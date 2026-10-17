@@ -1,0 +1,49 @@
+import { HTTPException } from 'hono/http-exception'
+import { env } from './config/env.ts'
+import { corsMiddleware } from './http/cors.ts'
+import { AppError } from './http/errors.ts'
+import { factory } from './http/factory.ts'
+import { requestLogger } from './http/logging.ts'
+import { requestId } from './http/request-id.ts'
+import { securityHeaders } from './http/security-headers.ts'
+import { logger } from './logger.ts'
+import { healthRoutes } from './routes/health.ts'
+
+export const app = factory.createApp()
+
+app.use(requestId)
+app.use(requestLogger)
+app.use(securityHeaders)
+app.use('*', corsMiddleware)
+
+app.route('/', healthRoutes)
+
+app.notFound((c) => {
+  return c.json(
+    { error: { message: 'Resource not found', code: 'NOT_FOUND', requestId: c.get('requestId') } },
+    404,
+  )
+})
+
+app.onError((error, c) => {
+  const requestId = c.get('requestId') ?? 'unknown'
+  const requestLogger = c.get('logger') ?? logger
+
+  if (error instanceof AppError) {
+    requestLogger.warn({ err: error, requestId }, 'application error')
+    return c.json(
+      { error: { message: error.message, code: error.code, requestId } },
+      error.statusCode as 400 | 401 | 403 | 404 | 409,
+    )
+  }
+
+  if (error instanceof HTTPException) {
+    return c.json(
+      { error: { message: error.message, code: 'HTTP_ERROR', requestId } },
+      error.status,
+    )
+  }
+
+  requestLogger.error({ err: error, requestId, environment: env.NODE_ENV }, 'unhandled error')
+  return c.json({ error: { message: 'Internal server error', code: 'INTERNAL', requestId } }, 500)
+})

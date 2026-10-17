@@ -1,20 +1,29 @@
 {
   "name": "api",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
     "check-types": "tsc --noEmit",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.3",
-    "hono": "^4.13.13"
+    "@gikautos/db": "workspace:*",
+    "@gikautos/shared": "workspace:*",
+    "@hono/node-server": "catalog:",
+    "@hono/zod-validator": "catalog:",
+    "dotenv": "catalog:",
+    "hono": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "tsx": "^4.23.0",
-    "typescript": "^7.0.2"
+    "@types/node": "catalog:",
+    "pino-pretty": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
