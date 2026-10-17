@@ -5,3 +5,5 @@ process.env.DATABASE_URL =
 process.env.CORS_ORIGINS = 'http://localhost:3000'
 process.env.BETTER_AUTH_TRUSTED_ORIGINS = 'http://localhost:3000'
 process.env.BETTER_AUTH_SECRET = 'test-only-secret-value-32-characters-minimum'
+process.env.ADMIN_EMAIL ??= 'admin@gikautos.test'
+process.env.ADMIN_PASSWORD ??= 'test-admin-password-123'

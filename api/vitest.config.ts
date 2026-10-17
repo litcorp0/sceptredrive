@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
     restoreMocks: true,
     // Integration suites share one gikautos_test database; run files serially
     // so fixtures like the last-active-admin assertion stay deterministic.

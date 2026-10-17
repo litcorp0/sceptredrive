@@ -5,13 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./seed": "./src/seed/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "bun run src/seed/index.ts",
+    "db:seed": "bun run src/seed/run.ts",
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run --passWithNoTests"
