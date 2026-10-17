@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "project": "gikautos",
+  "milestone": "v1",
+  "mode": "interactive",
+  "depth": "comprehensive",
+  "execution": "parallel",
+  "research": "existing",
+  "created": "2026-10-17",
+  "notes": {
+    "mode": "Interactive - confirm at each step (money, payments, credit, stock, loyalty)",
+    "depth": "Comprehensive - 9 phases with detailed plans per phase",
+    "execution": "Parallel - independent plans within a phase run as GSD waves",
+    "research": "Existing - findings captured in .planning/research/"
+  }
+}
