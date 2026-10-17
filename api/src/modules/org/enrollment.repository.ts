@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { terminalEnrollment } from '@gikautos/db/schema'
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { terminalEnrollment } from './enrollment.schema.ts'
 import type { TerminalEnrollmentRow } from './enrollment.types.ts'
 
 export async function expireOutstandingEnrollments(

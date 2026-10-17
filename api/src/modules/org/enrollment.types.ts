@@ -1,9 +1,9 @@
-import type { terminalEnrollment } from '@gikautos/db/schema'
 import type { z } from 'zod'
+import type { terminalEnrollment } from './enrollment.schema.ts'
 import type {
   enrollmentTerminalIdParamSchema,
   redeemEnrollmentSchema,
-} from './enrollment.schema.ts'
+} from './enrollment.validation.ts'
 
 export type TerminalEnrollmentRow = typeof terminalEnrollment.$inferSelect
 

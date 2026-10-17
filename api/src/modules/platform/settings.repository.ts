@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { setting } from '@gikautos/db/schema'
 import { and, eq, isNull } from 'drizzle-orm'
+import { setting } from './settings.schema.ts'
 
 function identityFilter(key: string, branchId: string | null) {
   return branchId === null

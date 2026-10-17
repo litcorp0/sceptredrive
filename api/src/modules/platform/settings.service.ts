@@ -15,13 +15,13 @@ import {
   readSettingRow,
   updateSettingRowValue,
 } from './settings.repository.ts'
+import type { ResolvedSetting, UpdateSettingInput } from './settings.types.ts'
 import {
   isSettingKey,
   SETTING_DEFINITIONS,
   type SettingKey,
   type SettingValue,
-} from './settings.schema.ts'
-import type { ResolvedSetting, UpdateSettingInput } from './settings.types.ts'
+} from './settings.validation.ts'
 
 async function resolveSetting<K extends SettingKey>(
   key: K,

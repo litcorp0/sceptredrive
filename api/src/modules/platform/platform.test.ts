@@ -1,5 +1,4 @@
 import { db } from '@gikautos/db'
-import { auditLog, branch, setting } from '@gikautos/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -11,7 +10,10 @@ import {
   signIn,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
+import { branch } from '../org/branches.schema.ts'
+import { auditLog } from './audit.schema.ts'
 import * as auditService from './audit.service.ts'
+import { setting } from './settings.schema.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[platform.test] database unavailable; integration tests skipped')

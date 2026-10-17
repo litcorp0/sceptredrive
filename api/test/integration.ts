@@ -1,9 +1,9 @@
 import { checkDb, db } from '@gikautos/db'
-import { user as userTable } from '@gikautos/db/schema'
 import type { Role } from '@gikautos/shared'
 import { eq } from 'drizzle-orm'
 import { app } from '../src/app.ts'
 import { auth } from '../src/auth/auth.ts'
+import { user as userTable } from '../src/modules/identity/staff.schema.ts'
 
 export const TEST_PASSWORD = 'test-password-1234'
 export const TEST_ORIGIN = 'http://localhost:3000'

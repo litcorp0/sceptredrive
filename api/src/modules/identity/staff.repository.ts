@@ -1,7 +1,7 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { account, user as userTable } from '@gikautos/db/schema'
 import type { Role } from '@gikautos/shared'
 import { and, asc, count, eq, or, type SQL, sql } from 'drizzle-orm'
+import { account, user as userTable } from './staff.schema.ts'
 import type { StaffRow } from './staff.types.ts'
 
 /** Staff profile projection; never selects credential or PIN columns. */

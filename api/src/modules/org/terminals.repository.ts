@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { device, terminal } from '@gikautos/db/schema'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
+import { device, terminal } from './terminals.schema.ts'
 import type { DeviceRow, TerminalRow } from './terminals.types.ts'
 
 export async function listTerminalRows(

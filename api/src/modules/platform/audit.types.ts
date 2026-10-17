@@ -1,6 +1,6 @@
-import type { auditLog } from '@gikautos/db/schema'
 import type { z } from 'zod'
-import type { auditListQuerySchema } from './audit.schema.ts'
+import type { auditLog } from './audit.schema.ts'
+import type { auditListQuerySchema } from './audit.validation.ts'
 
 export type AuditLogRow = typeof auditLog.$inferSelect
 

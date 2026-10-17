@@ -1,11 +1,11 @@
-import type { device, terminal } from '@gikautos/db/schema'
 import type { z } from 'zod'
+import type { device, terminal } from './terminals.schema.ts'
 import type {
   terminalCreateSchema,
   terminalIdParamSchema,
   terminalListQuerySchema,
   terminalUpdateSchema,
-} from './terminals.schema.ts'
+} from './terminals.validation.ts'
 
 export type TerminalRow = typeof terminal.$inferSelect
 export type DeviceRow = typeof device.$inferSelect

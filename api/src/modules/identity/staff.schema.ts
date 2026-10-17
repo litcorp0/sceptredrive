@@ -1,51 +1,130 @@
-import { ROLES } from '@gikautos/shared'
-import { z } from 'zod'
+import { relations } from 'drizzle-orm'
+import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { branch } from '../org/branches.schema.ts'
 
-// Better Auth user IDs are opaque 32-char strings, not UUIDs.
-export const staffIdParamSchema = z.object({
-  id: z
-    .string()
-    .trim()
-    .min(1)
-    .max(64)
-    .regex(/^[A-Za-z0-9_-]+$/),
+export const user = pgTable('user', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  emailVerified: boolean('email_verified').default(false).notNull(),
+  image: text('image'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+  twoFactorEnabled: boolean('two_factor_enabled').default(false),
+  role: text('role').default('CASHIER').notNull(),
+  branchId: uuid('branch_id').references(() => branch.id, { onDelete: 'set null' }),
+  staffId: text('staff_id').unique(),
+  phone: text('phone'),
+  isActive: boolean('is_active').default(true).notNull(),
+  mustChangePassword: boolean('must_change_password').default(false).notNull(),
+  pinHash: text('pin_hash'),
+  pinVersion: integer('pin_version').default(0).notNull(),
 })
 
-export const createStaffSchema = z
-  .object({
-    email: z.email(),
-    name: z.string().trim().min(2).max(120),
-    role: z.enum(ROLES),
-    branchId: z.uuid().nullish(),
-    phone: z.string().trim().min(3).max(32).optional(),
-  })
-  .strict()
+export const session = pgTable(
+  'session',
+  {
+    id: text('id').primaryKey(),
+    expiresAt: timestamp('expires_at').notNull(),
+    token: text('token').notNull().unique(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('session_user_idx').on(table.userId)],
+)
 
-export const updateStaffSchema = z
-  .object({
-    name: z.string().trim().min(2).max(120).optional(),
-    phone: z.string().trim().min(3).max(32).optional(),
-    role: z.enum(ROLES).optional(),
-    branchId: z.uuid().nullish(),
-  })
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'At least one field is required' })
+export const account = pgTable(
+  'account',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at'),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index('account_user_idx').on(table.userId)],
+)
 
-export const staffListQuerySchema = z.object({
-  role: z.enum(ROLES).optional(),
-  branchId: z.uuid().optional(),
-  includeInactive: z
-    .enum(['true', 'false'])
-    .optional()
-    .transform((value) => value === 'true'),
-  search: z.string().trim().min(1).max(120).optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-})
+export const verification = pgTable(
+  'verification',
+  {
+    id: text('id').primaryKey(),
+    identifier: text('identifier').notNull(),
+    value: text('value').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index('verification_identifier_idx').on(table.identifier)],
+)
 
-export const changePasswordSchema = z
-  .object({
-    currentPassword: z.string().min(1).max(256),
-    newPassword: z.string().min(12).max(128),
-  })
-  .strict()
+export const twoFactor = pgTable(
+  'two_factor',
+  {
+    id: text('id').primaryKey(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    verified: boolean('verified').default(true),
+    failedVerificationCount: integer('failed_verification_count').default(0),
+    lockedUntil: timestamp('locked_until'),
+  },
+  (table) => [
+    index('two_factor_secret_idx').on(table.secret),
+    index('two_factor_user_idx').on(table.userId),
+  ],
+)
+
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+  twoFactors: many(twoFactor),
+}))
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, {
+    fields: [session.userId],
+    references: [user.id],
+  }),
+}))
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, {
+    fields: [account.userId],
+    references: [user.id],
+  }),
+}))
+
+export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
+  user: one(user, {
+    fields: [twoFactor.userId],
+    references: [user.id],
+  }),
+}))

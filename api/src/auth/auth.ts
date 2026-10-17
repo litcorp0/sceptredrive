@@ -5,6 +5,13 @@ import { twoFactor } from 'better-auth/plugins/two-factor'
 import { env } from '../config/env.ts'
 import { email } from '../email/index.ts'
 import { logger } from '../logger.ts'
+import {
+  account,
+  session,
+  twoFactor as twoFactorTable,
+  user,
+  verification,
+} from '../modules/identity/staff.schema.ts'
 import { writeAudit } from '../modules/platform/audit.service.ts'
 import { authDatabaseHooks } from './hooks.ts'
 import { hashPassword, verifyPassword } from './password.ts'
@@ -29,7 +36,11 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   trustedOrigins: env.trustedOrigins,
   logger: betterAuthLogger,
-  database: drizzleAdapter(db, { provider: 'pg', transaction: true }),
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    transaction: true,
+    schema: { user, session, account, verification, twoFactor: twoFactorTable },
+  }),
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 12,

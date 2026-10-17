@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { branch } from '@gikautos/db/schema'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
+import { branch } from './branches.schema.ts'
 import type { BranchRow } from './branches.types.ts'
 
 export async function listBranchRows(

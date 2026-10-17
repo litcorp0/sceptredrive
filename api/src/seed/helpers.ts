@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto'
+import { db } from '@gikautos/db'
 import { hash, type Options } from '@node-rs/argon2'
 import { and, eq, isNull } from 'drizzle-orm'
-import { db } from '../client.ts'
-import { account, branch, setting, terminal, user } from '../schema/index.ts'
+import { account, user } from '../modules/identity/staff.schema.ts'
+import { branch } from '../modules/org/branches.schema.ts'
+import { terminal } from '../modules/org/terminals.schema.ts'
+import { setting } from '../modules/platform/settings.schema.ts'
 
 type SeedRole = 'ADMIN' | 'MANAGER' | 'CASHIER'
 

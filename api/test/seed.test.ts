@@ -1,9 +1,12 @@
 import { db } from '@gikautos/db'
-import { branch, setting, terminal, user as userTable } from '@gikautos/db/schema'
-import { seedAdmin, seedDemo } from '@gikautos/db/seed'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
+import { user as userTable } from '../src/modules/identity/staff.schema.ts'
+import { branch } from '../src/modules/org/branches.schema.ts'
+import { terminal } from '../src/modules/org/terminals.schema.ts'
+import { setting } from '../src/modules/platform/settings.schema.ts'
+import { seedAdmin, seedDemo } from '../src/seed/index.ts'
 import { databaseAvailable, signIn } from './integration.ts'
 
 const available = await databaseAvailable()

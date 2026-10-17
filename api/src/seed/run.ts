@@ -1,5 +1,5 @@
-import '../load-env.ts'
-import { closeDb } from '../client.ts'
+import '../config/env.ts'
+import { closeDb } from '@gikautos/db'
 import { seedAdmin } from './admin.ts'
 import { seedDemo } from './demo.ts'
 

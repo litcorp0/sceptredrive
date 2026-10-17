@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { session } from '@gikautos/db/schema'
 import { and, eq, ne } from 'drizzle-orm'
+import { session } from '../modules/identity/staff.schema.ts'
 
 /**
  * Revokes sessions directly in the database. Used for password resets,

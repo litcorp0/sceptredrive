@@ -1,13 +1,13 @@
-import type { user as userTable } from '@gikautos/db/schema'
 import type { Role } from '@gikautos/shared'
 import type { z } from 'zod'
+import type { user as userTable } from './staff.schema.ts'
 import type {
   changePasswordSchema,
   createStaffSchema,
   staffIdParamSchema,
   staffListQuerySchema,
   updateStaffSchema,
-} from './staff.schema.ts'
+} from './staff.validation.ts'
 
 type UserSelect = typeof userTable.$inferSelect
 

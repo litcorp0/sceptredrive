@@ -1,13 +1,26 @@
-import { z } from 'zod'
+import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
-export const auditListQuerySchema = z.object({
-  actorId: z.string().trim().min(1).max(64).optional(),
-  action: z.string().trim().min(1).max(120).optional(),
-  entity: z.string().trim().min(1).max(64).optional(),
-  entityId: z.string().trim().min(1).max(64).optional(),
-  branchId: z.uuid().optional(),
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-})
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorId: text('actor_id'),
+    actorStaffId: text('actor_staff_id'),
+    action: text('action').notNull(),
+    entity: text('entity').notNull(),
+    entityId: text('entity_id'),
+    before: jsonb('before'),
+    after: jsonb('after'),
+    branchId: uuid('branch_id'),
+    terminalId: uuid('terminal_id'),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    requestId: text('request_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('audit_entity_idx').on(table.entity, table.entityId),
+    index('audit_branch_created_idx').on(table.branchId, table.createdAt),
+    index('audit_actor_idx').on(table.actorId, table.createdAt),
+  ],
+)

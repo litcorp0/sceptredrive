@@ -3,9 +3,9 @@ import type {
   SettingKey,
   settingsListQuerySchema,
   settingsUpdateSchema,
-} from './settings.schema.ts'
+} from './settings.validation.ts'
 
-export type { SettingKey, SettingValue } from './settings.schema.ts'
+export type { SettingKey, SettingValue } from './settings.validation.ts'
 
 export type SettingsListQuery = z.infer<typeof settingsListQuerySchema>
 export type SettingsUpdateBody = z.infer<typeof settingsUpdateSchema>

@@ -1,49 +1,38 @@
-import { BRANCH_TYPES, isValidBranchCode } from '@gikautos/shared'
-import { z } from 'zod'
+import {
+  boolean,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 
-export const branchIdParamSchema = z.object({ id: z.uuid() })
+export const branchTypeEnum = pgEnum('branch_type', ['RETAIL', 'WAREHOUSE'])
 
-export const branchCodeSchema = z
-  .string()
-  .trim()
-  .min(2)
-  .max(16)
-  .refine(isValidBranchCode, { message: 'Invalid branch code format' })
-
-export const branchCreateSchema = z
-  .object({
-    code: branchCodeSchema,
-    name: z.string().trim().min(2).max(120),
-    type: z.enum(BRANCH_TYPES),
-    city: z.string().trim().min(1).max(80),
-    area: z.string().trim().min(1).max(80).optional(),
-    address: z.string().trim().min(1).max(240).optional(),
-    phone: z.string().trim().min(3).max(32).optional(),
-  })
-  .strict()
-
-export const branchUpdateSchema = z
-  .object({
-    name: z.string().trim().min(2).max(120).optional(),
-    city: z.string().trim().min(1).max(80).optional(),
-    area: z.string().trim().min(1).max(80).optional(),
-    address: z.string().trim().min(1).max(240).optional(),
-    phone: z.string().trim().min(3).max(32).optional(),
-  })
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, {
-    message: 'At least one field is required',
-  })
-
-export const branchListQuerySchema = z.object({
-  includeInactive: z
-    .enum(['true', 'false'])
-    .optional()
-    .transform((value) => value === 'true'),
-})
-
-export const suggestCodeQuerySchema = z.object({
-  city: z.string().trim().min(1).max(80),
-  area: z.string().trim().min(1).max(80).optional(),
-  type: z.enum(BRANCH_TYPES),
-})
+export const branch = pgTable(
+  'branch',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    type: branchTypeEnum('type').notNull().default('RETAIL'),
+    city: text('city').notNull(),
+    area: text('area'),
+    address: text('address'),
+    phone: text('phone'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex('branch_code_unique').on(table.code),
+    index('branch_type_idx').on(table.type),
+    index('branch_active_idx').on(table.isActive),
+  ],
+)

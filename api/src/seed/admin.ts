@@ -1,4 +1,4 @@
-import { db } from '../client.ts'
+import { db } from '@gikautos/db'
 import { createUserWithCredential, findUserByEmail } from './helpers.ts'
 
 export type SeedAdminResult = 'created' | 'skipped'

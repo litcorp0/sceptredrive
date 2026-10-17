@@ -1,13 +1,13 @@
-import type { branch } from '@gikautos/db/schema'
 import type { BranchCodeSuggestion, BranchType } from '@gikautos/shared'
 import type { z } from 'zod'
+import type { branch } from './branches.schema.ts'
 import type {
   branchCreateSchema,
   branchIdParamSchema,
   branchListQuerySchema,
   branchUpdateSchema,
   suggestCodeQuerySchema,
-} from './branches.schema.ts'
+} from './branches.validation.ts'
 
 export type BranchRow = typeof branch.$inferSelect
 

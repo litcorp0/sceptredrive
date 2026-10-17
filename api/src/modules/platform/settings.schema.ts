@@ -1,60 +1,24 @@
-import { z } from 'zod'
-import { env } from '../../config/env.ts'
+import { sql } from 'drizzle-orm'
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
-export const SETTING_DEFINITIONS = {
-  'staff.idPrefix': {
-    schema: z
-      .string()
-      .trim()
-      .min(1)
-      .max(8)
-      .regex(/^[A-Za-z0-9]+$/),
-    defaultValue: env.STAFF_ID_PREFIX,
-    branchScoped: false,
+export const setting = pgTable(
+  'setting',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    key: text('key').notNull(),
+    value: jsonb('value').notNull(),
+    branchId: uuid('branch_id'),
+    updatedBy: text('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  'staff.idSequence': {
-    schema: z.number().int().positive(),
-    defaultValue: env.STAFF_ID_START,
-    branchScoped: false,
-  },
-  'receipt.header': {
-    schema: z.string().trim().min(1).max(200),
-    defaultValue: 'Thank you for shopping at GikAutos',
-    branchScoped: true,
-  },
-  'loyalty.earnPointsPerCedi': {
-    schema: z.number().positive(),
-    defaultValue: 1,
-    branchScoped: false,
-  },
-  'loyalty.pointsPerCedi': {
-    schema: z.number().positive(),
-    defaultValue: 100,
-    branchScoped: false,
-  },
-  'loyalty.expiryMonths': {
-    schema: z.number().int().positive(),
-    defaultValue: 12,
-    branchScoped: false,
-  },
-} as const
-
-export type SettingKey = keyof typeof SETTING_DEFINITIONS
-
-export type SettingValue<K extends SettingKey> = z.infer<(typeof SETTING_DEFINITIONS)[K]['schema']>
-
-export function isSettingKey(value: string): value is SettingKey {
-  return Object.hasOwn(SETTING_DEFINITIONS, value)
-}
-
-export const settingsListQuerySchema = z.object({
-  branchId: z.uuid().optional(),
-})
-
-export const settingsUpdateSchema = z
-  .object({
-    key: z.string().trim().min(1).max(120),
-    value: z.unknown(),
-    branchId: z.uuid().nullish(),
-  })
-  .strict()
+  (table) => [
+    uniqueIndex('setting_global_key_unique').on(table.key).where(sql`${table.branchId} is null`),
+    uniqueIndex('setting_branch_key_unique')
+      .on(table.branchId, table.key)
+      .where(sql`${table.branchId} is not null`),
+    index('setting_branch_idx').on(table.branchId),
+  ],
+)
