@@ -3,7 +3,8 @@ import { normalizeBranchCode, suggestBranchCode } from '@gikautos/shared'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import {
   findBranchById,

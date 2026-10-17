@@ -11,7 +11,8 @@ import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../ht
 import type { SessionData, SessionUser } from '../../http/factory.ts'
 import { logger } from '../../logger.ts'
 import * as branchesService from '../org/branches.service.ts'
-import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { allocateStaffId } from '../platform/settings.service.ts'
 import {

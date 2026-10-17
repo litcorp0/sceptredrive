@@ -3,7 +3,8 @@ import { assertBranchAccess, branchScope } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as branchesService from '../org/branches.service.ts'
-import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import {
   findDeviceById,

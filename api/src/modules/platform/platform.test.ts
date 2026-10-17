@@ -81,11 +81,7 @@ describe.skipIf(!available)('audit and settings API', () => {
   })
 
   it('keeps the audit service append-only', () => {
-    expect(Object.keys(auditService).sort()).toEqual([
-      'actorFromContext',
-      'queryAudit',
-      'writeAudit',
-    ])
+    expect(Object.keys(auditService).sort()).toEqual(['queryAudit', 'writeAudit'])
   })
 
   it('paginates and orders audit entries newest first', async () => {

@@ -3,7 +3,8 @@ import { db } from '@gikautos/db'
 import { env } from '../../config/env.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import {
   expireOutstandingEnrollments,
   findEnrollmentByCodeHash,

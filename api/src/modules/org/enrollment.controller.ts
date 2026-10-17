@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
+import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
-import { actorFromContext } from '../platform/audit.service.ts'
 import * as enrollmentService from './enrollment.service.ts'
 import type { RedeemEnrollmentBody } from './enrollment.types.ts'
 
