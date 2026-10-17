@@ -15,12 +15,20 @@ function csv(value: string): string[] {
     .filter((item) => item.length > 0)
 }
 
+/** Treats empty or whitespace-only values as absent (common in .env templates). */
+function optionalNonEmpty(schema: z.ZodString) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    schema.optional(),
+  )
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().max(65535).default(4000),
   DATABASE_URL: z.string().min(1),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
-  BETTER_AUTH_SECRET: z.string().optional(),
+  BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url().optional(),
   BETTER_AUTH_TRUSTED_ORIGINS: z.string().default(''),
   CORS_ORIGINS: z.string().default(''),
@@ -29,6 +37,8 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(12).optional(),
   STAFF_ID_PREFIX: z.string().min(1).max(8).default('GA'),
   STAFF_ID_START: z.coerce.number().int().positive().default(1),
+  RESEND_API_KEY: optionalNonEmpty(z.string().min(1)),
+  EMAIL_FROM: z.string().min(1).default('GikAutos <no-reply@gikautos.local>'),
 })
 
 const parsed = envSchema.safeParse(process.env)
