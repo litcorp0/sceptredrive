@@ -2,7 +2,7 @@ import { type Database, db } from '@gikautos/db'
 import { auditLog } from '@gikautos/db/schema'
 import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { resolveBranchFilter } from '../../http/authorize.ts'
+import { resolveBranchFilter } from '../../auth/scope.ts'
 import type { AppEnv, SessionUser } from '../../http/factory.ts'
 import { clientIpFromHeaders } from '../../http/request-meta.ts'
 

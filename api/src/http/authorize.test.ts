@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  assertBranchAccess,
-  branchScope,
-  requirePermission,
-  resolveBranchFilter,
-  roleOf,
-} from './authorize.ts'
+import { assertBranchAccess, branchScope, resolveBranchFilter, roleOf } from '../auth/scope.ts'
+import { requirePermission } from './authorize.ts'
 import { AppError } from './errors.ts'
 import { factory, type SessionUser } from './factory.ts'
 

@@ -7,7 +7,7 @@ import {
   suggestBranchCode,
 } from '@gikautos/shared'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
-import { assertBranchAccess, branchScope, roleOf } from '../../http/authorize.ts'
+import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { type AuditActor, writeAudit } from '../platform/audit.service.ts'

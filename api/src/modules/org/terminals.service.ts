@@ -1,7 +1,7 @@
 import { db } from '@gikautos/db'
 import { branch, device, terminal } from '@gikautos/db/schema'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
-import { assertBranchAccess, branchScope } from '../../http/authorize.ts'
+import { assertBranchAccess, branchScope } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
