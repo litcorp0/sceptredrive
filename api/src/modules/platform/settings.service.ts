@@ -1,12 +1,12 @@
-import { db } from '@gikautos/db'
+import { db, type DbExecutor } from '@gikautos/db'
 import { branch, setting } from '@gikautos/db/schema'
 import { and, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { env } from '../../config/env.ts'
+import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { type AuditActor, type DbExecutor, writeAudit } from './audit.service.ts'
+import { writeAudit, type AuditActor } from './audit.service.ts'
 import { isUniqueViolation } from './db-errors.ts'
 
 export const SETTING_DEFINITIONS = {

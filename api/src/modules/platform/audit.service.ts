@@ -1,15 +1,10 @@
-import { type Database, db } from '@gikautos/db'
+import { db, type DbExecutor } from '@gikautos/db'
 import { auditLog } from '@gikautos/db/schema'
 import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import type { AppEnv, SessionUser } from '../../http/factory.ts'
 import { clientIpFromHeaders } from '../../http/request-meta.ts'
-
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
-
-/** A pooled connection or an open transaction; audit writes share the caller's transaction. */
-export type DbExecutor = Database | Transaction
 
 /** Identity and request metadata attached to every audit row. */
 export interface AuditActor {
