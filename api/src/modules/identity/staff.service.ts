@@ -1,8 +1,6 @@
 import { randomInt } from 'node:crypto'
-import { db, type DbExecutor } from '@gikautos/db'
-import { account, branch, user as userTable } from '@gikautos/db/schema'
+import { db } from '@gikautos/db'
 import type { Role } from '@gikautos/shared'
-import { and, asc, count, eq, or, type SQL, sql } from 'drizzle-orm'
 import { auth } from '../../auth/auth.ts'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
@@ -12,9 +10,32 @@ import { email } from '../../email/index.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionData, SessionUser } from '../../http/factory.ts'
 import { logger } from '../../logger.ts'
+import * as branchesService from '../org/branches.service.ts'
 import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { allocateStaffId } from '../platform/settings.service.ts'
+import {
+  countOtherActiveAdmins,
+  countStaffRows,
+  deleteUserRow,
+  findCredentialPassword,
+  findStaffById,
+  findUserById,
+  findUserIdByEmail,
+  selectStaffPage,
+  updateCredentialPassword,
+  updateUserRow,
+} from './staff.repository.ts'
+import type {
+  ChangeOwnPasswordInput,
+  CreateStaffInput,
+  CreateStaffResult,
+  InvitationData,
+  ListStaffFilters,
+  ResetPasswordResult,
+  StaffRow,
+  UpdateStaffInput,
+} from './staff.types.ts'
 
 const PASSWORD_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
 const TEMPORARY_PASSWORD_LENGTH = 16
@@ -27,33 +48,23 @@ export function generateTemporaryPassword(): string {
   return password
 }
 
-const staffColumns = {
-  id: userTable.id,
-  name: userTable.name,
-  email: userTable.email,
-  role: userTable.role,
-  branchId: userTable.branchId,
-  staffId: userTable.staffId,
-  phone: userTable.phone,
-  isActive: userTable.isActive,
-  mustChangePassword: userTable.mustChangePassword,
-  twoFactorEnabled: userTable.twoFactorEnabled,
-  createdAt: userTable.createdAt,
-  updatedAt: userTable.updatedAt,
+async function sendInvitation(data: InvitationData): Promise<boolean> {
+  const loginUrl = `${env.ADMIN_URL}/login`
+  try {
+    await email.send({
+      to: data.to,
+      subject: 'Your GikAutos account',
+      text: `Hello ${data.name},\n\nAn account has been created for you on GikAutos.\n\nSign in at ${loginUrl}\nEmail: ${data.to}\nTemporary password: ${data.temporaryPassword}\n\nYou will be asked to choose a new password after signing in.`,
+    })
+    return true
+  } catch (error) {
+    logger.error({ err: error }, 'failed to send staff invitation email')
+    return false
+  }
 }
 
-export interface CreateStaffInput {
-  email: string
-  name: string
-  role: Role
-  branchId?: string | null | undefined
-  phone?: string | undefined
-}
-
-async function assertBranchUsable(branchId: string): Promise<void> {
-  const rows = await db.select().from(branch).where(eq(branch.id, branchId)).limit(1)
-  const found = rows[0]
-  if (!found) throw new NotFoundError('Branch not found')
+async function assertBranchUsable(user: SessionUser, branchId: string): Promise<void> {
+  const found = await branchesService.getBranch(user, branchId)
   if (!found.isActive) throw new ConflictError('Cannot assign staff to a deactivated branch')
 }
 
@@ -70,26 +81,14 @@ function assertRoleBranchCombination(role: Role, branchId: string | null): void 
   }
 }
 
-async function assertNotLastAdmin(excludeUserId: string, executor: DbExecutor): Promise<void> {
-  const rows = await executor
-    .select({ value: count() })
-    .from(userTable)
-    .where(
-      and(
-        eq(userTable.role, 'ADMIN'),
-        eq(userTable.isActive, true),
-        sql`${userTable.id} <> ${excludeUserId}`,
-      ),
-    )
-  if ((rows[0]?.value ?? 0) === 0) {
+async function assertNotLastAdmin(
+  excludeUserId: string,
+  executor: Parameters<typeof countOtherActiveAdmins>[1],
+): Promise<void> {
+  const others = await countOtherActiveAdmins(excludeUserId, executor)
+  if (others === 0) {
     throw new ConflictError('The last active admin cannot be removed or demoted')
   }
-}
-
-export interface CreateStaffResult {
-  staff: Record<string, unknown>
-  temporaryPassword: string
-  invitationSent: boolean
 }
 
 export async function createStaff(
@@ -108,15 +107,11 @@ export async function createStaff(
     }
   }
   assertRoleBranchCombination(input.role, branchId)
-  if (branchId) await assertBranchUsable(branchId)
+  if (branchId) await assertBranchUsable(actorUser, branchId)
 
   const emailAddress = input.email.trim().toLowerCase()
-  const existing = await db
-    .select({ id: userTable.id })
-    .from(userTable)
-    .where(eq(userTable.email, emailAddress))
-    .limit(1)
-  if (existing[0]) throw new ConflictError('A user with this email already exists')
+  const existing = await findUserIdByEmail(emailAddress)
+  if (existing) throw new ConflictError('A user with this email already exists')
 
   const staffId = await allocateStaffId(db)
   const temporaryPassword = generateTemporaryPassword()
@@ -134,18 +129,17 @@ export async function createStaff(
 
   try {
     const staff = await db.transaction(async (tx) => {
-      const rows = await tx
-        .update(userTable)
-        .set({
+      const updated = await updateUserRow(
+        createdUserId,
+        {
           role: input.role,
           branchId,
           staffId,
           phone: input.phone ?? null,
           mustChangePassword: true,
-        })
-        .where(eq(userTable.id, createdUserId))
-        .returning(staffColumns)
-      const updated = rows[0]
+        },
+        tx,
+      )
       if (!updated) throw new ConflictError('A user with this email already exists')
 
       await writeAudit(
@@ -175,85 +169,32 @@ export async function createStaff(
 
     return { staff, temporaryPassword, invitationSent }
   } catch (error) {
-    await db
-      .delete(userTable)
-      .where(eq(userTable.id, createdUserId))
-      .catch((cleanupError) => {
-        logger.error({ err: cleanupError, userId: createdUserId }, 'failed to clean up staff user')
-      })
+    await deleteUserRow(createdUserId).catch((cleanupError) => {
+      logger.error({ err: cleanupError, userId: createdUserId }, 'failed to clean up staff user')
+    })
     throw error
   }
-}
-
-async function sendInvitation(data: {
-  to: string
-  name: string
-  temporaryPassword: string
-}): Promise<boolean> {
-  const loginUrl = `${env.ADMIN_URL}/login`
-  try {
-    await email.send({
-      to: data.to,
-      subject: 'Your GikAutos account',
-      text: `Hello ${data.name},\n\nAn account has been created for you on GikAutos.\n\nSign in at ${loginUrl}\nEmail: ${data.to}\nTemporary password: ${data.temporaryPassword}\n\nYou will be asked to choose a new password after signing in.`,
-    })
-    return true
-  } catch (error) {
-    logger.error({ err: error }, 'failed to send staff invitation email')
-    return false
-  }
-}
-
-export interface ListStaffFilters {
-  role?: Role | undefined
-  branchId?: string | undefined
-  includeInactive: boolean
-  search?: string | undefined
-  limit: number
-  offset: number
 }
 
 export async function listStaff(
   actorUser: SessionUser,
   filters: ListStaffFilters,
-): Promise<{ staff: Record<string, unknown>[]; total: number }> {
+): Promise<{ staff: StaffRow[]; total: number }> {
   const scope = branchScope(actorUser)
-  const conditions: SQL[] = []
-  if (scope) conditions.push(eq(userTable.branchId, scope))
-  else if (filters.branchId) conditions.push(eq(userTable.branchId, filters.branchId))
-  if (filters.role) conditions.push(eq(userTable.role, filters.role))
-  if (!filters.includeInactive) conditions.push(eq(userTable.isActive, true))
-  if (filters.search) {
-    const pattern = `%${filters.search.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`
-    const searchCondition = or(
-      sql`${userTable.name} ilike ${pattern}`,
-      sql`${userTable.email} ilike ${pattern}`,
-      sql`${userTable.staffId} ilike ${pattern}`,
-    )
-    if (searchCondition) conditions.push(searchCondition)
+  const queryScope = {
+    branchId: scope ?? filters.branchId ?? null,
+    role: filters.role,
+    includeInactive: filters.includeInactive,
+    search: filters.search,
   }
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined
-
-  const rows = await db
-    .select(staffColumns)
-    .from(userTable)
-    .where(where)
-    .orderBy(asc(userTable.staffId), asc(userTable.createdAt))
-    .limit(filters.limit)
-    .offset(filters.offset)
-
-  const totalRows = await db.select({ value: count() }).from(userTable).where(where)
-
-  return { staff: rows, total: totalRows[0]?.value ?? 0 }
+  const staff = await selectStaffPage(queryScope, { limit: filters.limit, offset: filters.offset })
+  const total = await countStaffRows(queryScope)
+  return { staff, total }
 }
 
-export async function getStaff(
-  actorUser: SessionUser,
-  id: string,
-): Promise<Record<string, unknown>> {
-  const rows = await db.select(staffColumns).from(userTable).where(eq(userTable.id, id)).limit(1)
-  const found = rows[0]
+export async function getStaff(actorUser: SessionUser, id: string): Promise<StaffRow> {
+  const found = await findStaffById(id)
   if (!found) throw new NotFoundError('Staff member not found')
   const scope = branchScope(actorUser)
   if (scope && found.branchId !== scope) {
@@ -262,24 +203,16 @@ export async function getStaff(
   return found
 }
 
-export interface UpdateStaffInput {
-  name?: string | undefined
-  phone?: string | undefined
-  role?: Role | undefined
-  branchId?: string | null | undefined
-}
-
 export async function updateStaff(
   actorUser: SessionUser,
   actor: AuditActor,
   id: string,
   input: UpdateStaffInput,
-): Promise<Record<string, unknown>> {
+): Promise<StaffRow> {
   const actorRole = roleOf(actorUser)
 
   return db.transaction(async (tx) => {
-    const rows = await tx.select().from(userTable).where(eq(userTable.id, id)).limit(1)
-    const target = rows[0]
+    const target = await findUserById(id, tx)
     if (!target) throw new NotFoundError('Staff member not found')
 
     if (actorRole !== 'ADMIN') {
@@ -292,23 +225,24 @@ export async function updateStaff(
     const nextRole = (input.role ?? target.role) as Role
     const nextBranchId = input.branchId !== undefined ? input.branchId : target.branchId
     assertRoleBranchCombination(nextRole, nextBranchId)
-    if (nextBranchId && nextBranchId !== target.branchId) await assertBranchUsable(nextBranchId)
+    if (nextBranchId && nextBranchId !== target.branchId) {
+      await assertBranchUsable(actorUser, nextBranchId)
+    }
 
     if (target.role === 'ADMIN' && nextRole !== 'ADMIN') {
       await assertNotLastAdmin(target.id, tx)
     }
 
-    const updatedRows = await tx
-      .update(userTable)
-      .set({
+    const updated = await updateUserRow(
+      id,
+      {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.role !== undefined ? { role: input.role } : {}),
         ...(input.branchId !== undefined ? { branchId: input.branchId } : {}),
-      })
-      .where(eq(userTable.id, id))
-      .returning(staffColumns)
-    const updated = updatedRows[0]
+      },
+      tx,
+    )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update staff member')
 
     await writeAudit(
@@ -342,12 +276,11 @@ export async function setStaffActive(
   actor: AuditActor,
   id: string,
   isActive: boolean,
-): Promise<Record<string, unknown>> {
+): Promise<StaffRow> {
   const actorRole = roleOf(actorUser)
 
   return db.transaction(async (tx) => {
-    const rows = await tx.select().from(userTable).where(eq(userTable.id, id)).limit(1)
-    const target = rows[0]
+    const target = await findUserById(id, tx)
     if (!target) throw new NotFoundError('Staff member not found')
 
     if (actorRole !== 'ADMIN') {
@@ -365,14 +298,13 @@ export async function setStaffActive(
       await assertNotLastAdmin(target.id, tx)
     }
 
-    if (target.isActive === isActive) return target
+    if (target.isActive === isActive) {
+      const current = await findStaffById(id, tx)
+      if (!current) throw new NotFoundError('Staff member not found')
+      return current
+    }
 
-    const updatedRows = await tx
-      .update(userTable)
-      .set({ isActive })
-      .where(eq(userTable.id, id))
-      .returning(staffColumns)
-    const updated = updatedRows[0]
+    const updated = await updateUserRow(id, { isActive }, tx)
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update staff member')
 
     if (!isActive) {
@@ -395,11 +327,6 @@ export async function setStaffActive(
   })
 }
 
-export interface ResetPasswordResult {
-  temporaryPassword: string
-  invitationSent: boolean
-}
-
 export async function resetStaffPassword(
   actorUser: SessionUser,
   actor: AuditActor,
@@ -410,8 +337,7 @@ export async function resetStaffPassword(
   const passwordHash = await hashPassword(temporaryPassword)
 
   const target = await db.transaction(async (tx) => {
-    const rows = await tx.select().from(userTable).where(eq(userTable.id, id)).limit(1)
-    const found = rows[0]
+    const found = await findUserById(id, tx)
     if (!found) throw new NotFoundError('Staff member not found')
 
     if (actorRole !== 'ADMIN') {
@@ -421,13 +347,8 @@ export async function resetStaffPassword(
       }
     }
 
-    await tx
-      .update(account)
-      .set({ password: passwordHash })
-      .where(and(eq(account.userId, id), eq(account.providerId, 'credential')))
-
-    await tx.update(userTable).set({ mustChangePassword: true }).where(eq(userTable.id, id))
-
+    await updateCredentialPassword(id, passwordHash, tx)
+    await updateUserRow(id, { mustChangePassword: true }, tx)
     await revokeUserSessions(id, {}, tx)
 
     await writeAudit(
@@ -453,23 +374,13 @@ export async function resetStaffPassword(
   return { temporaryPassword, invitationSent }
 }
 
-export interface ChangeOwnPasswordInput {
-  currentPassword: string
-  newPassword: string
-}
-
 export async function changeOwnPassword(
   user: SessionUser,
   session: SessionData,
   actor: AuditActor,
   input: ChangeOwnPasswordInput,
 ): Promise<void> {
-  const rows = await db
-    .select({ password: account.password })
-    .from(account)
-    .where(and(eq(account.userId, user.id), eq(account.providerId, 'credential')))
-    .limit(1)
-  const stored = rows[0]?.password
+  const stored = await findCredentialPassword(user.id)
   if (!stored) {
     throw new AppError(400, 'PASSWORD_NOT_SET', 'No password is set for this account')
   }
@@ -485,11 +396,8 @@ export async function changeOwnPassword(
   const newHash = await hashPassword(input.newPassword)
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(account)
-      .set({ password: newHash })
-      .where(and(eq(account.userId, user.id), eq(account.providerId, 'credential')))
-    await tx.update(userTable).set({ mustChangePassword: false }).where(eq(userTable.id, user.id))
+    await updateCredentialPassword(user.id, newHash, tx)
+    await updateUserRow(user.id, { mustChangePassword: false }, tx)
     await revokeUserSessions(user.id, { exceptToken: session.token }, tx)
     await writeAudit(
       {

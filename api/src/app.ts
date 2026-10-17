@@ -8,7 +8,6 @@ import { requestId } from './http/request-id.ts'
 import { securityHeaders } from './http/security-headers.ts'
 import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
-import { meRoutes } from './modules/identity/me.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
@@ -32,7 +31,6 @@ app.route('/', branchesRoutes)
 app.route('/', terminalsRoutes)
 app.route('/', enrollmentRoutes)
 app.route('/', staffRoutes)
-app.route('/', meRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
