@@ -2,9 +2,9 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-17
-**Status:** Phase 1 in progress — Plans 01 and 02 complete; Plans 03 and 04 pending.
-**Next action:** Execute Plan 03 (auth, RBAC, organisation APIs, audit, seeds), then Plan 04
-(admin console, CI, phase verification).
+**Status:** Phase 1 in progress — Plans 01–03 complete; Plan 04 pending.
+**Next action:** Execute Plan 04 (admin console, CI, phase verification). Read
+`.planning/phases/01-foundation/03-SUMMARY.md` for the deviations and verified state.
 
 ---
 
@@ -13,7 +13,7 @@
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Planning & decisions | ✅ Complete |
-| 1 | Foundation & Platform | 🚧 In progress (2/4 plans) |
+| 1 | Foundation & Platform | 🚧 In progress (3/4 plans) |
 | 2 | Catalog & Pricing | ⬜ Not started |
 | 3 | Inventory & Transfers | ⬜ Not started |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
@@ -29,8 +29,8 @@
 |---|---|---|
 | 01 | Workspace, tooling, Postgres, shared and db packages | ✅ Complete |
 | 02 | API skeleton, configuration, logging, health, first schema | ✅ Complete |
-| 03 | Auth, RBAC, organisation APIs, audit, seeds | ⬜ Next |
-| 04 | Admin shell, auth flows, CRUD screens, CI, verification | ⬜ Pending |
+| 03 | Auth, RBAC, organisation APIs, audit, seeds | ✅ Complete |
+| 04 | Admin shell, auth flows, CRUD screens, CI, verification | ⬜ Next |
 
 ---
 
@@ -45,7 +45,18 @@
 - Postgres 18 runs via `compose.yaml` on host port **5433** (5432 is taken by a system
   Postgres). `wal_level=logical` and 10 replication slots are enabled for Phase 6.
 - Migration `0000` applied: `branch`, `terminal`, `device`, `terminal_enrollment`,
-  `audit_log`, `setting`.
+  `audit_log`, `setting`. Migration `0001` adds Better Auth tables: `user`, `session`,
+  `account`, `verification`, `two_factor`.
+- API now serves auth (`/api/auth/*`, public sign-up blocked), branches, terminals,
+  enrollment codes (`/api/enrollments/redeem` returns 501 until Phase 6), devices,
+  staff, `/api/me/password`, audit, and settings. Middleware: session loading,
+  permission checks, fresh-session gate, branch scoping, request rate limiting.
+- Seeds implemented: `bun run db:seed` (admin) and `bun run db:seed --demo`
+  (ACC-SPX, ACC-WH1, terminals, manager + cashier, settings defaults). Both are
+  idempotent and verified against the dev database.
+- Tests run against a dedicated `gikautos_test` database: `bun run db:test:prepare`
+  creates and migrates it; `TEST_DATABASE_URL` overrides in CI. 79 API tests,
+  13 shared tests; vitest runs files serially for deterministic fixtures.
 - Old-build containers (`gikautos-powersync-*`, `infra-postgres-1`) were removed; their
   volumes were left untouched for now.
 - Local `.env` exists (gitignored) with a generated auth secret and dev admin credentials.
@@ -73,6 +84,12 @@
 | 2026-10-17 | Suppliers: invoices + payments ledger; Paystack transfers + manual fallback. |
 | 2026-10-17 | Deployment: one VPS, separate staging/prod Docker stacks, Caddy, GitHub Actions, R2 backups. |
 | 2026-10-17 | Scale target: 5 branches, 20 terminals, 5k SKUs, 20k customers. Manual data entry only. |
+| 2026-10-17 | Plan 03: session freshness is measured from `session.createdAt` (Better Auth semantics), not updatedAt. |
+| 2026-10-17 | Plan 03: public sign-up is blocked at the route level with `autoSignIn: false`; `disableSignUp` would also block server-side staff creation. |
+| 2026-10-17 | Plan 03: added `branch.deactivate` as an admin-only permission. |
+| 2026-10-17 | Plan 03: enrollment codes are HMAC-hashed with the auth secret, one live code per terminal, redeem rate limited (Phase 6 contract returns 501). |
+| 2026-10-17 | Plan 03: `pinHash`/`pinVersion` are stored with `returned: false` and never leave the server. |
+| 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
 
 ---
 
@@ -100,4 +117,11 @@
 - Branch code suggestions use first/second/last consonant for long area names
   (Spintex → SPX, Adum → ADM); codes stay editable before save.
 - Root scripts: `bun run db:up`, `dev:api`, `dev:admin`, `lint`, `check-types`, `test`,
-  `db:generate`, `db:migrate`, `db:seed`.
+  `db:generate`, `db:migrate`, `db:seed`, `db:test:prepare`.
+- Run `bun run db:test:prepare` after migrations before running API tests; integration
+  suites are skipped when the test database is unreachable.
+- Email: console provider in dev (recipients redacted, bodies not logged); staff temp
+  passwords are returned once in API responses and emailed, never logged.
+- Regenerating `packages/db/src/schema/auth.ts` with the Better Auth CLI will overwrite
+  manual hardening (NOT NULL defaults, branch FK, index names); re-apply and regenerate
+  a migration afterwards.
