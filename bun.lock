@@ -62,6 +62,7 @@
         "@node-rs/argon2": "catalog:",
         "better-auth": "catalog:",
         "dotenv": "catalog:",
+        "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",
         "resend": "catalog:",
