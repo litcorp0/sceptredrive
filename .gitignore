@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.output/
+.tanstack/
+.turbo/
+*.tsbuildinfo
+
+# Desktop packaging
+desktop/out/
+desktop/release/
+desktop/.vite/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Local runtime artifacts
+.storage/
+.backups/
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal
+
+# Secrets and certificates
+*.pem
+*.key
