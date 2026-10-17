@@ -1,10 +1,33 @@
 import { type Database, db } from '@gikautos/db'
 import { auditLog } from '@gikautos/db/schema'
+import type { Context } from 'hono'
+import type { AppEnv } from '../../http/factory.ts'
+import { clientIpFromHeaders } from '../../http/request-meta.ts'
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 /** A pooled connection or an open transaction; audit writes share the caller's transaction. */
 export type DbExecutor = Database | Transaction
+
+/** Identity and request metadata attached to every audit row. */
+export interface AuditActor {
+  actorId: string | null
+  actorStaffId: string | null
+  ip: string | null
+  userAgent: string | null
+  requestId: string | null
+}
+
+export function actorFromContext(c: Context<AppEnv>): AuditActor {
+  const user = c.get('user')
+  return {
+    actorId: user?.id ?? null,
+    actorStaffId: user?.staffId ?? null,
+    ip: clientIpFromHeaders(c.req.raw.headers),
+    userAgent: c.req.header('user-agent') ?? null,
+    requestId: c.get('requestId'),
+  }
+}
 
 export interface AuditEntry {
   action: string

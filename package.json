@@ -39,6 +39,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
+    "db:test:prepare": "docker compose exec -T postgres createdb -U gikautos gikautos_test || true && DATABASE_URL=postgresql://gikautos:gikautos@localhost:5433/gikautos_test bun run --filter @gikautos/db db:migrate",
     "dev": "bun run --parallel --if-present --filter '*' dev",
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",

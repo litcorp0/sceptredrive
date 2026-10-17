@@ -8,6 +8,7 @@ import { requestId } from './http/request-id.ts'
 import { securityHeaders } from './http/security-headers.ts'
 import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
+import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
 
@@ -21,6 +22,7 @@ app.use('*', corsMiddleware)
 
 app.route('/', healthRoutes)
 app.route('/', authRoutes)
+app.route('/', branchesRoutes)
 
 app.notFound((c) => {
   return c.json(

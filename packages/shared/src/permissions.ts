@@ -4,6 +4,7 @@ export const PERMISSIONS = [
   'branch.read',
   'branch.create',
   'branch.update',
+  'branch.deactivate',
   'terminal.read',
   'terminal.create',
   'terminal.update',
