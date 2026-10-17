@@ -9,6 +9,7 @@ import { securityHeaders } from './http/security-headers.ts'
 import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
+import { terminalsRoutes } from './modules/org/terminals.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
 
@@ -23,6 +24,7 @@ app.use('*', corsMiddleware)
 app.route('/', healthRoutes)
 app.route('/', authRoutes)
 app.route('/', branchesRoutes)
+app.route('/', terminalsRoutes)
 
 app.notFound((c) => {
   return c.json(
@@ -39,7 +41,7 @@ app.onError((error, c) => {
     requestLogger.warn({ err: error, requestId }, 'application error')
     return c.json(
       { error: { message: error.message, code: error.code, requestId } },
-      error.statusCode as 400 | 401 | 403 | 404 | 409,
+      error.statusCode as 400 | 401 | 403 | 404 | 409 | 429,
     )
   }
 

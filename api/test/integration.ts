@@ -24,6 +24,17 @@ export function uniqueSuffix(): string {
   return `${Date.now().toString(36)}${counter}`.toLowerCase().slice(-8)
 }
 
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+/** Random uppercase token safe for branch and terminal codes. */
+export function randomToken(length = 3): string {
+  let token = ''
+  for (let index = 0; index < length; index += 1) {
+    token += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
+  }
+  return token
+}
+
 export interface TestUserOptions {
   role?: Role
   branchId?: string | null

@@ -7,8 +7,8 @@ import {
   createTestUser,
   databaseAvailable,
   deleteTestUser,
+  randomToken,
   signIn,
-  uniqueSuffix,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
 
@@ -42,7 +42,7 @@ describe.skipIf(!available)('branch API', () => {
   let adminId = ''
   let primaryBranchId = ''
   let otherBranchId = ''
-  const suffix = uniqueSuffix().toUpperCase().slice(0, 3)
+  const suffix = randomToken(3)
 
   beforeAll(async () => {
     const admin = await createTestUser({ role: 'ADMIN' })
