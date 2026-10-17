@@ -1,0 +1,33 @@
+name: gikautos-dev
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: gikautos-postgres
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    environment:
+      POSTGRES_USER: gikautos
+      POSTGRES_PASSWORD: gikautos
+      POSTGRES_DB: gikautos
+    # Mapped to 5433 on the host so it never clashes with a system Postgres on 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gikautos -d gikautos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres-data:
