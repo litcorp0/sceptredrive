@@ -1,7 +1,9 @@
 import { type Database, db } from '@gikautos/db'
 import { auditLog } from '@gikautos/db/schema'
+import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
 import type { Context } from 'hono'
-import type { AppEnv } from '../../http/factory.ts'
+import { resolveBranchFilter } from '../../http/authorize.ts'
+import type { AppEnv, SessionUser } from '../../http/factory.ts'
 import { clientIpFromHeaders } from '../../http/request-meta.ts'
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -63,4 +65,52 @@ export async function writeAudit(entry: AuditEntry, executor: DbExecutor = db): 
     userAgent: entry.userAgent ?? null,
     requestId: entry.requestId ?? null,
   })
+}
+
+export interface AuditQueryFilters {
+  actorId?: string | undefined
+  action?: string | undefined
+  entity?: string | undefined
+  entityId?: string | undefined
+  branchId?: string | undefined
+  from?: Date | undefined
+  to?: Date | undefined
+  limit: number
+  offset: number
+}
+
+export interface AuditQueryResult {
+  entries: (typeof auditLog.$inferSelect)[]
+  total: number
+}
+
+/** Reads the audit log with manager branch scoping; the log stays append-only. */
+export async function queryAudit(
+  user: SessionUser,
+  filters: AuditQueryFilters,
+): Promise<AuditQueryResult> {
+  const scope = resolveBranchFilter(user, filters.branchId ?? null)
+
+  const conditions: SQL[] = []
+  if (scope) conditions.push(eq(auditLog.branchId, scope))
+  if (filters.actorId) conditions.push(eq(auditLog.actorId, filters.actorId))
+  if (filters.action) conditions.push(eq(auditLog.action, filters.action))
+  if (filters.entity) conditions.push(eq(auditLog.entity, filters.entity))
+  if (filters.entityId) conditions.push(eq(auditLog.entityId, filters.entityId))
+  if (filters.from) conditions.push(gte(auditLog.createdAt, filters.from))
+  if (filters.to) conditions.push(lte(auditLog.createdAt, filters.to))
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined
+
+  const entries = await db
+    .select()
+    .from(auditLog)
+    .where(where)
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+    .limit(filters.limit)
+    .offset(filters.offset)
+
+  const totalRows = await db.select({ value: count() }).from(auditLog).where(where)
+
+  return { entries, total: totalRows[0]?.value ?? 0 }
 }

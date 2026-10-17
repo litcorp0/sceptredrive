@@ -1,0 +1,270 @@
+import { db } from '@gikautos/db'
+import { auditLog, branch, setting } from '@gikautos/db/schema'
+import { eq, inArray } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  deleteTestUser,
+  randomToken,
+  signIn,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
+import * as auditService from './audit.service.ts'
+
+const available = await databaseAvailable()
+if (!available) console.warn('[platform.test] database unavailable; integration tests skipped')
+
+interface AuditEntry {
+  id: string
+  action: string
+  entity: string
+  entityId: string | null
+  branchId: string | null
+  createdAt: string
+}
+
+interface SettingsResponse {
+  settings: { key: string; value: unknown; branchScoped: boolean; source: string }[]
+  branchId: string | null
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  return (await response.json()) as T
+}
+
+describe.skipIf(!available)('audit and settings API', () => {
+  const createdUserIds: string[] = []
+  const createdBranchIds: string[] = []
+  let adminCookie = ''
+  let managerCookie = ''
+  let branchAId = ''
+  let branchBId = ''
+  const suffix = randomToken(3)
+
+  async function createBranchAsAdmin(code: string, name: string): Promise<string> {
+    const response = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ code, name, type: 'RETAIL', city: 'Accra' }),
+    })
+    expect(response.status).toBe(201)
+    const body = await readJson<{ branch: { id: string } }>(response)
+    createdBranchIds.push(body.branch.id)
+    return body.branch.id
+  }
+
+  beforeAll(async () => {
+    const admin = await createTestUser({ role: 'ADMIN', name: 'Platform Admin' })
+    createdUserIds.push(admin.id)
+    adminCookie = await signIn(admin.email)
+
+    branchAId = await createBranchAsAdmin(`T${suffix}-A`, 'Platform Branch A')
+    branchBId = await createBranchAsAdmin(`T${suffix}-B`, 'Platform Branch B')
+
+    const manager = await createTestUser({
+      role: 'MANAGER',
+      branchId: branchAId,
+      name: 'Platform Manager',
+    })
+    createdUserIds.push(manager.id)
+    managerCookie = await signIn(manager.email)
+  })
+
+  afterAll(async () => {
+    await db.delete(setting).where(inArray(setting.key, ['staff.idPrefix', 'receipt.header']))
+    for (const id of createdUserIds) await deleteTestUser(id)
+    if (createdBranchIds.length > 0) {
+      await db.delete(branch).where(inArray(branch.id, createdBranchIds))
+    }
+  })
+
+  it('keeps the audit service append-only', () => {
+    expect(Object.keys(auditService).sort()).toEqual([
+      'actorFromContext',
+      'queryAudit',
+      'writeAudit',
+    ])
+  })
+
+  it('paginates and orders audit entries newest first', async () => {
+    const response = await app.request('/api/audit?limit=2', {
+      headers: authedHeaders(adminCookie),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<{ entries: AuditEntry[]; total: number }>(response)
+    expect(body.entries.length).toBeLessThanOrEqual(2)
+    expect(body.total).toBeGreaterThanOrEqual(body.entries.length)
+    if (body.entries.length === 2) {
+      const [first, second] = body.entries
+      expect(new Date(first?.createdAt ?? 0).getTime()).toBeGreaterThanOrEqual(
+        new Date(second?.createdAt ?? 0).getTime(),
+      )
+    }
+
+    const offsetResponse = await app.request('/api/audit?limit=2&offset=1', {
+      headers: authedHeaders(adminCookie),
+    })
+    const offsetBody = await readJson<{ entries: AuditEntry[] }>(offsetResponse)
+    expect(offsetBody.entries[0]?.id).not.toBe(body.entries[0]?.id)
+  })
+
+  it('filters audit entries by entity, entity id, action, and date range', async () => {
+    const filtered = await app.request(
+      `/api/audit?entity=branch&entityId=${branchAId}&action=branch.created`,
+      { headers: authedHeaders(adminCookie) },
+    )
+    expect(filtered.status).toBe(200)
+    const filteredBody = await readJson<{ entries: AuditEntry[]; total: number }>(filtered)
+    expect(filteredBody.total).toBeGreaterThanOrEqual(1)
+    expect(
+      filteredBody.entries.every(
+        (entry) =>
+          entry.entity === 'branch' &&
+          entry.entityId === branchAId &&
+          entry.action === 'branch.created',
+      ),
+    ).toBe(true)
+
+    const from = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const recent = await app.request(`/api/audit?from=${from}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    const recentBody = await readJson<{ entries: AuditEntry[]; total: number }>(recent)
+    expect(recentBody.total).toBeGreaterThanOrEqual(1)
+
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const old = await app.request(`/api/audit?to=${past}&entity=branch`, {
+      headers: authedHeaders(adminCookie),
+    })
+    const oldBody = await readJson<{ total: number }>(old)
+    expect(oldBody.total).toBe(0)
+  })
+
+  it('scopes audit reads to the manager branch', async () => {
+    const scoped = await app.request('/api/audit?limit=200', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(scoped.status).toBe(200)
+    const scopedBody = await readJson<{ entries: AuditEntry[] }>(scoped)
+    expect(scopedBody.entries.length).toBeGreaterThanOrEqual(1)
+    expect(scopedBody.entries.every((entry) => entry.branchId === branchAId)).toBe(true)
+
+    const crossBranchFilter = await app.request(`/api/audit?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(crossBranchFilter.status).toBe(403)
+
+    const otherBranchEntity = await app.request(`/api/audit?entity=branch&entityId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    const otherBody = await readJson<{ total: number }>(otherBranchEntity)
+    expect(otherBody.total).toBe(0)
+  })
+
+  it('lists typed settings with defaults', async () => {
+    const response = await app.request('/api/settings', {
+      headers: authedHeaders(adminCookie),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<SettingsResponse>(response)
+    const prefix = body.settings.find((item) => item.key === 'staff.idPrefix')
+    expect(prefix?.value).toBe('GA')
+    expect(prefix?.source).not.toBe('branch')
+  })
+
+  it('updates global settings as admin and audits the change', async () => {
+    const response = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'staff.idPrefix', value: 'GX' }),
+    })
+
+    expect(response.status).toBe(200)
+
+    const list = await app.request('/api/settings', { headers: authedHeaders(adminCookie) })
+    const body = await readJson<SettingsResponse>(list)
+    const prefix = body.settings.find((item) => item.key === 'staff.idPrefix')
+    expect(prefix?.value).toBe('GX')
+    expect(prefix?.source).toBe('global')
+
+    const auditRows = await db.select().from(auditLog).where(eq(auditLog.action, 'setting.updated'))
+    expect(auditRows.some((row) => row.entityId === 'staff.idPrefix')).toBe(true)
+  })
+
+  it('validates setting keys and values', async () => {
+    const unknownKey = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'nope.key', value: 1 }),
+    })
+    expect(unknownKey.status).toBe(400)
+
+    const badValue = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'staff.idPrefix', value: 'way-too-long-prefix' }),
+    })
+    expect(badValue.status).toBe(400)
+  })
+
+  it('forbids managers from changing global settings', async () => {
+    const response = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'staff.idPrefix', value: 'MX' }),
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('lets managers set branch-scoped settings for their branch only', async () => {
+    const update = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'receipt.header', value: 'Branch A welcomes you' }),
+    })
+    expect(update.status).toBe(200)
+    const updateBody = await readJson<{ setting: { source: string; value: unknown } }>(update)
+    expect(updateBody.setting.source).toBe('branch')
+
+    const managerList = await app.request('/api/settings', {
+      headers: authedHeaders(managerCookie),
+    })
+    const managerBody = await readJson<SettingsResponse>(managerList)
+    const header = managerBody.settings.find((item) => item.key === 'receipt.header')
+    expect(header?.value).toBe('Branch A welcomes you')
+    expect(header?.source).toBe('branch')
+
+    const adminGlobal = await app.request('/api/settings', {
+      headers: authedHeaders(adminCookie),
+    })
+    const adminGlobalBody = await readJson<SettingsResponse>(adminGlobal)
+    expect(adminGlobalBody.settings.find((item) => item.key === 'receipt.header')?.source).not.toBe(
+      'branch',
+    )
+
+    const adminBranch = await app.request(`/api/settings?branchId=${branchAId}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    const adminBranchBody = await readJson<SettingsResponse>(adminBranch)
+    expect(adminBranchBody.settings.find((item) => item.key === 'receipt.header')?.value).toBe(
+      'Branch A welcomes you',
+    )
+
+    const crossUpdate = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'receipt.header', value: 'Nope', branchId: branchBId }),
+    })
+    expect(crossUpdate.status).toBe(403)
+
+    const crossRead = await app.request(`/api/settings?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(crossRead.status).toBe(403)
+  })
+})

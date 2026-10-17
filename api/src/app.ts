@@ -12,6 +12,8 @@ import { meRoutes } from './modules/identity/me.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
+import { auditRoutes } from './modules/platform/audit.routes.ts'
+import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
 
@@ -29,6 +31,8 @@ app.route('/', branchesRoutes)
 app.route('/', terminalsRoutes)
 app.route('/', staffRoutes)
 app.route('/', meRoutes)
+app.route('/', auditRoutes)
+app.route('/', settingsRoutes)
 
 app.notFound((c) => {
   return c.json(
