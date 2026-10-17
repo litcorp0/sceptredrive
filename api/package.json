@@ -11,13 +11,17 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "catalog:",
     "@gikautos/db": "workspace:*",
     "@gikautos/shared": "workspace:*",
     "@hono/node-server": "catalog:",
     "@hono/zod-validator": "catalog:",
+    "@node-rs/argon2": "catalog:",
+    "better-auth": "catalog:",
     "dotenv": "catalog:",
     "hono": "catalog:",
     "pino": "catalog:",
+    "resend": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

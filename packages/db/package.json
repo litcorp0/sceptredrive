@@ -17,6 +17,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@node-rs/argon2": "catalog:",
     "drizzle-orm": "catalog:",
     "pg": "catalog:"
   },
