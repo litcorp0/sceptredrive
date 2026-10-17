@@ -70,6 +70,7 @@
       },
       "devDependencies": {
         "@types/node": "catalog:",
+        "drizzle-kit": "catalog:",
         "pino-pretty": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",
@@ -79,7 +80,6 @@
       "name": "@gikautos/db",
       "version": "0.1.0",
       "dependencies": {
-        "@node-rs/argon2": "catalog:",
         "drizzle-orm": "catalog:",
         "pg": "catalog:",
       },
@@ -87,7 +87,6 @@
         "@types/node": "catalog:",
         "@types/pg": "catalog:",
         "dotenv": "catalog:",
-        "drizzle-kit": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",
       },

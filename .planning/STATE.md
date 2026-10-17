@@ -46,7 +46,9 @@
   Postgres). `wal_level=logical` and 10 replication slots are enabled for Phase 6.
 - Migration `0000` applied: `branch`, `terminal`, `device`, `terminal_enrollment`,
   `audit_log`, `setting`. Migration `0001` adds Better Auth tables: `user`, `session`,
-  `account`, `verification`, `two_factor`.
+  `account`, `verification`, `two_factor`. Tables are defined in the owning module's
+  `*.schema.ts`; migrations and seeds now live in `api/` (`packages/db` is the
+  Postgres client).
 - API now serves auth (`/api/auth/*`, public sign-up blocked), branches, terminals,
   enrollment codes (`/api/enrollments/redeem` returns 501 until Phase 6), devices,
   staff, `/api/me/password`, audit, and settings. Middleware: session loading,
@@ -90,7 +92,8 @@
 | 2026-10-17 | Plan 03: enrollment codes are HMAC-hashed with the auth secret, one live code per terminal, redeem rate limited (Phase 6 contract returns 501). |
 | 2026-10-17 | Plan 03: `pinHash`/`pinVersion` are stored with `returned: false` and never leave the server. |
 | 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
-| 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); see AGENTS.md. Drizzle tables stay in `packages/db`. |
+| 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); `schema` = Drizzle tables, `validation` = Zod schemas + validators. See AGENTS.md. |
+| 2026-10-17 | Drizzle tables live in `api/src/modules/*/*.schema.ts`; drizzle-kit config, migrations, and seeds live in `api/`; `packages/db` is only the Postgres client. |
 
 ---
 

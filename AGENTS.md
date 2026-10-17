@@ -55,9 +55,9 @@ double-selling or losing a transaction.
 
 ```text
 admin/        TanStack Start console (Admin + Manager)
-api/          Hono API
+api/          Hono API (also owns Drizzle schema, migrations, and seeds)
 desktop/      Electron Forge POS (created in Phase 6)
-packages/     shared, db, sync, ui (created in Phase 1)
+packages/     shared, db (Postgres client), sync, ui (created in Phase 1)
 powersync/    sync-config.yaml + setup docs (created in Phase 6)
 infra/        Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 9)
 .planning/    GSD project memory (this is the source of truth for scope)
@@ -70,19 +70,21 @@ Every module keeps the same seven files, one concern per file:
 | File | Responsibility |
 |---|---|
 | `<module>.routes.ts` | Paths, middleware, validators, controller wiring only |
-| `<module>.validation.ts` | Hono validators composed from the module schemas |
+| `<module>.validation.ts` | Zod schemas and the Hono validators composed from them |
 | `<module>.controller.ts` | HTTP handlers: validated input → service → response |
 | `<module>.service.ts` | Business rules, authorization, transactions, audit |
 | `<module>.repository.ts` | Drizzle data access only; no business logic |
-| `<module>.schema.ts` | Zod schemas (requests, settings definitions) |
+| `<module>.schema.ts` | Drizzle table definitions owned by the module |
 | `<module>.types.ts` | TypeScript types, `z.infer` aliases, row types |
 
 Flow: routes → validation → controller → service → repository → database.
 Controllers never import repositories; services never import Hono types
 (`Context`, middleware); cross-module calls go service-to-service. Drizzle
-table definitions stay in `packages/db` (migrations and PowerSync depend on
-them). Shared HTTP infrastructure lives in `api/src/http/`, auth in
-`api/src/auth/`.
+tables live in the owning module's `<module>.schema.ts` (cross-module FKs
+reference sibling schema files); migrations and seeds live in `api/`
+(`api/migrations`, `api/src/seed`), and `packages/db` provides only the
+shared Postgres client. Shared HTTP infrastructure lives in `api/src/http/`,
+auth in `api/src/auth/`.
 
 ## Workflow (GSD)
 
