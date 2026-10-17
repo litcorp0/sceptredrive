@@ -7,6 +7,7 @@ import { requestLogger } from './http/logging.ts'
 import { requestId } from './http/request-id.ts'
 import { securityHeaders } from './http/security-headers.ts'
 import { logger } from './logger.ts'
+import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
 
 export const app = factory.createApp()
@@ -17,6 +18,7 @@ app.use(securityHeaders)
 app.use('*', corsMiddleware)
 
 app.route('/', healthRoutes)
+app.route('/', authRoutes)
 
 app.notFound((c) => {
   return c.json(
