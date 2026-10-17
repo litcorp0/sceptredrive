@@ -2,9 +2,9 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-17
-**Status:** Planning complete and approved. Planning documents created and awaiting review.
-**Next action:** Review `.planning/PROJECT.md`, `REQUIREMENTS.md`, and `ROADMAP.md`, then start
-Phase 1 planning (`/gsd:plan-phase 1` equivalent).
+**Status:** Phase 1 in progress — Plans 01 and 02 complete; Plans 03 and 04 pending.
+**Next action:** Execute Plan 03 (auth, RBAC, organisation APIs, audit, seeds), then Plan 04
+(admin console, CI, phase verification).
 
 ---
 
@@ -13,7 +13,7 @@ Phase 1 planning (`/gsd:plan-phase 1` equivalent).
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Planning & decisions | ✅ Complete |
-| 1 | Foundation & Platform | ⬜ Not started |
+| 1 | Foundation & Platform | 🚧 In progress (2/4 plans) |
 | 2 | Catalog & Pricing | ⬜ Not started |
 | 3 | Inventory & Transfers | ⬜ Not started |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
@@ -23,17 +23,34 @@ Phase 1 planning (`/gsd:plan-phase 1` equivalent).
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
 
+### Phase 1 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Workspace, tooling, Postgres, shared and db packages | ✅ Complete |
+| 02 | API skeleton, configuration, logging, health, first schema | ✅ Complete |
+| 03 | Auth, RBAC, organisation APIs, audit, seeds | ⬜ Next |
+| 04 | Admin shell, auth flows, CRUD screens, CI, verification | ⬜ Pending |
+
 ---
 
 ## Repository State
 
-- Fresh git history initialized on `dev` (no commits before the planning commit).
-- Working tree contains the new scaffolds: `admin/` (TanStack Start) and `api/` (Hono).
-- Nested lockfiles (`admin/bun.lock`, `api/bun.lock`) and `api/pnpm-workspace.yaml` were
-  removed so Phase 1 can establish the single root Bun workspace.
-- Desktop app, shared packages, PowerSync config, and infrastructure are created in later
-  phases (6, 1, 6, and 9 respectively).
-- A bundle of the deleted prototype's git history is stored outside the repository at
+- Fresh git history on `dev`; planning + Phase 1 Plans 01 and 02 committed.
+- Root Bun workspace with catalogs; `@gikautos/shared` (roles, permissions, branch codes)
+  and `@gikautos/db` (Drizzle client, config, migrations) exist and pass typecheck/tests.
+- API boots on Node 24 with Node's native TypeScript type stripping (no build step):
+  `bun run dev:api`. Validated env, pino logs, request IDs, security headers, CORS,
+  `/health` and `/ready` are implemented and covered by 8 tests.
+- Postgres 18 runs via `compose.yaml` on host port **5433** (5432 is taken by a system
+  Postgres). `wal_level=logical` and 10 replication slots are enabled for Phase 6.
+- Migration `0000` applied: `branch`, `terminal`, `device`, `terminal_enrollment`,
+  `audit_log`, `setting`.
+- Old-build containers (`gikautos-powersync-*`, `infra-postgres-1`) were removed; their
+  volumes were left untouched for now.
+- Local `.env` exists (gitignored) with a generated auth secret and dev admin credentials.
+- Desktop app, PowerSync config, and infrastructure are created in later phases
+  (6, 6, and 9 respectively). A bundle of the deleted prototype's git history is stored at
   `/tmp/opencode/gikautos-old-history.bundle` (safe to delete).
 
 ---
@@ -78,3 +95,9 @@ Phase 1 planning (`/gsd:plan-phase 1` equivalent).
 - Plans are prompts. Implement one task at a time and commit atomically.
 - Stop and ask before decisions that affect money, credit, stock, loyalty, permissions,
   or production infrastructure.
+- The API runs TypeScript directly on Node 24 (`node src/index.ts`) using erasable-syntax
+  type stripping; keep source free of TS enums, namespaces, and parameter properties.
+- Branch code suggestions use first/second/last consonant for long area names
+  (Spintex → SPX, Adum → ADM); codes stay editable before save.
+- Root scripts: `bun run db:up`, `dev:api`, `dev:admin`, `lint`, `check-types`, `test`,
+  `db:generate`, `db:migrate`, `db:seed`.
