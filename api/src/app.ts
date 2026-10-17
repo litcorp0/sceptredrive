@@ -11,6 +11,7 @@ import { logger } from './logger.ts'
 import { meRoutes } from './modules/identity/me.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
+import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
@@ -29,6 +30,7 @@ app.route('/', healthRoutes)
 app.route('/', authRoutes)
 app.route('/', branchesRoutes)
 app.route('/', terminalsRoutes)
+app.route('/', enrollmentRoutes)
 app.route('/', staffRoutes)
 app.route('/', meRoutes)
 app.route('/', auditRoutes)

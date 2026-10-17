@@ -1,42 +1,31 @@
 import { db } from '@gikautos/db'
-import { branch, device, terminal } from '@gikautos/db/schema'
-import { and, asc, eq, type SQL } from 'drizzle-orm'
 import { assertBranchAccess, branchScope } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import * as branchesService from '../org/branches.service.ts'
 import { type AuditActor, writeAudit } from '../platform/audit.service.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
-
-export interface TerminalCreateInput {
-  branchId: string
-  name: string
-}
-
-export interface TerminalUpdateInput {
-  name?: string | undefined
-  isActive?: boolean | undefined
-}
+import {
+  findDeviceById,
+  findTerminalById,
+  insertTerminal,
+  listDeviceRows,
+  listTerminalRows,
+  selectTerminalCodes,
+  updateDeviceRow,
+  updateTerminalRow,
+} from './terminals.repository.ts'
+import type {
+  DeviceRow,
+  TerminalCreateInput,
+  TerminalListFilters,
+  TerminalRow,
+  TerminalUpdateInput,
+} from './terminals.types.ts'
 
 const MAX_CODE_ATTEMPTS = 5
 
-async function loadBranch(branchId: string): Promise<typeof branch.$inferSelect> {
-  const rows = await db.select().from(branch).where(eq(branch.id, branchId)).limit(1)
-  const found = rows[0]
-  if (!found) throw new NotFoundError('Branch not found')
-  return found
-}
-
-async function loadTerminal(id: string): Promise<typeof terminal.$inferSelect> {
-  const rows = await db.select().from(terminal).where(eq(terminal.id, id)).limit(1)
-  const found = rows[0]
-  if (!found) throw new NotFoundError('Terminal not found')
-  return found
-}
-
-export function assertTerminalAccess(
-  user: SessionUser,
-  terminalRecord: typeof terminal.$inferSelect,
-): void {
+function assertTerminalAccess(user: SessionUser, terminalRecord: TerminalRow): void {
   assertBranchAccess(user, terminalRecord.branchId)
 }
 
@@ -53,30 +42,16 @@ function nextCodeFrom(existingCodes: string[], branchCode: string): string {
 
 export async function listTerminals(
   user: SessionUser,
-  options: { branchId?: string | undefined; includeInactive: boolean },
-): Promise<(typeof terminal.$inferSelect)[]> {
+  filters: TerminalListFilters,
+): Promise<TerminalRow[]> {
   const scope = branchScope(user)
-  let branchFilter = scope
-  if (branchFilter === null && options.branchId) {
-    branchFilter = options.branchId
-  }
-
-  const filters: SQL[] = []
-  if (branchFilter) filters.push(eq(terminal.branchId, branchFilter))
-  if (!options.includeInactive) filters.push(eq(terminal.isActive, true))
-
-  return db
-    .select()
-    .from(terminal)
-    .where(filters.length > 0 ? and(...filters) : undefined)
-    .orderBy(asc(terminal.code))
+  const branchId = scope ?? filters.branchId
+  return listTerminalRows({ branchId, includeInactive: filters.includeInactive })
 }
 
-export async function getTerminal(
-  user: SessionUser,
-  id: string,
-): Promise<typeof terminal.$inferSelect> {
-  const found = await loadTerminal(id)
+export async function getTerminal(user: SessionUser, id: string): Promise<TerminalRow> {
+  const found = await findTerminalById(id)
+  if (!found) throw new NotFoundError('Terminal not found')
   assertTerminalAccess(user, found)
   return found
 }
@@ -85,33 +60,25 @@ export async function createTerminal(
   user: SessionUser,
   actor: AuditActor,
   input: TerminalCreateInput,
-): Promise<typeof terminal.$inferSelect> {
-  assertBranchAccess(user, input.branchId)
-  const parent = await loadBranch(input.branchId)
+): Promise<TerminalRow> {
+  const parent = await branchesService.getBranch(user, input.branchId)
   if (!parent.isActive) throw new ConflictError('Cannot add terminals to a deactivated branch')
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     try {
       return await db.transaction(async (tx) => {
-        const existing = await tx
-          .select({ code: terminal.code })
-          .from(terminal)
-          .where(eq(terminal.branchId, input.branchId))
-        const code = nextCodeFrom(
-          existing.map((row) => row.code),
-          parent.code,
-        )
+        const existingCodes = await selectTerminalCodes(input.branchId, tx)
+        const code = nextCodeFrom(existingCodes, parent.code)
 
-        const rows = await tx
-          .insert(terminal)
-          .values({
+        const created = await insertTerminal(
+          {
             branchId: input.branchId,
             code,
             name: input.name,
             createdBy: actor.actorId,
-          })
-          .returning()
-        const created = rows[0]
+          },
+          tx,
+        )
         if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create terminal')
 
         await writeAudit(
@@ -144,22 +111,20 @@ export async function updateTerminal(
   actor: AuditActor,
   id: string,
   input: TerminalUpdateInput,
-): Promise<typeof terminal.$inferSelect> {
+): Promise<TerminalRow> {
   return db.transaction(async (tx) => {
-    const existingRows = await tx.select().from(terminal).where(eq(terminal.id, id)).limit(1)
-    const existing = existingRows[0]
+    const existing = await findTerminalById(id, tx)
     if (!existing) throw new NotFoundError('Terminal not found')
     assertTerminalAccess(user, existing)
 
-    const rows = await tx
-      .update(terminal)
-      .set({
+    const updated = await updateTerminalRow(
+      id,
+      {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-      })
-      .where(eq(terminal.id, id))
-      .returning()
-    const updated = rows[0]
+      },
+      tx,
+    )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update terminal')
 
     await writeAudit(
@@ -179,46 +144,30 @@ export async function updateTerminal(
   })
 }
 
-export async function listDevices(
-  user: SessionUser,
-  terminalId: string,
-): Promise<(typeof device.$inferSelect)[]> {
-  const terminalRecord = await loadTerminal(terminalId)
-  assertTerminalAccess(user, terminalRecord)
-
-  return db
-    .select()
-    .from(device)
-    .where(eq(device.terminalId, terminalId))
-    .orderBy(asc(device.enrolledAt))
+export async function listDevices(user: SessionUser, terminalId: string): Promise<DeviceRow[]> {
+  const terminalRecord = await getTerminal(user, terminalId)
+  return listDeviceRows(terminalRecord.id)
 }
 
 export async function revokeDevice(
   user: SessionUser,
   actor: AuditActor,
   deviceId: string,
-): Promise<typeof device.$inferSelect> {
+): Promise<DeviceRow> {
   return db.transaction(async (tx) => {
-    const rows = await tx.select().from(device).where(eq(device.id, deviceId)).limit(1)
-    const found = rows[0]
+    const found = await findDeviceById(deviceId, tx)
     if (!found) throw new NotFoundError('Device not found')
 
-    const terminalRows = await tx
-      .select()
-      .from(terminal)
-      .where(eq(terminal.id, found.terminalId))
-      .limit(1)
-    const parent = terminalRows[0]
+    const parent = await findTerminalById(found.terminalId, tx)
     if (!parent) throw new NotFoundError('Terminal not found')
     assertTerminalAccess(user, parent)
     if (found.status === 'REVOKED') return found
 
-    const updatedRows = await tx
-      .update(device)
-      .set({ status: 'REVOKED', revokedAt: new Date(), revokedBy: actor.actorId })
-      .where(eq(device.id, deviceId))
-      .returning()
-    const updated = updatedRows[0]
+    const updated = await updateDeviceRow(
+      deviceId,
+      { status: 'REVOKED', revokedAt: new Date(), revokedBy: actor.actorId },
+      tx,
+    )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to revoke device')
 
     await writeAudit(
