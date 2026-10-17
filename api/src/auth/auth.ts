@@ -9,6 +9,8 @@ import { writeAudit } from '../modules/platform/audit.service.ts'
 import { authDatabaseHooks } from './hooks.ts'
 import { hashPassword, verifyPassword } from './password.ts'
 
+export const SESSION_FRESH_AGE_SECONDS = 60 * 60
+
 const betterAuthLogger: NonNullable<BetterAuthOptions['logger']> = {
   level: env.LOG_LEVEL === 'debug' || env.LOG_LEVEL === 'trace' ? 'debug' : 'info',
   disableColors: true,
@@ -57,7 +59,7 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
-    freshAge: 60 * 60,
+    freshAge: SESSION_FRESH_AGE_SECONDS,
     cookieCache: { enabled: true, maxAge: 60 * 5, strategy: 'compact' },
   },
   rateLimit: {

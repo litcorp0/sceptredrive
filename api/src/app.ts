@@ -6,6 +6,7 @@ import { factory } from './http/factory.ts'
 import { requestLogger } from './http/logging.ts'
 import { requestId } from './http/request-id.ts'
 import { securityHeaders } from './http/security-headers.ts'
+import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -14,6 +15,7 @@ export const app = factory.createApp()
 
 app.use(requestId)
 app.use(requestLogger)
+app.use(loadSession)
 app.use(securityHeaders)
 app.use('*', corsMiddleware)
 
