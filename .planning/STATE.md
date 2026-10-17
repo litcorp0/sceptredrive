@@ -90,6 +90,7 @@
 | 2026-10-17 | Plan 03: enrollment codes are HMAC-hashed with the auth secret, one live code per terminal, redeem rate limited (Phase 6 contract returns 501). |
 | 2026-10-17 | Plan 03: `pinHash`/`pinVersion` are stored with `returned: false` and never leave the server. |
 | 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
+| 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); see AGENTS.md. Drizzle tables stay in `packages/db`. |
 
 ---
 
@@ -125,3 +126,6 @@
 - Regenerating `packages/db/src/schema/auth.ts` with the Better Auth CLI will overwrite
   manual hardening (NOT NULL defaults, branch FK, index names); re-apply and regenerate
   a migration afterwards.
+- New API modules: copy the seven-file layout documented in AGENTS.md. Pure scope
+  helpers live in `api/src/auth/scope.ts`; request context adapters in
+  `api/src/http/` (e.g. `audit-context.ts`).

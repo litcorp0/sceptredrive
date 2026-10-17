@@ -63,6 +63,27 @@ infra/        Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 9)
 .planning/    GSD project memory (this is the source of truth for scope)
 ```
 
+### API module layout (`api/src/modules/<domain>/`)
+
+Every module keeps the same seven files, one concern per file:
+
+| File | Responsibility |
+|---|---|
+| `<module>.routes.ts` | Paths, middleware, validators, controller wiring only |
+| `<module>.validation.ts` | Hono validators composed from the module schemas |
+| `<module>.controller.ts` | HTTP handlers: validated input → service → response |
+| `<module>.service.ts` | Business rules, authorization, transactions, audit |
+| `<module>.repository.ts` | Drizzle data access only; no business logic |
+| `<module>.schema.ts` | Zod schemas (requests, settings definitions) |
+| `<module>.types.ts` | TypeScript types, `z.infer` aliases, row types |
+
+Flow: routes → validation → controller → service → repository → database.
+Controllers never import repositories; services never import Hono types
+(`Context`, middleware); cross-module calls go service-to-service. Drizzle
+table definitions stay in `packages/db` (migrations and PowerSync depend on
+them). Shared HTTP infrastructure lives in `api/src/http/`, auth in
+`api/src/auth/`.
+
 ## Workflow (GSD)
 
 - Project memory lives in `.planning/`. **Read `.planning/STATE.md`, `PROJECT.md`,
