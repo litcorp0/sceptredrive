@@ -31,6 +31,7 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url().optional(),
   BETTER_AUTH_TRUSTED_ORIGINS: z.string().default(''),
+  ADMIN_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   ADMIN_EMAIL: z.string().email().optional(),

@@ -1,0 +1,19 @@
+import { db } from '@gikautos/db'
+import { session } from '@gikautos/db/schema'
+import { and, eq, ne } from 'drizzle-orm'
+import type { DbExecutor } from '../modules/platform/audit.service.ts'
+
+/**
+ * Revokes sessions directly in the database. Used for password resets,
+ * deactivation, and password changes. The signed cookie cache can keep a
+ * revoked session usable for up to its 5-minute max age.
+ */
+export async function revokeUserSessions(
+  userId: string,
+  options: { exceptToken?: string | undefined } = {},
+  executor: DbExecutor = db,
+): Promise<void> {
+  const filters = [eq(session.userId, userId)]
+  if (options.exceptToken) filters.push(ne(session.token, options.exceptToken))
+  await executor.delete(session).where(and(...filters))
+}
