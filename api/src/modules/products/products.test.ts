@@ -172,6 +172,23 @@ describe.skipIf(!available)('products API', () => {
     return response
   }
 
+  async function suggestSku(): Promise<string> {
+    const response = await app.request('/api/products/suggest-sku', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(response.status).toBe(200)
+    return ((await response.json()) as { sku: string }).sku
+  }
+
+  async function ensureSequence(value: number): Promise<void> {
+    const sequenceFilter = and(eq(setting.key, 'catalog.skuSequence'), isNull(setting.branchId))
+    await db
+      .insert(setting)
+      .values({ key: 'catalog.skuSequence', value, updatedBy: 'test' })
+      .onConflictDoNothing()
+    await db.update(setting).set({ value }).where(sequenceFilter)
+  }
+
   function productPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       name: `Product ${suffix} ${Math.random().toString(36).slice(2, 7)}`,
@@ -286,23 +303,36 @@ describe.skipIf(!available)('products API', () => {
     })
 
     it('lets an admin suggest a SKU without consuming it', async () => {
-      const first = await app.request('/api/products/suggest-sku', {
-        headers: authedHeaders(adminCookie),
-      })
-      expect(first.status).toBe(200)
-      const firstBody = await readJson<{ sku: string }>(first)
+      await ensureSequence(sequenceStart)
+
+      const firstBody = { sku: await suggestSku() }
       expect(firstBody.sku).toMatch(/^GIK-\d+$/)
 
-      const second = await app.request('/api/products/suggest-sku', {
-        headers: authedHeaders(adminCookie),
-      })
-      const secondBody = await readJson<{ sku: string }>(second)
+      const secondBody = { sku: await suggestSku() }
       expect(secondBody.sku).toBe(firstBody.sku)
 
-      const createResponse = await createProductViaApi(productPayload())
+      const createResponse = await createProductViaApi(productPayload({ sku: firstBody.sku }))
       expect(createResponse.status).toBe(201)
       const created = (await readJson<{ product: ProductRecord }>(createResponse)).product
       expect(created.sku).toBe(firstBody.sku)
+    })
+
+    it('advances the sequence past a suggested SKU that was saved explicitly', async () => {
+      await ensureSequence(sequenceStart + 10_000)
+
+      const firstSuggestion = await suggestSku()
+      const explicit = await createProductViaApi(productPayload({ sku: firstSuggestion }))
+      expect(explicit.status).toBe(201)
+
+      const secondSuggestion = await suggestSku()
+      const firstNumber = Number.parseInt(firstSuggestion.split('-')[1] ?? '0', 10)
+      const secondNumber = Number.parseInt(secondSuggestion.split('-')[1] ?? '0', 10)
+      expect(secondNumber).toBeGreaterThan(firstNumber)
+
+      const autoResponse = await createProductViaApi(productPayload())
+      expect(autoResponse.status).toBe(201)
+      const auto = (await readJson<{ product: ProductRecord }>(autoResponse)).product
+      expect(auto.sku).toBe(secondSuggestion)
     })
 
     it('lets managers not suggest or create', async () => {

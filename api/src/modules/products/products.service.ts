@@ -14,7 +14,11 @@ import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
-import { allocateFromSequence, peekSequenceValue } from '../platform/settings.service.ts'
+import {
+  advanceSequencePast,
+  allocateFromSequence,
+  peekSequenceValue,
+} from '../platform/settings.service.ts'
 import {
   countProductRows,
   deleteBarcodeRow,
@@ -160,6 +164,10 @@ export async function createProduct(
       )
       if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create product')
 
+      if (input.sku) {
+        await advanceSequencePast('catalog.skuSequence', created.sku, tx)
+      }
+
       const barcodeRows: BarcodeRow[] = []
       for (const code of normalizeBarcodes(input.barcodes)) {
         try {
@@ -253,6 +261,10 @@ export async function updateProduct(
 
       const updated = await updateProductRow(id, patch, tx)
       if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update product')
+
+      if (patch.sku !== undefined) {
+        await advanceSequencePast('catalog.skuSequence', updated.sku, tx)
+      }
 
       await writeAudit(
         {

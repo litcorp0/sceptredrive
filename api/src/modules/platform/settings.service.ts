@@ -225,3 +225,44 @@ export async function peekSequenceValue(
   const next = await getSettingValue(key, {}, executor)
   return `${prefix}-${String(next).padStart(format.pad, '0')}`
 }
+
+/**
+ * Keeps a sequence in step when one of its formatted values was used outside
+ * the allocator (e.g. a suggested SKU saved explicitly). Bumps the counter
+ * past the value when it matches the sequence's prefix; otherwise no-op.
+ */
+export async function advanceSequencePast(
+  key: SequenceKey,
+  formattedValue: string,
+  executor: DbExecutor = db,
+): Promise<void> {
+  const format = SEQUENCE_FORMATS[key]
+  const prefix = await getSettingValue(format.prefixKey, {}, executor)
+  const expectedPrefix = `${prefix}-`
+  if (!formattedValue.startsWith(expectedPrefix)) return
+
+  const digits = formattedValue.slice(expectedPrefix.length)
+  if (!/^\d+$/.test(digits)) return
+  const used = Number.parseInt(digits, 10)
+  if (!Number.isSafeInteger(used)) return
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const row = await findSequenceRowForUpdate(key, executor)
+    if (!row) {
+      try {
+        await insertSequenceRow(key, used + 1, executor)
+        return
+      } catch (error) {
+        if (isUniqueViolation(error)) continue
+        throw error
+      }
+    }
+
+    const parsed = SETTING_DEFINITIONS[key].schema.safeParse(row.value)
+    const current = parsed.success ? parsed.data : SETTING_DEFINITIONS[key].defaultValue
+    if (current > used) return
+
+    await bumpSequenceRow(row.id, used + 1, executor)
+    return
+  }
+}
