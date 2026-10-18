@@ -80,6 +80,7 @@ export const shortCloseSchema = z.object({ note: z.string().trim().min(1).max(30
 export const transferListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   status: z.enum(['DRAFT', 'DISPATCHED', 'RECEIVED', 'SHORT_CLOSED', 'CANCELLED']).optional(),
+  direction: z.enum(['from', 'to']).optional(),
   limit: limitSchema,
   offset: offsetSchema,
 })

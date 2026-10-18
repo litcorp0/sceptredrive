@@ -1,6 +1,7 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { and, count, desc, eq, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
+import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { transfer, transferLine } from './transfers.schema.ts'
@@ -85,7 +86,7 @@ export async function selectTransferLines(
 export async function selectTransferLineDetails(
   transferId: string,
   executor: DbExecutor = db,
-): Promise<TransferLineDetail[]> {
+): Promise<Omit<TransferLineDetail, 'fromOnHand' | 'toOnHand'>[]> {
   const rows = await executor
     .select({
       id: transferLine.id,
@@ -142,11 +143,15 @@ export async function deleteTransferLines(transferId: string, executor: DbExecut
 function transferConditions(filters: TransferListFilters) {
   const conditions = []
   if (filters.branchId) {
-    const side = or(
-      eq(transfer.fromBranchId, filters.branchId),
-      eq(transfer.toBranchId, filters.branchId),
-    )
-    if (side) conditions.push(side)
+    const branchId = filters.branchId
+    if (filters.direction === 'from') {
+      conditions.push(eq(transfer.fromBranchId, branchId))
+    } else if (filters.direction === 'to') {
+      conditions.push(eq(transfer.toBranchId, branchId))
+    } else {
+      const side = or(eq(transfer.fromBranchId, branchId), eq(transfer.toBranchId, branchId))
+      if (side) conditions.push(side)
+    }
   }
   if (filters.status) conditions.push(eq(transfer.status, filters.status))
   return conditions
@@ -230,4 +235,17 @@ export async function selectTransferBase(
     .where(eq(transfer.id, id))
     .limit(1)
   return rows[0] ?? null
+}
+
+export async function selectLevelsForProducts(
+  branchId: string,
+  productIds: string[],
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  if (productIds.length === 0) return new Map()
+  const rows = await executor
+    .select({ productId: stockLevel.productId, quantityOnHand: stockLevel.quantityOnHand })
+    .from(stockLevel)
+    .where(and(eq(stockLevel.branchId, branchId), inArray(stockLevel.productId, productIds)))
+  return new Map(rows.map((row) => [row.productId, row.quantityOnHand]))
 }

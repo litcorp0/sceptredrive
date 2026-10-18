@@ -15,6 +15,7 @@ import {
   findTransferByIdForUpdate,
   insertTransfer,
   insertTransferLines,
+  selectLevelsForProducts,
   selectTransferBase,
   selectTransferLineDetails,
   selectTransferLines,
@@ -74,7 +75,17 @@ async function validateLineProducts(
 async function loadTransferDetail(id: string): Promise<TransferDetail> {
   const base = await selectTransferBase(id)
   if (!base) throw new NotFoundError('Transfer not found')
-  const lines = await selectTransferLineDetails(id)
+  const lineRows = await selectTransferLineDetails(id)
+  const productIds = lineRows.map((line) => line.productId)
+  const [fromLevels, toLevels] = await Promise.all([
+    selectLevelsForProducts(base.fromBranchId, productIds),
+    selectLevelsForProducts(base.toBranchId, productIds),
+  ])
+  const lines = lineRows.map((line) => ({
+    ...line,
+    fromOnHand: fromLevels.get(line.productId) ?? 0,
+    toOnHand: toLevels.get(line.productId) ?? 0,
+  }))
   return {
     ...base,
     lineCount: lines.length,
@@ -162,6 +173,7 @@ export async function listTransfers(
   const filters = {
     branchId,
     status: query.status,
+    direction: query.direction,
     limit: query.limit,
     offset: query.offset,
   }

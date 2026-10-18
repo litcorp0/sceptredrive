@@ -1,6 +1,7 @@
 import type { transfer, transferLine, transferStatusEnum } from './transfers.schema.ts'
 
 export type TransferStatus = (typeof transferStatusEnum.enumValues)[number]
+export type TransferDirection = 'from' | 'to'
 export type TransferRow = typeof transfer.$inferSelect
 export type TransferLineRow = typeof transferLine.$inferSelect
 
@@ -49,6 +50,7 @@ export interface ShortCloseInput {
 export interface TransferListQuery {
   branchId?: string
   status?: TransferStatus
+  direction?: TransferDirection
   limit: number
   offset: number
 }
@@ -56,6 +58,7 @@ export interface TransferListQuery {
 export interface TransferListFilters {
   branchId: string | null
   status?: TransferStatus | undefined
+  direction?: TransferDirection | undefined
   limit: number
   offset: number
 }
@@ -91,6 +94,10 @@ export interface TransferLineDetail extends TransferLineRow {
   sku: string
   productName: string
   pending: number
+  /** On-hand at the source branch (dispatch context). */
+  fromOnHand: number
+  /** On-hand at the destination branch (receive context). */
+  toOnHand: number
 }
 
 export interface TransferDetail extends TransferListRow {

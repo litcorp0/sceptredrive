@@ -486,6 +486,22 @@ describe.skipIf(!available)('transfers API', () => {
     const destinationBody = await readJson<{ transfers: TransferResponse[] }>(destinationList)
     expect(destinationBody.transfers.length).toBeGreaterThanOrEqual(2)
 
+    const outgoingOnly = await app.request('/api/transfers?direction=from', {
+      headers: authedHeaders(managerACookie),
+    })
+    expect(outgoingOnly.status).toBe(200)
+    const outgoingBody = await readJson<{ transfers: TransferResponse[] }>(outgoingOnly)
+    expect(outgoingBody.transfers.length).toBeGreaterThan(0)
+    expect(outgoingBody.transfers.every((row) => row.fromBranchId === branchAId)).toBe(true)
+
+    const incomingOnly = await app.request('/api/transfers?direction=to', {
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(incomingOnly.status).toBe(200)
+    const incomingBody = await readJson<{ transfers: TransferResponse[] }>(incomingOnly)
+    expect(incomingBody.transfers.length).toBeGreaterThan(0)
+    expect(incomingBody.transfers.every((row) => row.toBranchId === branchBId)).toBe(true)
+
     const adminList = await app.request('/api/transfers', {
       headers: authedHeaders(adminCookie),
     })
