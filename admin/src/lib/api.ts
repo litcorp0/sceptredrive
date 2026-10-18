@@ -17,6 +17,8 @@ import type {
 	CategoryTreeNode,
 	CategoryUpdateInput,
 	ChangePasswordInput,
+	CountCreateInput,
+	CountListQuery,
 	CreateStaffResult,
 	Device,
 	Enrollment,
@@ -40,6 +42,7 @@ import type {
 	StaffCreateInput,
 	StaffListQuery,
 	StaffUpdateInput,
+	StockCount,
 	StockDetail,
 	StockListQuery,
 	StockRow,
@@ -50,6 +53,9 @@ import type {
 	TerminalListQuery,
 	TerminalUpdateInput,
 	ThresholdInput,
+	Transfer,
+	TransferCreateInput,
+	TransferListQuery,
 	Uom,
 	UomCreateInput,
 	UomUpdateInput,
@@ -357,5 +363,61 @@ export const api = {
 					query,
 				}),
 		},
+	},
+	transfers: {
+		list: (query: TransferListQuery = {}) =>
+			apiRequest<{ transfers: Transfer[]; total: number; branchId: string | null }>(
+				"/api/transfers",
+				{ query },
+			),
+		get: (id: string) => apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}`),
+		create: (input: TransferCreateInput) =>
+			apiRequest<{ transfer: Transfer }>("/api/transfers", { method: "POST", body: input }),
+		update: (id: string, input: { note?: string | null }) =>
+			apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}`, {
+				method: "PATCH",
+				body: input,
+			}),
+		replaceLines: (id: string, lines: TransferCreateInput["lines"]) =>
+			apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}/lines`, {
+				method: "PUT",
+				body: { lines },
+			}),
+		cancel: (id: string) =>
+			apiRequest<{ ok: true }>(`/api/transfers/${id}/cancel`, { method: "POST" }),
+		dispatch: (id: string, lines: { productId: string; quantityDispatched: number }[]) =>
+			apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}/dispatch`, {
+				method: "POST",
+				body: { lines },
+			}),
+		receive: (id: string, lines: { productId: string; quantityReceived: number }[]) =>
+			apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}/receive`, {
+				method: "POST",
+				body: { lines },
+			}),
+		shortClose: (id: string, note: string) =>
+			apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}/short-close`, {
+				method: "POST",
+				body: { note },
+			}),
+	},
+
+	counts: {
+		list: (query: CountListQuery = {}) =>
+			apiRequest<{ counts: StockCount[]; total: number; branchId: string | null }>("/api/counts", {
+				query,
+			}),
+		get: (id: string) => apiRequest<{ count: StockCount }>(`/api/counts/${id}`),
+		create: (input: CountCreateInput) =>
+			apiRequest<{ count: StockCount }>("/api/counts", { method: "POST", body: input }),
+		updateLines: (id: string, lines: { productId: string; countedQty: number | null }[]) =>
+			apiRequest<{ count: StockCount }>(`/api/counts/${id}/lines`, {
+				method: "PATCH",
+				body: { lines },
+			}),
+		post: (id: string) =>
+			apiRequest<{ count: StockCount }>(`/api/counts/${id}/post`, { method: "POST" }),
+		cancel: (id: string) =>
+			apiRequest<{ ok: true }>(`/api/counts/${id}/cancel`, { method: "POST" }),
 	},
 }

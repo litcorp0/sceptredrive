@@ -8,6 +8,8 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 const TAB_LINKS = {
 	stock: "/inventory/stock",
+	transfers: "/inventory/transfers",
+	counts: "/inventory/counts",
 } as const
 
 type InventoryTab = keyof typeof TAB_LINKS
@@ -32,7 +34,15 @@ function InventoryLayout() {
 				onValueChange={(value) => void navigate({ to: TAB_LINKS[value as InventoryTab] })}
 			>
 				<TabsList>
-					<TabsTrigger value="stock">Stock</TabsTrigger>
+					<TabsTrigger value="stock" onClick={() => void navigate({ to: TAB_LINKS.stock })}>
+						Stock
+					</TabsTrigger>
+					<TabsTrigger value="transfers" onClick={() => void navigate({ to: TAB_LINKS.transfers })}>
+						Transfers
+					</TabsTrigger>
+					<TabsTrigger value="counts" onClick={() => void navigate({ to: TAB_LINKS.counts })}>
+						Counts
+					</TabsTrigger>
 				</TabsList>
 			</Tabs>
 

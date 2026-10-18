@@ -507,3 +507,111 @@ export interface ThresholdInput {
 	productId: string
 	threshold: number
 }
+
+export type TransferStatus = "DRAFT" | "DISPATCHED" | "RECEIVED" | "SHORT_CLOSED" | "CANCELLED"
+
+export interface TransferLine {
+	id: string
+	transferId: string
+	productId: string
+	quantityRequested: number
+	quantityDispatched: number
+	quantityReceived: number
+	unitCostMinor: number
+	sku: string
+	productName: string
+	pending: number
+	fromOnHand: number
+	toOnHand: number
+}
+
+export interface Transfer {
+	id: string
+	number: string
+	fromBranchId: string
+	fromBranchCode: string
+	fromBranchName: string
+	toBranchId: string
+	toBranchCode: string
+	toBranchName: string
+	status: TransferStatus
+	note: string | null
+	createdBy: string | null
+	dispatchedBy: string | null
+	dispatchedAt: string | null
+	receivedBy: string | null
+	receivedAt: string | null
+	closedBy: string | null
+	closedAt: string | null
+	cancelledBy: string | null
+	cancelledAt: string | null
+	createdAt: string
+	updatedAt: string
+	lineCount: number
+	unitsDispatched: number
+	unitsReceived: number
+	lines?: TransferLine[]
+}
+
+export interface TransferCreateInput {
+	fromBranchId: string
+	toBranchId: string
+	note?: string
+	lines: { productId: string; quantityRequested: number }[]
+}
+
+export type TransferListQuery = {
+	branchId?: string
+	status?: TransferStatus
+	direction?: "from" | "to"
+	limit?: number
+	offset?: number
+}
+
+export type StockCountStatus = "OPEN" | "POSTED" | "CANCELLED"
+
+export interface StockCountLine {
+	id: string
+	countId: string
+	productId: string
+	snapshotQty: number
+	countedQty: number | null
+	sku: string
+	productName: string
+	variance: number | null
+}
+
+export interface StockCount {
+	id: string
+	number: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	categoryId: string | null
+	status: StockCountStatus
+	note: string | null
+	createdBy: string | null
+	postedBy: string | null
+	postedAt: string | null
+	cancelledBy: string | null
+	cancelledAt: string | null
+	createdAt: string
+	updatedAt: string
+	lineCount: number
+	countedCount: number
+	varianceUnits: number
+	lines?: StockCountLine[]
+}
+
+export interface CountCreateInput {
+	branchId: string
+	categoryId?: string
+	note?: string
+}
+
+export type CountListQuery = {
+	branchId?: string
+	status?: StockCountStatus
+	limit?: number
+	offset?: number
+}
