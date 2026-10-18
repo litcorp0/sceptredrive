@@ -48,13 +48,18 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
   let ownBranchId = ''
   let ownBranchCode = ''
   let otherBranchId = ''
+  let warehouseBranchId = ''
   const suffix = randomToken(3)
 
-  async function createBranchAsAdmin(code: string, name: string): Promise<string> {
+  async function createBranchAsAdmin(
+    code: string,
+    name: string,
+    type: 'RETAIL' | 'WAREHOUSE' = 'RETAIL',
+  ): Promise<string> {
     const response = await app.request('/api/branches', {
       method: 'POST',
       headers: authedHeaders(adminCookie),
-      body: JSON.stringify({ code, name, type: 'RETAIL', city: 'Accra' }),
+      body: JSON.stringify({ code, name, type, city: 'Accra' }),
     })
     expect(response.status).toBe(201)
     const body = await readJson<{ branch: { id: string } }>(response)
@@ -70,6 +75,7 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
     ownBranchCode = `T${suffix}-A`
     ownBranchId = await createBranchAsAdmin(ownBranchCode, 'Terminal Branch A')
     otherBranchId = await createBranchAsAdmin(`T${suffix}-B`, 'Terminal Branch B')
+    warehouseBranchId = await createBranchAsAdmin(`T${suffix}-W`, 'Terminal Warehouse', 'WAREHOUSE')
 
     const manager = await createTestUser({
       role: 'MANAGER',
@@ -126,6 +132,17 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
     })
 
     expect(response.status).toBe(403)
+  })
+
+  it('refuses to create terminals on warehouse branches', async () => {
+    const response = await app.request('/api/terminals', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: warehouseBranchId, name: 'Warehouse POS' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: { code: 'CONFLICT' } })
   })
 
   it('rejects unauthenticated listing', async () => {

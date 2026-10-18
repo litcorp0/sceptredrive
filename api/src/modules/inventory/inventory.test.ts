@@ -7,6 +7,7 @@ import { category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { product } from '../products/products.schema.ts'
+import * as productsService from '../products/products.service.ts'
 import { findLevel } from './inventory.repository.ts'
 import { stockLevel, stockMovement } from './inventory.schema.ts'
 import * as inventory from './inventory.service.ts'
@@ -315,6 +316,21 @@ describe.skipIf(!available)('inventory ledger service', () => {
     expect(await inventory.getOnHandTotal(productId)).toBe(7)
     expect((await findLevel(productId, branchAId))?.quantityOnHand).toBe(3)
     expect((await findLevel(productId, branchBId))?.quantityOnHand).toBe(4)
+  })
+
+  it('blocks archiving a product while stock remains', async () => {
+    const productId = await makeProduct('archive')
+    await receipt(productId, 2, 500)
+
+    await expect(productsService.archiveProduct(actor, productId)).rejects.toMatchObject({
+      statusCode: 409,
+    })
+
+    await outbound(productId, 2)
+    const archived = await productsService.archiveProduct(actor, productId)
+    expect(archived.isActive).toBe(false)
+
+    await productsService.reactivateProduct(actor, productId)
   })
 
   it('has no movement update or delete path in the repository', async () => {

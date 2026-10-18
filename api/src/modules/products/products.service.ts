@@ -10,6 +10,7 @@ import {
   findUomById,
   listChildCategoryIds,
 } from '../catalog/catalog.repository.ts'
+import * as inventoryService from '../inventory/inventory.service.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -297,6 +298,11 @@ export async function archiveProduct(actor: AuditActor, id: string): Promise<Pro
     const existing = await findProductById(id, tx)
     if (!existing) throw new NotFoundError('Product not found')
     if (!existing.isActive) return existing
+
+    const onHand = await inventoryService.getOnHandTotal(id, tx)
+    if (onHand !== 0) {
+      throw new ConflictError('Cannot archive a product with stock on hand')
+    }
 
     const updated = await updateProductRow(id, { isActive: false }, tx)
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to archive product')

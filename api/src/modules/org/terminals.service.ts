@@ -64,6 +64,9 @@ export async function createTerminal(
 ): Promise<TerminalRow> {
   const parent = await branchesService.getBranch(user, input.branchId)
   if (!parent.isActive) throw new ConflictError('Cannot add terminals to a deactivated branch')
+  if (parent.type === 'WAREHOUSE') {
+    throw new ConflictError('Warehouses cannot host POS terminals')
+  }
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     try {
