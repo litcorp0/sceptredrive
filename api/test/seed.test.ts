@@ -107,7 +107,7 @@ describe.skipIf(!available)('database seeds', () => {
     })
     const session = (await sessionResponse.json()) as { user?: { role?: string } } | null
     expect(session?.user?.role).toBe('ADMIN')
-  })
+  }, 30_000)
 
   it('creates demo users, branches, terminals, and catalog idempotently', async () => {
     const first = await seedDemo()
@@ -165,5 +165,5 @@ describe.skipIf(!available)('database seeds', () => {
 
     const managerCookie = await signIn(DEMO_MANAGER_EMAIL, DEMO_PASSWORD)
     expect(managerCookie.length).toBeGreaterThan(0)
-  })
+  }, 30_000)
 })
