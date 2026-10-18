@@ -6,6 +6,13 @@ import { PageHeader } from "#/components/common/page-header"
 import { StatusBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select"
 import { api } from "#/lib/api"
 import type { ResolvedSetting, SettingKey } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
@@ -21,7 +28,8 @@ interface SettingMeta {
 	group: string
 	label: string
 	description: string
-	type: "text" | "int" | "decimal"
+	type: "text" | "int" | "decimal" | "select"
+	options?: Array<{ value: string; label: string }>
 }
 
 const SETTING_META: SettingMeta[] = [
@@ -38,6 +46,32 @@ const SETTING_META: SettingMeta[] = [
 		label: "Next staff number",
 		description: "The next number to allocate. Changing this affects new accounts only.",
 		type: "int",
+	},
+	{
+		key: "catalog.skuPrefix",
+		group: "Catalog",
+		label: "SKU prefix",
+		description: "Prefix for auto-generated product SKUs, e.g. GIK-00001.",
+		type: "text",
+	},
+	{
+		key: "catalog.skuSequence",
+		group: "Catalog",
+		label: "Next SKU number",
+		description: "The next number for new products. Saving a suggested SKU advances it.",
+		type: "int",
+	},
+	{
+		key: "pricing.taxMode",
+		group: "Pricing",
+		label: "Tax mode",
+		description:
+			"Inclusive: entered prices already contain VAT, NHIL, and GETFund. Exclusive: tax is added on top.",
+		type: "select",
+		options: [
+			{ value: "INCLUSIVE", label: "Tax-inclusive prices" },
+			{ value: "EXCLUSIVE", label: "Tax-exclusive prices" },
+		],
 	},
 	{
 		key: "receipt.header",
@@ -159,8 +193,8 @@ function SettingRow({
 
 	const updateMutation = useMutation({
 		mutationFn: () => {
-			const parsed = meta.type === "text" ? value : Number(value)
-			if (meta.type !== "text" && !Number.isFinite(parsed)) {
+			const parsed = meta.type === "text" || meta.type === "select" ? value : Number(value)
+			if (meta.type !== "text" && meta.type !== "select" && !Number.isFinite(parsed)) {
 				throw new Error("Enter a valid number")
 			}
 			return api.settings.update({ key: meta.key, value: parsed, branchId })
@@ -200,15 +234,30 @@ function SettingRow({
 			</div>
 
 			<div className="flex items-center gap-2">
-				<Input
-					type={meta.type === "text" ? "text" : "number"}
-					step={meta.type === "decimal" ? "any" : undefined}
-					className="h-8 w-40"
-					value={value}
-					disabled={!canEdit}
-					onChange={(event) => setValue(event.target.value)}
-					aria-label={meta.label}
-				/>
+				{meta.type === "select" ? (
+					<Select value={value} onValueChange={(next) => setValue(next)} disabled={!canEdit}>
+						<SelectTrigger className="h-8 w-44" aria-label={meta.label}>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{(meta.options ?? []).map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				) : (
+					<Input
+						type={meta.type === "text" ? "text" : "number"}
+						step={meta.type === "decimal" ? "any" : undefined}
+						className="h-8 w-40"
+						value={value}
+						disabled={!canEdit}
+						onChange={(event) => setValue(event.target.value)}
+						aria-label={meta.label}
+					/>
+				)}
 				<Button type="submit" size="sm" disabled={!canEdit || !dirty || updateMutation.isPending}>
 					{updateMutation.isPending ? "Saving…" : "Save"}
 				</Button>
