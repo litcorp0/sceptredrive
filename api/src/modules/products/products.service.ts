@@ -16,3 +16,27 @@ export async function countActiveProductsByCategory(
     .where(and(eq(product.categoryId, categoryId), eq(product.isActive, true)))
   return rows[0]?.total ?? 0
 }
+
+/** Counts active products that reference a brand (catalog archive guard). */
+export async function countActiveProductsByBrand(
+  brandId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({ total: count() })
+    .from(product)
+    .where(and(eq(product.brandId, brandId), eq(product.isActive, true)))
+  return rows[0]?.total ?? 0
+}
+
+/** Counts active products that reference a unit of measure (catalog archive guard). */
+export async function countActiveProductsByUom(
+  uomId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({ total: count() })
+    .from(product)
+    .where(and(eq(product.uomId, uomId), eq(product.isActive, true)))
+  return rows[0]?.total ?? 0
+}

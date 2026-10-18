@@ -3,21 +3,41 @@ import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
-import { countActiveProductsByCategory } from '../products/products.service.ts'
+import {
+  countActiveProductsByBrand,
+  countActiveProductsByCategory,
+  countActiveProductsByUom,
+} from '../products/products.service.ts'
 import {
   countActiveCategoryChildren,
   countCategoryChildren,
+  findBrandById,
+  findBrandByNameInsensitive,
   findCategoryById,
   findCategoryByNameInsensitive,
+  findUomByCode,
+  findUomById,
+  insertBrand,
   insertCategory,
+  insertUom,
+  listBrandRows,
   listCategoryRows,
+  listUomRows,
+  updateBrandRow,
   updateCategoryRow,
+  updateUomRow,
 } from './catalog.repository.ts'
 import type {
+  BrandCreateInput,
+  BrandRow,
+  BrandUpdateInput,
   CategoryCreateInput,
   CategoryRow,
   CategoryUpdateInput,
   CategoryWithChildren,
+  UomCreateInput,
+  UomRow,
+  UomUpdateInput,
 } from './catalog.types.ts'
 
 function buildCategoryTree(rows: CategoryRow[]): CategoryWithChildren[] {
@@ -200,6 +220,241 @@ export async function reactivateCategory(actor: AuditActor, id: string): Promise
         ...actor,
         action: 'category.reactivated',
         entity: 'category',
+        entityId: id,
+        before: { isActive: false },
+        after: { isActive: true },
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function listBrands(filters: { includeArchived: boolean }): Promise<BrandRow[]> {
+  return listBrandRows(filters)
+}
+
+export async function createBrand(actor: AuditActor, input: BrandCreateInput): Promise<BrandRow> {
+  const duplicate = await findBrandByNameInsensitive(input.name)
+  if (duplicate) throw new ConflictError('A brand with this name already exists')
+
+  try {
+    return await db.transaction(async (tx) => {
+      const created = await insertBrand({ name: input.name, createdBy: actor.actorId }, tx)
+      if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create brand')
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'brand.created',
+          entity: 'brand',
+          entityId: created.id,
+          after: created,
+        },
+        tx,
+      )
+      return created
+    })
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError('A brand with this name already exists')
+    }
+    throw error
+  }
+}
+
+export async function updateBrand(
+  actor: AuditActor,
+  id: string,
+  input: BrandUpdateInput,
+): Promise<BrandRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findBrandById(id, tx)
+    if (!existing) throw new NotFoundError('Brand not found')
+    if (input.name === existing.name) return existing
+
+    const duplicate = await findBrandByNameInsensitive(input.name, tx)
+    if (duplicate && duplicate.id !== id) {
+      throw new ConflictError('A brand with this name already exists')
+    }
+
+    const updated = await updateBrandRow(id, { name: input.name }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update brand')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'brand.updated',
+        entity: 'brand',
+        entityId: id,
+        before: existing,
+        after: updated,
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function archiveBrand(actor: AuditActor, id: string): Promise<BrandRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findBrandById(id, tx)
+    if (!existing) throw new NotFoundError('Brand not found')
+    if (!existing.isActive) return existing
+
+    if ((await countActiveProductsByBrand(id, tx)) > 0) {
+      throw new ConflictError('This brand is used by active products')
+    }
+
+    const updated = await updateBrandRow(id, { isActive: false }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to archive brand')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'brand.archived',
+        entity: 'brand',
+        entityId: id,
+        before: { isActive: true },
+        after: { isActive: false },
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function reactivateBrand(actor: AuditActor, id: string): Promise<BrandRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findBrandById(id, tx)
+    if (!existing) throw new NotFoundError('Brand not found')
+    if (existing.isActive) return existing
+
+    const updated = await updateBrandRow(id, { isActive: true }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to reactivate brand')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'brand.reactivated',
+        entity: 'brand',
+        entityId: id,
+        before: { isActive: false },
+        after: { isActive: true },
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function listUoms(filters: { includeArchived: boolean }): Promise<UomRow[]> {
+  return listUomRows(filters)
+}
+
+export async function createUom(actor: AuditActor, input: UomCreateInput): Promise<UomRow> {
+  const duplicate = await findUomByCode(input.code)
+  if (duplicate) throw new ConflictError('A unit with this code already exists')
+
+  try {
+    return await db.transaction(async (tx) => {
+      const created = await insertUom(
+        { code: input.code, name: input.name, createdBy: actor.actorId },
+        tx,
+      )
+      if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create unit')
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'uom.created',
+          entity: 'uom',
+          entityId: created.id,
+          after: created,
+        },
+        tx,
+      )
+      return created
+    })
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError('A unit with this code already exists')
+    }
+    throw error
+  }
+}
+
+/** Renames a unit. The code is immutable after creation. */
+export async function updateUom(
+  actor: AuditActor,
+  id: string,
+  input: UomUpdateInput,
+): Promise<UomRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findUomById(id, tx)
+    if (!existing) throw new NotFoundError('Unit not found')
+    if (input.name === existing.name) return existing
+
+    const updated = await updateUomRow(id, { name: input.name }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update unit')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'uom.updated',
+        entity: 'uom',
+        entityId: id,
+        before: existing,
+        after: updated,
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function archiveUom(actor: AuditActor, id: string): Promise<UomRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findUomById(id, tx)
+    if (!existing) throw new NotFoundError('Unit not found')
+    if (!existing.isActive) return existing
+
+    if ((await countActiveProductsByUom(id, tx)) > 0) {
+      throw new ConflictError('This unit is used by active products')
+    }
+
+    const updated = await updateUomRow(id, { isActive: false }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to archive unit')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'uom.archived',
+        entity: 'uom',
+        entityId: id,
+        before: { isActive: true },
+        after: { isActive: false },
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+export async function reactivateUom(actor: AuditActor, id: string): Promise<UomRow> {
+  return db.transaction(async (tx) => {
+    const existing = await findUomById(id, tx)
+    if (!existing) throw new NotFoundError('Unit not found')
+    if (existing.isActive) return existing
+
+    const updated = await updateUomRow(id, { isActive: true }, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to reactivate unit')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'uom.reactivated',
+        entity: 'uom',
         entityId: id,
         before: { isActive: false },
         after: { isActive: true },
