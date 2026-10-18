@@ -6,8 +6,10 @@
 browser walkthrough 29/29; see `.planning/phases/02-catalog-pricing/01-VERIFICATION.md`).
 TOTP forced setup/verification is now machine-verified end to end, closing the Phase 1
 human item; TOTP secret for the dev environment lives at `/tmp/opencode/admin-totp.json`.
-**Next action:** Plan Phase 3 (Inventory & Transfers) — read `ROADMAP.md` Phase 3,
-`REQUIREMENTS.md` (INV-01…09, ADM-04), then run the GSD planning flow.
+**Next action:** Execute Phase 3 (Inventory & Transfers) — planning is complete:
+`00-CONTEXT.md` (locked decisions), `01-RESEARCH.md`, and 8 plans in
+`.planning/phases/03-inventory-transfers/`. Start with Plan 01 (schema, migration,
+settings, demo seed).
 
 ---
 
