@@ -28,6 +28,7 @@ import { Route as AuthenticatedCatalogBrandsRouteImport } from './routes/_authen
 import { Route as AuthenticatedCatalogCategoriesRouteImport } from './routes/_authenticated/catalog/categories'
 import { Route as AuthenticatedCatalogProductsRouteImport } from './routes/_authenticated/catalog/products'
 import { Route as AuthenticatedCatalogUnitsRouteImport } from './routes/_authenticated/catalog/units'
+import { Route as AuthenticatedCatalogProductsIndexRouteImport } from './routes/_authenticated/catalog/products/index'
 import { Route as AuthenticatedCatalogProductsIdRouteImport } from './routes/_authenticated/catalog/products.$id'
 import { Route as AuthenticatedCatalogProductsNewRouteImport } from './routes/_authenticated/catalog/products.new'
 
@@ -132,6 +133,12 @@ const AuthenticatedCatalogUnitsRoute =
     path: '/units',
     getParentRoute: () => AuthenticatedCatalogRouteRoute,
   } as any)
+const AuthenticatedCatalogProductsIndexRoute =
+  AuthenticatedCatalogProductsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCatalogProductsRoute,
+  } as any)
 const AuthenticatedCatalogProductsIdRoute =
   AuthenticatedCatalogProductsIdRouteImport.update({
     id: '/$id',
@@ -166,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/catalog/': typeof AuthenticatedCatalogIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -182,11 +190,11 @@ export interface FileRoutesByTo {
   '/branches/$id': typeof AuthenticatedBranchesIdRoute
   '/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
-  '/catalog/products': typeof AuthenticatedCatalogProductsRouteWithChildren
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/catalog': typeof AuthenticatedCatalogIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/catalog/products': typeof AuthenticatedCatalogProductsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/_authenticated/catalog/': typeof AuthenticatedCatalogIndexRoute
   '/_authenticated/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/_authenticated/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/_authenticated/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -235,6 +244,7 @@ export interface FileRouteTypes {
     | '/catalog/'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/catalog/products/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -251,11 +261,11 @@ export interface FileRouteTypes {
     | '/branches/$id'
     | '/catalog/brands'
     | '/catalog/categories'
-    | '/catalog/products'
     | '/catalog/units'
     | '/catalog'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/catalog/products'
   id:
     | '__root__'
     | '/_authenticated'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/_authenticated/catalog/'
     | '/_authenticated/catalog/products/$id'
     | '/_authenticated/catalog/products/new'
+    | '/_authenticated/catalog/products/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -424,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCatalogUnitsRouteImport
       parentRoute: typeof AuthenticatedCatalogRouteRoute
     }
+    '/_authenticated/catalog/products/': {
+      id: '/_authenticated/catalog/products/'
+      path: '/'
+      fullPath: '/catalog/products/'
+      preLoaderRoute: typeof AuthenticatedCatalogProductsIndexRouteImport
+      parentRoute: typeof AuthenticatedCatalogProductsRoute
+    }
     '/_authenticated/catalog/products/$id': {
       id: '/_authenticated/catalog/products/$id'
       path: '/$id'
@@ -444,12 +462,15 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedCatalogProductsRouteChildren {
   AuthenticatedCatalogProductsIdRoute: typeof AuthenticatedCatalogProductsIdRoute
   AuthenticatedCatalogProductsNewRoute: typeof AuthenticatedCatalogProductsNewRoute
+  AuthenticatedCatalogProductsIndexRoute: typeof AuthenticatedCatalogProductsIndexRoute
 }
 
 const AuthenticatedCatalogProductsRouteChildren: AuthenticatedCatalogProductsRouteChildren =
   {
     AuthenticatedCatalogProductsIdRoute: AuthenticatedCatalogProductsIdRoute,
     AuthenticatedCatalogProductsNewRoute: AuthenticatedCatalogProductsNewRoute,
+    AuthenticatedCatalogProductsIndexRoute:
+      AuthenticatedCatalogProductsIndexRoute,
   }
 
 const AuthenticatedCatalogProductsRouteWithChildren =
