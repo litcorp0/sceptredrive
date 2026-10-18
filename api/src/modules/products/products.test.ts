@@ -418,4 +418,206 @@ describe.skipIf(!available)('products API', () => {
       expect(body.product.categoryId).toBe(childCategoryId)
     })
   })
+
+  describe('update, archive, and barcodes', () => {
+    async function createProductAndReturn(overrides: Record<string, unknown> = {}) {
+      const response = await createProductViaApi(productPayload(overrides))
+      expect(response.status).toBe(201)
+      return (await readJson<{ product: ProductRecord }>(response)).product
+    }
+
+    it('updates a product with an audit diff', async () => {
+      const created = await createProductAndReturn()
+
+      const response = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({
+          name: `Renamed ${suffix}`,
+          basePriceMinor: 12_500,
+          taxCategory: 'ZERO_RATED',
+        }),
+      })
+
+      expect(response.status).toBe(200)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      expect(body.product.name).toBe(`Renamed ${suffix}`)
+      expect(body.product.basePriceMinor).toBe(12_500)
+      expect(body.product.taxCategory).toBe('ZERO_RATED')
+
+      const auditRows = await db
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.entity, 'product'), eq(auditLog.entityId, created.id)))
+      const updated = auditRows.find((row) => row.action === 'product.updated')
+      expect((updated?.before as { name?: string } | undefined)?.name).toBe(created.name)
+      expect((updated?.after as { name?: string } | undefined)?.name).toBe(`Renamed ${suffix}`)
+    })
+
+    it('changes the SKU and rejects a colliding SKU with 409', async () => {
+      const first = await createProductAndReturn()
+      const second = await createProductAndReturn()
+
+      const change = await app.request(`/api/products/${first.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ sku: `MOVED-${suffix}-01` }),
+      })
+      expect(change.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(change)).product.sku).toBe(
+        `MOVED-${suffix.toUpperCase()}-01`,
+      )
+
+      const collision = await app.request(`/api/products/${first.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ sku: second.sku }),
+      })
+      expect(collision.status).toBe(409)
+    })
+
+    it('validates updated references and can clear the brand', async () => {
+      const created = await createProductAndReturn()
+
+      const archivedCategoryAttempt = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ categoryId: archivedCategoryId }),
+      })
+      expect(archivedCategoryAttempt.status).toBe(409)
+
+      const unknownUomAttempt = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ uomId: '00000000-0000-4000-8000-000000000000' }),
+      })
+      expect(unknownUomAttempt.status).toBe(404)
+
+      const clearBrand = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ brandId: null }),
+      })
+      expect(clearBrand.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(clearBrand)).product.brandId).toBeNull()
+    })
+
+    it('forbids managers from updating products', async () => {
+      const created = await createProductAndReturn()
+
+      const response = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ name: 'Manager Edit' }),
+      })
+      expect(response.status).toBe(403)
+    })
+
+    it('archives and reactivates a product with audit rows', async () => {
+      const created = await createProductAndReturn()
+
+      const archive = await app.request(`/api/products/${created.id}/archive`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(archive.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(archive)).product.isActive).toBe(false)
+
+      const managerAttempt = await app.request(`/api/products/${created.id}/archive`, {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+      })
+      expect(managerAttempt.status).toBe(403)
+
+      const reactivate = await app.request(`/api/products/${created.id}/reactivate`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(reactivate.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(reactivate)).product.isActive).toBe(true)
+
+      const auditRows = await db
+        .select({ action: auditLog.action })
+        .from(auditLog)
+        .where(and(eq(auditLog.entity, 'product'), eq(auditLog.entityId, created.id)))
+      const actions = auditRows.map((row) => row.action)
+      expect(actions).toContain('product.archived')
+      expect(actions).toContain('product.reactivated')
+    })
+
+    it('returns product detail with barcodes and scopes overrides per role', async () => {
+      const code = `DTL-${suffix}-01`
+      const created = await createProductAndReturn({ barcodes: [code] })
+
+      const response = await app.request(`/api/products/${created.id}`, {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(response.status).toBe(200)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      expect(body.product.barcodes?.map((item) => item.code)).toEqual([code])
+      expect(body.product.basePriceMinor).toBe(10_000)
+
+      const managerResponse = await app.request(`/api/products/${created.id}`, {
+        headers: authedHeaders(managerCookie),
+      })
+      expect(managerResponse.status).toBe(200)
+
+      const missing = await app.request('/api/products/00000000-0000-4000-8000-000000000000', {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(missing.status).toBe(404)
+    })
+
+    it('adds and removes barcodes with conflict and scope checks', async () => {
+      const created = await createProductAndReturn()
+      const code = `ADD-${suffix}-01`
+
+      const add = await app.request(`/api/products/${created.id}/barcodes`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ code }),
+      })
+      expect(add.status).toBe(201)
+      const added = (await readJson<{ barcode: BarcodeRecord }>(add)).barcode
+      expect(added.code).toBe(code)
+
+      const duplicate = await app.request(`/api/products/${created.id}/barcodes`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ code }),
+      })
+      expect(duplicate.status).toBe(409)
+
+      const missingProduct = await app.request(
+        '/api/products/00000000-0000-4000-8000-000000000000/barcodes',
+        {
+          method: 'POST',
+          headers: authedHeaders(adminCookie),
+          body: JSON.stringify({ code: `ADD-${suffix}-02` }),
+        },
+      )
+      expect(missingProduct.status).toBe(404)
+
+      const other = await createProductAndReturn()
+      const crossProduct = await app.request(`/api/products/${other.id}/barcodes/${added.id}`, {
+        method: 'DELETE',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(crossProduct.status).toBe(404)
+
+      const remove = await app.request(`/api/products/${created.id}/barcodes/${added.id}`, {
+        method: 'DELETE',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(remove.status).toBe(200)
+
+      const auditRows = await db
+        .select({ action: auditLog.action })
+        .from(auditLog)
+        .where(and(eq(auditLog.entity, 'product'), eq(auditLog.entityId, created.id)))
+      const actions = auditRows.map((row) => row.action)
+      expect(actions).toContain('product.barcode.added')
+      expect(actions).toContain('product.barcode.removed')
+    })
+  })
 })

@@ -1,8 +1,13 @@
 import type { Context } from 'hono'
 import { actorFromContext } from '../../http/audit-context.ts'
+import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as productsService from './products.service.ts'
-import type { ProductCreateInput } from './products.types.ts'
+import type {
+  BarcodeCreateInput,
+  ProductCreateInput,
+  ProductUpdateInput,
+} from './products.types.ts'
 
 export async function suggestSku(c: Context<AppEnv>) {
   const suggestion = await productsService.suggestSku()
@@ -13,4 +18,40 @@ export async function createProduct(c: Context<AppEnv>, input: ProductCreateInpu
   const actor = actorFromContext(c)
   const product = await productsService.createProduct(actor, input)
   return c.json({ product }, 201)
+}
+
+export async function getProduct(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const product = await productsService.getProductDetail(user, id)
+  return c.json({ product })
+}
+
+export async function updateProduct(c: Context<AppEnv>, id: string, input: ProductUpdateInput) {
+  const actor = actorFromContext(c)
+  const product = await productsService.updateProduct(actor, id, input)
+  return c.json({ product })
+}
+
+export async function archiveProduct(c: Context<AppEnv>, id: string) {
+  const actor = actorFromContext(c)
+  const product = await productsService.archiveProduct(actor, id)
+  return c.json({ product })
+}
+
+export async function reactivateProduct(c: Context<AppEnv>, id: string) {
+  const actor = actorFromContext(c)
+  const product = await productsService.reactivateProduct(actor, id)
+  return c.json({ product })
+}
+
+export async function addBarcode(c: Context<AppEnv>, id: string, input: BarcodeCreateInput) {
+  const actor = actorFromContext(c)
+  const barcodeRow = await productsService.addProductBarcode(actor, id, input.code)
+  return c.json({ barcode: barcodeRow }, 201)
+}
+
+export async function removeBarcode(c: Context<AppEnv>, id: string, barcodeId: string) {
+  const actor = actorFromContext(c)
+  await productsService.removeProductBarcode(actor, id, barcodeId)
+  return c.json({ removed: true })
 }

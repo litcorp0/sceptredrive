@@ -43,6 +43,10 @@ export interface ProductUpdateInput {
   taxCategory?: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | undefined
 }
 
+export interface BarcodeCreateInput {
+  code: string
+}
+
 export interface ProductListFilters {
   q?: string | undefined
   categoryId?: string | undefined
