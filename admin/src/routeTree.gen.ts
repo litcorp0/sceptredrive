@@ -17,11 +17,17 @@ import { Route as TwoFactorRouteImport } from './routes/two-factor'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated/branches'
+import { Route as AuthenticatedCatalogRouteRouteImport } from './routes/_authenticated/catalog/route'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedTerminalsRouteImport } from './routes/_authenticated/terminals'
 import { Route as AuthenticatedBranchesIdRouteImport } from './routes/_authenticated/branches.$id'
+import { Route as AuthenticatedCatalogIndexRouteImport } from './routes/_authenticated/catalog/index'
+import { Route as AuthenticatedCatalogBrandsRouteImport } from './routes/_authenticated/catalog/brands'
+import { Route as AuthenticatedCatalogCategoriesRouteImport } from './routes/_authenticated/catalog/categories'
+import { Route as AuthenticatedCatalogProductsRouteImport } from './routes/_authenticated/catalog/products'
+import { Route as AuthenticatedCatalogUnitsRouteImport } from './routes/_authenticated/catalog/units'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -62,6 +68,12 @@ const AuthenticatedBranchesRoute = AuthenticatedBranchesRouteImport.update({
   path: '/branches',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCatalogRouteRoute =
+  AuthenticatedCatalogRouteRouteImport.update({
+    id: '/catalog',
+    path: '/catalog',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChangePasswordRoute =
   AuthenticatedChangePasswordRouteImport.update({
     id: '/change-password',
@@ -88,6 +100,36 @@ const AuthenticatedBranchesIdRoute = AuthenticatedBranchesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedBranchesRoute,
 } as any)
+const AuthenticatedCatalogIndexRoute =
+  AuthenticatedCatalogIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCatalogRouteRoute,
+  } as any)
+const AuthenticatedCatalogBrandsRoute =
+  AuthenticatedCatalogBrandsRouteImport.update({
+    id: '/brands',
+    path: '/brands',
+    getParentRoute: () => AuthenticatedCatalogRouteRoute,
+  } as any)
+const AuthenticatedCatalogCategoriesRoute =
+  AuthenticatedCatalogCategoriesRouteImport.update({
+    id: '/categories',
+    path: '/categories',
+    getParentRoute: () => AuthenticatedCatalogRouteRoute,
+  } as any)
+const AuthenticatedCatalogProductsRoute =
+  AuthenticatedCatalogProductsRouteImport.update({
+    id: '/products',
+    path: '/products',
+    getParentRoute: () => AuthenticatedCatalogRouteRoute,
+  } as any)
+const AuthenticatedCatalogUnitsRoute =
+  AuthenticatedCatalogUnitsRouteImport.update({
+    id: '/units',
+    path: '/units',
+    getParentRoute: () => AuthenticatedCatalogRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -95,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
+  '/catalog': typeof AuthenticatedCatalogRouteRouteWithChildren
   '/audit': typeof AuthenticatedAuditRoute
   '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
@@ -102,6 +145,11 @@ export interface FileRoutesByFullPath {
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
   '/branches/$id': typeof AuthenticatedBranchesIdRoute
+  '/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
+  '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
+  '/catalog/products': typeof AuthenticatedCatalogProductsRoute
+  '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
+  '/catalog/': typeof AuthenticatedCatalogIndexRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -116,6 +164,11 @@ export interface FileRoutesByTo {
   '/terminals': typeof AuthenticatedTerminalsRoute
   '/': typeof AuthenticatedIndexRoute
   '/branches/$id': typeof AuthenticatedBranchesIdRoute
+  '/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
+  '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
+  '/catalog/products': typeof AuthenticatedCatalogProductsRoute
+  '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
+  '/catalog': typeof AuthenticatedCatalogIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -124,6 +177,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
+  '/_authenticated/catalog': typeof AuthenticatedCatalogRouteRouteWithChildren
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
@@ -132,6 +186,11 @@ export interface FileRoutesById {
   '/_authenticated/terminals': typeof AuthenticatedTerminalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/branches/$id': typeof AuthenticatedBranchesIdRoute
+  '/_authenticated/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
+  '/_authenticated/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
+  '/_authenticated/catalog/products': typeof AuthenticatedCatalogProductsRoute
+  '/_authenticated/catalog/units': typeof AuthenticatedCatalogUnitsRoute
+  '/_authenticated/catalog/': typeof AuthenticatedCatalogIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +200,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/two-factor'
+    | '/catalog'
     | '/audit'
     | '/branches'
     | '/change-password'
@@ -148,6 +208,11 @@ export interface FileRouteTypes {
     | '/staff'
     | '/terminals'
     | '/branches/$id'
+    | '/catalog/brands'
+    | '/catalog/categories'
+    | '/catalog/products'
+    | '/catalog/units'
+    | '/catalog/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -162,6 +227,11 @@ export interface FileRouteTypes {
     | '/terminals'
     | '/'
     | '/branches/$id'
+    | '/catalog/brands'
+    | '/catalog/categories'
+    | '/catalog/products'
+    | '/catalog/units'
+    | '/catalog'
   id:
     | '__root__'
     | '/_authenticated'
@@ -169,6 +239,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/two-factor'
+    | '/_authenticated/catalog'
     | '/_authenticated/audit'
     | '/_authenticated/branches'
     | '/_authenticated/change-password'
@@ -177,6 +248,11 @@ export interface FileRouteTypes {
     | '/_authenticated/terminals'
     | '/_authenticated/'
     | '/_authenticated/branches/$id'
+    | '/_authenticated/catalog/brands'
+    | '/_authenticated/catalog/categories'
+    | '/_authenticated/catalog/products'
+    | '/_authenticated/catalog/units'
+    | '/_authenticated/catalog/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -245,6 +321,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBranchesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/catalog': {
+      id: '/_authenticated/catalog'
+      path: '/catalog'
+      fullPath: '/catalog'
+      preLoaderRoute: typeof AuthenticatedCatalogRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/change-password': {
       id: '/_authenticated/change-password'
       path: '/change-password'
@@ -280,8 +363,65 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBranchesIdRouteImport
       parentRoute: typeof AuthenticatedBranchesRoute
     }
+    '/_authenticated/catalog/': {
+      id: '/_authenticated/catalog/'
+      path: '/'
+      fullPath: '/catalog/'
+      preLoaderRoute: typeof AuthenticatedCatalogIndexRouteImport
+      parentRoute: typeof AuthenticatedCatalogRouteRoute
+    }
+    '/_authenticated/catalog/brands': {
+      id: '/_authenticated/catalog/brands'
+      path: '/brands'
+      fullPath: '/catalog/brands'
+      preLoaderRoute: typeof AuthenticatedCatalogBrandsRouteImport
+      parentRoute: typeof AuthenticatedCatalogRouteRoute
+    }
+    '/_authenticated/catalog/categories': {
+      id: '/_authenticated/catalog/categories'
+      path: '/categories'
+      fullPath: '/catalog/categories'
+      preLoaderRoute: typeof AuthenticatedCatalogCategoriesRouteImport
+      parentRoute: typeof AuthenticatedCatalogRouteRoute
+    }
+    '/_authenticated/catalog/products': {
+      id: '/_authenticated/catalog/products'
+      path: '/products'
+      fullPath: '/catalog/products'
+      preLoaderRoute: typeof AuthenticatedCatalogProductsRouteImport
+      parentRoute: typeof AuthenticatedCatalogRouteRoute
+    }
+    '/_authenticated/catalog/units': {
+      id: '/_authenticated/catalog/units'
+      path: '/units'
+      fullPath: '/catalog/units'
+      preLoaderRoute: typeof AuthenticatedCatalogUnitsRouteImport
+      parentRoute: typeof AuthenticatedCatalogRouteRoute
+    }
   }
 }
+
+interface AuthenticatedCatalogRouteRouteChildren {
+  AuthenticatedCatalogBrandsRoute: typeof AuthenticatedCatalogBrandsRoute
+  AuthenticatedCatalogCategoriesRoute: typeof AuthenticatedCatalogCategoriesRoute
+  AuthenticatedCatalogProductsRoute: typeof AuthenticatedCatalogProductsRoute
+  AuthenticatedCatalogUnitsRoute: typeof AuthenticatedCatalogUnitsRoute
+  AuthenticatedCatalogIndexRoute: typeof AuthenticatedCatalogIndexRoute
+}
+
+const AuthenticatedCatalogRouteRouteChildren: AuthenticatedCatalogRouteRouteChildren =
+  {
+    AuthenticatedCatalogBrandsRoute: AuthenticatedCatalogBrandsRoute,
+    AuthenticatedCatalogCategoriesRoute: AuthenticatedCatalogCategoriesRoute,
+    AuthenticatedCatalogProductsRoute: AuthenticatedCatalogProductsRoute,
+    AuthenticatedCatalogUnitsRoute: AuthenticatedCatalogUnitsRoute,
+    AuthenticatedCatalogIndexRoute: AuthenticatedCatalogIndexRoute,
+  }
+
+const AuthenticatedCatalogRouteRouteWithChildren =
+  AuthenticatedCatalogRouteRoute._addFileChildren(
+    AuthenticatedCatalogRouteRouteChildren,
+  )
 
 interface AuthenticatedBranchesRouteChildren {
   AuthenticatedBranchesIdRoute: typeof AuthenticatedBranchesIdRoute
@@ -297,6 +437,7 @@ const AuthenticatedBranchesRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCatalogRouteRoute: typeof AuthenticatedCatalogRouteRouteWithChildren
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRouteWithChildren
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
@@ -307,6 +448,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCatalogRouteRoute: AuthenticatedCatalogRouteRouteWithChildren,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedBranchesRoute: AuthenticatedBranchesRouteWithChildren,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,

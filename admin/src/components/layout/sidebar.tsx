@@ -7,6 +7,7 @@ import {
 	LayoutDashboard,
 	type LucideIcon,
 	MonitorSmartphone,
+	Package,
 	ScrollText,
 	Settings2,
 	Users,
@@ -14,7 +15,7 @@ import {
 import { toRole } from "#/lib/role"
 
 interface NavItem {
-	to: "/" | "/branches" | "/terminals" | "/staff" | "/audit" | "/settings"
+	to: "/" | "/branches" | "/terminals" | "/staff" | "/catalog" | "/audit" | "/settings"
 	label: string
 	icon: LucideIcon
 	permission?: Permission
@@ -22,6 +23,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
 	{ to: "/", label: "Dashboard", icon: LayoutDashboard },
+	{ to: "/catalog", label: "Catalog", icon: Package, permission: "catalog.read" },
 	{ to: "/branches", label: "Branches", icon: Building2, permission: "branch.read" },
 	{ to: "/terminals", label: "Terminals", icon: MonitorSmartphone, permission: "terminal.read" },
 	{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },
