@@ -17,3 +17,10 @@ export function parseGhsToMinor(input: string): number | null {
 	const pesewas = Number(whole) * 100 + Number(fraction.padEnd(2, "0"))
 	return Number.isSafeInteger(pesewas) ? pesewas : null
 }
+
+/** Plain "95.00" form of an amount for editable inputs (no currency label). */
+export function formatMinorPlain(minorUnits: number): string {
+	const whole = Math.trunc(minorUnits / 100)
+	const fraction = Math.abs(minorUnits % 100)
+	return `${whole}.${String(fraction).padStart(2, "0")}`
+}
