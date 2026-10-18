@@ -4,18 +4,23 @@ import { branchScope } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { findBrandById, findCategoryById, findUomById } from '../catalog/catalog.repository.ts'
+import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
 import { allocateFromSequence, peekSequenceValue } from '../platform/settings.service.ts'
 import {
   deleteBarcodeRow,
+  deleteProductPriceRow,
   findBarcodeForProduct,
   findProductById,
+  findProductPriceRow,
   insertBarcode,
   insertProduct,
+  insertProductPriceRow,
   listBarcodesByProduct,
   listProductPriceRows,
+  updateProductPriceRow,
   updateProductRow,
 } from './products.repository.ts'
 import { product } from './products.schema.ts'
@@ -23,6 +28,7 @@ import type {
   BarcodeRow,
   ProductCreateInput,
   ProductDetail,
+  ProductPriceRow,
   ProductRow,
   ProductUpdateInput,
   ProductWithBarcodes,
@@ -365,4 +371,104 @@ export async function removeProductBarcode(
       tx,
     )
   })
+}
+
+export interface PriceOverrideInput {
+  branchId: string
+  priceMinor: number
+}
+
+/** Admin upserts any branch; managers only their own (checked via branch access). */
+export async function setPriceOverride(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  input: PriceOverrideInput,
+): Promise<ProductPriceRow> {
+  const found = await findProductById(productId)
+  if (!found) throw new NotFoundError('Product not found')
+
+  const branchRow = await branchesService.getBranch(user, input.branchId)
+  if (!branchRow.isActive) throw new ConflictError('The branch is inactive')
+
+  return db.transaction(async (tx) => {
+    const existing = await findProductPriceRow(productId, input.branchId, tx)
+
+    let saved: ProductPriceRow | null
+    if (existing) {
+      saved = await updateProductPriceRow(
+        existing.id,
+        { priceMinor: input.priceMinor, updatedBy: actor.actorId },
+        tx,
+      )
+    } else {
+      saved = await insertProductPriceRow(
+        {
+          productId,
+          branchId: input.branchId,
+          priceMinor: input.priceMinor,
+          updatedBy: actor.actorId,
+        },
+        tx,
+      )
+    }
+    if (!saved) throw new AppError(500, 'INTERNAL', 'Failed to set price override')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'product.price.override_set',
+        entity: 'product',
+        entityId: productId,
+        before: existing ? { branchId: input.branchId, priceMinor: existing.priceMinor } : null,
+        after: { branchId: input.branchId, priceMinor: saved.priceMinor },
+      },
+      tx,
+    )
+    return saved
+  })
+}
+
+export async function removePriceOverride(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  branchId: string,
+): Promise<void> {
+  const found = await findProductById(productId)
+  if (!found) throw new NotFoundError('Product not found')
+
+  await branchesService.getBranch(user, branchId)
+
+  await db.transaction(async (tx) => {
+    const existing = await findProductPriceRow(productId, branchId, tx)
+    if (!existing) throw new NotFoundError('Price override not found')
+
+    await deleteProductPriceRow(existing.id, tx)
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'product.price.override_removed',
+        entity: 'product',
+        entityId: productId,
+        before: { branchId, priceMinor: existing.priceMinor },
+        after: null,
+      },
+      tx,
+    )
+  })
+}
+
+/** Base price plus the overrides the caller may see (managers: own branch). */
+export async function getPriceOverrides(
+  user: SessionUser,
+  productId: string,
+): Promise<{ basePriceMinor: number; overrides: ProductPriceRow[] }> {
+  const found = await findProductById(productId)
+  if (!found) throw new NotFoundError('Product not found')
+
+  const scope = branchScope(user)
+  const overrides = await listProductPriceRows(productId, scope)
+  return { basePriceMinor: found.basePriceMinor, overrides }
 }

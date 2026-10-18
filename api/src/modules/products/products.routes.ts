@@ -4,7 +4,9 @@ import { requireSession } from '../../http/session.ts'
 import * as productsController from './products.controller.ts'
 import {
   validateBarcodeCreate,
+  validatePriceOverride,
   validateProductBarcodeParam,
+  validateProductBranchParam,
   validateProductCreate,
   validateProductIdParam,
   validateProductUpdate,
@@ -76,4 +78,34 @@ productsRoutes.delete(
   validateProductBarcodeParam,
   (c) =>
     productsController.removeBarcode(c, c.req.valid('param').id, c.req.valid('param').barcodeId),
+)
+
+productsRoutes.get(
+  '/api/products/:id/prices',
+  requireSession,
+  requirePermission('catalog.read'),
+  validateProductIdParam,
+  (c) => productsController.getPrices(c, c.req.valid('param').id),
+)
+
+productsRoutes.put(
+  '/api/products/:id/prices',
+  requireSession,
+  requirePermission('price.override'),
+  validateProductIdParam,
+  validatePriceOverride,
+  (c) => productsController.setPriceOverride(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+productsRoutes.delete(
+  '/api/products/:id/prices/:branchId',
+  requireSession,
+  requirePermission('price.override'),
+  validateProductBranchParam,
+  (c) =>
+    productsController.removePriceOverride(
+      c,
+      c.req.valid('param').id,
+      c.req.valid('param').branchId,
+    ),
 )

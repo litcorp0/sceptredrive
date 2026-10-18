@@ -620,4 +620,183 @@ describe.skipIf(!available)('products API', () => {
       expect(actions).toContain('product.barcode.removed')
     })
   })
+
+  describe('price overrides', () => {
+    async function createProductAndReturn() {
+      const response = await createProductViaApi(productPayload())
+      expect(response.status).toBe(201)
+      return (await readJson<{ product: ProductRecord }>(response)).product
+    }
+
+    interface OverrideRecord {
+      id: string
+      productId: string
+      branchId: string
+      priceMinor: number
+    }
+
+    it('lets admins set an override for any branch and upsert it later', async () => {
+      const created = await createProductAndReturn()
+
+      const first = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: 9_000 }),
+      })
+      expect(first.status).toBe(200)
+      const firstBody = await readJson<{ override: OverrideRecord }>(first)
+      expect(firstBody.override.priceMinor).toBe(9_000)
+      expect(firstBody.override.branchId).toBe(managerBranchId)
+
+      const second = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: 8_750 }),
+      })
+      expect(second.status).toBe(200)
+      const secondBody = await readJson<{ override: OverrideRecord }>(second)
+      expect(secondBody.override.id).toBe(firstBody.override.id)
+      expect(secondBody.override.priceMinor).toBe(8_750)
+
+      const otherBranch = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: otherBranchId, priceMinor: 10_500 }),
+      })
+      expect(otherBranch.status).toBe(200)
+    })
+
+    it('lets managers set only their own branch override', async () => {
+      const created = await createProductAndReturn()
+
+      const own = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: 9_250 }),
+      })
+      expect(own.status).toBe(200)
+
+      const foreign = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ branchId: otherBranchId, priceMinor: 9_250 }),
+      })
+      expect(foreign.status).toBe(403)
+    })
+
+    it('rejects overrides on unknown or inactive branches and bad products', async () => {
+      const created = await createProductAndReturn()
+
+      const unknownBranch = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({
+          branchId: '00000000-0000-4000-8000-000000000000',
+          priceMinor: 1_000,
+        }),
+      })
+      expect(unknownBranch.status).toBe(404)
+
+      const negativePrice = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: -5 }),
+      })
+      expect(negativePrice.status).toBe(400)
+
+      const branchRows = await db
+        .insert(branch)
+        .values({
+          code: `PT${randomToken(3)}C`,
+          name: 'Inactive Branch',
+          type: 'RETAIL',
+          city: 'Tema',
+          createdBy: 'test',
+        })
+        .returning({ id: branch.id })
+      if (!branchRows[0]) throw new Error('Could not create inactive branch')
+      createdBranchIds.push(branchRows[0].id)
+      const deactivate = await app.request(`/api/branches/${branchRows[0].id}/deactivate`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(deactivate.status).toBe(200)
+
+      const inactiveBranch = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: branchRows[0].id, priceMinor: 1_000 }),
+      })
+      expect(inactiveBranch.status).toBe(409)
+
+      const unknownProduct = await app.request(
+        '/api/products/00000000-0000-4000-8000-000000000000/prices',
+        {
+          method: 'PUT',
+          headers: authedHeaders(adminCookie),
+          body: JSON.stringify({ branchId: managerBranchId, priceMinor: 1_000 }),
+        },
+      )
+      expect(unknownProduct.status).toBe(404)
+    })
+
+    it('scopes GET prices per role and audits set and remove', async () => {
+      const created = await createProductAndReturn()
+      await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: 9_000 }),
+      })
+      await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: otherBranchId, priceMinor: 10_500 }),
+      })
+
+      const adminView = await app.request(`/api/products/${created.id}/prices`, {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(adminView.status).toBe(200)
+      const adminBody = await readJson<{ basePriceMinor: number; overrides: OverrideRecord[] }>(
+        adminView,
+      )
+      expect(adminBody.basePriceMinor).toBe(10_000)
+      expect(adminBody.overrides).toHaveLength(2)
+
+      const managerView = await app.request(`/api/products/${created.id}/prices`, {
+        headers: authedHeaders(managerCookie),
+      })
+      const managerBody = await readJson<{ basePriceMinor: number; overrides: OverrideRecord[] }>(
+        managerView,
+      )
+      expect(managerBody.overrides).toHaveLength(1)
+      expect(managerBody.overrides[0]?.branchId).toBe(managerBranchId)
+
+      const remove = await app.request(`/api/products/${created.id}/prices/${managerBranchId}`, {
+        method: 'DELETE',
+        headers: authedHeaders(managerCookie),
+      })
+      expect(remove.status).toBe(200)
+
+      const removeAgain = await app.request(
+        `/api/products/${created.id}/prices/${managerBranchId}`,
+        { method: 'DELETE', headers: authedHeaders(managerCookie) },
+      )
+      expect(removeAgain.status).toBe(404)
+
+      const removeForeign = await app.request(
+        `/api/products/${created.id}/prices/${otherBranchId}`,
+        { method: 'DELETE', headers: authedHeaders(managerCookie) },
+      )
+      expect(removeForeign.status).toBe(403)
+
+      const auditRows = await db
+        .select({ action: auditLog.action })
+        .from(auditLog)
+        .where(and(eq(auditLog.entity, 'product'), eq(auditLog.entityId, created.id)))
+      const actions = auditRows.map((row) => row.action)
+      expect(actions).toContain('product.price.override_set')
+      expect(actions).toContain('product.price.override_removed')
+    })
+  })
 })

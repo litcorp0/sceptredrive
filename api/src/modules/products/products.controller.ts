@@ -5,6 +5,7 @@ import type { AppEnv } from '../../http/factory.ts'
 import * as productsService from './products.service.ts'
 import type {
   BarcodeCreateInput,
+  PriceOverrideBody,
   ProductCreateInput,
   ProductUpdateInput,
 } from './products.types.ts'
@@ -53,5 +54,25 @@ export async function addBarcode(c: Context<AppEnv>, id: string, input: BarcodeC
 export async function removeBarcode(c: Context<AppEnv>, id: string, barcodeId: string) {
   const actor = actorFromContext(c)
   await productsService.removeProductBarcode(actor, id, barcodeId)
+  return c.json({ removed: true })
+}
+
+export async function getPrices(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const result = await productsService.getPriceOverrides(user, id)
+  return c.json(result)
+}
+
+export async function setPriceOverride(c: Context<AppEnv>, id: string, input: PriceOverrideBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const override = await productsService.setPriceOverride(user, actor, id, input)
+  return c.json({ override })
+}
+
+export async function removePriceOverride(c: Context<AppEnv>, id: string, branchId: string) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  await productsService.removePriceOverride(user, actor, id, branchId)
   return c.json({ removed: true })
 }
