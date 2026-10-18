@@ -47,3 +47,158 @@ export interface BranchReconciliation {
   quantityOnHand: number
   ledgerQuantity: number
 }
+
+export interface ReceiptLineInput {
+  productId: string
+  quantity: number
+  unitCostMinor: number
+}
+
+export interface ReceiptCreateInput {
+  branchId: string
+  supplierName?: string
+  supplierInvoiceNumber?: string
+  note?: string
+  lines: ReceiptLineInput[]
+}
+
+export interface ReceiptListQuery {
+  branchId?: string
+  from?: Date
+  to?: Date
+  limit: number
+  offset: number
+}
+
+export interface ReceiptListFilters {
+  branchId: string | null
+  from?: Date | undefined
+  to?: Date | undefined
+  limit: number
+  offset: number
+}
+
+export interface ReceiptLineRow {
+  id: string
+  productId: string
+  sku: string
+  productName: string
+  quantity: number
+  unitCostMinor: number
+  movementId: string
+}
+
+export interface StockReceiptRow {
+  id: string
+  number: string
+  branchId: string
+  branchCode: string
+  branchName: string
+  supplierName: string | null
+  supplierInvoiceNumber: string | null
+  note: string | null
+  createdBy: string | null
+  createdAt: Date
+  lineCount: number
+  totalCostMinor: number
+}
+
+export interface ReceiptDetail extends StockReceiptRow {
+  lines: ReceiptLineRow[]
+}
+
+export interface AdjustmentCreateInput {
+  branchId: string
+  productId: string
+  quantityDelta: number
+  reasonCode: StockAdjustmentReason
+  note?: string
+}
+
+export interface MovementListQuery {
+  branchId?: string
+  productId?: string
+  type?: StockMovementType
+  from?: Date
+  to?: Date
+  limit: number
+  offset: number
+}
+
+export interface MovementListFilters {
+  branchId: string | null
+  productId?: string | undefined
+  type?: StockMovementType | undefined
+  from?: Date | undefined
+  to?: Date | undefined
+  limit: number
+  offset: number
+}
+
+export interface MovementHistoryRow extends StockMovementRow {
+  sku: string
+  productName: string
+  branchCode: string
+}
+
+export interface StockListQuery {
+  branchId?: string
+  q?: string
+  lowStock?: boolean
+  limit: number
+  offset: number
+}
+
+export interface StockListFilters {
+  branchId: string
+  q?: string | undefined
+  lowStock: boolean
+  limit: number
+  offset: number
+}
+
+export interface StockRow {
+  productId: string
+  sku: string
+  productName: string
+  categoryName: string
+  quantityOnHand: number
+  avgCostMinor: number
+  valueMinor: number
+  threshold: number | null
+  isLow: boolean
+  updatedAt: Date
+}
+
+export interface StockDetail {
+  productId: string
+  sku: string
+  productName: string
+  categoryName: string
+  taxCategory: string
+  basePriceMinor: number
+  costPriceMinor: number
+  isActive: boolean
+  quantityOnHand: number
+  avgCostMinor: number
+  valueMinor: number
+  threshold: number | null
+  updatedAt: Date | null
+}
+
+export interface ThresholdInput {
+  branchId: string
+  productId: string
+  threshold: number
+}
+
+export interface ThresholdRow {
+  id: string
+  productId: string
+  sku: string
+  productName: string
+  branchId: string
+  threshold: number
+  updatedBy: string | null
+  updatedAt: Date
+}

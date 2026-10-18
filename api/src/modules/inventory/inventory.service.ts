@@ -1,24 +1,55 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { averageCostAfterReceipt } from '@gikautos/shared'
-import { assertBranchAccess } from '../../auth/scope.ts'
-import { AppError, ConflictError } from '../../http/errors.ts'
+import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
+import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import * as branchesService from '../org/branches.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
+import { allocateFromSequence } from '../platform/settings.service.ts'
+import { findProductById } from '../products/products.repository.ts'
 import {
+  countMovements,
+  countReceipts,
+  countStockRows,
+  deleteThresholdRow,
   findLevel,
+  findReceiptBase,
+  findStockProduct,
+  findThreshold,
   insertMovement,
+  insertReceipt,
+  insertReceiptLine,
   lockOrCreateLevel,
   selectBranchLevels,
+  selectMovementPage,
+  selectReceiptLines,
+  selectReceiptPage,
+  selectStockPage,
+  selectThresholdRows,
   sumMovementsByProduct,
   sumMovementsForProduct,
   updateLevel,
+  upsertThresholdRow,
 } from './inventory.repository.ts'
 import type {
+  AdjustmentCreateInput,
   BranchReconciliation,
+  MovementHistoryRow,
   MovementInput,
+  MovementListQuery,
   PostMovementsOptions,
   PostMovementsResult,
+  ReceiptCreateInput,
+  ReceiptDetail,
+  ReceiptListQuery,
+  StockDetail,
   StockLevelRow,
+  StockListQuery,
+  StockReceiptRow,
+  StockRow,
+  ThresholdInput,
+  ThresholdRow,
 } from './inventory.types.ts'
 
 function assertSafeInteger(value: number, label: string): void {
@@ -199,4 +230,380 @@ export async function reconcileBranch(
     }
   }
   return discrepancies
+}
+
+async function requireActiveProduct(productId: string, executor: DbExecutor = db) {
+  const found = await findProductById(productId, executor)
+  if (!found) throw new NotFoundError('Product not found')
+  if (!found.isActive) throw new ConflictError('The product is archived')
+  return found
+}
+
+async function requireActiveBranch(user: SessionUser, branchId: string) {
+  const found = await branchesService.getBranch(user, branchId)
+  if (!found.isActive) throw new ConflictError('The branch is inactive')
+  return found
+}
+
+async function loadReceipt(receiptId: string): Promise<ReceiptDetail> {
+  const base = await findReceiptBase(receiptId)
+  if (!base) throw new NotFoundError('Receipt not found')
+  const lines = await selectReceiptLines(receiptId)
+  return {
+    ...base,
+    lineCount: lines.length,
+    totalCostMinor: lines.reduce((sum, line) => sum + line.quantity * line.unitCostMinor, 0),
+    lines,
+  }
+}
+
+/** Creates an immutable goods receipt and posts its movements atomically. */
+export async function createReceipt(
+  user: SessionUser,
+  actor: AuditActor,
+  input: ReceiptCreateInput,
+): Promise<ReceiptDetail> {
+  await requireActiveBranch(user, input.branchId)
+
+  const productNames = new Map<string, string>()
+  for (const line of input.lines) {
+    const found = await requireActiveProduct(line.productId)
+    productNames.set(line.productId, found.name)
+  }
+
+  const receiptId = await db.transaction(async (tx) => {
+    const number = await allocateFromSequence('inventory.receiptSequence', tx)
+    const receipt = await insertReceipt(
+      {
+        number,
+        branchId: input.branchId,
+        supplierName: input.supplierName ?? null,
+        supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
+        note: input.note ?? null,
+        createdBy: actor.actorId,
+      },
+      tx,
+    )
+    if (!receipt) throw new AppError(500, 'INTERNAL', 'Failed to create the receipt')
+
+    const posted = await postMovements(
+      actor,
+      input.lines.map((line) => ({
+        productId: line.productId,
+        branchId: input.branchId,
+        type: 'RECEIPT' as const,
+        quantityDelta: line.quantity,
+        unitCostMinor: line.unitCostMinor,
+        referenceType: 'RECEIPT' as const,
+        referenceId: receipt.id,
+        referenceNumber: number,
+        productName: productNames.get(line.productId),
+      })),
+      { executor: tx },
+    )
+
+    const movementByProduct = new Map(posted.movements.map((row) => [row.productId, row.id]))
+    for (const line of input.lines) {
+      const movementId = movementByProduct.get(line.productId)
+      if (!movementId) throw new AppError(500, 'INTERNAL', 'Failed to link a receipt line')
+      await insertReceiptLine(
+        {
+          receiptId: receipt.id,
+          productId: line.productId,
+          quantity: line.quantity,
+          unitCostMinor: line.unitCostMinor,
+          movementId,
+        },
+        tx,
+      )
+    }
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'stock_receipt.created',
+        entity: 'stock_receipt',
+        entityId: receipt.id,
+        branchId: input.branchId,
+        after: {
+          number,
+          supplierName: input.supplierName ?? null,
+          supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
+          lines: input.lines,
+        },
+      },
+      tx,
+    )
+
+    return receipt.id
+  })
+
+  return loadReceipt(receiptId)
+}
+
+export async function listReceipts(
+  user: SessionUser,
+  query: ReceiptListQuery,
+): Promise<{ receipts: StockReceiptRow[]; total: number; branchId: string | null }> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters = {
+    branchId,
+    from: query.from,
+    to: query.to,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [receipts, total] = await Promise.all([selectReceiptPage(filters), countReceipts(filters)])
+  return { receipts, total, branchId }
+}
+
+export async function getReceipt(user: SessionUser, receiptId: string): Promise<ReceiptDetail> {
+  const detail = await loadReceipt(receiptId)
+  assertBranchAccess(user, detail.branchId)
+  return detail
+}
+
+/** Posts a reason-coded manual adjustment and audits the level change. */
+export async function createAdjustment(
+  user: SessionUser,
+  actor: AuditActor,
+  input: AdjustmentCreateInput,
+): Promise<{ movement: PostMovementsResult['movements'][number]; level: StockLevelRow }> {
+  await requireActiveBranch(user, input.branchId)
+  await requireActiveProduct(input.productId)
+
+  return db.transaction(async (tx) => {
+    const before = await findLevel(input.productId, input.branchId, tx)
+    const posted = await postMovements(
+      actor,
+      [
+        {
+          productId: input.productId,
+          branchId: input.branchId,
+          type: 'ADJUSTMENT',
+          quantityDelta: input.quantityDelta,
+          referenceType: 'ADJUSTMENT',
+          reasonCode: input.reasonCode,
+          note: input.note ?? null,
+        },
+      ],
+      { executor: tx },
+    )
+
+    const movement = posted.movements[0]
+    const level = posted.levels.get(input.productId)
+    if (!movement || !level) throw new AppError(500, 'INTERNAL', 'Failed to post the adjustment')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'stock.adjusted',
+        entity: 'product',
+        entityId: input.productId,
+        branchId: input.branchId,
+        before: {
+          quantityOnHand: before?.quantityOnHand ?? 0,
+          avgCostMinor: before?.avgCostMinor ?? 0,
+        },
+        after: {
+          quantityOnHand: level.quantityOnHand,
+          avgCostMinor: level.avgCostMinor,
+          quantityDelta: input.quantityDelta,
+          reasonCode: input.reasonCode,
+          note: input.note ?? null,
+        },
+      },
+      tx,
+    )
+
+    return { movement, level }
+  })
+}
+
+export async function listMovements(
+  user: SessionUser,
+  query: MovementListQuery,
+): Promise<{ movements: MovementHistoryRow[]; total: number; branchId: string | null }> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters = {
+    branchId,
+    productId: query.productId,
+    type: query.type,
+    from: query.from,
+    to: query.to,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [movements, total] = await Promise.all([
+    selectMovementPage(filters),
+    countMovements(filters),
+  ])
+  return { movements, total, branchId }
+}
+
+function toStockRow(row: {
+  productId: string
+  sku: string
+  productName: string
+  categoryName: string
+  quantityOnHand: number
+  avgCostMinor: number
+  threshold: number | null
+  updatedAt: Date
+}): StockRow {
+  return {
+    ...row,
+    valueMinor: row.quantityOnHand * row.avgCostMinor,
+    isLow: row.threshold !== null && row.quantityOnHand <= row.threshold,
+  }
+}
+
+async function queryStock(
+  user: SessionUser,
+  query: StockListQuery,
+  forceLowStock: boolean,
+): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  if (!branchId) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'branchId is required')
+  }
+
+  const filters = {
+    branchId,
+    q: query.q,
+    lowStock: forceLowStock || query.lowStock === true,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [rows, total] = await Promise.all([selectStockPage(filters), countStockRows(filters)])
+  return { stock: rows.map(toStockRow), total, branchId }
+}
+
+export async function listStock(
+  user: SessionUser,
+  query: StockListQuery,
+): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
+  return queryStock(user, query, false)
+}
+
+export async function listLowStock(
+  user: SessionUser,
+  query: StockListQuery,
+): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
+  return queryStock(user, query, true)
+}
+
+export async function getStockDetail(
+  user: SessionUser,
+  productId: string,
+  requestedBranchId?: string | null,
+): Promise<StockDetail> {
+  const branchId = resolveBranchFilter(user, requestedBranchId ?? null)
+  if (!branchId) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'branchId is required')
+  }
+
+  const productRow = await findStockProduct(productId)
+  if (!productRow) throw new NotFoundError('Product not found')
+
+  const [level, threshold] = await Promise.all([
+    findLevel(productId, branchId),
+    findThreshold(productId, branchId),
+  ])
+
+  const quantityOnHand = level?.quantityOnHand ?? 0
+  const avgCostMinor = level?.avgCostMinor ?? 0
+  return {
+    ...productRow,
+    quantityOnHand,
+    avgCostMinor,
+    valueMinor: quantityOnHand * avgCostMinor,
+    threshold: threshold?.threshold ?? null,
+    updatedAt: level?.updatedAt ?? null,
+  }
+}
+
+export async function listThresholds(
+  user: SessionUser,
+  requestedBranchId?: string | null,
+): Promise<{ thresholds: ThresholdRow[]; branchId: string }> {
+  const branchId = resolveBranchFilter(user, requestedBranchId ?? null)
+  if (!branchId) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'branchId is required')
+  }
+  return { thresholds: await selectThresholdRows(branchId), branchId }
+}
+
+export async function setThreshold(
+  user: SessionUser,
+  actor: AuditActor,
+  input: ThresholdInput,
+): Promise<{ id: string; productId: string; branchId: string; threshold: number }> {
+  await requireActiveBranch(user, input.branchId)
+  await requireActiveProduct(input.productId)
+
+  return db.transaction(async (tx) => {
+    const existing = await findThreshold(input.productId, input.branchId, tx)
+    const saved = await upsertThresholdRow(
+      {
+        productId: input.productId,
+        branchId: input.branchId,
+        threshold: input.threshold,
+        updatedBy: actor.actorId,
+      },
+      tx,
+    )
+    if (!saved) throw new AppError(500, 'INTERNAL', 'Failed to save the threshold')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'stock_threshold.updated',
+        entity: 'stock_threshold',
+        entityId: saved.id,
+        branchId: input.branchId,
+        before: existing ? { threshold: existing.threshold } : null,
+        after: { productId: input.productId, threshold: saved.threshold },
+      },
+      tx,
+    )
+
+    return {
+      id: saved.id,
+      productId: input.productId,
+      branchId: input.branchId,
+      threshold: saved.threshold,
+    }
+  })
+}
+
+export async function removeThreshold(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  requestedBranchId?: string | null,
+): Promise<void> {
+  const branchId = resolveBranchFilter(user, requestedBranchId ?? null)
+  if (!branchId) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'branchId is required')
+  }
+
+  const existing = await findThreshold(productId, branchId)
+  if (!existing) throw new NotFoundError('Threshold not found')
+
+  await db.transaction(async (tx) => {
+    await deleteThresholdRow(existing.id, tx)
+    await writeAudit(
+      {
+        ...actor,
+        action: 'stock_threshold.removed',
+        entity: 'stock_threshold',
+        entityId: existing.id,
+        branchId,
+        before: { productId, threshold: existing.threshold },
+        after: null,
+      },
+      tx,
+    )
+  })
 }

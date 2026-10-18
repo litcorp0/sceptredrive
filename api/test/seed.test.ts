@@ -4,6 +4,13 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
 import { brand, category, uom } from '../src/modules/catalog/catalog.schema.ts'
 import { user as userTable } from '../src/modules/identity/staff.schema.ts'
+import {
+  stockLevel,
+  stockMovement,
+  stockReceipt,
+  stockReceiptLine,
+  stockThreshold,
+} from '../src/modules/inventory/inventory.schema.ts'
 import { branch } from '../src/modules/org/branches.schema.ts'
 import { terminal } from '../src/modules/org/terminals.schema.ts'
 import { setting } from '../src/modules/platform/settings.schema.ts'
@@ -30,6 +37,10 @@ const DEMO_SETTING_KEYS = [
   'catalog.skuPrefix',
   'catalog.skuSequence',
   'pricing.taxMode',
+  'inventory.receiptPrefix',
+  'inventory.receiptSequence',
+  'inventory.transferPrefix',
+  'inventory.countPrefix',
 ]
 const DEMO_SKUS = DEMO_PRODUCTS.map((item) => item.sku)
 const DEMO_CATEGORY_NAMES = DEMO_CATEGORIES.flatMap((parent) => [parent.name, ...parent.children])
@@ -42,10 +53,32 @@ describe.skipIf(!available)('database seeds', () => {
       .from(product)
       .where(inArray(product.sku, DEMO_SKUS))
     const productIds = demoProducts.map((row) => row.id)
+    const demoBranches = await db
+      .select({ id: branch.id })
+      .from(branch)
+      .where(inArray(branch.code, ['ACC-SPX', 'ACC-WH1']))
+    const demoBranchIds = demoBranches.map((row) => row.id)
+    const demoReceipts =
+      demoBranchIds.length > 0
+        ? await db
+            .select({ id: stockReceipt.id })
+            .from(stockReceipt)
+            .where(inArray(stockReceipt.branchId, demoBranchIds))
+        : []
+    const receiptIds = demoReceipts.map((row) => row.id)
+    if (receiptIds.length > 0) {
+      await db.delete(stockReceiptLine).where(inArray(stockReceiptLine.receiptId, receiptIds))
+    }
     if (productIds.length > 0) {
+      await db.delete(stockMovement).where(inArray(stockMovement.productId, productIds))
+      await db.delete(stockLevel).where(inArray(stockLevel.productId, productIds))
+      await db.delete(stockThreshold).where(inArray(stockThreshold.productId, productIds))
       await db.delete(productPrice).where(inArray(productPrice.productId, productIds))
       await db.delete(barcode).where(inArray(barcode.productId, productIds))
       await db.delete(product).where(inArray(product.id, productIds))
+    }
+    if (receiptIds.length > 0) {
+      await db.delete(stockReceipt).where(inArray(stockReceipt.id, receiptIds))
     }
     await db
       .delete(category)
@@ -103,10 +136,11 @@ describe.skipIf(!available)('database seeds', () => {
     expect(cashierRows[0]?.mustChangePassword).toBe(true)
 
     const terminalRows = await db
-      .select({ id: terminal.id })
+      .select({ id: terminal.id, code: terminal.code })
       .from(terminal)
       .where(inArray(terminal.code, ['ACC-SPX-T01', 'ACC-WH1-T01']))
-    expect(terminalRows).toHaveLength(2)
+    expect(terminalRows).toHaveLength(1)
+    expect(terminalRows[0]?.code).toBe('ACC-SPX-T01')
 
     const productRows = await db
       .select({ id: product.id })

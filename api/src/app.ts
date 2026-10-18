@@ -10,6 +10,7 @@ import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
+import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
@@ -35,6 +36,7 @@ app.route('/', enrollmentRoutes)
 app.route('/', staffRoutes)
 app.route('/', catalogRoutes)
 app.route('/', productsRoutes)
+app.route('/', inventoryRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
