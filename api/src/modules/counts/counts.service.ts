@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { db } from '@gikautos/db'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'

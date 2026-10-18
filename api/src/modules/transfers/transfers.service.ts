@@ -13,7 +13,6 @@ import {
   deleteTransferLines,
   findTransferById,
   findTransferByIdForUpdate,
-  findTransferLine,
   insertTransfer,
   insertTransferLines,
   selectTransferBase,
