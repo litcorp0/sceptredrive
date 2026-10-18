@@ -166,6 +166,7 @@ export type SequenceKey =
   | 'inventory.receiptSequence'
   | 'inventory.transferSequence'
   | 'inventory.countSequence'
+  | 'credit.repaymentSequence'
 
 const SEQUENCE_FORMATS: Record<
   SequenceKey,
@@ -176,6 +177,7 @@ const SEQUENCE_FORMATS: Record<
       | 'inventory.receiptPrefix'
       | 'inventory.transferPrefix'
       | 'inventory.countPrefix'
+      | 'credit.repaymentPrefix'
     pad: number
     label: string
   }
@@ -196,6 +198,11 @@ const SEQUENCE_FORMATS: Record<
     prefixKey: 'inventory.countPrefix',
     pad: 5,
     label: 'count number',
+  },
+  'credit.repaymentSequence': {
+    prefixKey: 'credit.repaymentPrefix',
+    pad: 5,
+    label: 'repayment receipt number',
   },
 }
 

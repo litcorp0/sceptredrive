@@ -190,6 +190,9 @@ describe.skipIf(!available)('audit and settings API', () => {
     const prefix = body.settings.find((item) => item.key === 'staff.idPrefix')
     expect(prefix?.value).toBe('GA')
     expect(prefix?.source).not.toBe('branch')
+
+    const minimumRedeem = body.settings.find((item) => item.key === 'loyalty.minimumRedeemPoints')
+    expect(minimumRedeem?.value).toBe(100)
   })
 
   it('updates global settings as admin and audits the change', async () => {
@@ -225,6 +228,13 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'staff.idPrefix', value: 'way-too-long-prefix' }),
     })
     expect(badValue.status).toBe(400)
+
+    const fractionalEarn = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'loyalty.earnPointsPerCedi', value: 1.5 }),
+    })
+    expect(fractionalEarn.status).toBe(400)
   })
 
   it('allocates inventory document numbers from their sequences', async () => {
@@ -243,6 +253,12 @@ describe.skipIf(!available)('audit and settings API', () => {
     await advanceSequencePast('inventory.countSequence', 'CNT-00090', db)
     const afterAdvance = await allocateFromSequence('inventory.countSequence', db)
     expect(Number(afterAdvance.split('-')[1])).toBeGreaterThan(90)
+
+    const repayment = await allocateFromSequence('credit.repaymentSequence', db)
+    expect(repayment).toMatch(/^REP-\d{5}$/)
+    await advanceSequencePast('credit.repaymentSequence', 'REP-00042', db)
+    const afterRepaymentAdvance = await allocateFromSequence('credit.repaymentSequence', db)
+    expect(Number(afterRepaymentAdvance.split('-')[1])).toBeGreaterThan(42)
   })
 
   it('forbids managers from changing global settings', async () => {
@@ -253,6 +269,13 @@ describe.skipIf(!available)('audit and settings API', () => {
     })
 
     expect(response.status).toBe(403)
+
+    const creditAttempt = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'credit.repaymentPrefix', value: 'RCP' }),
+    })
+    expect(creditAttempt.status).toBe(403)
   })
 
   it('lets managers set branch-scoped settings for their branch only', async () => {

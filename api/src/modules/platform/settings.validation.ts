@@ -24,7 +24,7 @@ export const SETTING_DEFINITIONS = {
     branchScoped: true,
   },
   'loyalty.earnPointsPerCedi': {
-    schema: z.number().positive(),
+    schema: z.number().int().min(1),
     defaultValue: 1,
     branchScoped: false,
   },
@@ -36,6 +36,26 @@ export const SETTING_DEFINITIONS = {
   'loyalty.expiryMonths': {
     schema: z.number().int().positive(),
     defaultValue: 12,
+    branchScoped: false,
+  },
+  'loyalty.minimumRedeemPoints': {
+    schema: z.number().int().min(1),
+    defaultValue: 100,
+    branchScoped: false,
+  },
+  'credit.repaymentPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'REP',
+    branchScoped: false,
+  },
+  'credit.repaymentSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
     branchScoped: false,
   },
   'catalog.skuPrefix': {
