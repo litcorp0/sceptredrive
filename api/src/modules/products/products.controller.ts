@@ -7,8 +7,15 @@ import type {
   BarcodeCreateInput,
   PriceOverrideBody,
   ProductCreateInput,
+  ProductListQuery,
   ProductUpdateInput,
 } from './products.types.ts'
+
+export async function listProducts(c: Context<AppEnv>, query: ProductListQuery) {
+  const user = currentUser(c)
+  const result = await productsService.listProducts(user, query)
+  return c.json(result)
+}
 
 export async function suggestSku(c: Context<AppEnv>) {
   const suggestion = await productsService.suggestSku()

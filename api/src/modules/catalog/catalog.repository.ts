@@ -56,6 +56,17 @@ export async function countActiveCategoryChildren(
   return rows[0]?.total ?? 0
 }
 
+export async function listChildCategoryIds(
+  parentId: string,
+  executor: DbExecutor = db,
+): Promise<string[]> {
+  const rows = await executor
+    .select({ id: category.id })
+    .from(category)
+    .where(eq(category.parentId, parentId))
+  return rows.map((row) => row.id)
+}
+
 export async function insertCategory(
   values: typeof category.$inferInsert,
   executor: DbExecutor = db,

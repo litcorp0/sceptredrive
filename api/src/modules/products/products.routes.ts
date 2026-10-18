@@ -9,10 +9,19 @@ import {
   validateProductBranchParam,
   validateProductCreate,
   validateProductIdParam,
+  validateProductListQuery,
   validateProductUpdate,
 } from './products.validation.ts'
 
 export const productsRoutes = factory.createApp()
+
+productsRoutes.get(
+  '/api/products',
+  requireSession,
+  requirePermission('catalog.read'),
+  validateProductListQuery,
+  (c) => productsController.listProducts(c, c.req.valid('query')),
+)
 
 productsRoutes.get(
   '/api/products/suggest-sku',

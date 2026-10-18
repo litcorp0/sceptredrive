@@ -1,7 +1,14 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, type SQL, sql } from 'drizzle-orm'
+import { brand, category, uom } from '../catalog/catalog.schema.ts'
 import { barcode, product, productPrice } from './products.schema.ts'
-import type { BarcodeRow, ProductPriceRow, ProductRow } from './products.types.ts'
+import type {
+  BarcodeRow,
+  ProductListFilters,
+  ProductListQueryRow,
+  ProductPriceRow,
+  ProductRow,
+} from './products.types.ts'
 
 export async function insertProduct(
   values: typeof product.$inferInsert,
@@ -121,4 +128,76 @@ export async function updateProductPriceRow(
 
 export async function deleteProductPriceRow(id: string, executor: DbExecutor = db): Promise<void> {
   await executor.delete(productPrice).where(eq(productPrice.id, id))
+}
+
+function buildProductFilters(filters: ProductListFilters): SQL | undefined {
+  const conditions: SQL[] = []
+
+  if (!filters.includeArchived) conditions.push(eq(product.isActive, true))
+  if (filters.categoryIds && filters.categoryIds.length > 0) {
+    conditions.push(inArray(product.categoryId, filters.categoryIds))
+  }
+  if (filters.brandId) conditions.push(eq(product.brandId, filters.brandId))
+
+  if (filters.q) {
+    const term = filters.q
+    const escaped = term.replace(/[\\%_]/g, (match) => `\\${match}`)
+    const matches = or(
+      ilike(product.name, `%${escaped}%`),
+      ilike(product.sku, `${escaped}%`),
+      sql`exists (select 1 from ${barcode} where ${barcode.productId} = ${product.id} and ${barcode.code} = ${term})`,
+    )
+    if (matches) conditions.push(matches)
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined
+}
+
+export async function listProductRows(
+  filters: ProductListFilters,
+  executor: DbExecutor = db,
+): Promise<ProductListQueryRow[]> {
+  const overrideJoin = filters.branchId
+    ? and(eq(productPrice.productId, product.id), eq(productPrice.branchId, filters.branchId))
+    : sql`false`
+
+  return executor
+    .select({
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      categoryId: product.categoryId,
+      categoryName: category.name,
+      brandId: product.brandId,
+      brandName: brand.name,
+      uomId: product.uomId,
+      uomCode: uom.code,
+      uomName: uom.name,
+      taxCategory: product.taxCategory,
+      isActive: product.isActive,
+      basePriceMinor: product.basePriceMinor,
+      overrideMinor: productPrice.priceMinor,
+      barcodeCount: sql<number>`(select count(*)::int from ${barcode} where ${barcode.productId} = ${product.id})`,
+      updatedAt: product.updatedAt,
+    })
+    .from(product)
+    .innerJoin(category, eq(product.categoryId, category.id))
+    .leftJoin(brand, eq(product.brandId, brand.id))
+    .innerJoin(uom, eq(product.uomId, uom.id))
+    .leftJoin(productPrice, overrideJoin)
+    .where(buildProductFilters(filters))
+    .orderBy(asc(product.name))
+    .limit(filters.limit)
+    .offset(filters.offset)
+}
+
+export async function countProductRows(
+  filters: ProductListFilters,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({ total: count() })
+    .from(product)
+    .where(buildProductFilters(filters))
+  return rows[0]?.total ?? 0
 }

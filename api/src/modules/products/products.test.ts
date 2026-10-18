@@ -1,4 +1,5 @@
 import { db } from '@gikautos/db'
+import { resolveEffectivePrice } from '@gikautos/shared'
 import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -797,6 +798,188 @@ describe.skipIf(!available)('products API', () => {
       const actions = auditRows.map((row) => row.action)
       expect(actions).toContain('product.price.override_set')
       expect(actions).toContain('product.price.override_removed')
+    })
+  })
+
+  describe('list and search', () => {
+    interface ProductListItem {
+      id: string
+      sku: string
+      name: string
+      categoryName: string
+      brandName: string | null
+      uomCode: string
+      basePriceMinor: number
+      effectivePriceMinor: number | null
+      barcodeCount: number
+      isActive: boolean
+      taxCategory: string
+    }
+
+    interface ProductListResponse {
+      products: ProductListItem[]
+      total: number
+      branchId: string | null
+    }
+
+    async function createProductAndReturn(overrides: Record<string, unknown> = {}) {
+      const response = await createProductViaApi(productPayload(overrides))
+      expect(response.status).toBe(201)
+      return (await readJson<{ product: ProductRecord }>(response)).product
+    }
+
+    async function listFor(query: Record<string, string>, cookie = adminCookie) {
+      const params = new URLSearchParams(query)
+      const response = await app.request(`/api/products?${params.toString()}`, {
+        headers: authedHeaders(cookie),
+      })
+      expect(response.status).toBe(200)
+      return readJson<ProductListResponse>(response)
+    }
+
+    it('finds a product by name substring, SKU prefix, and exact barcode', async () => {
+      const token = `srch${suffix}`
+      const created = await createProductAndReturn({
+        name: `Filter ${token} one`,
+        sku: `SRCH-${suffix}-N1`,
+        barcodes: [`BRC${suffix}A1`],
+      })
+
+      const byName = await listFor({ q: token })
+      expect(byName.products.map((item) => item.id)).toEqual([created.id])
+
+      const bySkuPrefix = await listFor({ q: `SRCH-${suffix}` })
+      expect(bySkuPrefix.products.map((item) => item.id)).toContain(created.id)
+      expect(bySkuPrefix.products[0]?.id).toBe(created.id)
+
+      const byBarcode = await listFor({ q: `BRC${suffix}A1` })
+      expect(byBarcode.products.map((item) => item.id)).toEqual([created.id])
+
+      const row = byName.products[0]
+      expect(row?.sku).toBe(`SRCH-${suffix.toUpperCase()}-N1`)
+      expect(row?.categoryName.startsWith('Products Category')).toBe(true)
+      expect(row?.uomCode).toBe(`P${suffix.slice(0, 7).toUpperCase()}`)
+      expect(row?.basePriceMinor).toBe(10_000)
+      expect(row?.effectivePriceMinor).toBeNull()
+      expect(row?.barcodeCount).toBe(1)
+      expect(row?.isActive).toBe(true)
+      expect(row?.taxCategory).toBe('STANDARD')
+    })
+
+    it('matches literal percent signs in search terms', async () => {
+      const created = await createProductAndReturn({ name: `Rare % item ${suffix}` })
+      const response = await listFor({ q: '% item' })
+      expect(response.products.map((item) => item.id)).toContain(created.id)
+      expect(response.products).toHaveLength(1)
+    })
+
+    it('filters by category including subcategories', async () => {
+      const token = `catfil${suffix}`
+      const inParent = await createProductAndReturn({ name: `Parent ${token}` })
+      const inChild = await createProductAndReturn({
+        name: `Child ${token}`,
+        categoryId: childCategoryId,
+      })
+
+      const response = await listFor({ q: token, categoryId: activeCategoryId })
+      expect(response.total).toBe(2)
+      const ids = response.products.map((item) => item.id)
+      expect(ids).toContain(inParent.id)
+      expect(ids).toContain(inChild.id)
+    })
+
+    it('filters by brand', async () => {
+      const token = `brfil${suffix}`
+      const secondBrand = await createBrandViaApi(`Second Brand ${suffix}`)
+      const withFirst = await createProductAndReturn({
+        name: `First brand ${token}`,
+        brandId: activeBrandId,
+      })
+      await createProductAndReturn({
+        name: `Second brand ${token}`,
+        brandId: secondBrand.id,
+      })
+
+      const response = await listFor({ q: token, brandId: activeBrandId })
+      expect(response.total).toBe(1)
+      expect(response.products[0]?.id).toBe(withFirst.id)
+    })
+
+    it('hides archived products unless includeArchived is requested', async () => {
+      const token = `arch${suffix}`
+      const created = await createProductAndReturn({ name: `Archived ${token}` })
+      await app.request(`/api/products/${created.id}/archive`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+
+      const hidden = await listFor({ q: token })
+      expect(hidden.total).toBe(0)
+
+      const shown = await listFor({ q: token, includeArchived: 'true' })
+      expect(shown.total).toBe(1)
+      expect(shown.products[0]?.isActive).toBe(false)
+    })
+
+    it('paginates with a stable total', async () => {
+      const token = `page${suffix}`
+      for (let index = 0; index < 3; index += 1) {
+        await createProductAndReturn({ name: `Paged ${token} ${index}` })
+      }
+
+      const firstPage = await listFor({ q: token, limit: '2', offset: '0' })
+      expect(firstPage.total).toBe(3)
+      expect(firstPage.products).toHaveLength(2)
+
+      const secondPage = await listFor({ q: token, limit: '2', offset: '2' })
+      expect(secondPage.total).toBe(3)
+      expect(secondPage.products).toHaveLength(1)
+    })
+
+    it('resolves branch-aware effective prices per role', async () => {
+      const token = `price${suffix}`
+      const created = await createProductAndReturn({
+        name: `Priced ${token}`,
+        basePriceMinor: 10_000,
+      })
+      const overrideResponse = await app.request(`/api/products/${created.id}/prices`, {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId: managerBranchId, priceMinor: 8_800 }),
+      })
+      expect(overrideResponse.status).toBe(200)
+
+      const expected = resolveEffectivePrice(10_000, 8_800)
+
+      const adminScoped = await listFor({ q: token, branchId: managerBranchId })
+      expect(adminScoped.products[0]?.effectivePriceMinor).toBe(expected)
+      expect(adminScoped.branchId).toBe(managerBranchId)
+
+      const adminUnscoped = await listFor({ q: token })
+      expect(adminUnscoped.products[0]?.effectivePriceMinor).toBeNull()
+      expect(adminUnscoped.branchId).toBeNull()
+
+      const managerScoped = await listFor({ q: token }, managerCookie)
+      expect(managerScoped.products[0]?.effectivePriceMinor).toBe(expected)
+      expect(managerScoped.branchId).toBe(managerBranchId)
+
+      const managerForeign = await app.request(
+        `/api/products?q=${token}&branchId=${otherBranchId}`,
+        { headers: authedHeaders(managerCookie) },
+      )
+      expect(managerForeign.status).toBe(403)
+    })
+
+    it('falls back to the base price when a branch has no override', async () => {
+      const token = `basep${suffix}`
+      const created = await createProductAndReturn({
+        name: `Base price ${token}`,
+        basePriceMinor: 7_700,
+      })
+
+      const response = await listFor({ q: token, branchId: otherBranchId })
+      expect(response.products[0]?.id).toBe(created.id)
+      expect(response.products[0]?.effectivePriceMinor).toBe(7_700)
     })
   })
 })

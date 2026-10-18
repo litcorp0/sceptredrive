@@ -49,12 +49,31 @@ export interface BarcodeCreateInput {
 
 export interface ProductListFilters {
   q?: string | undefined
-  categoryId?: string | undefined
+  categoryIds?: string[] | undefined
   brandId?: string | undefined
   includeArchived: boolean
   branchId: string | null
   limit: number
   offset: number
+}
+
+export interface ProductListQueryRow {
+  id: string
+  sku: string
+  name: string
+  categoryId: string
+  categoryName: string
+  brandId: string | null
+  brandName: string | null
+  uomId: string
+  uomCode: string
+  uomName: string
+  taxCategory: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT'
+  isActive: boolean
+  basePriceMinor: number
+  overrideMinor: number | null
+  barcodeCount: number
+  updatedAt: Date
 }
 
 export interface ProductListRow {

@@ -1,15 +1,22 @@
 import { type DbExecutor, db } from '@gikautos/db'
+import { resolveEffectivePrice } from '@gikautos/shared'
 import { and, count, eq } from 'drizzle-orm'
-import { branchScope } from '../../auth/scope.ts'
+import { branchScope, resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { findBrandById, findCategoryById, findUomById } from '../catalog/catalog.repository.ts'
+import {
+  findBrandById,
+  findCategoryById,
+  findUomById,
+  listChildCategoryIds,
+} from '../catalog/catalog.repository.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
 import { allocateFromSequence, peekSequenceValue } from '../platform/settings.service.ts'
 import {
+  countProductRows,
   deleteBarcodeRow,
   deleteProductPriceRow,
   findBarcodeForProduct,
@@ -20,6 +27,7 @@ import {
   insertProductPriceRow,
   listBarcodesByProduct,
   listProductPriceRows,
+  listProductRows,
   updateProductPriceRow,
   updateProductRow,
 } from './products.repository.ts'
@@ -28,6 +36,9 @@ import type {
   BarcodeRow,
   ProductCreateInput,
   ProductDetail,
+  ProductListFilters,
+  ProductListQuery,
+  ProductListRow,
   ProductPriceRow,
   ProductRow,
   ProductUpdateInput,
@@ -471,4 +482,55 @@ export async function getPriceOverrides(
   const scope = branchScope(user)
   const overrides = await listProductPriceRows(productId, scope)
   return { basePriceMinor: found.basePriceMinor, overrides }
+}
+
+/**
+ * Lists products with branch-aware effective pricing. Managers are always
+ * scoped to their own branch; admins may pass any branch id (or none).
+ */
+export async function listProducts(
+  user: SessionUser,
+  query: ProductListQuery,
+): Promise<{ products: ProductListRow[]; total: number; branchId: string | null }> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+
+  let categoryIds: string[] | undefined
+  if (query.categoryId) {
+    const childIds = await listChildCategoryIds(query.categoryId)
+    categoryIds = [query.categoryId, ...childIds]
+  }
+
+  const filters: ProductListFilters = {
+    q: query.q,
+    categoryIds,
+    brandId: query.brandId,
+    includeArchived: query.includeArchived,
+    branchId,
+    limit: query.limit,
+    offset: query.offset,
+  }
+
+  const [rows, total] = await Promise.all([listProductRows(filters), countProductRows(filters)])
+
+  const products = rows.map((row) => ({
+    id: row.id,
+    sku: row.sku,
+    name: row.name,
+    categoryId: row.categoryId,
+    categoryName: row.categoryName,
+    brandId: row.brandId,
+    brandName: row.brandName,
+    uomId: row.uomId,
+    uomCode: row.uomCode,
+    uomName: row.uomName,
+    taxCategory: row.taxCategory,
+    isActive: row.isActive,
+    basePriceMinor: row.basePriceMinor,
+    effectivePriceMinor:
+      branchId === null ? null : resolveEffectivePrice(row.basePriceMinor, row.overrideMinor),
+    barcodeCount: row.barcodeCount,
+    updatedAt: row.updatedAt,
+  }))
+
+  return { products, total, branchId }
 }
