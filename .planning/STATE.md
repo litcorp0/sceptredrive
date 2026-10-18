@@ -5,9 +5,9 @@
 **Status:** Phase 3 complete and verified (fresh-database HTTP + SQL walkthrough 92/92 and
 browser walkthroughs 15/15 + 6/6; see
 `.planning/phases/03-inventory-transfers/01-VERIFICATION.md`).
-**Next action:** Plan Phase 4 (Customers, Credit & Loyalty) under
-`.planning/phases/04-*` — start with `00-CONTEXT.md` (locked decisions), then research
-and plans per GSD, from the Phase 4 section of `ROADMAP.md`.
+**Next action:** Write Phase 4 plans (`01-PLAN.md` … `08-PLAN.md`) under
+`.planning/phases/04-customers-credit/` — context and research are locked (14 operator
+decisions; see `00-CONTEXT.md` bootstrap order).
 
 ---
 
@@ -19,7 +19,7 @@ and plans per GSD, from the Phase 4 section of `ROADMAP.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | ⬜ Not started |
+| 4 | Customers, Credit & Loyalty | 🟦 Planning (context + research locked) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
