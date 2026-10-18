@@ -107,6 +107,16 @@ async function loginAsAdmin() {
   await page.waitForURL((url) => new URL(url).pathname === '/')
 }
 
+async function pickProduct(scope, name) {
+  await scope.getByPlaceholder('Search products by name or SKU…').click()
+  await scope.getByPlaceholder('Search products by name or SKU…').fill(name)
+  await page
+    .getByRole('button', { name: new RegExp(name) })
+    .first()
+    .click()
+  await scope.getByRole('button', { name: 'Change' }).waitFor()
+}
+
 console.log('== Phase 3 console smoke (stock screens) ==\n')
 
 try {
@@ -141,16 +151,101 @@ try {
 
   await page.goBack()
   await page.waitForURL('**/inventory/stock')
-  await page.getByRole('button', { name: 'Receive stock' }).click()
-  await page.getByRole('dialog').getByText('Receive stock').first().waitFor()
-  check('receive dialog opens', (await page.getByRole('dialog').count()) === 1)
-  await shot('06-receive-dialog')
-  await page.keyboard.press('Escape')
 
+  // Leave the low filter off whatever the history restore did, then narrow to one product.
+  const lowSwitch = page.getByLabel('Low stock only')
+  if ((await lowSwitch.getAttribute('aria-checked')) === 'true') await lowSwitch.click()
+  await page.getByLabel('Search stock').fill('Bosch Oil Filter')
+  const boschRow = page.locator('table tbody tr').filter({ hasText: 'Bosch Oil Filter' })
+  await boschRow.waitFor()
+  const onHand = async () => Number.parseInt(await boschRow.locator('td').nth(3).innerText(), 10)
+  const waitForOnHand = async (expected) => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if ((await onHand()) === expected) return true
+      await page.waitForTimeout(250)
+    }
+    return false
+  }
+  const before = await onHand()
+
+  // -- receive: submit a real receipt (GRN toast, on-hand up by 2) --
+  await page.getByRole('button', { name: 'Receive stock' }).click()
+  const receiveDialog = page.getByRole('dialog')
+  await receiveDialog.getByText('Receive stock').first().waitFor()
+  check('receive dialog opens', (await page.getByRole('dialog').count()) === 1)
+
+  await pickProduct(receiveDialog, 'Bosch Oil Filter')
+  await receiveDialog.getByLabel('Quantity for line 1').fill('2')
+  await receiveDialog.getByLabel('Unit cost for line 1').fill('46.00')
+  await shot('06-receive-dialog')
+  await receiveDialog.getByRole('button', { name: 'Receive stock' }).click()
+
+  await page
+    .getByText(/Received stock as GRN-\d{5}/)
+    .first()
+    .waitFor()
+  const grnText = await page
+    .getByText(/Received stock as GRN-\d{5}/)
+    .first()
+    .innerText()
+  const grn = grnText.match(/GRN-\d{5}/)?.[0] ?? ''
+  check('receive posts with a GRN toast', /^GRN-\d{5}$/.test(grn), grnText)
+  await shot('06-receive-submitted')
+  check('receive increases on-hand by 2', await waitForOnHand(before + 2), `before=${before}`)
+
+  // -- adjust: submit a damage adjustment (toast, on-hand down by 1) --
   await page.getByRole('button', { name: 'Adjust' }).click()
-  await page.getByRole('dialog').getByText('Adjust stock').waitFor()
+  const adjustDialog = page.getByRole('dialog')
+  await adjustDialog.getByText('Adjust stock').waitFor()
   check('adjust dialog opens', (await page.getByRole('dialog').count()) === 1)
-  await page.keyboard.press('Escape')
+
+  await pickProduct(adjustDialog, 'Bosch Oil Filter')
+  await adjustDialog.locator('#adjust-quantity').fill('1')
+  await adjustDialog.locator('#adjust-reason').click()
+  await page.getByRole('option', { name: 'Damage' }).click()
+  await shot('06-adjust-dialog')
+  await adjustDialog.getByRole('button', { name: 'Post adjustment' }).click()
+
+  await page.getByText('Stock adjusted', { exact: true }).first().waitFor()
+  check('adjustment posts with a toast', true)
+  await shot('06-adjust-submitted')
+  check('adjustment decreases on-hand by 1', await waitForOnHand(before + 1), `before=${before}`)
+
+  // -- detail: the new movements are in history; set threshold at on-hand → Low --
+  await boschRow.getByRole('link', { name: 'View' }).click()
+  await page.waitForURL('**/inventory/stock/**')
+  await page.getByRole('heading', { name: 'Movement history' }).waitFor()
+  const boschHistory = await page.locator('table tbody').innerText()
+  check('Bosch history shows the new receipt', boschHistory.includes(grn), grn)
+  check('Bosch history shows the adjustment', boschHistory.includes('Adjustment'))
+
+  const thresholdValue = before + 1
+  await page.getByRole('button', { name: /(Set|Edit) threshold/ }).click()
+  await page.getByRole('dialog').getByText('Low-stock threshold').waitFor()
+  await robustFill(page, '#threshold-value', String(thresholdValue))
+  await page.getByRole('dialog').getByRole('button', { name: 'Save threshold' }).click()
+  await page.getByText('Low-stock threshold saved').first().waitFor()
+  check('threshold saved from the console', true)
+  await page.getByText('Low', { exact: true }).first().waitFor()
+  await shot('06-threshold-saved')
+
+  // -- low-stock filter reflects the saved threshold --
+  await page.getByRole('link', { name: 'Back to stock' }).click()
+  await page.waitForURL('**/inventory/stock')
+  await page.getByLabel('Low stock only').click()
+  const lowRow = page.locator('table tbody tr').filter({ hasText: 'Bosch Oil Filter' })
+  await lowRow.waitFor()
+  const thresholdCell = Number.parseInt(await lowRow.locator('td').nth(6).innerText(), 10)
+  check(
+    'low-stock filter shows the thresholded product',
+    (await lowRow.locator('td').nth(7).innerText()).includes('Low'),
+  )
+  check(
+    'threshold column shows the saved value',
+    thresholdCell === thresholdValue,
+    `cell=${thresholdCell}`,
+  )
+  await shot('06-low-stock-updated')
 } catch (error) {
   failed += 1
   console.log(`  FAIL  unexpected error — ${error.message}`)
