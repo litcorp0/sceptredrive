@@ -17,10 +17,30 @@ describe('permissions', () => {
     expect(can('MANAGER', 'settings.update')).toBe(true)
   })
 
+  it('gives managers catalog read and own-branch price overrides only', () => {
+    expect(can('MANAGER', 'catalog.read')).toBe(true)
+    expect(can('MANAGER', 'price.override')).toBe(true)
+    expect(can('MANAGER', 'catalog.create')).toBe(false)
+    expect(can('MANAGER', 'catalog.update')).toBe(false)
+    expect(can('MANAGER', 'catalog.archive')).toBe(false)
+    expect(can('MANAGER', 'price.update')).toBe(false)
+  })
+
+  it('gives admins every catalog and price permission', () => {
+    expect(can('ADMIN', 'catalog.read')).toBe(true)
+    expect(can('ADMIN', 'catalog.create')).toBe(true)
+    expect(can('ADMIN', 'catalog.update')).toBe(true)
+    expect(can('ADMIN', 'catalog.archive')).toBe(true)
+    expect(can('ADMIN', 'price.update')).toBe(true)
+    expect(can('ADMIN', 'price.override')).toBe(true)
+  })
+
   it('gives cashiers no admin permissions', () => {
     expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
     expect(can('CASHIER', 'branch.read')).toBe(false)
     expect(can('CASHIER', 'audit.read')).toBe(false)
+    expect(can('CASHIER', 'catalog.read')).toBe(false)
+    expect(can('CASHIER', 'price.override')).toBe(false)
   })
 
   it('has no duplicate permissions', () => {
