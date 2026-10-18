@@ -21,7 +21,7 @@ const DEMO_MANAGER_EMAIL = 'manager@gikautos.local'
 const DEMO_CASHIER_EMAIL = 'cashier@gikautos.local'
 const DEMO_PASSWORD_DEFAULT = 'demo-password-1234'
 
-const DEMO_UNITS = [
+export const DEMO_UNITS = [
   { code: 'PCS', name: 'Piece' },
   { code: 'SET', name: 'Set' },
   { code: 'PAIR', name: 'Pair' },
@@ -29,9 +29,9 @@ const DEMO_UNITS = [
   { code: 'LTR', name: 'Litre' },
 ] as const
 
-const DEMO_BRANDS = ['Bosch', 'Denso', 'NGK', 'Febi'] as const
+export const DEMO_BRANDS = ['Bosch', 'Denso', 'NGK', 'Febi'] as const
 
-const DEMO_CATEGORIES = [
+export const DEMO_CATEGORIES = [
   { name: 'Engine', children: ['Oil Filters', 'Air Filters', 'Belts'] },
   { name: 'Brakes', children: ['Pads', 'Discs'] },
   { name: 'Electrical', children: ['Batteries', 'Spark Plugs'] },
@@ -50,7 +50,7 @@ interface DemoProduct {
   barcodes: string[]
 }
 
-const DEMO_PRODUCTS: readonly DemoProduct[] = [
+export const DEMO_PRODUCTS: readonly DemoProduct[] = [
   {
     sku: 'GIK-00001',
     name: 'Bosch Oil Filter',
