@@ -43,6 +43,17 @@ describe('permissions', () => {
     expect(can('CASHIER', 'price.override')).toBe(false)
   })
 
+  it('lets managers run inventory operations for their branch', () => {
+    expect(can('MANAGER', 'inventory.read')).toBe(true)
+    expect(can('MANAGER', 'inventory.receive')).toBe(true)
+    expect(can('MANAGER', 'inventory.adjust')).toBe(true)
+    expect(can('MANAGER', 'inventory.transfer')).toBe(true)
+    expect(can('MANAGER', 'inventory.count')).toBe(true)
+    expect(can('MANAGER', 'inventory.threshold')).toBe(true)
+    expect(can('CASHIER', 'inventory.read')).toBe(false)
+    expect(can('CASHIER', 'inventory.adjust')).toBe(false)
+  })
+
   it('has no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
