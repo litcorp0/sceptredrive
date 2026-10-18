@@ -2,12 +2,12 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-18
-**Status:** Phase 1 complete and verified (30/30 fresh-database checks; see
-`.planning/phases/01-foundation/01-VERIFICATION.md`). Phase 2 planned (6 plans across 4
-waves; decisions locked in `02-catalog-pricing/00-CONTEXT.md`).
-**Next action:** Execute Phase 2, starting with Plan 01 (shared tax engine). Human
-verification items from Plan 04 remain (TOTP with a real authenticator, console
-walkthroughs — listed in the Phase 1 verification file).
+**Status:** Phase 2 complete and verified (fresh-database API walkthrough 31/31 and real
+browser walkthrough 29/29; see `.planning/phases/02-catalog-pricing/01-VERIFICATION.md`).
+TOTP forced setup/verification is now machine-verified end to end, closing the Phase 1
+human item; TOTP secret for the dev environment lives at `/tmp/opencode/admin-totp.json`.
+**Next action:** Plan Phase 3 (Inventory & Transfers) — read `ROADMAP.md` Phase 3,
+`REQUIREMENTS.md` (INV-01…09, ADM-04), then run the GSD planning flow.
 
 ---
 
@@ -17,7 +17,7 @@ walkthroughs — listed in the Phase 1 verification file).
 |---|---|---|
 | 0 | Planning & decisions | ✅ Complete |
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
-| 2 | Catalog & Pricing | 🚧 Planned (6 plans ready) |
+| 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ⬜ Not started |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
 | 5 | Suppliers & Payables | ⬜ Not started |
@@ -34,6 +34,17 @@ walkthroughs — listed in the Phase 1 verification file).
 | 02 | API skeleton, configuration, logging, health, first schema | ✅ Complete |
 | 03 | Auth, RBAC, organisation APIs, audit, seeds | ✅ Complete |
 | 04 | Admin shell, auth flows, CRUD screens, CI, verification | ✅ Complete |
+
+### Phase 2 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Shared tax engine and pricing helpers | ✅ Complete |
+| 02 | Catalog schema, migration, settings, demo seed | ✅ Complete |
+| 03 | Catalog module APIs (categories, brands, units) | ✅ Complete |
+| 04 | Products module APIs (products, barcodes, prices, search) | ✅ Complete |
+| 05 | Console catalog screens and settings extensions | ✅ Complete |
+| 06 | Phase 2 verification and state update | ✅ Complete |
 
 ---
 
@@ -57,13 +68,32 @@ walkthroughs — listed in the Phase 1 verification file).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 13/13, api 83/83 against
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 40/40, api 146/146 against
   `gikautos_test`.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
   locally. **Remote run pending a git remote.**
 - `.planning/phases/01-foundation/01-VERIFICATION.md` records all evidence, deviations,
   and the human verification checklist.
+
+### Phase 2 additions
+
+- `@gikautos/shared` now exports the Ghana tax engine (`taxBreakdown`, basis-point rates,
+  `addTaxBreakdowns`) and pricing helpers (`resolveEffectivePrice`, `isValidPriceMinor`) —
+  integer-only, reused by API, console preview, and (Phase 6) the offline POS.
+- Catalog module (`api/src/modules/catalog`): categories (two-level tree, depth/self-parent/
+  duplicate guards, guarded archive/reactivate), brands, units (uppercase codes, immutable).
+- Products module (`api/src/modules/products`): create with atomic SKU allocation,
+  suggest-sku peek, update/archive, barcode add/remove, branch price overrides,
+  trigram-backed search with branch-aware effective pricing.
+- Migration `0002_fresh_shen.sql` creates `pg_trgm` and the `product_name_trgm_idx` GIN
+  index; `db:seed --demo` seeds a browsable catalog idempotently (12 products, 14 barcodes).
+- Console: Catalog section (Products/Categories/Brands/Units tabs), product editor with
+  live tax preview and per-branch override panel, catalog settings (SKU, tax mode) in
+  Settings. `formatGhs`/`parseGhsToMinor`/`formatMinorPlain` in `admin/src/lib/format.ts`.
+- Verification: fresh-DB cycle, API walkthrough 31/31, real browser (Playwright)
+  walkthrough 29/29 with screenshots and scripts under
+  `.planning/phases/02-catalog-pricing/evidence/`.
 
 ---
 
@@ -100,6 +130,13 @@ walkthroughs — listed in the Phase 1 verification file).
 | 2026-10-18 | Admin build script pins `NODE_ENV=production` (SSR bundle mixes dev JSX runtime otherwise). |
 | 2026-10-18 | Vite: `envDir` = repo root; `resolve.dedupe` + `ssr.noExternal: ["sonner"]` prevent a second React copy from the Bun store. |
 | 2026-10-18 | Forced flows order: password change first (API lock), then TOTP setup for admins; `/change-password` renders standalone. |
+| 2026-10-18 | Phase 2: category `PATCH` updates name/parent only; archiving goes through the guarded archive/reactivate endpoints (no `isActive` on PATCH) so guards cannot be bypassed. |
+| 2026-10-18 | Phase 2: saving a suggested SKU advances `catalog.skuSequence` (`advanceSequencePast`), on create and SKU-changing update; gaps acceptable. |
+| 2026-10-18 | Phase 2: reference validation on product update runs only when the value changes (keeps archived-brand products editable). |
+| 2026-10-18 | Phase 2: catalog archive counters live in `products.service` (service-to-service) to avoid a module cycle with `catalog.service`. |
+| 2026-10-18 | Phase 2: products routes are `catalog/products/index.tsx` + thin `products.tsx` layout (flat-file children need the parent `Outlet`). |
+| 2026-10-18 | Console money rendering: `formatGhs` / `parseGhsToMinor` / `formatMinorPlain` in `admin/src/lib/format.ts`; storage stays integer pesewas. |
+| 2026-10-18 | Browser verification uses Playwright with `channel: "chromium"` (cached full build; the headless shell is not installed). |
 
 ---
 
@@ -107,14 +144,17 @@ walkthroughs — listed in the Phase 1 verification file).
 
 - **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
   on GitHub (workflow is written and locally verified).
-- Human verification from Plan 04 (TOTP with an authenticator app, console walkthroughs,
-  dev-mail password reset) — see `01-VERIFICATION.md`.
+- Human verification from Plan 04: TOTP with an authenticator app is now machine-verified
+  end to end (browser walkthrough performs forced setup + verification). Remaining: a
+  human visual pass over the Phase 2 console screens and the dev-mail password-reset
+  flow (Phase 1 list).
 - GRA E-VAT onboarding: credentials, QR encoding, submission API shape (mock until then).
 - Paystack registered business and keys; `PAYSTACK_MODE=mock` until then.
 - VPS provider, domain, and DNS (Phase 9 setup gate).
 - Windows code-signing certificate (Phase 9; unsigned builds first).
 - PowerSync Cloud account + two instances (staging/prod) before Phase 6 human verification.
 - Physical hardware for human verification: ESC/POS printer, keyboard-wedge scanner, cash drawer.
+- Cosmetic: console `favicon.ico` is a 404 (Phase 9 polish).
 
 ---
 
@@ -141,10 +181,25 @@ walkthroughs — listed in the Phase 1 verification file).
   manual hardening; re-apply and regenerate a migration afterwards.
 - New API modules: copy the seven-file layout documented in AGENTS.md. Pure scope
   helpers live in `api/src/auth/scope.ts`; request context adapters in `api/src/http/`.
+- Phase 2 modules: `api/src/modules/catalog` (category/brand/uom + schema) and
+  `api/src/modules/products` (product/barcode/price + guard counters). Cross-module
+  calls: `catalog.service` → `products.service` (counts); `products.service` →
+  `catalog.repository` (ref lookups) — keep it acyclic.
+- Sequences: `allocateFromSequence` (consumes), `peekSequenceValue` (peeks),
+  `advanceSequencePast` (syncs after an explicit `PREFIX-#####` value was saved) in
+  `api/src/modules/platform/settings.service.ts`.
+- Integration test fixtures seed catalog rows directly via Drizzle when the API under
+  test does not own them; track every created id for scoped cleanup (other suites run
+  in parallel against `gikautos_test`).
+- Walkthrough scripts (API + Playwright browser) live under
+  `.planning/phases/02-catalog-pricing/evidence/`; run them against a running
+  API (`:4000`) and console (`:3000`). The browser script auto-handles forced TOTP
+  setup, storing the dev secret at `/tmp/opencode/admin-totp.json`.
 - Admin console: server functions live in `admin/src/lib/*.functions.ts`; the session
   guard is `admin/src/routes/_authenticated/route.tsx`; permission helpers in
   `admin/src/lib/role.ts`; API client + types in `admin/src/lib/api.ts` / `api-types.ts`
-  (hand-maintained — revisit a shared contracts package in Phase 2).
+  (hand-maintained). Catalog screens under `admin/src/routes/_authenticated/catalog/`;
+  shared dialogs under `admin/src/components/catalog/`.
 - Long-running dev servers in this environment: start with
   `(setsid nohup bun run dev > log 2>&1 < /dev/null &)` and kill with
   `pkill -f "[v]ite dev"` (bracket pattern avoids killing the calling shell).
