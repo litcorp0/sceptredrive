@@ -5,9 +5,9 @@
 **Status:** Phase 3 complete and verified (fresh-database HTTP + SQL walkthrough 92/92 and
 browser walkthroughs 15/15 + 6/6; see
 `.planning/phases/03-inventory-transfers/01-VERIFICATION.md`).
-**Next action:** Write Phase 4 plans (`01-PLAN.md` … `08-PLAN.md`) under
-`.planning/phases/04-customers-credit/` — context and research are locked (14 operator
-decisions; see `00-CONTEXT.md` bootstrap order).
+**Next action:** Phase 4 planning is complete (`00-CONTEXT.md` locked decisions,
+`01-RESEARCH.md`, plans 01–08). On operator go-ahead, begin execution with Plan 01
+(schema, settings, permissions, seed) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
