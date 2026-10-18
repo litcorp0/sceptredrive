@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { db } from '@gikautos/db'
+import { averageCostAfterReceipt } from '@gikautos/shared'
 import { hash, type Options } from '@node-rs/argon2'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
 import { account, user } from '../modules/identity/staff.schema.ts'
+import {
+  stockLevel,
+  stockMovement,
+  stockReceipt,
+  stockReceiptLine,
+  stockThreshold,
+} from '../modules/inventory/inventory.schema.ts'
 import { branch } from '../modules/org/branches.schema.ts'
 import { terminal } from '../modules/org/terminals.schema.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
@@ -325,6 +333,140 @@ export async function ensureProductPrice(input: {
       productId: input.productId,
       branchId: input.branchId,
       priceMinor: input.priceMinor,
+      updatedBy: 'seed',
+    })
+    .onConflictDoNothing()
+  return true
+}
+
+/**
+ * Seeds an immutable opening-stock receipt (document + lines + movements +
+ * level projection) in one transaction, mirroring the production posting rules.
+ * Idempotent by receipt number; returns false when the receipt already exists.
+ */
+export async function ensureStockReceipt(input: {
+  number: string
+  branchId: string
+  lines: readonly { productId: string; quantity: number; unitCostMinor: number }[]
+  supplierName?: string
+  supplierInvoiceNumber?: string
+  note?: string
+  createdAt?: Date
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: stockReceipt.id })
+    .from(stockReceipt)
+    .where(eq(stockReceipt.number, input.number))
+    .limit(1)
+  if (existing[0]) return false
+
+  const createdAt = input.createdAt ?? new Date()
+
+  return db.transaction(async (tx) => {
+    const receiptRows = await tx
+      .insert(stockReceipt)
+      .values({
+        number: input.number,
+        branchId: input.branchId,
+        supplierName: input.supplierName ?? null,
+        supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
+        note: input.note ?? null,
+        createdBy: 'seed',
+        createdAt,
+      })
+      .onConflictDoNothing()
+      .returning({ id: stockReceipt.id })
+
+    const receipt = receiptRows[0]
+    if (!receipt) return false
+
+    const lines = [...input.lines].sort((a, b) => a.productId.localeCompare(b.productId))
+    for (const line of lines) {
+      await tx
+        .insert(stockLevel)
+        .values({ productId: line.productId, branchId: input.branchId })
+        .onConflictDoNothing()
+
+      const levelRows = await tx
+        .select()
+        .from(stockLevel)
+        .where(
+          and(eq(stockLevel.productId, line.productId), eq(stockLevel.branchId, input.branchId)),
+        )
+        .limit(1)
+        .for('update')
+      const level = levelRows[0]
+      if (!level) throw new Error(`Could not lock stock level for ${line.productId}`)
+
+      const avgCostMinor = averageCostAfterReceipt(
+        level.avgCostMinor,
+        level.quantityOnHand,
+        line.unitCostMinor,
+        line.quantity,
+      )
+
+      await tx
+        .update(stockLevel)
+        .set({
+          quantityOnHand: level.quantityOnHand + line.quantity,
+          avgCostMinor,
+        })
+        .where(eq(stockLevel.id, level.id))
+
+      const movementRows = await tx
+        .insert(stockMovement)
+        .values({
+          productId: line.productId,
+          branchId: input.branchId,
+          type: 'RECEIPT',
+          quantityDelta: line.quantity,
+          unitCostMinor: line.unitCostMinor,
+          referenceType: 'RECEIPT',
+          referenceId: receipt.id,
+          referenceNumber: input.number,
+          createdBy: 'seed',
+          createdAt,
+        })
+        .returning({ id: stockMovement.id })
+      const movement = movementRows[0]
+      if (!movement) throw new Error('Could not insert stock movement')
+
+      await tx.insert(stockReceiptLine).values({
+        receiptId: receipt.id,
+        productId: line.productId,
+        quantity: line.quantity,
+        unitCostMinor: line.unitCostMinor,
+        movementId: movement.id,
+      })
+    }
+
+    return true
+  })
+}
+
+export async function ensureStockThreshold(input: {
+  productId: string
+  branchId: string
+  threshold: number
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: stockThreshold.id })
+    .from(stockThreshold)
+    .where(
+      and(
+        eq(stockThreshold.productId, input.productId),
+        eq(stockThreshold.branchId, input.branchId),
+      ),
+    )
+    .limit(1)
+  if (existing[0]) return false
+
+  await db
+    .insert(stockThreshold)
+    .values({
+      productId: input.productId,
+      branchId: input.branchId,
+      threshold: input.threshold,
       updatedBy: 'seed',
     })
     .onConflictDoNothing()

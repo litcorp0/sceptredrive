@@ -8,6 +8,8 @@ import {
   ensureProductPrice,
   ensureSequenceAtLeast,
   ensureSetting,
+  ensureStockReceipt,
+  ensureStockThreshold,
   ensureTerminal,
   ensureUom,
   findUserByEmail,
@@ -217,9 +219,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   if (await ensureTerminal({ branchId: retail.id, code: 'ACC-SPX-T01', name: 'Counter 1' })) {
     created.push('terminal ACC-SPX-T01')
   }
-  if (await ensureTerminal({ branchId: warehouse.id, code: 'ACC-WH1-T01', name: 'Warehouse 1' })) {
-    created.push('terminal ACC-WH1-T01')
-  }
+  // Warehouses are stock-only (INV-09): no POS terminal is seeded on ACC-WH1.
 
   const managerEmail = (process.env.DEMO_MANAGER_EMAIL ?? DEMO_MANAGER_EMAIL).trim().toLowerCase()
   const password = process.env.DEMO_PASSWORD ?? DEMO_PASSWORD_DEFAULT
@@ -261,6 +261,9 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('catalog.skuPrefix', 'GIK'),
     ensureSetting('catalog.skuSequence', 1),
     ensureSetting('pricing.taxMode', 'INCLUSIVE'),
+    ensureSetting('inventory.receiptPrefix', 'GRN'),
+    ensureSetting('inventory.transferPrefix', 'TRF'),
+    ensureSetting('inventory.countPrefix', 'CNT'),
   ])
   if (settingsSeeded.some(Boolean)) created.push('settings defaults')
 
@@ -324,6 +327,72 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     }))
   ) {
     created.push('branch price override GIK-00006 @ ACC-SPX')
+  }
+
+  const productIdFor = (sku: string): string => {
+    const id = productIds.get(sku)
+    if (!id) throw new Error(`Demo product ${sku} was not created`)
+    return id
+  }
+
+  const retailQuantityOverrides = new Map([
+    ['GIK-00007', 3],
+    ['GIK-00011', 8],
+  ])
+
+  if (
+    await ensureStockReceipt({
+      number: 'GRN-00001',
+      branchId: warehouse.id,
+      supplierName: 'GikAutos Imports',
+      supplierInvoiceNumber: 'INV-2026-001',
+      note: 'Opening stock — warehouse',
+      createdAt: new Date('2026-10-01T08:00:00.000Z'),
+      lines: DEMO_PRODUCTS.map((item, index) => ({
+        productId: productIdFor(item.sku),
+        quantity: 40 + (index % 5) * 10,
+        unitCostMinor: item.costPriceMinor,
+      })),
+    })
+  ) {
+    created.push('opening stock GRN-00001 @ ACC-WH1')
+  }
+
+  if (
+    await ensureStockReceipt({
+      number: 'GRN-00002',
+      branchId: retail.id,
+      supplierName: 'Accra Parts Depot',
+      supplierInvoiceNumber: 'APD-0451',
+      note: 'Opening stock — retail floor',
+      createdAt: new Date('2026-10-02T08:00:00.000Z'),
+      lines: DEMO_PRODUCTS.map((item, index) => ({
+        productId: productIdFor(item.sku),
+        quantity: retailQuantityOverrides.get(item.sku) ?? 6 + (index % 4) * 3,
+        unitCostMinor: item.costPriceMinor,
+      })),
+    })
+  ) {
+    created.push('opening stock GRN-00002 @ ACC-SPX')
+  }
+
+  for (const [sku, threshold] of [
+    ['GIK-00007', 5],
+    ['GIK-00011', 10],
+  ] as const) {
+    if (
+      await ensureStockThreshold({
+        productId: productIdFor(sku),
+        branchId: retail.id,
+        threshold,
+      })
+    ) {
+      created.push(`stock threshold ${sku} @ ACC-SPX`)
+    }
+  }
+
+  if (await ensureSequenceAtLeast('inventory.receiptSequence', 3)) {
+    created.push('inventory receipt sequence')
   }
 
   if (await ensureSequenceAtLeast('catalog.skuSequence', DEMO_PRODUCTS.length + 1)) {
