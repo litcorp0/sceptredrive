@@ -190,7 +190,10 @@ check('row includes joined category and unit names', Boolean(res.body.products[0
 res = await request(`/api/products?q=${(res.body.products[0]?.sku ?? suggestedSku).slice(0, 8)}`, {
   cookie: adminCookie,
 })
-check('search by SKU prefix finds the product', res.body.products.some((p) => p.id === product.id))
+check(
+  'search by SKU prefix finds the product',
+  res.body.products.some((p) => p.id === product.id),
+)
 
 // ---------- Manager: read-only catalog + own-branch override ----------
 console.log('\n-- Manager session: forced password change, browse, override own branch --')
@@ -258,7 +261,11 @@ res = await request(`/api/products/${product.id}/prices`, {
   cookie: managerCookie,
   body: { branchId: otherBranch.id, priceMinor: 8950 },
 })
-check('manager override on another branch is forbidden (403)', res.status === 403, `status ${res.status}`)
+check(
+  'manager override on another branch is forbidden (403)',
+  res.status === 403,
+  `status ${res.status}`,
+)
 
 res = await request(`/api/products?q=${encodeURIComponent(walkBarcode)}`, { cookie: managerCookie })
 check(
@@ -267,9 +274,12 @@ check(
   String(res.body?.products?.[0]?.effectivePriceMinor),
 )
 
-res = await request(`/api/products?q=${encodeURIComponent(walkBarcode)}&branchId=${managerBranchId}`, {
-  cookie: adminCookie,
-})
+res = await request(
+  `/api/products?q=${encodeURIComponent(walkBarcode)}&branchId=${managerBranchId}`,
+  {
+    cookie: adminCookie,
+  },
+)
 check(
   'admin sees the same branch override',
   res.body.products[0]?.effectivePriceMinor === 8950,
@@ -285,7 +295,12 @@ check(
 res = await request('/api/products', {
   method: 'POST',
   cookie: managerCookie,
-  body: { name: 'Manager product', categoryId: childCategory.id, uomId: unit.id, basePriceMinor: 1 },
+  body: {
+    name: 'Manager product',
+    categoryId: childCategory.id,
+    uomId: unit.id,
+    basePriceMinor: 1,
+  },
 })
 check('manager cannot create products (403)', res.status === 403, `status ${res.status}`)
 
