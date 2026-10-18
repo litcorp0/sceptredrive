@@ -1,5 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { assertBranchAccess, branchScope, resolveBranchFilter } from '../../auth/scope.ts'
+import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
@@ -128,7 +129,7 @@ export async function createTransfer(
         fromBranchId: from.id,
         toBranchId: to.id,
         note: input.note ?? null,
-        createdBy: actor.actorId,
+        createdBy: actorLabel(actor),
       },
       tx,
     )
@@ -278,7 +279,7 @@ export async function cancelTransfer(
 
     const updated = await updateTransferRow(
       transferId,
-      { status: 'CANCELLED', cancelledBy: actor.actorId, cancelledAt: new Date() },
+      { status: 'CANCELLED', cancelledBy: actorLabel(actor), cancelledAt: new Date() },
       tx,
     )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to cancel the transfer')
@@ -375,7 +376,7 @@ export async function dispatchTransfer(
 
     const updated = await updateTransferRow(
       transferId,
-      { status: 'DISPATCHED', dispatchedBy: actor.actorId, dispatchedAt: new Date() },
+      { status: 'DISPATCHED', dispatchedBy: actorLabel(actor), dispatchedAt: new Date() },
       tx,
     )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to dispatch the transfer')
@@ -467,7 +468,7 @@ export async function receiveTransfer(
       transferId,
       {
         status: allReceived ? 'RECEIVED' : 'DISPATCHED',
-        receivedBy: actor.actorId,
+        receivedBy: actorLabel(actor),
         receivedAt: new Date(),
       },
       tx,
@@ -525,7 +526,7 @@ export async function shortCloseTransfer(
       transferId,
       {
         status: 'SHORT_CLOSED',
-        closedBy: actor.actorId,
+        closedBy: actorLabel(actor),
         closedAt: new Date(),
         note: input.note,
       },

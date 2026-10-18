@@ -1,5 +1,6 @@
 import { db } from '@gikautos/db'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
+import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { listChildCategoryIds } from '../catalog/catalog.repository.ts'
@@ -85,7 +86,7 @@ export async function createCount(
         branchId: input.branchId,
         categoryId: input.categoryId ?? null,
         note: input.note ?? null,
-        createdBy: actor.actorId,
+        createdBy: actorLabel(actor),
       },
       tx,
     )
@@ -239,7 +240,7 @@ export async function postCount(
 
     const updated = await updateCountRow(
       countId,
-      { status: 'POSTED', postedBy: actor.actorId, postedAt: new Date() },
+      { status: 'POSTED', postedBy: actorLabel(actor), postedAt: new Date() },
       tx,
     )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to post the count')
@@ -285,7 +286,7 @@ export async function cancelCount(
 
     const updated = await updateCountRow(
       countId,
-      { status: 'CANCELLED', cancelledBy: actor.actorId, cancelledAt: new Date() },
+      { status: 'CANCELLED', cancelledBy: actorLabel(actor), cancelledAt: new Date() },
       tx,
     )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to cancel the count')

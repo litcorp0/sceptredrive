@@ -3,6 +3,11 @@ import type { AuditActor } from '../modules/platform/audit.types.ts'
 import type { AppEnv } from './factory.ts'
 import { clientIpFromHeaders } from './request-meta.ts'
 
+/** Human-readable actor label for documents (staff id preferred over user id). */
+export function actorLabel(actor: AuditActor): string | null {
+  return actor.actorStaffId ?? actor.actorId
+}
+
 /** Adapts the request context into the audit actor fields. */
 export function actorFromContext(c: Context<AppEnv>): AuditActor {
   const user = c.get('user')

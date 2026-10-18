@@ -1,6 +1,7 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { averageCostAfterReceipt } from '@gikautos/shared'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
+import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as branchesService from '../org/branches.service.ts'
@@ -157,7 +158,7 @@ export async function postMovements(
           referenceNumber: input.referenceNumber ?? null,
           reasonCode: input.reasonCode ?? null,
           note: input.note ?? null,
-          createdBy: actor.actorId,
+          createdBy: actorLabel(actor),
         },
         executor,
       )
@@ -280,7 +281,7 @@ export async function createReceipt(
         supplierName: input.supplierName ?? null,
         supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
         note: input.note ?? null,
-        createdBy: actor.actorId,
+        createdBy: actorLabel(actor),
       },
       tx,
     )
