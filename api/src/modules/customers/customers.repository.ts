@@ -9,6 +9,7 @@ import type {
   CustomerListRow,
   CustomerRow,
   CustomerSearchFilters,
+  CustomerStatus,
 } from './customers.types.ts'
 
 const customerListSelection = {
@@ -71,6 +72,42 @@ export async function updateCustomerRow(
   executor: DbExecutor = db,
 ): Promise<CustomerRow | null> {
   const rows = await executor.update(customer).set(patch).where(eq(customer.id, id)).returning()
+  return rows[0] ?? null
+}
+
+export async function setCustomerStatus(
+  id: string,
+  status: CustomerStatus,
+  executor: DbExecutor = db,
+): Promise<CustomerRow | null> {
+  const rows = await executor
+    .update(customer)
+    .set({ status })
+    .where(eq(customer.id, id))
+    .returning()
+  return rows[0] ?? null
+}
+
+/**
+ * Scrubs all PII in place (Ghana DPA erasure) and marks the row anonymized.
+ * Ledger rows keep referencing the id; the partial unique phone index lets
+ * the released number be registered again.
+ */
+export async function anonymizeCustomerRow(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<CustomerRow | null> {
+  const rows = await executor
+    .update(customer)
+    .set({
+      name: 'Anonymized customer',
+      phone: null,
+      email: null,
+      address: null,
+      anonymizedAt: new Date(),
+    })
+    .where(eq(customer.id, id))
+    .returning()
   return rows[0] ?? null
 }
 

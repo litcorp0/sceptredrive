@@ -14,6 +14,7 @@ import { getBranch } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import {
+  anonymizeCustomerRow,
   countCustomerRows,
   findCustomerById,
   findCustomerByPhone,
@@ -23,6 +24,7 @@ import {
   insertLoyaltyAccount,
   listCreditProfilesForCustomer,
   searchCustomerRows,
+  setCustomerStatus,
   updateCustomerRow,
 } from './customers.repository.ts'
 import type {
@@ -216,4 +218,128 @@ export async function searchCustomers(
   ])
 
   return { customers, total, page: query.page, pageSize: query.pageSize }
+}
+
+/** Integer-only minor-unit formatting for operator-facing messages. */
+function formatMinor(minor: number): string {
+  const sign = minor < 0 ? '-' : ''
+  const absolute = Math.abs(minor)
+  const cedis = Math.trunc(absolute / 100)
+  const pesewas = String(absolute % 100).padStart(2, '0')
+  return `${sign}GHS ${cedis}.${pesewas}`
+}
+
+async function loadListRowOrFail(id: string): Promise<CustomerListRow> {
+  const listRow = await findCustomerListRowById(id)
+  if (!listRow) throw new AppError(500, 'INTERNAL', 'Failed to load the customer')
+  return listRow
+}
+
+/** Archives a customer (blocks new credit). Idempotent; audited on change. */
+export async function archiveCustomer(
+  actor: AuditActor,
+  id: string,
+  note?: string,
+): Promise<CustomerListRow> {
+  const existing = await findCustomerById(id)
+  if (!existing) throw new NotFoundError('Customer not found')
+  if (existing.anonymizedAt) throw new ConflictError('Anonymized customers cannot be archived')
+
+  if (existing.status !== 'ARCHIVED') {
+    await db.transaction(async (tx) => {
+      const row = await setCustomerStatus(id, 'ARCHIVED', tx)
+      if (!row) throw new AppError(500, 'INTERNAL', 'Failed to archive customer')
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'customer.archived',
+          entity: 'customer',
+          entityId: id,
+          branchId: row.createdBranchId,
+          after: { status: row.status, note: note ?? null },
+        },
+        tx,
+      )
+    })
+  }
+
+  return loadListRowOrFail(id)
+}
+
+/** Returns an archived customer to active trading. Idempotent; audited on change. */
+export async function reactivateCustomer(actor: AuditActor, id: string): Promise<CustomerListRow> {
+  const existing = await findCustomerById(id)
+  if (!existing) throw new NotFoundError('Customer not found')
+  if (existing.anonymizedAt) throw new ConflictError('Anonymized customers cannot be reactivated')
+
+  if (existing.status !== 'ACTIVE') {
+    await db.transaction(async (tx) => {
+      const row = await setCustomerStatus(id, 'ACTIVE', tx)
+      if (!row) throw new AppError(500, 'INTERNAL', 'Failed to reactivate customer')
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'customer.reactivated',
+          entity: 'customer',
+          entityId: id,
+          branchId: row.createdBranchId,
+          after: { status: row.status },
+        },
+        tx,
+      )
+    })
+  }
+
+  return loadListRowOrFail(id)
+}
+
+/**
+ * Ghana DPA erasure: requires every branch credit balance and the loyalty
+ * balance to be zero. PII is scrubbed in place; ledger rows stay intact.
+ */
+export async function anonymizeCustomer(
+  actor: AuditActor,
+  id: string,
+  note?: string,
+): Promise<CustomerListRow> {
+  const existing = await findCustomerById(id)
+  if (!existing) throw new NotFoundError('Customer not found')
+  if (existing.anonymizedAt) throw new ConflictError('Customer is already anonymized')
+
+  const profiles = await listCreditProfilesForCustomer(id)
+  const blockingCredit = profiles.filter((profile) => profile.balanceMinor !== 0)
+  if (blockingCredit.length > 0) {
+    const details = blockingCredit
+      .map((profile) => `${profile.branchCode}: ${formatMinor(profile.balanceMinor)}`)
+      .join(', ')
+    throw new ConflictError(`Cannot anonymize: unreconciled credit at ${details}`)
+  }
+
+  const account = await findLoyaltyAccount(id)
+  if (account && account.balancePoints !== 0) {
+    throw new ConflictError(
+      `Cannot anonymize: ${account.balancePoints} unreconciled loyalty points remain`,
+    )
+  }
+
+  await db.transaction(async (tx) => {
+    const row = await anonymizeCustomerRow(id, tx)
+    if (!row) throw new AppError(500, 'INTERNAL', 'Failed to anonymize customer')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'customer.anonymized',
+        entity: 'customer',
+        entityId: id,
+        branchId: row.createdBranchId,
+        after: { note: note ?? null },
+      },
+      tx,
+    )
+  })
+
+  return loadListRowOrFail(id)
 }

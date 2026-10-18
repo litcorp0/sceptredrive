@@ -1,11 +1,11 @@
 import { db } from '@gikautos/db'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'
 import { ConflictError, ForbiddenError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { creditProfile } from '../credit/credit.schema.ts'
-import { loyaltyAccount } from '../loyalty/loyalty.schema.ts'
+import { creditLedgerEntry, creditProfile } from '../credit/credit.schema.ts'
+import { loyaltyAccount, loyaltyLedgerEntry } from '../loyalty/loyalty.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -105,8 +105,10 @@ describe.skipIf(!available)('customers service', () => {
         .where(inArray(loyaltyAccount.customerId, customerIds))
       const accountIds = accounts.map((row) => row.id)
       if (accountIds.length > 0) {
+        await db.delete(loyaltyLedgerEntry).where(inArray(loyaltyLedgerEntry.accountId, accountIds))
         await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.id, accountIds))
       }
+      await db.delete(creditLedgerEntry).where(inArray(creditLedgerEntry.customerId, customerIds))
       await db.delete(creditProfile).where(inArray(creditProfile.customerId, customerIds))
       await db.delete(customer).where(inArray(customer.id, customerIds))
       await db.delete(auditLog).where(inArray(auditLog.entityId, customerIds))
@@ -300,5 +302,156 @@ describe.skipIf(!available)('customers service', () => {
     const asAdmin = await customersService.getCustomer(adminUser, created.id)
     expect(asAdmin.creditProfiles).toHaveLength(2)
     expect(asAdmin.creditProfiles.map((row) => row.branchId)).toEqual([branchAId, branchBId])
+  })
+
+  it('archives and reactivates a customer with an audit trail', async () => {
+    const created = await createCustomer(managerUser, {
+      name: `Lifecycle ${suffix}`,
+      phone: nextPhone('059'),
+    })
+
+    const archived = await customersService.archiveCustomer(actor, created.id, 'Moved away')
+    expect(archived.status).toBe('ARCHIVED')
+
+    // Re-archiving is a no-op and writes no second audit row.
+    await customersService.archiveCustomer(actor, created.id)
+    const archivedAudits = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, created.id), eq(auditLog.action, 'customer.archived')))
+    expect(archivedAudits).toHaveLength(1)
+
+    const reactivated = await customersService.reactivateCustomer(actor, created.id)
+    expect(reactivated.status).toBe('ACTIVE')
+
+    const actions = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.entityId, created.id))
+    expect(actions.map((row) => row.action)).toEqual(
+      expect.arrayContaining(['customer.archived', 'customer.reactivated']),
+    )
+  })
+
+  it('anonymizes only after credit and loyalty balances are zero and releases the phone', async () => {
+    const phone = nextPhone('028')
+    const created = await createCustomer(managerUser, {
+      name: `Erasure ${suffix}`,
+      phone,
+      email: `erasure-${suffix}@example.com`,
+    })
+    const normalizedPhone = created.phone
+    if (!normalizedPhone) throw new Error('expected a normalized phone')
+
+    await db.insert(creditProfile).values({
+      customerId: created.id,
+      branchId: branchAId,
+      balanceMinor: 4_500,
+      createdBy: 'test',
+    })
+    await db.insert(creditLedgerEntry).values({
+      customerId: created.id,
+      branchId: branchAId,
+      kind: 'CHARGE',
+      amountMinor: 4_500,
+      reasonCode: 'OPENING_BALANCE',
+      occurredAt: new Date(),
+      createdBy: 'test',
+    })
+
+    const creditBlock = await captureError(() =>
+      customersService.anonymizeCustomer(actor, created.id),
+    )
+    expect(creditBlock).toBeInstanceOf(ConflictError)
+    if (!(creditBlock instanceof ConflictError)) throw new Error('expected ConflictError')
+    expect(creditBlock.message).toContain(`CUS-${suffix}-A`)
+
+    // Reconcile the branch credit to zero with a compensating entry.
+    await db.insert(creditLedgerEntry).values({
+      customerId: created.id,
+      branchId: branchAId,
+      kind: 'ADJUSTMENT',
+      amountMinor: -4_500,
+      reasonCode: 'CORRECTION',
+      occurredAt: new Date(),
+      createdBy: 'test',
+    })
+    await db
+      .update(creditProfile)
+      .set({ balanceMinor: 0 })
+      .where(eq(creditProfile.customerId, created.id))
+
+    const accountRows = await db
+      .select({ id: loyaltyAccount.id })
+      .from(loyaltyAccount)
+      .where(eq(loyaltyAccount.customerId, created.id))
+    const accountId = accountRows[0]?.id
+    if (!accountId) throw new Error('loyalty account missing')
+
+    await db
+      .update(loyaltyAccount)
+      .set({ balancePoints: 250 })
+      .where(eq(loyaltyAccount.customerId, created.id))
+    const loyaltyBlock = await captureError(() =>
+      customersService.anonymizeCustomer(actor, created.id),
+    )
+    expect(loyaltyBlock).toBeInstanceOf(ConflictError)
+
+    // Reconcile points to zero, then anonymize for real.
+    await db.insert(loyaltyLedgerEntry).values({
+      accountId,
+      customerId: created.id,
+      branchId: branchAId,
+      kind: 'ADJUST',
+      pointsDelta: -250,
+      reasonCode: 'CORRECTION',
+      occurredAt: new Date(),
+      createdBy: 'test',
+    })
+    await db
+      .update(loyaltyAccount)
+      .set({ balancePoints: 0 })
+      .where(eq(loyaltyAccount.customerId, created.id))
+
+    const anonymized = await customersService.anonymizeCustomer(actor, created.id, 'DPA request')
+    expect(anonymized.name).toBe('Anonymized customer')
+    expect(anonymized.phone).toBeNull()
+    expect(anonymized.email).toBeNull()
+    expect(anonymized.anonymizedAt).not.toBeNull()
+
+    // Ledger history stays intact and audited.
+    const creditRows = await db
+      .select({ id: creditLedgerEntry.id })
+      .from(creditLedgerEntry)
+      .where(eq(creditLedgerEntry.customerId, created.id))
+    expect(creditRows).toHaveLength(2)
+    const pointsRows = await db
+      .select({ id: loyaltyLedgerEntry.id })
+      .from(loyaltyLedgerEntry)
+      .where(eq(loyaltyLedgerEntry.accountId, accountId))
+    expect(pointsRows).toHaveLength(1)
+    const actions = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.entityId, created.id))
+    expect(actions.map((row) => row.action)).toContain('customer.anonymized')
+
+    // Anonymized rows never appear in search.
+    const search = await customersService.searchCustomers(
+      managerUser,
+      searchQuery({ q: 'Anonymized cust' }),
+    )
+    expect(search.customers.map((row) => row.id)).not.toContain(created.id)
+
+    // The released phone can be registered by a new customer.
+    const reborn = await createCustomer(managerUser, { name: `Reborn ${suffix}`, phone })
+    expect(reborn.phone).toBe(normalizedPhone)
+    expect(reborn.id).not.toBe(created.id)
+
+    // Anonymized customers are no longer editable.
+    const editBlock = await captureError(() =>
+      customersService.updateCustomer(actor, created.id, { name: 'Nope' }),
+    )
+    expect(editBlock).toBeInstanceOf(ConflictError)
   })
 })
