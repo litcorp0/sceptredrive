@@ -8,6 +8,7 @@ import {
   deleteTestUser,
   randomToken,
   signIn,
+  TEST_PASSWORD,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -285,6 +286,33 @@ describe.skipIf(!available)('staff management API', () => {
         ),
       )
     expect(auditRows.length).toBe(1)
+  })
+
+  it('authorizes from fresh data after a password change, not the cookie cache', async () => {
+    const { id, email } = await createTestUser({ role: 'MANAGER', branchId: branchAId })
+    await db.update(userTable).set({ mustChangePassword: true }).where(eq(userTable.id, id))
+
+    const jar = await signIn(email, TEST_PASSWORD)
+
+    const locked = await app.request('/api/branches', { headers: authedHeaders(jar) })
+    expect(locked.status).toBe(403)
+
+    const changed = await app.request('/api/me/password', {
+      method: 'POST',
+      headers: authedHeaders(jar),
+      body: JSON.stringify({
+        currentPassword: TEST_PASSWORD,
+        newPassword: 'regression-password-2026',
+      }),
+    })
+    expect(changed.status).toBe(200)
+
+    // Regression: a cached session kept mustChangePassword true for up to
+    // five minutes; authorization must use fresh data instead.
+    const after = await app.request('/api/branches', { headers: authedHeaders(jar) })
+    expect(after.status).toBe(200)
+
+    await deleteTestUser(id)
   })
 
   it('deactivates and reactivates staff, blocking sign-in while inactive', async () => {

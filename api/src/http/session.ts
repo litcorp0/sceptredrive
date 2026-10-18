@@ -9,6 +9,10 @@ const PASSWORD_CHANGE_PATHS = new Set(['/api/me/password'])
 /**
  * Resolves the Better Auth session for API routes and stores it on the
  * context. Never throws: a lookup failure is treated as anonymous.
+ *
+ * The cookie cache is deliberately bypassed: authorization must reflect
+ * role, branch, isActive, and mustChangePassword changes immediately, not
+ * after the cache's 5-minute max age.
  */
 export const loadSession = factory.createMiddleware(async (c, next) => {
   const path = c.req.path
@@ -19,7 +23,10 @@ export const loadSession = factory.createMiddleware(async (c, next) => {
 
   let result: Awaited<ReturnType<typeof auth.api.getSession>> = null
   try {
-    result = await auth.api.getSession({ headers: c.req.raw.headers })
+    result = await auth.api.getSession({
+      headers: c.req.raw.headers,
+      query: { disableCookieCache: true },
+    })
   } catch (error) {
     c.get('logger').warn({ err: error }, 'session lookup failed')
     result = null
