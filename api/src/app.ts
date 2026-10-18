@@ -9,6 +9,7 @@ import { securityHeaders } from './http/security-headers.ts'
 import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
+import { countsRoutes } from './modules/counts/counts.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
@@ -39,6 +40,7 @@ app.route('/', catalogRoutes)
 app.route('/', productsRoutes)
 app.route('/', inventoryRoutes)
 app.route('/', transfersRoutes)
+app.route('/', countsRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
