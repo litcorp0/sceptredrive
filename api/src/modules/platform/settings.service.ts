@@ -211,3 +211,17 @@ export async function allocateFromSequence(
 export async function allocateStaffId(executor: DbExecutor): Promise<string> {
   return allocateFromSequence('staff.idSequence', executor)
 }
+
+/**
+ * Formats the next value of a sequence without consuming it (a peek for
+ * pre-filling forms; creation always allocates atomically).
+ */
+export async function peekSequenceValue(
+  key: SequenceKey,
+  executor: DbExecutor = db,
+): Promise<string> {
+  const format = SEQUENCE_FORMATS[key]
+  const prefix = await getSettingValue(format.prefixKey, {}, executor)
+  const next = await getSettingValue(key, {}, executor)
+  return `${prefix}-${String(next).padStart(format.pad, '0')}`
+}

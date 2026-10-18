@@ -72,6 +72,10 @@ export interface ProductListRow {
   updatedAt: Date
 }
 
+export interface ProductWithBarcodes extends ProductRow {
+  barcodes: BarcodeRow[]
+}
+
 export interface ProductDetail extends ProductRow {
   barcodes: BarcodeRow[]
   overrides: ProductPriceRow[]
