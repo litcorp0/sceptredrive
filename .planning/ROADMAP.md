@@ -63,6 +63,7 @@ functions and tests; admin catalog list/create/edit screens; archive flows.
 **Goal:** Stock is a single, auditable truth per branch. Goods are received, adjusted,
 transferred, and counted; warehouses and retail branches interoperate.
 
+**Status:** ✅ Complete (verified 2026-10-18 — see `phases/03-inventory-transfers/01-VERIFICATION.md`)
 **Dependencies:** Phase 2
 **Requirements:** INV-01…09, ADM-04
 

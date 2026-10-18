@@ -2,14 +2,12 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-18
-**Status:** Phase 2 complete and verified (fresh-database API walkthrough 31/31 and real
-browser walkthrough 29/29; see `.planning/phases/02-catalog-pricing/01-VERIFICATION.md`).
-TOTP forced setup/verification is now machine-verified end to end, closing the Phase 1
-human item; TOTP secret for the dev environment lives at `/tmp/opencode/admin-totp.json`.
-**Next action:** Execute Phase 3 (Inventory & Transfers) — planning is complete:
-`00-CONTEXT.md` (locked decisions), `01-RESEARCH.md`, and 8 plans in
-`.planning/phases/03-inventory-transfers/`. Start with Plan 01 (schema, migration,
-settings, demo seed).
+**Status:** Phase 3 complete and verified (fresh-database HTTP + SQL walkthrough 92/92 and
+browser walkthroughs 15/15 + 6/6; see
+`.planning/phases/03-inventory-transfers/01-VERIFICATION.md`).
+**Next action:** Plan Phase 4 (Customers, Credit & Loyalty) under
+`.planning/phases/04-*` — start with `00-CONTEXT.md` (locked decisions), then research
+and plans per GSD, from the Phase 4 section of `ROADMAP.md`.
 
 ---
 
@@ -20,7 +18,7 @@ settings, demo seed).
 | 0 | Planning & decisions | ✅ Complete |
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
-| 3 | Inventory & Transfers | ⬜ Not started |
+| 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
@@ -48,6 +46,19 @@ settings, demo seed).
 | 05 | Console catalog screens and settings extensions | ✅ Complete |
 | 06 | Phase 2 verification and state update | ✅ Complete |
 
+### Phase 3 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Inventory schema, migration, settings, and demo seed | ✅ Complete |
+| 02 | Inventory core service — ledger, projection, average cost, guards | ✅ Complete |
+| 03 | Inventory APIs — receipts, adjustments, stock, history, low stock, thresholds | ✅ Complete |
+| 04 | Transfers module — draft, dispatch, receive, short-close | ✅ Complete |
+| 05 | Counts module — snapshot, entry, post | ✅ Complete |
+| 06 | Console — inventory shell, stock screens, receive, adjust, thresholds | ✅ Complete |
+| 07 | Console — transfers and stock count screens | ✅ Complete |
+| 08 | Phase 3 verification and state update | ✅ Complete |
+
 ---
 
 ## Repository State
@@ -70,7 +81,7 @@ settings, demo seed).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 40/40, api 146/146 against
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 46/46, api 176/176 against
   `gikautos_test`.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -96,6 +107,34 @@ settings, demo seed).
 - Verification: fresh-DB cycle, API walkthrough 31/31, real browser (Playwright)
   walkthrough 29/29 with screenshots and scripts under
   `.planning/phases/02-catalog-pricing/evidence/`.
+
+### Phase 3 additions
+
+- `@gikautos/shared` exports `averageCostAfterReceipt` (integer weighted average,
+  half-up) used by the API and the demo seed.
+- Inventory module (`api/src/modules/inventory`): append-only `stock_movement` ledger +
+  `stock_level` projection, receipts (`stock_receipt`, `stock_receipt_line`),
+  adjustments, per-branch thresholds, stock/history/low-stock reads; one posting
+  service with sorted per-product locks (`lockOrCreateLevel`) enforcing the non-negative
+  guard (409).
+- Transfers module (`api/src/modules/transfers`): draft → dispatch → receive →
+  short-close with source/destination on-hand context, cost carry to the destination,
+  side-scoped authority, direction-filtered list reads.
+- Counts module (`api/src/modules/counts`): snapshot at open, entry, post (variance
+  movements only), cancel; negative-guard 409 names the offending products.
+- Guards: product archive blocked while any branch holds stock; warehouses cannot host
+  POS terminals.
+- Sequences/settings: `GRN-#####`, `TRF-#####`, `CNT-#####`; demo seed adds opening
+  stock (GRN-00001 @ ACC-WH1, GRN-00002 @ ACC-SPX) and thresholds GIK-00007=5 /
+  GIK-00011=10 at ACC-SPX, idempotently.
+- Console: Inventory section (Stock / Transfers / Counts tabs) — stock list with
+  search + low filter, product detail with movement history, receive / adjust /
+  threshold dialogs, transfer detail (dispatch / receive / short-close), count
+  entry/posting; permission-aware actions.
+- Verification: fresh-DB cycle (demo seed ×2 idempotent), HTTP + SQL walkthrough 92/92
+  (ledger invariant SQL, audit rows, permission matrix, warehouse + archive guards),
+  browser walkthroughs 15/15 + 6/6; scripts and screenshots under
+  `.planning/phases/03-inventory-transfers/evidence/`.
 
 ---
 
@@ -139,6 +178,14 @@ settings, demo seed).
 | 2026-10-18 | Phase 2: products routes are `catalog/products/index.tsx` + thin `products.tsx` layout (flat-file children need the parent `Outlet`). |
 | 2026-10-18 | Console money rendering: `formatGhs` / `parseGhsToMinor` / `formatMinorPlain` in `admin/src/lib/format.ts`; storage stays integer pesewas. |
 | 2026-10-18 | Browser verification uses Playwright with `channel: "chromium"` (cached full build; the headless shell is not installed). |
+| 2026-10-18 | Phase 3: branch average cost uses the shared `averageCostAfterReceipt` (weighted integer average, half-up). Receipts blend; adjustments and count variances never change average cost. |
+| 2026-10-18 | Phase 3: posting is single-writer per product/branch — `lockOrCreateLevel` (upsert + `FOR UPDATE`) with products locked in sorted order; no deadlocks (concurrency test). |
+| 2026-10-18 | Phase 3: short-close records status/note/closer with no stock movement — dispatched stock simply never arrives; destination discrepancies are the destination's problem, losses at source are adjustments. |
+| 2026-10-18 | Phase 3: transfer authority is side-scoped — dispatch/cancel belong to the source branch, receive/short-close to the destination; the other side sees 403. |
+| 2026-10-18 | Phase 3: count snapshots copy the level book at open; posting writes only variance movements (counted − snapshot) and refuses negative results (409, naming products). |
+| 2026-10-18 | Phase 3: product archive requires zero stock everywhere (409 otherwise); warehouses cannot host POS terminals (409). |
+| 2026-10-18 | Phase 3: movements carry `reference_number` (GRN/TRF/CNT, null for adjustments) so offline history reconciles without joins (Phase 6 contract). |
+| 2026-10-18 | Phase 3: receipts record supplier name + invoice now; the payable row is created in Phase 5 from the same receipt (`payable` table does not exist yet). |
 
 ---
 
@@ -146,6 +193,8 @@ settings, demo seed).
 
 - **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
   on GitHub (workflow is written and locally verified).
+- Phase 5 must create payables from existing receipts: Phase 3 stores supplier name +
+  invoice number on the receipt; the `payable` table does not exist yet.
 - Human verification from Plan 04: TOTP with an authenticator app is now machine-verified
   end to end (browser walkthrough performs forced setup + verification). Remaining: a
   human visual pass over the Phase 2 console screens and the dev-mail password-reset
@@ -197,6 +246,17 @@ settings, demo seed).
   `.planning/phases/02-catalog-pricing/evidence/`; run them against a running
   API (`:4000`) and console (`:3000`). The browser script auto-handles forced TOTP
   setup, storing the dev secret at `/tmp/opencode/admin-totp.json`.
+- Phase 3 posting is a single service path: `postMovements` in
+  `api/src/modules/inventory/inventory.service.ts` (sorted locks via
+  `lockOrCreateLevel`; receipts, adjustments, transfers, and counts all go through it) —
+  keep every future write path (POS sales) on it.
+- Phase 3 evidence scripts: `.planning/phases/03-inventory-transfers/evidence/`
+  (`walkthrough-inventory.mjs`, `smoke-console.mjs`, `smoke-transfers-counts.mjs`); run
+  the browser scripts from a directory where `playwright` resolves and point `SHOTS_DIR`
+  at the `evidence/` folder.
+- Phase 6 contracts to honour: extend `StockMovementType` (e.g. `SALE`) and add an
+  oversell posting mode; keep movements append-only, `reference_number` populated, and
+  the ledger-invariant test green.
 - Admin console: server functions live in `admin/src/lib/*.functions.ts`; the session
   guard is `admin/src/routes/_authenticated/route.tsx`; permission helpers in
   `admin/src/lib/role.ts`; API client + types in `admin/src/lib/api.ts` / `api-types.ts`
