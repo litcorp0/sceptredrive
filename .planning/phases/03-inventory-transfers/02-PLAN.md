@@ -17,10 +17,14 @@ ledger; product archive and warehouse-terminal guards enforce the new invariants
 
 ## Task 1 — Movement posting, projection, and reads
 
-**Files:** `api/src/modules/inventory/inventory.repository.ts`,
+**Files:** `packages/shared/src/permissions.ts`, `packages/shared/src/permissions.test.ts`,
+`api/src/modules/inventory/inventory.repository.ts`,
 `api/src/modules/inventory/inventory.types.ts`,
 `api/src/modules/inventory/inventory.service.ts`
 
+- Permissions registry: add `inventory.read`, `inventory.receive`, `inventory.adjust`,
+  `inventory.transfer`, `inventory.count`, `inventory.threshold`; grant all to ADMIN and
+  MANAGER (D8); extend the shared permission tests.
 - Types: `StockMovementType`, `MovementInput { productId, branchId, type, quantityDelta,
   unitCostMinor, referenceType, referenceId?, referenceNumber?, reasonCode?, note? }`,
   `PostedMovement`, `StockLevelRow`, `OnHandTotals`.
@@ -50,7 +54,8 @@ ledger; product archive and warehouse-terminal guards enforce the new invariants
   read for the archive guard), `reconcileBranch(branchId)` — returns rows where
   `level.quantity_on_hand !== SUM(delta)`.
 
-**Verify:** `bun run --filter api check-types`; unit-level tests come in Task 2.
+**Verify:** `bun run --filter shared test`; `bun run --filter api check-types`;
+service-level tests come in Task 2.
 **Commit:** `feat(api): add stock movement posting and level projection`
 
 ## Task 2 — Costing, guard, and concurrency tests
