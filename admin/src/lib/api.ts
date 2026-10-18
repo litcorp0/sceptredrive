@@ -2,14 +2,31 @@ import { env } from "#/env"
 import type {
 	AuditEntry,
 	AuditListQuery,
+	Barcode,
 	Branch,
 	BranchCreateInput,
 	BranchListQuery,
 	BranchUpdateInput,
+	Brand,
+	BrandCreateInput,
+	BrandUpdateInput,
+	CatalogListQuery,
+	Category,
+	CategoryCreateInput,
+	CategoryTreeNode,
+	CategoryUpdateInput,
 	ChangePasswordInput,
 	CreateStaffResult,
 	Device,
 	Enrollment,
+	PriceOverride,
+	Product,
+	ProductCreateInput,
+	ProductDetail,
+	ProductListQuery,
+	ProductRow,
+	ProductUpdateInput,
+	ProductWithBarcodes,
 	ResetPasswordResult,
 	ResolvedSetting,
 	SettingsUpdateInput,
@@ -22,6 +39,9 @@ import type {
 	TerminalCreateInput,
 	TerminalListQuery,
 	TerminalUpdateInput,
+	Uom,
+	UomCreateInput,
+	UomUpdateInput,
 } from "./api-types"
 
 export class ApiError extends Error {
@@ -41,7 +61,7 @@ export class ApiError extends Error {
 type QueryValue = string | number | boolean | undefined
 
 interface RequestOptions {
-	method?: "GET" | "POST" | "PATCH" | "DELETE"
+	method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE"
 	body?: unknown
 	query?: Record<string, QueryValue>
 	signal?: AbortSignal
@@ -176,5 +196,95 @@ export const api = {
 			}),
 		update: (input: SettingsUpdateInput) =>
 			apiRequest<{ setting: ResolvedSetting }>("/api/settings", { method: "PATCH", body: input }),
+	},
+
+	catalog: {
+		categories: {
+			list: (query: CatalogListQuery = {}) =>
+				apiRequest<{ categories: CategoryTreeNode[] }>("/api/categories", { query }),
+			create: (input: CategoryCreateInput) =>
+				apiRequest<{ category: Category }>("/api/categories", { method: "POST", body: input }),
+			update: (id: string, input: CategoryUpdateInput) =>
+				apiRequest<{ category: Category }>(`/api/categories/${id}`, {
+					method: "PATCH",
+					body: input,
+				}),
+			archive: (id: string) =>
+				apiRequest<{ category: Category }>(`/api/categories/${id}/archive`, { method: "POST" }),
+			reactivate: (id: string) =>
+				apiRequest<{ category: Category }>(`/api/categories/${id}/reactivate`, {
+					method: "POST",
+				}),
+		},
+		brands: {
+			list: (query: CatalogListQuery = {}) =>
+				apiRequest<{ brands: Brand[] }>("/api/brands", { query }),
+			create: (input: BrandCreateInput) =>
+				apiRequest<{ brand: Brand }>("/api/brands", { method: "POST", body: input }),
+			update: (id: string, input: BrandUpdateInput) =>
+				apiRequest<{ brand: Brand }>(`/api/brands/${id}`, { method: "PATCH", body: input }),
+			archive: (id: string) =>
+				apiRequest<{ brand: Brand }>(`/api/brands/${id}/archive`, { method: "POST" }),
+			reactivate: (id: string) =>
+				apiRequest<{ brand: Brand }>(`/api/brands/${id}/reactivate`, { method: "POST" }),
+		},
+		units: {
+			list: (query: CatalogListQuery = {}) => apiRequest<{ uoms: Uom[] }>("/api/uoms", { query }),
+			create: (input: UomCreateInput) =>
+				apiRequest<{ uom: Uom }>("/api/uoms", { method: "POST", body: input }),
+			update: (id: string, input: UomUpdateInput) =>
+				apiRequest<{ uom: Uom }>(`/api/uoms/${id}`, { method: "PATCH", body: input }),
+			archive: (id: string) =>
+				apiRequest<{ uom: Uom }>(`/api/uoms/${id}/archive`, { method: "POST" }),
+			reactivate: (id: string) =>
+				apiRequest<{ uom: Uom }>(`/api/uoms/${id}/reactivate`, { method: "POST" }),
+		},
+	},
+
+	products: {
+		list: (query: ProductListQuery = {}) =>
+			apiRequest<{ products: Product[]; total: number; branchId: string | null }>("/api/products", {
+				query,
+			}),
+		get: (id: string) => apiRequest<{ product: ProductDetail }>(`/api/products/${id}`),
+		suggestSku: () => apiRequest<{ sku: string }>("/api/products/suggest-sku"),
+		create: (input: ProductCreateInput) =>
+			apiRequest<{ product: ProductWithBarcodes }>("/api/products", {
+				method: "POST",
+				body: input,
+			}),
+		update: (id: string, input: ProductUpdateInput) =>
+			apiRequest<{ product: ProductRow }>(`/api/products/${id}`, {
+				method: "PATCH",
+				body: input,
+			}),
+		archive: (id: string) =>
+			apiRequest<{ product: ProductRow }>(`/api/products/${id}/archive`, { method: "POST" }),
+		reactivate: (id: string) =>
+			apiRequest<{ product: ProductRow }>(`/api/products/${id}/reactivate`, { method: "POST" }),
+		addBarcode: (id: string, code: string) =>
+			apiRequest<{ barcode: Barcode }>(`/api/products/${id}/barcodes`, {
+				method: "POST",
+				body: { code },
+			}),
+		removeBarcode: (id: string, barcodeId: string) =>
+			apiRequest<{ removed: true }>(`/api/products/${id}/barcodes/${barcodeId}`, {
+				method: "DELETE",
+			}),
+		prices: {
+			list: (id: string) =>
+				apiRequest<{ basePriceMinor: number; overrides: PriceOverride[] }>(
+					`/api/products/${id}/prices`,
+				),
+			set: (id: string, input: { branchId: string; priceMinor: number }) =>
+				apiRequest<{ override: PriceOverride }>(`/api/products/${id}/prices`, {
+					method: "PUT",
+					body: input,
+				}),
+			remove: (id: string, branchId: string) =>
+				apiRequest<{ removed: true }>(`/api/products/${id}/prices/${branchId}`, {
+					method: "DELETE",
+				}),
+		},
 	},
 }
