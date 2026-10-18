@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import type { customer } from './customers.schema.ts'
 import type {
+  customerAnonymizeSchema,
   customerCreateSchema,
   customerListQuerySchema,
   customerUpdateSchema,
@@ -12,6 +13,7 @@ export type CustomerStatus = CustomerRow['status']
 export type CustomerCreateBody = z.infer<typeof customerCreateSchema>
 export type CustomerUpdateBody = z.infer<typeof customerUpdateSchema>
 export type CustomerListQuery = z.infer<typeof customerListQuerySchema>
+export type CustomerNoteBody = z.infer<typeof customerAnonymizeSchema>
 
 /** Internal search filters derived from the query plus caller scoping. */
 export interface CustomerSearchFilters {

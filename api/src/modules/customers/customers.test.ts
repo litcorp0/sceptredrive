@@ -1,10 +1,18 @@
 import { db } from '@gikautos/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  signIn,
+  uniqueSuffix,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
 import { ConflictError, ForbiddenError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { creditLedgerEntry, creditProfile } from '../credit/credit.schema.ts'
+import { user as userTable } from '../identity/staff.schema.ts'
 import { loyaltyAccount, loyaltyLedgerEntry } from '../loyalty/loyalty.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
@@ -453,5 +461,224 @@ describe.skipIf(!available)('customers service', () => {
       customersService.updateCustomer(actor, created.id, { name: 'Nope' }),
     )
     expect(editBlock).toBeInstanceOf(ConflictError)
+  })
+})
+
+describe.skipIf(!available)('customers HTTP surface', () => {
+  const suffix = uniqueSuffix()
+  const createdUserIds: string[] = []
+  const createdCustomerIds: string[] = []
+  let branchId = ''
+  let adminCookie = ''
+  let managerCookie = ''
+  let cashierCookie = ''
+  let phoneCounter = 0
+
+  function nextPhone(prefix: '024' | '027' | '059'): string {
+    phoneCounter += 1
+    return `${prefix}321${String(2000 + phoneCounter).slice(-4)}`
+  }
+
+  async function readJson<T>(response: Response): Promise<T> {
+    return (await response.json()) as T
+  }
+
+  beforeAll(async () => {
+    const branches = await db
+      .insert(branch)
+      .values({
+        code: `CUSHTTP-${suffix}`,
+        name: `Customers HTTP ${suffix}`,
+        type: 'RETAIL',
+        city: 'Accra',
+      })
+      .returning({ id: branch.id })
+    branchId = branches[0]?.id ?? ''
+
+    const admin = await createTestUser({ role: 'ADMIN' })
+    createdUserIds.push(admin.id)
+    adminCookie = await signIn(admin.email)
+
+    const manager = await createTestUser({ role: 'MANAGER', branchId })
+    createdUserIds.push(manager.id)
+    managerCookie = await signIn(manager.email)
+
+    const cashier = await createTestUser({ role: 'CASHIER', branchId })
+    createdUserIds.push(cashier.id)
+    cashierCookie = await signIn(cashier.email)
+  })
+
+  afterAll(async () => {
+    if (createdCustomerIds.length > 0) {
+      const accounts = await db
+        .select({ id: loyaltyAccount.id })
+        .from(loyaltyAccount)
+        .where(inArray(loyaltyAccount.customerId, createdCustomerIds))
+      const accountIds = accounts.map((row) => row.id)
+      if (accountIds.length > 0) {
+        await db.delete(loyaltyLedgerEntry).where(inArray(loyaltyLedgerEntry.accountId, accountIds))
+        await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.id, accountIds))
+      }
+      await db
+        .delete(creditLedgerEntry)
+        .where(inArray(creditLedgerEntry.customerId, createdCustomerIds))
+      await db.delete(creditProfile).where(inArray(creditProfile.customerId, createdCustomerIds))
+      await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
+      await db.delete(auditLog).where(inArray(auditLog.entityId, createdCustomerIds))
+    }
+    if (createdUserIds.length > 0) {
+      await db.delete(userTable).where(inArray(userTable.id, createdUserIds))
+    }
+    if (branchId) {
+      await db.delete(branch).where(eq(branch.id, branchId))
+    }
+  })
+
+  it('requires a session', async () => {
+    const response = await app.request('/api/customers')
+    expect(response.status).toBe(401)
+  })
+
+  it('denies cashiers on customer endpoints', async () => {
+    const list = await app.request('/api/customers', { headers: authedHeaders(cashierCookie) })
+    expect(list.status).toBe(403)
+
+    const create = await app.request('/api/customers', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({ name: 'Cashier Customer', phone: '0241234567' }),
+    })
+    expect(create.status).toBe(403)
+  })
+
+  it('lets a manager create, search, read, and update', async () => {
+    const phone = nextPhone('024')
+    const create = await app.request('/api/customers', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ name: `HTTP Customer ${suffix}`, phone }),
+    })
+    expect(create.status).toBe(201)
+    const created = (
+      await readJson<{
+        customer: { id: string; phone: string | null; createdBranchId: string }
+      }>(create)
+    ).customer
+    createdCustomerIds.push(created.id)
+    expect(created.phone).toBe(`+233${phone.slice(1)}`)
+    expect(created.createdBranchId).toBe(branchId)
+
+    const search = await app.request(`/api/customers?q=${phone.slice(-4)}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(search.status).toBe(200)
+    const found = await readJson<{ customers: { id: string }[]; total: number }>(search)
+    expect(found.customers.map((row) => row.id)).toContain(created.id)
+
+    const detail = await app.request(`/api/customers/${created.id}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(detail.status).toBe(200)
+    const detailBody = await readJson<{
+      customer: { id: string }
+      creditProfiles: unknown[]
+      loyalty: { balancePoints: number } | null
+    }>(detail)
+    expect(detailBody.customer.id).toBe(created.id)
+    expect(detailBody.loyalty?.balancePoints).toBe(0)
+
+    const update = await app.request(`/api/customers/${created.id}`, {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ address: '12 Ring Road, Accra' }),
+    })
+    expect(update.status).toBe(200)
+    const updated = await readJson<{ customer: { address: string | null } }>(update)
+    expect(updated.customer.address).toBe('12 Ring Road, Accra')
+  })
+
+  it('reserves archive, reactivate, and anonymize for admins', async () => {
+    const phone = nextPhone('027')
+    const create = await app.request('/api/customers', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ name: `HTTP Lifecycle ${suffix}`, phone }),
+    })
+    expect(create.status).toBe(201)
+    const created = (await readJson<{ customer: { id: string } }>(create)).customer
+    createdCustomerIds.push(created.id)
+
+    const managerArchive = await app.request(`/api/customers/${created.id}/archive`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({}),
+    })
+    expect(managerArchive.status).toBe(403)
+
+    const managerAnonymize = await app.request(`/api/customers/${created.id}/anonymize`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({}),
+    })
+    expect(managerAnonymize.status).toBe(403)
+
+    const adminArchive = await app.request(`/api/customers/${created.id}/archive`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ note: 'Duplicate record' }),
+    })
+    expect(adminArchive.status).toBe(200)
+    expect((await readJson<{ customer: { status: string } }>(adminArchive)).customer.status).toBe(
+      'ARCHIVED',
+    )
+
+    const hidden = await app.request(`/api/customers?q=${phone.slice(-4)}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(
+      (await readJson<{ customers: { id: string }[] }>(hidden)).customers.map((row) => row.id),
+    ).not.toContain(created.id)
+
+    const visible = await app.request(`/api/customers?q=${phone.slice(-4)}&includeArchived=true`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(
+      (await readJson<{ customers: { id: string }[] }>(visible)).customers.map((row) => row.id),
+    ).toContain(created.id)
+
+    const reactivate = await app.request(`/api/customers/${created.id}/reactivate`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+    })
+    expect(reactivate.status).toBe(200)
+    expect((await readJson<{ customer: { status: string } }>(reactivate)).customer.status).toBe(
+      'ACTIVE',
+    )
+
+    const anonymize = await app.request(`/api/customers/${created.id}/anonymize`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ note: 'DPA request' }),
+    })
+    expect(anonymize.status).toBe(200)
+    const anonymized = (
+      await readJson<{ customer: { phone: string | null; anonymizedAt: string | null } }>(anonymize)
+    ).customer
+    expect(anonymized.phone).toBeNull()
+    expect(anonymized.anonymizedAt).not.toBeNull()
+
+    const again = await app.request(`/api/customers/${created.id}/anonymize`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({}),
+    })
+    expect(again.status).toBe(409)
+  })
+
+  it('returns 404 for unknown ids', async () => {
+    const response = await app.request(`/api/customers/${crypto.randomUUID()}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(response.status).toBe(404)
   })
 })

@@ -40,7 +40,12 @@ export const customerListQuerySchema = z.object({
   branchId: z.uuid().optional(),
 })
 
+export const customerAnonymizeSchema = z
+  .object({ note: z.string().trim().min(1).max(300).optional() })
+  .strict()
+
 export const validateCustomerIdParam = validateParam(customerIdParamSchema)
 export const validateCustomerCreate = validateJson(customerCreateSchema)
 export const validateCustomerUpdate = validateJson(customerUpdateSchema)
 export const validateCustomerListQuery = validateQuery(customerListQuerySchema)
+export const validateCustomerNote = validateJson(customerAnonymizeSchema)
