@@ -241,8 +241,10 @@ export async function updateProduct(
         patch.categoryId = await validateCategoryRef(input.categoryId, tx)
       }
       if (input.brandId !== undefined) {
-        const brandId = await validateBrandRef(input.brandId, tx)
-        if (brandId !== existing.brandId) patch.brandId = brandId
+        const targetBrandId = input.brandId ?? null
+        if (targetBrandId !== existing.brandId) {
+          patch.brandId = await validateBrandRef(targetBrandId, tx)
+        }
       }
       if (input.uomId !== undefined && input.uomId !== existing.uomId) {
         patch.uomId = await validateUomRef(input.uomId, tx)

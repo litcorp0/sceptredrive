@@ -533,6 +533,37 @@ describe.skipIf(!available)('products API', () => {
       expect((await readJson<{ product: ProductRecord }>(clearBrand)).product.brandId).toBeNull()
     })
 
+    it('edits a product that keeps an archived brand unchanged', async () => {
+      const brand = await createBrandViaApi(`Retired Brand ${suffix}`)
+      const created = await createProductAndReturn({ brandId: brand.id })
+
+      const archiveProduct = await app.request(`/api/products/${created.id}/archive`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(archiveProduct.status).toBe(200)
+
+      const archiveBrand = await app.request(`/api/brands/${brand.id}/archive`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(archiveBrand.status).toBe(200)
+
+      const reactivateProduct = await app.request(`/api/products/${created.id}/reactivate`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+      })
+      expect(reactivateProduct.status).toBe(200)
+
+      const response = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ name: `Kept brand ${suffix}`, brandId: brand.id }),
+      })
+      expect(response.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(response)).product.brandId).toBe(brand.id)
+    })
+
     it('forbids managers from updating products', async () => {
       const created = await createProductAndReturn()
 
