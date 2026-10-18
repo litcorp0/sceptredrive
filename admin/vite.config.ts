@@ -8,6 +8,8 @@ import { nitro } from "nitro/vite"
 import { defineConfig } from "vite"
 
 const config = defineConfig({
+	// Load VITE_* variables from the repository-root .env (single source of truth).
+	envDir: "..",
 	resolve: { tsconfigPaths: true },
 	plugins: [
 		devtools(),
