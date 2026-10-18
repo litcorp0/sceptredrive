@@ -1,4 +1,5 @@
 export * from './branch-code.ts'
 export * from './permissions.ts'
+export * from './pricing.ts'
 export * from './roles.ts'
 export * from './tax.ts'
