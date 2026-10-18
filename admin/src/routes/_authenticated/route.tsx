@@ -1,4 +1,6 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router"
+import { AppShell } from "#/components/layout/app-shell"
+import { BranchProvider } from "#/lib/branch-context"
 import { getSession } from "#/lib/session.functions"
 
 export const Route = createFileRoute("/_authenticated")({
@@ -19,5 +21,19 @@ export const Route = createFileRoute("/_authenticated")({
 
 		return { session }
 	},
-	component: Outlet,
+	component: AuthenticatedLayout,
 })
+
+function AuthenticatedLayout() {
+	const { session } = Route.useRouteContext()
+	const pathname = useRouterState({ select: (state) => state.location.pathname })
+
+	// The forced password change renders standalone, without the console shell.
+	if (pathname === "/change-password") return <Outlet />
+
+	return (
+		<BranchProvider session={session}>
+			<AppShell session={session} />
+		</BranchProvider>
+	)
+}
