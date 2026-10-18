@@ -52,21 +52,24 @@ export async function updateSettingRowValue(
 }
 
 export async function findSequenceRowForUpdate(
+  key: string,
   executor: DbExecutor = db,
 ): Promise<{ id: string; value: unknown } | null> {
   const rows = await executor
     .select({ id: setting.id, value: setting.value })
     .from(setting)
-    .where(and(eq(setting.key, 'staff.idSequence'), isNull(setting.branchId)))
+    .where(and(eq(setting.key, key), isNull(setting.branchId)))
     .limit(1)
     .for('update')
   return rows[0] ?? null
 }
 
-export async function insertSequenceRow(start: number, executor: DbExecutor = db): Promise<void> {
-  await executor
-    .insert(setting)
-    .values({ key: 'staff.idSequence', value: start, updatedBy: 'system' })
+export async function insertSequenceRow(
+  key: string,
+  start: number,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor.insert(setting).values({ key, value: start, updatedBy: 'system' })
 }
 
 export async function bumpSequenceRow(

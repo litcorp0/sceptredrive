@@ -157,18 +157,36 @@ export async function updateSetting(
 }
 
 /**
- * Atomically allocates the next staff identifier (e.g. GA-0001). The sequence
- * row is locked for update; gaps are acceptable because identifiers are never
- * reused.
+ * Settings keys backed by an atomic counter (FOR UPDATE row lock, gaps are
+ * acceptable because identifiers are never reused).
  */
-export async function allocateStaffId(executor: DbExecutor): Promise<string> {
-  const prefix = await getSettingValue('staff.idPrefix', {}, executor)
+export type SequenceKey = 'staff.idSequence' | 'catalog.skuSequence'
+
+const SEQUENCE_FORMATS: Record<
+  SequenceKey,
+  { prefixKey: 'staff.idPrefix' | 'catalog.skuPrefix'; pad: number; label: string }
+> = {
+  'staff.idSequence': { prefixKey: 'staff.idPrefix', pad: 4, label: 'staff identifier' },
+  'catalog.skuSequence': { prefixKey: 'catalog.skuPrefix', pad: 5, label: 'SKU' },
+}
+
+/**
+ * Atomically allocates the next formatted value from a settings sequence,
+ * e.g. `GA-0001` for staff or `GIK-00001` for SKUs. The sequence row is
+ * locked for update; retries cover the insert race on first use.
+ */
+export async function allocateFromSequence(
+  key: SequenceKey,
+  executor: DbExecutor,
+): Promise<string> {
+  const format = SEQUENCE_FORMATS[key]
+  const prefix = await getSettingValue(format.prefixKey, {}, executor)
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const row = await findSequenceRowForUpdate(executor)
+    const row = await findSequenceRowForUpdate(key, executor)
     if (!row) {
       try {
-        await insertSequenceRow(SETTING_DEFINITIONS['staff.idSequence'].defaultValue, executor)
+        await insertSequenceRow(key, SETTING_DEFINITIONS[key].defaultValue, executor)
         continue
       } catch (error) {
         if (isUniqueViolation(error)) continue
@@ -176,12 +194,20 @@ export async function allocateStaffId(executor: DbExecutor): Promise<string> {
       }
     }
 
-    const parsed = SETTING_DEFINITIONS['staff.idSequence'].schema.safeParse(row.value)
-    const next = parsed.success ? parsed.data : SETTING_DEFINITIONS['staff.idSequence'].defaultValue
+    const parsed = SETTING_DEFINITIONS[key].schema.safeParse(row.value)
+    const next = parsed.success ? parsed.data : SETTING_DEFINITIONS[key].defaultValue
 
     await bumpSequenceRow(row.id, next + 1, executor)
-    return `${prefix}-${String(next).padStart(4, '0')}`
+    return `${prefix}-${String(next).padStart(format.pad, '0')}`
   }
 
-  throw new AppError(500, 'INTERNAL', 'Could not allocate a staff identifier')
+  throw new AppError(500, 'INTERNAL', `Could not allocate a ${format.label}`)
+}
+
+/**
+ * Atomically allocates the next staff identifier (e.g. GA-0001). Gaps are
+ * acceptable because identifiers are never reused.
+ */
+export async function allocateStaffId(executor: DbExecutor): Promise<string> {
+  return allocateFromSequence('staff.idSequence', executor)
 }

@@ -88,6 +88,9 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('loyalty.earnPointsPerCedi', 1),
     ensureSetting('loyalty.pointsPerCedi', 100),
     ensureSetting('loyalty.expiryMonths', 12),
+    ensureSetting('catalog.skuPrefix', 'GIK'),
+    ensureSetting('catalog.skuSequence', 1),
+    ensureSetting('pricing.taxMode', 'INCLUSIVE'),
   ])
   if (settingsSeeded.some(Boolean)) created.push('settings defaults')
 

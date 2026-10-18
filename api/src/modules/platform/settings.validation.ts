@@ -38,6 +38,26 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 12,
     branchScoped: false,
   },
+  'catalog.skuPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'GIK',
+    branchScoped: false,
+  },
+  'catalog.skuSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
+  'pricing.taxMode': {
+    schema: z.enum(['INCLUSIVE', 'EXCLUSIVE']),
+    defaultValue: 'INCLUSIVE',
+    branchScoped: false,
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS
