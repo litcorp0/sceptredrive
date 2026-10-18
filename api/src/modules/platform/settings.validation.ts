@@ -58,6 +58,51 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 'INCLUSIVE',
     branchScoped: false,
   },
+  'inventory.receiptPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'GRN',
+    branchScoped: false,
+  },
+  'inventory.receiptSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
+  'inventory.transferPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'TRF',
+    branchScoped: false,
+  },
+  'inventory.transferSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
+  'inventory.countPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'CNT',
+    branchScoped: false,
+  },
+  'inventory.countSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS

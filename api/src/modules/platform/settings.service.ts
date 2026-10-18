@@ -160,14 +160,43 @@ export async function updateSetting(
  * Settings keys backed by an atomic counter (FOR UPDATE row lock, gaps are
  * acceptable because identifiers are never reused).
  */
-export type SequenceKey = 'staff.idSequence' | 'catalog.skuSequence'
+export type SequenceKey =
+  | 'staff.idSequence'
+  | 'catalog.skuSequence'
+  | 'inventory.receiptSequence'
+  | 'inventory.transferSequence'
+  | 'inventory.countSequence'
 
 const SEQUENCE_FORMATS: Record<
   SequenceKey,
-  { prefixKey: 'staff.idPrefix' | 'catalog.skuPrefix'; pad: number; label: string }
+  {
+    prefixKey:
+      | 'staff.idPrefix'
+      | 'catalog.skuPrefix'
+      | 'inventory.receiptPrefix'
+      | 'inventory.transferPrefix'
+      | 'inventory.countPrefix'
+    pad: number
+    label: string
+  }
 > = {
   'staff.idSequence': { prefixKey: 'staff.idPrefix', pad: 4, label: 'staff identifier' },
   'catalog.skuSequence': { prefixKey: 'catalog.skuPrefix', pad: 5, label: 'SKU' },
+  'inventory.receiptSequence': {
+    prefixKey: 'inventory.receiptPrefix',
+    pad: 5,
+    label: 'goods receipt number',
+  },
+  'inventory.transferSequence': {
+    prefixKey: 'inventory.transferPrefix',
+    pad: 5,
+    label: 'transfer number',
+  },
+  'inventory.countSequence': {
+    prefixKey: 'inventory.countPrefix',
+    pad: 5,
+    label: 'count number',
+  },
 }
 
 /**

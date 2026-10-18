@@ -14,6 +14,7 @@ import { branch } from '../org/branches.schema.ts'
 import { auditLog } from './audit.schema.ts'
 import * as auditService from './audit.service.ts'
 import { setting } from './settings.schema.ts'
+import { advanceSequencePast, allocateFromSequence, peekSequenceValue } from './settings.service.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[platform.test] database unavailable; integration tests skipped')
@@ -224,6 +225,24 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'staff.idPrefix', value: 'way-too-long-prefix' }),
     })
     expect(badValue.status).toBe(400)
+  })
+
+  it('allocates inventory document numbers from their sequences', async () => {
+    const first = await allocateFromSequence('inventory.receiptSequence', db)
+    const second = await allocateFromSequence('inventory.receiptSequence', db)
+    expect(first).toMatch(/^GRN-\d{5}$/)
+    expect(Number(second.split('-')[1])).toBe(Number(first.split('-')[1]) + 1)
+
+    const peeked = await peekSequenceValue('inventory.receiptSequence', db)
+    expect(await peekSequenceValue('inventory.receiptSequence', db)).toBe(peeked)
+    expect(await allocateFromSequence('inventory.receiptSequence', db)).toBe(peeked)
+
+    expect(await allocateFromSequence('inventory.transferSequence', db)).toMatch(/^TRF-\d{5}$/)
+    expect(await allocateFromSequence('inventory.countSequence', db)).toMatch(/^CNT-\d{5}$/)
+
+    await advanceSequencePast('inventory.countSequence', 'CNT-00090', db)
+    const afterAdvance = await allocateFromSequence('inventory.countSequence', db)
+    expect(Number(afterAdvance.split('-')[1])).toBeGreaterThan(90)
   })
 
   it('forbids managers from changing global settings', async () => {
