@@ -3,10 +3,11 @@
 **Milestone:** v1
 **Updated:** 2026-10-18
 **Status:** Phase 1 complete and verified (30/30 fresh-database checks; see
-`.planning/phases/01-foundation/01-VERIFICATION.md`).
-**Next action:** Plan Phase 2 (Catalog & Pricing). Human verification items from Plan 04
-remain (TOTP with a real authenticator, console walkthroughs — listed in the verification
-file).
+`.planning/phases/01-foundation/01-VERIFICATION.md`). Phase 2 planned (6 plans across 4
+waves; decisions locked in `02-catalog-pricing/00-CONTEXT.md`).
+**Next action:** Execute Phase 2, starting with Plan 01 (shared tax engine). Human
+verification items from Plan 04 remain (TOTP with a real authenticator, console
+walkthroughs — listed in the Phase 1 verification file).
 
 ---
 
@@ -16,7 +17,7 @@ file).
 |---|---|---|
 | 0 | Planning & decisions | ✅ Complete |
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
-| 2 | Catalog & Pricing | ⬜ Next |
+| 2 | Catalog & Pricing | 🚧 Planned (6 plans ready) |
 | 3 | Inventory & Transfers | ⬜ Not started |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
 | 5 | Suppliers & Payables | ⬜ Not started |
