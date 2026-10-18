@@ -11,6 +11,9 @@
     "lint": "biome check .",
     "test": "vitest run"
   },
+  "dependencies": {
+    "libphonenumber-js": "catalog:"
+  },
   "devDependencies": {
     "typescript": "catalog:",
     "vitest": "catalog:"

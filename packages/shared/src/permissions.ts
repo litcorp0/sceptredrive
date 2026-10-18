@@ -30,6 +30,19 @@ export const PERMISSIONS = [
   'audit.read',
   'settings.read',
   'settings.update',
+  'customer.read',
+  'customer.create',
+  'customer.update',
+  'customer.archive',
+  'customer.anonymize',
+  'credit.read',
+  'credit.profile.manage',
+  'credit.repayment',
+  'credit.adjust',
+  'credit.override',
+  'loyalty.read',
+  'loyalty.adjust',
+  'loyalty.settings',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -60,6 +73,16 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'audit.read',
   'settings.read',
   'settings.update',
+  'customer.read',
+  'customer.create',
+  'customer.update',
+  'credit.read',
+  'credit.profile.manage',
+  'credit.repayment',
+  'credit.adjust',
+  'credit.override',
+  'loyalty.read',
+  'loyalty.adjust',
 ]
 
 // Cashiers authenticate on the POS (device-bound PIN) and never call the admin API.

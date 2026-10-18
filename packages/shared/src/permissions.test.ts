@@ -54,6 +54,37 @@ describe('permissions', () => {
     expect(can('CASHIER', 'inventory.adjust')).toBe(false)
   })
 
+  it('lets managers run customer, credit, and loyalty operations', () => {
+    expect(can('MANAGER', 'customer.read')).toBe(true)
+    expect(can('MANAGER', 'customer.create')).toBe(true)
+    expect(can('MANAGER', 'customer.update')).toBe(true)
+    expect(can('MANAGER', 'credit.read')).toBe(true)
+    expect(can('MANAGER', 'credit.profile.manage')).toBe(true)
+    expect(can('MANAGER', 'credit.repayment')).toBe(true)
+    expect(can('MANAGER', 'credit.adjust')).toBe(true)
+    expect(can('MANAGER', 'credit.override')).toBe(true)
+    expect(can('MANAGER', 'loyalty.read')).toBe(true)
+    expect(can('MANAGER', 'loyalty.adjust')).toBe(true)
+  })
+
+  it('keeps customer erasure, archiving, and loyalty settings admin-only', () => {
+    expect(can('MANAGER', 'customer.archive')).toBe(false)
+    expect(can('MANAGER', 'customer.anonymize')).toBe(false)
+    expect(can('MANAGER', 'loyalty.settings')).toBe(false)
+
+    expect(can('ADMIN', 'customer.archive')).toBe(true)
+    expect(can('ADMIN', 'customer.anonymize')).toBe(true)
+    expect(can('ADMIN', 'loyalty.settings')).toBe(true)
+  })
+
+  it('keeps cashiers out of phase 4 permissions', () => {
+    expect(can('CASHIER', 'customer.read')).toBe(false)
+    expect(can('CASHIER', 'customer.create')).toBe(false)
+    expect(can('CASHIER', 'credit.read')).toBe(false)
+    expect(can('CASHIER', 'credit.override')).toBe(false)
+    expect(can('CASHIER', 'loyalty.read')).toBe(false)
+  })
+
   it('has no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
