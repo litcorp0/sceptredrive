@@ -77,7 +77,9 @@ describe.skipIf(!available)('audit and settings API', () => {
   })
 
   afterAll(async () => {
-    await db.delete(setting).where(inArray(setting.key, ['staff.idPrefix', 'receipt.header']))
+    await db
+      .delete(setting)
+      .where(inArray(setting.key, ['staff.idPrefix', 'receipt.header', 'credit.repaymentSequence']))
     for (const id of createdUserIds) await deleteTestUser(id)
     if (createdBranchIds.length > 0) {
       await db.delete(branch).where(inArray(branch.id, createdBranchIds))

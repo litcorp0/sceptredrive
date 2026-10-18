@@ -257,7 +257,9 @@ describe.skipIf(!available)('database seeds', () => {
       .where(eq(creditLedgerEntry.customerId, credit.id))
     const ledgerSum = creditEntries.reduce((sum, row) => sum + row.amountMinor, 0)
     expect(ledgerSum).toBe(profiles[0]?.balanceMinor)
-    expect(creditEntries.some((row) => row.referenceNumber === 'REP-00001')).toBe(true)
+    // Seeded on a fresh database the repayment is REP-00001; in any case it
+    // must carry a sequenced receipt number.
+    expect(creditEntries.some((row) => /^REP-\d{5}$/.test(row.referenceNumber ?? ''))).toBe(true)
 
     const accounts = await db
       .select({ id: loyaltyAccount.id, balancePoints: loyaltyAccount.balancePoints })
