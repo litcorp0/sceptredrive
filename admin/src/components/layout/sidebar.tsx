@@ -11,11 +11,20 @@ import {
 	ScrollText,
 	Settings2,
 	Users,
+	Warehouse,
 } from "lucide-react"
 import { toRole } from "#/lib/role"
 
 interface NavItem {
-	to: "/" | "/branches" | "/terminals" | "/staff" | "/catalog" | "/audit" | "/settings"
+	to:
+		| "/"
+		| "/branches"
+		| "/terminals"
+		| "/staff"
+		| "/catalog"
+		| "/inventory"
+		| "/audit"
+		| "/settings"
 	label: string
 	icon: LucideIcon
 	permission?: Permission
@@ -24,6 +33,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
 	{ to: "/", label: "Dashboard", icon: LayoutDashboard },
 	{ to: "/catalog", label: "Catalog", icon: Package, permission: "catalog.read" },
+	{ to: "/inventory", label: "Inventory", icon: Warehouse, permission: "inventory.read" },
 	{ to: "/branches", label: "Branches", icon: Building2, permission: "branch.read" },
 	{ to: "/terminals", label: "Terminals", icon: MonitorSmartphone, permission: "terminal.read" },
 	{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },

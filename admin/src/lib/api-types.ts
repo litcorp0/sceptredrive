@@ -365,3 +365,145 @@ export type ProductListQuery = {
 	limit?: number
 	offset?: number
 }
+
+export type AdjustmentReason = "DAMAGE" | "LOSS" | "FOUND" | "CORRECTION" | "EXPIRED" | "OTHER"
+
+export type StockMovementType =
+	| "RECEIPT"
+	| "ADJUSTMENT"
+	| "TRANSFER_OUT"
+	| "TRANSFER_IN"
+	| "COUNT_VARIANCE"
+
+export interface StockRow {
+	productId: string
+	sku: string
+	productName: string
+	categoryName: string
+	quantityOnHand: number
+	avgCostMinor: number
+	valueMinor: number
+	threshold: number | null
+	isLow: boolean
+	updatedAt: string
+}
+
+export interface StockDetail {
+	productId: string
+	sku: string
+	productName: string
+	categoryName: string
+	taxCategory: string
+	basePriceMinor: number
+	costPriceMinor: number
+	isActive: boolean
+	quantityOnHand: number
+	avgCostMinor: number
+	valueMinor: number
+	threshold: number | null
+	updatedAt: string | null
+}
+
+export type StockListQuery = {
+	branchId?: string
+	q?: string
+	lowStock?: boolean
+	limit?: number
+	offset?: number
+}
+
+export interface MovementRow {
+	id: string
+	productId: string
+	branchId: string
+	type: StockMovementType
+	quantityDelta: number
+	unitCostMinor: number
+	referenceType: string
+	referenceId: string | null
+	referenceNumber: string | null
+	reasonCode: AdjustmentReason | null
+	note: string | null
+	createdBy: string | null
+	createdAt: string
+	sku: string
+	productName: string
+	branchCode: string
+}
+
+export type MovementListQuery = {
+	branchId?: string
+	productId?: string
+	type?: StockMovementType
+	from?: string
+	to?: string
+	limit?: number
+	offset?: number
+}
+
+export interface InventoryReceiptLine {
+	id: string
+	productId: string
+	sku: string
+	productName: string
+	quantity: number
+	unitCostMinor: number
+	movementId: string
+}
+
+export interface InventoryReceipt {
+	id: string
+	number: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	supplierName: string | null
+	supplierInvoiceNumber: string | null
+	note: string | null
+	createdBy: string | null
+	createdAt: string
+	lineCount: number
+	totalCostMinor: number
+	lines?: InventoryReceiptLine[]
+}
+
+export interface ReceiptCreateInput {
+	branchId: string
+	supplierName?: string
+	supplierInvoiceNumber?: string
+	note?: string
+	lines: { productId: string; quantity: number; unitCostMinor: number }[]
+}
+
+export type ReceiptListQuery = {
+	branchId?: string
+	from?: string
+	to?: string
+	limit?: number
+	offset?: number
+}
+
+export interface AdjustmentCreateInput {
+	branchId: string
+	productId: string
+	quantityDelta: number
+	reasonCode: AdjustmentReason
+	note?: string
+}
+
+export interface StockThreshold {
+	id: string
+	productId: string
+	sku: string
+	productName: string
+	branchId: string
+	threshold: number
+	updatedBy: string | null
+	updatedAt: string
+}
+
+export interface ThresholdInput {
+	branchId: string
+	productId: string
+	threshold: number
+}

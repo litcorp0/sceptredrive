@@ -19,6 +19,7 @@ import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated/branches'
 import { Route as AuthenticatedCatalogRouteRouteImport } from './routes/_authenticated/catalog/route'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
+import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authenticated/inventory/route'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedTerminalsRouteImport } from './routes/_authenticated/terminals'
@@ -28,9 +29,13 @@ import { Route as AuthenticatedCatalogBrandsRouteImport } from './routes/_authen
 import { Route as AuthenticatedCatalogCategoriesRouteImport } from './routes/_authenticated/catalog/categories'
 import { Route as AuthenticatedCatalogProductsRouteImport } from './routes/_authenticated/catalog/products'
 import { Route as AuthenticatedCatalogUnitsRouteImport } from './routes/_authenticated/catalog/units'
+import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
+import { Route as AuthenticatedInventoryStockRouteImport } from './routes/_authenticated/inventory/stock'
 import { Route as AuthenticatedCatalogProductsIndexRouteImport } from './routes/_authenticated/catalog/products/index'
 import { Route as AuthenticatedCatalogProductsIdRouteImport } from './routes/_authenticated/catalog/products.$id'
 import { Route as AuthenticatedCatalogProductsNewRouteImport } from './routes/_authenticated/catalog/products.new'
+import { Route as AuthenticatedInventoryStockIndexRouteImport } from './routes/_authenticated/inventory/stock/index'
+import { Route as AuthenticatedInventoryStockProductIdRouteImport } from './routes/_authenticated/inventory/stock/$productId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -83,6 +88,12 @@ const AuthenticatedChangePasswordRoute =
     path: '/change-password',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedInventoryRouteRoute =
+  AuthenticatedInventoryRouteRouteImport.update({
+    id: '/inventory',
+    path: '/inventory',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -133,6 +144,18 @@ const AuthenticatedCatalogUnitsRoute =
     path: '/units',
     getParentRoute: () => AuthenticatedCatalogRouteRoute,
   } as any)
+const AuthenticatedInventoryIndexRoute =
+  AuthenticatedInventoryIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryStockRoute =
+  AuthenticatedInventoryStockRouteImport.update({
+    id: '/stock',
+    path: '/stock',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
 const AuthenticatedCatalogProductsIndexRoute =
   AuthenticatedCatalogProductsIndexRouteImport.update({
     id: '/',
@@ -151,6 +174,18 @@ const AuthenticatedCatalogProductsNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedCatalogProductsRoute,
   } as any)
+const AuthenticatedInventoryStockIndexRoute =
+  AuthenticatedInventoryStockIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedInventoryStockRoute,
+  } as any)
+const AuthenticatedInventoryStockProductIdRoute =
+  AuthenticatedInventoryStockProductIdRouteImport.update({
+    id: '/$productId',
+    path: '/$productId',
+    getParentRoute: () => AuthenticatedInventoryStockRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -159,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
   '/catalog': typeof AuthenticatedCatalogRouteRouteWithChildren
+  '/inventory': typeof AuthenticatedInventoryRouteRouteWithChildren
   '/audit': typeof AuthenticatedAuditRoute
   '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
@@ -170,10 +206,14 @@ export interface FileRoutesByFullPath {
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
   '/catalog/products': typeof AuthenticatedCatalogProductsRouteWithChildren
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
+  '/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
   '/catalog/': typeof AuthenticatedCatalogIndexRoute
+  '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
+  '/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -192,9 +232,12 @@ export interface FileRoutesByTo {
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/catalog': typeof AuthenticatedCatalogIndexRoute
+  '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/catalog/products': typeof AuthenticatedCatalogProductsIndexRoute
+  '/inventory/stock': typeof AuthenticatedInventoryStockIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -204,6 +247,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
   '/_authenticated/catalog': typeof AuthenticatedCatalogRouteRouteWithChildren
+  '/_authenticated/inventory': typeof AuthenticatedInventoryRouteRouteWithChildren
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
@@ -216,10 +260,14 @@ export interface FileRoutesById {
   '/_authenticated/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
   '/_authenticated/catalog/products': typeof AuthenticatedCatalogProductsRouteWithChildren
   '/_authenticated/catalog/units': typeof AuthenticatedCatalogUnitsRoute
+  '/_authenticated/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
   '/_authenticated/catalog/': typeof AuthenticatedCatalogIndexRoute
+  '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/_authenticated/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/_authenticated/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/_authenticated/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
+  '/_authenticated/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,6 +278,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/two-factor'
     | '/catalog'
+    | '/inventory'
     | '/audit'
     | '/branches'
     | '/change-password'
@@ -241,10 +290,14 @@ export interface FileRouteTypes {
     | '/catalog/categories'
     | '/catalog/products'
     | '/catalog/units'
+    | '/inventory/stock'
     | '/catalog/'
+    | '/inventory/'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/inventory/stock/$productId'
     | '/catalog/products/'
+    | '/inventory/stock/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -263,9 +316,12 @@ export interface FileRouteTypes {
     | '/catalog/categories'
     | '/catalog/units'
     | '/catalog'
+    | '/inventory'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/inventory/stock/$productId'
     | '/catalog/products'
+    | '/inventory/stock'
   id:
     | '__root__'
     | '/_authenticated'
@@ -274,6 +330,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/two-factor'
     | '/_authenticated/catalog'
+    | '/_authenticated/inventory'
     | '/_authenticated/audit'
     | '/_authenticated/branches'
     | '/_authenticated/change-password'
@@ -286,10 +343,14 @@ export interface FileRouteTypes {
     | '/_authenticated/catalog/categories'
     | '/_authenticated/catalog/products'
     | '/_authenticated/catalog/units'
+    | '/_authenticated/inventory/stock'
     | '/_authenticated/catalog/'
+    | '/_authenticated/inventory/'
     | '/_authenticated/catalog/products/$id'
     | '/_authenticated/catalog/products/new'
+    | '/_authenticated/inventory/stock/$productId'
     | '/_authenticated/catalog/products/'
+    | '/_authenticated/inventory/stock/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -372,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChangePasswordRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/inventory': {
+      id: '/_authenticated/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof AuthenticatedInventoryRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
@@ -435,6 +503,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCatalogUnitsRouteImport
       parentRoute: typeof AuthenticatedCatalogRouteRoute
     }
+    '/_authenticated/inventory/': {
+      id: '/_authenticated/inventory/'
+      path: '/'
+      fullPath: '/inventory/'
+      preLoaderRoute: typeof AuthenticatedInventoryIndexRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/stock': {
+      id: '/_authenticated/inventory/stock'
+      path: '/stock'
+      fullPath: '/inventory/stock'
+      preLoaderRoute: typeof AuthenticatedInventoryStockRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
     '/_authenticated/catalog/products/': {
       id: '/_authenticated/catalog/products/'
       path: '/'
@@ -455,6 +537,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/catalog/products/new'
       preLoaderRoute: typeof AuthenticatedCatalogProductsNewRouteImport
       parentRoute: typeof AuthenticatedCatalogProductsRoute
+    }
+    '/_authenticated/inventory/stock/': {
+      id: '/_authenticated/inventory/stock/'
+      path: '/'
+      fullPath: '/inventory/stock/'
+      preLoaderRoute: typeof AuthenticatedInventoryStockIndexRouteImport
+      parentRoute: typeof AuthenticatedInventoryStockRoute
+    }
+    '/_authenticated/inventory/stock/$productId': {
+      id: '/_authenticated/inventory/stock/$productId'
+      path: '/$productId'
+      fullPath: '/inventory/stock/$productId'
+      preLoaderRoute: typeof AuthenticatedInventoryStockProductIdRouteImport
+      parentRoute: typeof AuthenticatedInventoryStockRoute
     }
   }
 }
@@ -501,6 +597,41 @@ const AuthenticatedCatalogRouteRouteWithChildren =
     AuthenticatedCatalogRouteRouteChildren,
   )
 
+interface AuthenticatedInventoryStockRouteChildren {
+  AuthenticatedInventoryStockProductIdRoute: typeof AuthenticatedInventoryStockProductIdRoute
+  AuthenticatedInventoryStockIndexRoute: typeof AuthenticatedInventoryStockIndexRoute
+}
+
+const AuthenticatedInventoryStockRouteChildren: AuthenticatedInventoryStockRouteChildren =
+  {
+    AuthenticatedInventoryStockProductIdRoute:
+      AuthenticatedInventoryStockProductIdRoute,
+    AuthenticatedInventoryStockIndexRoute:
+      AuthenticatedInventoryStockIndexRoute,
+  }
+
+const AuthenticatedInventoryStockRouteWithChildren =
+  AuthenticatedInventoryStockRoute._addFileChildren(
+    AuthenticatedInventoryStockRouteChildren,
+  )
+
+interface AuthenticatedInventoryRouteRouteChildren {
+  AuthenticatedInventoryStockRoute: typeof AuthenticatedInventoryStockRouteWithChildren
+  AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
+}
+
+const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRouteChildren =
+  {
+    AuthenticatedInventoryStockRoute:
+      AuthenticatedInventoryStockRouteWithChildren,
+    AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
+  }
+
+const AuthenticatedInventoryRouteRouteWithChildren =
+  AuthenticatedInventoryRouteRoute._addFileChildren(
+    AuthenticatedInventoryRouteRouteChildren,
+  )
+
 interface AuthenticatedBranchesRouteChildren {
   AuthenticatedBranchesIdRoute: typeof AuthenticatedBranchesIdRoute
 }
@@ -516,6 +647,7 @@ const AuthenticatedBranchesRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCatalogRouteRoute: typeof AuthenticatedCatalogRouteRouteWithChildren
+  AuthenticatedInventoryRouteRoute: typeof AuthenticatedInventoryRouteRouteWithChildren
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRouteWithChildren
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
@@ -527,6 +659,8 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCatalogRouteRoute: AuthenticatedCatalogRouteRouteWithChildren,
+  AuthenticatedInventoryRouteRoute:
+    AuthenticatedInventoryRouteRouteWithChildren,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedBranchesRoute: AuthenticatedBranchesRouteWithChildren,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,

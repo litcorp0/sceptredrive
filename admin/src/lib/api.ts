@@ -1,5 +1,6 @@
 import { env } from "#/env"
 import type {
+	AdjustmentCreateInput,
 	AuditEntry,
 	AuditListQuery,
 	Barcode,
@@ -19,6 +20,9 @@ import type {
 	CreateStaffResult,
 	Device,
 	Enrollment,
+	InventoryReceipt,
+	MovementListQuery,
+	MovementRow,
 	PriceOverride,
 	Product,
 	ProductCreateInput,
@@ -27,6 +31,8 @@ import type {
 	ProductRow,
 	ProductUpdateInput,
 	ProductWithBarcodes,
+	ReceiptCreateInput,
+	ReceiptListQuery,
 	ResetPasswordResult,
 	ResolvedSetting,
 	SettingsUpdateInput,
@@ -34,11 +40,16 @@ import type {
 	StaffCreateInput,
 	StaffListQuery,
 	StaffUpdateInput,
+	StockDetail,
+	StockListQuery,
+	StockRow,
+	StockThreshold,
 	SuggestCode,
 	Terminal,
 	TerminalCreateInput,
 	TerminalListQuery,
 	TerminalUpdateInput,
+	ThresholdInput,
 	Uom,
 	UomCreateInput,
 	UomUpdateInput,
@@ -284,6 +295,66 @@ export const api = {
 			remove: (id: string, branchId: string) =>
 				apiRequest<{ removed: true }>(`/api/products/${id}/prices/${branchId}`, {
 					method: "DELETE",
+				}),
+		},
+	},
+	inventory: {
+		stock: {
+			list: (query: StockListQuery = {}) =>
+				apiRequest<{ stock: StockRow[]; total: number; branchId: string }>("/api/inventory/stock", {
+					query,
+				}),
+			lowStock: (query: StockListQuery = {}) =>
+				apiRequest<{ stock: StockRow[]; total: number; branchId: string }>(
+					"/api/inventory/low-stock",
+					{ query },
+				),
+			get: (productId: string, query: { branchId?: string } = {}) =>
+				apiRequest<{ stock: StockDetail }>(`/api/inventory/stock/${productId}`, { query }),
+		},
+		movements: {
+			list: (query: MovementListQuery = {}) =>
+				apiRequest<{ movements: MovementRow[]; total: number; branchId: string | null }>(
+					"/api/inventory/movements",
+					{ query },
+				),
+		},
+		receipts: {
+			list: (query: ReceiptListQuery = {}) =>
+				apiRequest<{ receipts: InventoryReceipt[]; total: number; branchId: string | null }>(
+					"/api/inventory/receipts",
+					{ query },
+				),
+			get: (id: string) =>
+				apiRequest<{ receipt: InventoryReceipt }>(`/api/inventory/receipts/${id}`),
+			create: (input: ReceiptCreateInput) =>
+				apiRequest<{ receipt: InventoryReceipt }>("/api/inventory/receipts", {
+					method: "POST",
+					body: input,
+				}),
+		},
+		adjustments: {
+			create: (input: AdjustmentCreateInput) =>
+				apiRequest<{ movement: MovementRow; level: { quantityOnHand: number } }>(
+					"/api/inventory/adjustments",
+					{ method: "POST", body: input },
+				),
+		},
+		thresholds: {
+			list: (query: { branchId?: string } = {}) =>
+				apiRequest<{ thresholds: StockThreshold[]; branchId: string }>(
+					"/api/inventory/thresholds",
+					{ query },
+				),
+			set: (input: ThresholdInput) =>
+				apiRequest<{ threshold: StockThreshold }>("/api/inventory/thresholds", {
+					method: "PUT",
+					body: input,
+				}),
+			remove: (productId: string, query: { branchId?: string } = {}) =>
+				apiRequest<{ ok: true }>(`/api/inventory/thresholds/${productId}`, {
+					method: "DELETE",
+					query,
 				}),
 		},
 	},
