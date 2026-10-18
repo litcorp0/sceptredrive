@@ -1,8 +1,10 @@
 import { db } from '@gikautos/db'
-import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, or } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
 import { brand, category, uom } from '../src/modules/catalog/catalog.schema.ts'
+import { creditLedgerEntry, creditProfile } from '../src/modules/credit/credit.schema.ts'
+import { customer } from '../src/modules/customers/customers.schema.ts'
 import { user as userTable } from '../src/modules/identity/staff.schema.ts'
 import {
   stockLevel,
@@ -11,6 +13,12 @@ import {
   stockReceiptLine,
   stockThreshold,
 } from '../src/modules/inventory/inventory.schema.ts'
+import {
+  loyaltyAccount,
+  loyaltyLedgerEntry,
+  loyaltyLot,
+  loyaltyLotConsumption,
+} from '../src/modules/loyalty/loyalty.schema.ts'
 import { branch } from '../src/modules/org/branches.schema.ts'
 import { terminal } from '../src/modules/org/terminals.schema.ts'
 import { setting } from '../src/modules/platform/settings.schema.ts'
@@ -34,6 +42,9 @@ const DEMO_SETTING_KEYS = [
   'loyalty.earnPointsPerCedi',
   'loyalty.pointsPerCedi',
   'loyalty.expiryMonths',
+  'loyalty.minimumRedeemPoints',
+  'credit.repaymentPrefix',
+  'credit.repaymentSequence',
   'catalog.skuPrefix',
   'catalog.skuSequence',
   'pricing.taxMode',
@@ -42,6 +53,7 @@ const DEMO_SETTING_KEYS = [
   'inventory.transferPrefix',
   'inventory.countPrefix',
 ]
+const DEMO_PHONES = ['+233241000001', '+233241000002', '+233241000003']
 const DEMO_SKUS = DEMO_PRODUCTS.map((item) => item.sku)
 const DEMO_CATEGORY_NAMES = DEMO_CATEGORIES.flatMap((parent) => [parent.name, ...parent.children])
 const DEMO_UOM_CODES = DEMO_UNITS.map((unit) => unit.code)
@@ -88,6 +100,54 @@ describe.skipIf(!available)('database seeds', () => {
     await db.delete(uom).where(inArray(uom.code, DEMO_UOM_CODES))
     await db.delete(userTable).where(inArray(userTable.email, SEEDED_EMAILS))
     await db.delete(terminal).where(inArray(terminal.code, ['ACC-SPX-T01', 'ACC-WH1-T01']))
+
+    const demoCustomers = await db
+      .select({ id: customer.id })
+      .from(customer)
+      .where(inArray(customer.phone, DEMO_PHONES))
+    const demoCustomerIds = demoCustomers.map((row) => row.id)
+    if (demoCustomerIds.length > 0) {
+      const accounts = await db
+        .select({ id: loyaltyAccount.id })
+        .from(loyaltyAccount)
+        .where(inArray(loyaltyAccount.customerId, demoCustomerIds))
+      const accountIds = accounts.map((row) => row.id)
+      if (accountIds.length > 0) {
+        const lots = await db
+          .select({ id: loyaltyLot.id })
+          .from(loyaltyLot)
+          .where(inArray(loyaltyLot.accountId, accountIds))
+        const entries = await db
+          .select({ id: loyaltyLedgerEntry.id })
+          .from(loyaltyLedgerEntry)
+          .where(inArray(loyaltyLedgerEntry.accountId, accountIds))
+        const lotIds = lots.map((row) => row.id)
+        const entryIds = entries.map((row) => row.id)
+        if (lotIds.length > 0 || entryIds.length > 0) {
+          await db
+            .delete(loyaltyLotConsumption)
+            .where(
+              or(
+                inArray(loyaltyLotConsumption.lotId, lotIds),
+                inArray(loyaltyLotConsumption.entryId, entryIds),
+              ),
+            )
+        }
+        if (lotIds.length > 0) {
+          await db.delete(loyaltyLot).where(inArray(loyaltyLot.id, lotIds))
+        }
+        if (entryIds.length > 0) {
+          await db.delete(loyaltyLedgerEntry).where(inArray(loyaltyLedgerEntry.id, entryIds))
+        }
+        await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.id, accountIds))
+      }
+      await db
+        .delete(creditLedgerEntry)
+        .where(inArray(creditLedgerEntry.customerId, demoCustomerIds))
+      await db.delete(creditProfile).where(inArray(creditProfile.customerId, demoCustomerIds))
+      await db.delete(customer).where(inArray(customer.id, demoCustomerIds))
+    }
+
     await db.delete(branch).where(inArray(branch.code, ['ACC-SPX', 'ACC-WH1']))
     await db.delete(setting).where(inArray(setting.key, DEMO_SETTING_KEYS))
   })
@@ -166,4 +226,53 @@ describe.skipIf(!available)('database seeds', () => {
     const managerCookie = await signIn(DEMO_MANAGER_EMAIL, DEMO_PASSWORD)
     expect(managerCookie.length).toBeGreaterThan(0)
   }, 30_000)
+
+  it('seeds demo customers with reconciled credit and loyalty balances', async () => {
+    const customerRows = await db
+      .select({ id: customer.id, phone: customer.phone })
+      .from(customer)
+      .where(inArray(customer.phone, DEMO_PHONES))
+    expect(customerRows).toHaveLength(3)
+
+    const credit = customerRows.find((row) => row.phone === '+233241000001')
+    const loyalty = customerRows.find((row) => row.phone === '+233241000002')
+    if (!credit || !loyalty) throw new Error('demo customers were not seeded')
+
+    const profiles = await db
+      .select({
+        limitMinor: creditProfile.limitMinor,
+        balanceMinor: creditProfile.balanceMinor,
+      })
+      .from(creditProfile)
+      .where(eq(creditProfile.customerId, credit.id))
+    expect(profiles[0]?.limitMinor).toBe(50_000)
+    expect(profiles[0]?.balanceMinor).toBe(6_000)
+
+    const creditEntries = await db
+      .select({
+        amountMinor: creditLedgerEntry.amountMinor,
+        referenceNumber: creditLedgerEntry.referenceNumber,
+      })
+      .from(creditLedgerEntry)
+      .where(eq(creditLedgerEntry.customerId, credit.id))
+    const ledgerSum = creditEntries.reduce((sum, row) => sum + row.amountMinor, 0)
+    expect(ledgerSum).toBe(profiles[0]?.balanceMinor)
+    expect(creditEntries.some((row) => row.referenceNumber === 'REP-00001')).toBe(true)
+
+    const accounts = await db
+      .select({ id: loyaltyAccount.id, balancePoints: loyaltyAccount.balancePoints })
+      .from(loyaltyAccount)
+      .where(eq(loyaltyAccount.customerId, loyalty.id))
+    const account = accounts[0]
+    if (!account) throw new Error('demo loyalty account was not seeded')
+    expect(account.balancePoints).toBe(250)
+
+    const lots = await db
+      .select({ points: loyaltyLot.points, remainingPoints: loyaltyLot.remainingPoints })
+      .from(loyaltyLot)
+      .where(eq(loyaltyLot.accountId, account.id))
+    expect(lots).toHaveLength(1)
+    expect(lots[0]?.points).toBe(250)
+    expect(lots[0]?.remainingPoints).toBe(account.balancePoints)
+  })
 })

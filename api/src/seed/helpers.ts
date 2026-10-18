@@ -4,6 +4,8 @@ import { averageCostAfterReceipt } from '@gikautos/shared'
 import { hash, type Options } from '@node-rs/argon2'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
+import { creditLedgerEntry, creditProfile } from '../modules/credit/credit.schema.ts'
+import { customer } from '../modules/customers/customers.schema.ts'
 import { account, user } from '../modules/identity/staff.schema.ts'
 import {
   stockLevel,
@@ -12,6 +14,11 @@ import {
   stockReceiptLine,
   stockThreshold,
 } from '../modules/inventory/inventory.schema.ts'
+import {
+  loyaltyAccount,
+  loyaltyLedgerEntry,
+  loyaltyLot,
+} from '../modules/loyalty/loyalty.schema.ts'
 import { branch } from '../modules/org/branches.schema.ts'
 import { terminal } from '../modules/org/terminals.schema.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
@@ -491,4 +498,247 @@ export async function ensureSequenceAtLeast(key: string, value: number): Promise
 
   await db.update(setting).set({ value, updatedBy: 'seed' }).where(eq(setting.id, row.id))
   return true
+}
+
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date)
+  result.setUTCMonth(result.getUTCMonth() + months)
+  return result
+}
+
+/** Allocates the next `REP-…` repayment number through the settings sequence. */
+async function allocateRepaymentNumber(tx: Tx): Promise<string> {
+  const prefixRows = await tx
+    .select({ value: setting.value })
+    .from(setting)
+    .where(and(eq(setting.key, 'credit.repaymentPrefix'), isNull(setting.branchId)))
+    .limit(1)
+  const prefix =
+    typeof prefixRows[0]?.value === 'string' && prefixRows[0].value.length > 0
+      ? prefixRows[0].value
+      : 'REP'
+
+  const rows = await tx
+    .select({ id: setting.id, value: setting.value })
+    .from(setting)
+    .where(and(eq(setting.key, 'credit.repaymentSequence'), isNull(setting.branchId)))
+    .limit(1)
+    .for('update')
+
+  const row = rows[0]
+  if (!row) {
+    await tx
+      .insert(setting)
+      .values({ key: 'credit.repaymentSequence', value: 2, updatedBy: 'seed' })
+      .onConflictDoNothing()
+    return `${prefix}-00001`
+  }
+
+  const current = typeof row.value === 'number' && row.value > 0 ? row.value : 1
+  await tx
+    .update(setting)
+    .set({ value: current + 1 })
+    .where(eq(setting.id, row.id))
+  return `${prefix}-${String(current).padStart(5, '0')}`
+}
+
+/**
+ * Seeds a global customer plus their loyalty account in one transaction.
+ * Idempotent by phone (E.164); returns false when the customer already exists.
+ */
+export async function ensureCustomer(input: {
+  name: string
+  phone: string
+  email?: string
+  address?: string
+  createdBranchId: string
+}): Promise<{ id: string; created: boolean }> {
+  const existing = await db
+    .select({ id: customer.id })
+    .from(customer)
+    .where(eq(customer.phone, input.phone))
+    .limit(1)
+  if (existing[0]) return { id: existing[0].id, created: false }
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(customer)
+      .values({
+        name: input.name,
+        phone: input.phone,
+        email: input.email ?? null,
+        address: input.address ?? null,
+        createdBranchId: input.createdBranchId,
+        createdBy: 'seed',
+      })
+      .onConflictDoNothing()
+      .returning({ id: customer.id })
+
+    const row = rows[0]
+    if (!row) {
+      const raced = await tx
+        .select({ id: customer.id })
+        .from(customer)
+        .where(eq(customer.phone, input.phone))
+        .limit(1)
+      if (!raced[0]) throw new Error(`Could not create customer ${input.phone}`)
+      return { id: raced[0].id, created: false }
+    }
+
+    await tx.insert(loyaltyAccount).values({ customerId: row.id }).onConflictDoNothing()
+    return { id: row.id, created: true }
+  })
+}
+
+/**
+ * Seeds a branch credit profile with an opening CHARGE and an optional CASH
+ * REPAYMENT (sequenced `REP-…`), reconciling the balance projection exactly
+ * like the production posting rules. Idempotent by customer+branch profile.
+ */
+export async function ensureCreditOpening(input: {
+  customerId: string
+  branchId: string
+  limitMinor: number
+  chargeMinor: number
+  repaymentMinor?: number
+  chargeDate?: Date
+  repaymentDate?: Date
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: creditProfile.id })
+    .from(creditProfile)
+    .where(
+      and(
+        eq(creditProfile.customerId, input.customerId),
+        eq(creditProfile.branchId, input.branchId),
+      ),
+    )
+    .limit(1)
+  if (existing[0]) return false
+
+  const repaymentMinor = input.repaymentMinor ?? 0
+  const chargeDate = input.chargeDate ?? new Date()
+  const repaymentDate = input.repaymentDate ?? new Date()
+
+  return db.transaction(async (tx) => {
+    const profileRows = await tx
+      .insert(creditProfile)
+      .values({
+        customerId: input.customerId,
+        branchId: input.branchId,
+        limitMinor: input.limitMinor,
+        createdBy: 'seed',
+      })
+      .onConflictDoNothing()
+      .returning({ id: creditProfile.id })
+
+    const profile = profileRows[0]
+    if (!profile) return false
+
+    await tx.insert(creditLedgerEntry).values({
+      customerId: input.customerId,
+      branchId: input.branchId,
+      kind: 'CHARGE',
+      amountMinor: input.chargeMinor,
+      reasonCode: 'OPENING_BALANCE',
+      note: 'Opening balance — migrated from previous books',
+      referenceNumber: 'OPENING',
+      occurredAt: chargeDate,
+      createdBy: 'seed',
+    })
+
+    if (repaymentMinor > 0) {
+      const number = await allocateRepaymentNumber(tx)
+      await tx.insert(creditLedgerEntry).values({
+        customerId: input.customerId,
+        branchId: input.branchId,
+        kind: 'REPAYMENT',
+        amountMinor: -repaymentMinor,
+        method: 'CASH',
+        note: 'Opening repayment',
+        referenceNumber: number,
+        occurredAt: repaymentDate,
+        createdBy: 'seed',
+      })
+    }
+
+    await tx
+      .update(creditProfile)
+      .set({ balanceMinor: input.chargeMinor - repaymentMinor })
+      .where(eq(creditProfile.id, profile.id))
+
+    return true
+  })
+}
+
+/**
+ * Seeds an EARN entry with its lot (expiry months from the earn date) and
+ * updates the balance projection. Idempotent by idempotency key.
+ */
+export async function ensureLoyaltyEarn(input: {
+  customerId: string
+  branchId: string
+  points: number
+  idempotencyKey: string
+  occurredAt?: Date
+  expiryMonths?: number
+}): Promise<boolean> {
+  const accountRows = await db
+    .select({ id: loyaltyAccount.id })
+    .from(loyaltyAccount)
+    .where(eq(loyaltyAccount.customerId, input.customerId))
+    .limit(1)
+  const account = accountRows[0]
+  if (!account) throw new Error(`Customer ${input.customerId} has no loyalty account`)
+
+  const occurredAt = input.occurredAt ?? new Date()
+  const expiresAt = addMonths(occurredAt, input.expiryMonths ?? 12)
+
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ id: loyaltyLedgerEntry.id })
+      .from(loyaltyLedgerEntry)
+      .where(
+        and(
+          eq(loyaltyLedgerEntry.accountId, account.id),
+          eq(loyaltyLedgerEntry.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .limit(1)
+    if (existing[0]) return false
+
+    const entryRows = await tx
+      .insert(loyaltyLedgerEntry)
+      .values({
+        accountId: account.id,
+        customerId: input.customerId,
+        branchId: input.branchId,
+        kind: 'EARN',
+        pointsDelta: input.points,
+        reasonCode: 'GOODWILL',
+        note: 'Demo welcome points',
+        idempotencyKey: input.idempotencyKey,
+        createdBy: 'seed',
+        occurredAt,
+      })
+      .returning({ id: loyaltyLedgerEntry.id })
+
+    const entry = entryRows[0]
+    if (!entry) return false
+
+    await tx.insert(loyaltyLot).values({
+      accountId: account.id,
+      earnEntryId: entry.id,
+      points: input.points,
+      remainingPoints: input.points,
+      expiresAt,
+    })
+
+    await tx
+      .update(loyaltyAccount)
+      .set({ balancePoints: sql`${loyaltyAccount.balancePoints} + ${input.points}` })
+      .where(eq(loyaltyAccount.id, account.id))
+
+    return true
+  })
 }

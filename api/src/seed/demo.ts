@@ -4,6 +4,9 @@ import {
   ensureBranch,
   ensureBrand,
   ensureCategory,
+  ensureCreditOpening,
+  ensureCustomer,
+  ensureLoyaltyEarn,
   ensureProduct,
   ensureProductPrice,
   ensureSequenceAtLeast,
@@ -189,8 +192,9 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
 
 /**
  * Development-only demo data: a retail branch, a warehouse, one terminal per
- * branch, a manager, a cashier, and a small two-level catalog with products,
- * barcodes, and one branch price override. Idempotent.
+ * branch, a manager, a cashier, a small two-level catalog with products,
+ * barcodes, and branch prices, opening stock with thresholds, and demo
+ * customers carrying a branch credit balance and loyalty points. Idempotent.
  */
 export async function seedDemo(): Promise<SeedDemoResult> {
   if (process.env.NODE_ENV === 'production') {
@@ -258,6 +262,9 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('loyalty.earnPointsPerCedi', 1),
     ensureSetting('loyalty.pointsPerCedi', 100),
     ensureSetting('loyalty.expiryMonths', 12),
+    ensureSetting('loyalty.minimumRedeemPoints', 100),
+    ensureSetting('credit.repaymentPrefix', 'REP'),
+    ensureSetting('credit.repaymentSequence', 1),
     ensureSetting('catalog.skuPrefix', 'GIK'),
     ensureSetting('catalog.skuSequence', 1),
     ensureSetting('pricing.taxMode', 'INCLUSIVE'),
@@ -389,6 +396,64 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ) {
       created.push(`stock threshold ${sku} @ ACC-SPX`)
     }
+  }
+
+  const demoCustomers = [
+    {
+      name: 'Akosua Mensah',
+      phone: '+233241000001',
+      email: 'akosua.mensah@example.com',
+    },
+    {
+      name: 'Kwame Boateng',
+      phone: '+233241000002',
+      address: '22 Spintex Road, Accra',
+    },
+    {
+      name: 'Efua Owusu',
+      phone: '+233241000003',
+    },
+  ] as const
+
+  const customerIds = new Map<string, string>()
+  for (const person of demoCustomers) {
+    const result = await ensureCustomer({ ...person, createdBranchId: retail.id })
+    customerIds.set(person.phone, result.id)
+    if (result.created) created.push(`customer ${person.name}`)
+  }
+
+  const creditCustomerId = customerIds.get('+233241000001')
+  if (
+    creditCustomerId &&
+    (await ensureCreditOpening({
+      customerId: creditCustomerId,
+      branchId: retail.id,
+      limitMinor: 50_000,
+      chargeMinor: 12_000,
+      repaymentMinor: 6_000,
+      chargeDate: new Date('2026-10-05T09:00:00.000Z'),
+      repaymentDate: new Date('2026-10-12T09:00:00.000Z'),
+    }))
+  ) {
+    created.push('credit opening balance Akosua Mensah @ ACC-SPX')
+  }
+
+  const loyaltyCustomerId = customerIds.get('+233241000002')
+  if (
+    loyaltyCustomerId &&
+    (await ensureLoyaltyEarn({
+      customerId: loyaltyCustomerId,
+      branchId: retail.id,
+      points: 250,
+      idempotencyKey: 'seed-loyalty-welcome-0002',
+      occurredAt: new Date('2026-09-20T10:00:00.000Z'),
+    }))
+  ) {
+    created.push('loyalty points Kwame Boateng')
+  }
+
+  if (await ensureSequenceAtLeast('credit.repaymentSequence', 2)) {
+    created.push('credit repayment sequence')
   }
 
   if (await ensureSequenceAtLeast('inventory.receiptSequence', 3)) {
