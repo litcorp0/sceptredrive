@@ -2,12 +2,10 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-18
-**Status:** Phase 3 complete and verified (fresh-database HTTP + SQL walkthrough 92/92 and
-browser walkthroughs 15/15 + 6/6; see
-`.planning/phases/03-inventory-transfers/01-VERIFICATION.md`).
-**Next action:** Phase 4 planning is complete (`00-CONTEXT.md` locked decisions,
-`01-RESEARCH.md`, plans 01–08). On operator go-ahead, begin execution with Plan 01
-(schema, settings, permissions, seed) following the GSD waves in `00-CONTEXT.md`.
+**Status:** Phase 4 execution in progress — Plans 01–02 complete and green (api 192/192,
+shared 54/54); live smoke test passed (create → suffix search → detail).
+**Next action:** Execute Plan 03 (credit module — profiles, ledger, enforcement,
+repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
@@ -19,7 +17,7 @@ browser walkthroughs 15/15 + 6/6; see
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟦 Planning (context + research locked) |
+| 4 | Customers, Credit & Loyalty | 🟨 Executing (2/8 plans) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -58,6 +56,19 @@ browser walkthroughs 15/15 + 6/6; see
 | 06 | Console — inventory shell, stock screens, receive, adjust, thresholds | ✅ Complete |
 | 07 | Console — transfers and stock count screens | ✅ Complete |
 | 08 | Phase 3 verification and state update | ✅ Complete |
+
+### Phase 4 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Phase 4 schema, settings, permissions, phone helper, and demo seed | ✅ Complete |
+| 02 | Customers module — identity, search, lifecycle | ✅ Complete |
+| 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ⬜ Pending |
+| 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ⬜ Pending |
+| 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ⬜ Pending |
+| 06 | Console — customers, credit ledger, repayments, statements, aging | ⬜ Pending |
+| 07 | Console — loyalty history, liability report, and settings | ⬜ Pending |
+| 08 | Phase 4 verification and state update | ⬜ Pending |
 
 ---
 
@@ -136,6 +147,28 @@ browser walkthroughs 15/15 + 6/6; see
   browser walkthroughs 15/15 + 6/6; scripts and screenshots under
   `.planning/phases/03-inventory-transfers/evidence/`.
 
+### Phase 4 additions (in progress)
+
+- Schema (migration `0004_cute_namor.sql`): `customer` (global identity, partial unique
+  phone index `WHERE anonymized_at IS NULL`), `credit_profile` + append-only
+  `credit_ledger_entry`, `loyalty_account` + append-only `loyalty_ledger_entry` +
+  `loyalty_lot` + `loyalty_lot_consumption`; `pg_trgm` indexes on customer name/phone.
+- Settings: `loyalty.minimumRedeemPoints`, `credit.repaymentPrefix` (REP),
+  `credit.repaymentSequence` (REP-#####); `loyalty.earnPointsPerCedi` is integer-only.
+- Permissions: `customer.read/create/update/archive/anonymize`,
+  `credit.read/profile.manage/repayment/adjust/override`, `loyalty.read/adjust/settings`
+  (archive, anonymize, and loyalty settings are admin-only) plus
+  `packages/shared/src/phone.ts` (`normalizeGhanaPhone` / `formatGhanaPhone`).
+- Demo seed: 3 customers at ACC-SPX — Akosua (credit limit GHS 500, opening CHARGE
+  GHS 120, sequenced REP repayment GHS 60 → balance GHS 60), Kwame (250 points, 12-month
+  lot), Efua (plain).
+- Customers module (`api/src/modules/customers`): search by phone digit-suffix or name
+  ILIKE (trigram-backed), `page`/`pageSize`, archived hidden unless admin
+  `includeArchived`, `branchId` admin filter; create normalizes the phone, dedupes (409
+  with the existing id), and bootstraps the loyalty account in the same transaction;
+  archive/reactivate/anonymize are audited; anonymize requires zero credit balances and
+  zero loyalty points, scrubs PII in place, and releases the phone.
+
 ---
 
 ## Decisions Log
@@ -186,6 +219,9 @@ browser walkthroughs 15/15 + 6/6; see
 | 2026-10-18 | Phase 3: product archive requires zero stock everywhere (409 otherwise); warehouses cannot host POS terminals (409). |
 | 2026-10-18 | Phase 3: movements carry `reference_number` (GRN/TRF/CNT, null for adjustments) so offline history reconciles without joins (Phase 6 contract). |
 | 2026-10-18 | Phase 3: receipts record supplier name + invoice now; the payable row is created in Phase 5 from the same receipt (`payable` table does not exist yet). |
+| 2026-10-18 | Phase 4: customer creation records the creating branch; admins must pass `branchId`, managers default to their own branch. |
+| 2026-10-18 | Phase 4: customer search is `q` + `page`/`pageSize` (default 20); `includeArchived` and `branchId` filters are admin-only, managers search globally. |
+| 2026-10-18 | Phase 4: anonymization requires zero credit balances (all branches) and zero loyalty points; it scrubs PII in place, keeps the ledgers, and releases the phone for re-registration. |
 
 ---
 
@@ -267,3 +303,9 @@ browser walkthroughs 15/15 + 6/6; see
   `pkill -f "[v]ite dev"` (bracket pattern avoids killing the calling shell).
 - Better Auth CSRF: browser requests carry `Origin`; scripted clients must send a trusted
   `Origin` header on POSTs or the API rejects with `MISSING_OR_NULL_ORIGIN`.
+- Phase 4: `writeAudit(entry, executor)` takes the executor as its second positional
+  argument. Sequence assertions in tests stay format-based (e.g. `/^REP-\d{5}$/`) because
+  the platform suite advances global sequences and test files run in parallel.
+- Phase 4: customer archive/anonymize POST bodies are `{}` or `{ "note": "…" }`; the
+  customer module owns bootstrap of the `loyalty_account` row (schema import only, no
+  loyalty-module dependency) per D22.
