@@ -8,6 +8,7 @@ export async function listAudit(c: Context<AppEnv>, query: AuditListQuery) {
   const user = currentUser(c)
   const result = await auditService.queryAudit(user, {
     actorId: query.actorId,
+    actorStaffId: query.actorStaffId,
     action: query.action,
     entity: query.entity,
     entityId: query.entityId,

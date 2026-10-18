@@ -31,6 +31,7 @@ export interface AuditEntry {
 
 export interface AuditQueryFilters {
   actorId?: string | undefined
+  actorStaffId?: string | undefined
   action?: string | undefined
   entity?: string | undefined
   entityId?: string | undefined

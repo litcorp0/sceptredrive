@@ -3,6 +3,7 @@ import { validateQuery } from '../../http/validation.ts'
 
 export const auditListQuerySchema = z.object({
   actorId: z.string().trim().min(1).max(64).optional(),
+  actorStaffId: z.string().trim().min(1).max(64).optional(),
   action: z.string().trim().min(1).max(120).optional(),
   entity: z.string().trim().min(1).max(64).optional(),
   entityId: z.string().trim().min(1).max(64).optional(),

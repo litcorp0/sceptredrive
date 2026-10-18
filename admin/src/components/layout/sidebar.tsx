@@ -1,5 +1,5 @@
-import type { Permission, Role } from "@gikautos/shared"
-import { can, ROLES } from "@gikautos/shared"
+import type { Permission } from "@gikautos/shared"
+import { can } from "@gikautos/shared"
 import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
@@ -11,11 +11,7 @@ import {
 	Settings2,
 	Users,
 } from "lucide-react"
-
-/** Better Auth types additional fields loosely; narrow to the known roles. */
-function toRole(value: string): Role | null {
-	return (ROLES as readonly string[]).includes(value) ? (value as Role) : null
-}
+import { toRole } from "#/lib/role"
 
 interface NavItem {
 	to: "/" | "/branches" | "/terminals" | "/staff" | "/audit" | "/settings"

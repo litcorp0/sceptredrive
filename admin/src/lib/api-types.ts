@@ -182,6 +182,7 @@ export type StaffListQuery = {
 
 export type AuditListQuery = {
 	actorId?: string
+	actorStaffId?: string
 	action?: string
 	entity?: string
 	entityId?: string

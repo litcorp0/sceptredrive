@@ -23,6 +23,7 @@ interface AuditEntry {
   action: string
   entity: string
   entityId: string | null
+  actorStaffId: string | null
   branchId: string | null
   createdAt: string
 }
@@ -134,11 +135,27 @@ describe.skipIf(!available)('audit and settings API', () => {
     expect(recentBody.total).toBeGreaterThanOrEqual(1)
 
     const past = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const old = await app.request(`/api/audit?to=${past}&entity=branch`, {
+    const old = await app.request(`/api/audit?to=${past}&entity=branch&entityId=${branchAId}`, {
       headers: authedHeaders(adminCookie),
     })
     const oldBody = await readJson<{ total: number }>(old)
     expect(oldBody.total).toBe(0)
+  })
+
+  it('filters audit entries by actor staff id', async () => {
+    await auditService.writeAudit({
+      action: 'test.actor-filter',
+      entity: 'test',
+      actorStaffId: 'GA-TEST-1',
+    })
+
+    const filtered = await app.request('/api/audit?actorStaffId=GA-TEST-1', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(filtered.status).toBe(200)
+    const body = await readJson<{ entries: AuditEntry[] }>(filtered)
+    expect(body.entries.length).toBeGreaterThanOrEqual(1)
+    expect(body.entries.every((entry) => entry.actorStaffId === 'GA-TEST-1')).toBe(true)
   })
 
   it('scopes audit reads to the manager branch', async () => {

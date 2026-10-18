@@ -28,6 +28,7 @@ function buildWhere(scope: AuditQueryScope): SQL | undefined {
   const conditions: SQL[] = []
   if (scope.branchScope) conditions.push(eq(auditLog.branchId, scope.branchScope))
   if (scope.actorId) conditions.push(eq(auditLog.actorId, scope.actorId))
+  if (scope.actorStaffId) conditions.push(eq(auditLog.actorStaffId, scope.actorStaffId))
   if (scope.action) conditions.push(eq(auditLog.action, scope.action))
   if (scope.entity) conditions.push(eq(auditLog.entity, scope.entity))
   if (scope.entityId) conditions.push(eq(auditLog.entityId, scope.entityId))

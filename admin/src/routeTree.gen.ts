@@ -21,6 +21,7 @@ import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authe
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedTerminalsRouteImport } from './routes/_authenticated/terminals'
+import { Route as AuthenticatedBranchesIdRouteImport } from './routes/_authenticated/branches.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -82,6 +83,11 @@ const AuthenticatedTerminalsRoute = AuthenticatedTerminalsRouteImport.update({
   path: '/terminals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBranchesIdRoute = AuthenticatedBranchesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedBranchesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -90,11 +96,12 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
   '/audit': typeof AuthenticatedAuditRoute
-  '/branches': typeof AuthenticatedBranchesRoute
+  '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
+  '/branches/$id': typeof AuthenticatedBranchesIdRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -102,12 +109,13 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
   '/audit': typeof AuthenticatedAuditRoute
-  '/branches': typeof AuthenticatedBranchesRoute
+  '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/branches/$id': typeof AuthenticatedBranchesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -117,12 +125,13 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/two-factor': typeof TwoFactorRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
-  '/_authenticated/branches': typeof AuthenticatedBranchesRoute
+  '/_authenticated/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
   '/_authenticated/terminals': typeof AuthenticatedTerminalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/branches/$id': typeof AuthenticatedBranchesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/staff'
     | '/terminals'
+    | '/branches/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/staff'
     | '/terminals'
     | '/'
+    | '/branches/$id'
   id:
     | '__root__'
     | '/_authenticated'
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff'
     | '/_authenticated/terminals'
     | '/_authenticated/'
+    | '/_authenticated/branches/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -261,12 +273,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTerminalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/branches/$id': {
+      id: '/_authenticated/branches/$id'
+      path: '/$id'
+      fullPath: '/branches/$id'
+      preLoaderRoute: typeof AuthenticatedBranchesIdRouteImport
+      parentRoute: typeof AuthenticatedBranchesRoute
+    }
   }
 }
 
+interface AuthenticatedBranchesRouteChildren {
+  AuthenticatedBranchesIdRoute: typeof AuthenticatedBranchesIdRoute
+}
+
+const AuthenticatedBranchesRouteChildren: AuthenticatedBranchesRouteChildren = {
+  AuthenticatedBranchesIdRoute: AuthenticatedBranchesIdRoute,
+}
+
+const AuthenticatedBranchesRouteWithChildren =
+  AuthenticatedBranchesRoute._addFileChildren(
+    AuthenticatedBranchesRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
-  AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRoute
+  AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRouteWithChildren
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
@@ -276,7 +308,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
-  AuthenticatedBranchesRoute: AuthenticatedBranchesRoute,
+  AuthenticatedBranchesRoute: AuthenticatedBranchesRouteWithChildren,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,
