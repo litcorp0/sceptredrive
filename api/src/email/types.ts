@@ -6,6 +6,6 @@ export interface EmailMessage {
 }
 
 export interface EmailProvider {
-  readonly name: 'console' | 'resend'
+  readonly name: 'console' | 'resend' | 'file'
   send(message: EmailMessage): Promise<void>
 }

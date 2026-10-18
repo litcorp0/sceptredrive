@@ -42,6 +42,7 @@ blob-report/
 # Local runtime artifacts
 .storage/
 .backups/
+api/.mail/
 *.sqlite
 *.sqlite-journal
 *.db
