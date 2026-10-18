@@ -22,6 +22,13 @@
       "when": 1792307556096,
       "tag": "0002_fresh_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792344256551,
+      "tag": "0003_freezing_toad_men",
+      "breakpoints": true
     }
   ]
 }
