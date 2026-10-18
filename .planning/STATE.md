@@ -1,10 +1,12 @@
 # STATE — GikAutos v1
 
 **Milestone:** v1
-**Updated:** 2026-10-17
-**Status:** Phase 1 in progress — Plans 01–03 complete; Plan 04 pending.
-**Next action:** Execute Plan 04 (admin console, CI, phase verification). Read
-`.planning/phases/01-foundation/03-SUMMARY.md` for the deviations and verified state.
+**Updated:** 2026-10-18
+**Status:** Phase 1 complete and verified (30/30 fresh-database checks; see
+`.planning/phases/01-foundation/01-VERIFICATION.md`).
+**Next action:** Plan Phase 2 (Catalog & Pricing). Human verification items from Plan 04
+remain (TOTP with a real authenticator, console walkthroughs — listed in the verification
+file).
 
 ---
 
@@ -13,8 +15,8 @@
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Planning & decisions | ✅ Complete |
-| 1 | Foundation & Platform | 🚧 In progress (3/4 plans) |
-| 2 | Catalog & Pricing | ⬜ Not started |
+| 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
+| 2 | Catalog & Pricing | ⬜ Next |
 | 3 | Inventory & Transfers | ⬜ Not started |
 | 4 | Customers, Credit & Loyalty | ⬜ Not started |
 | 5 | Suppliers & Payables | ⬜ Not started |
@@ -30,41 +32,37 @@
 | 01 | Workspace, tooling, Postgres, shared and db packages | ✅ Complete |
 | 02 | API skeleton, configuration, logging, health, first schema | ✅ Complete |
 | 03 | Auth, RBAC, organisation APIs, audit, seeds | ✅ Complete |
-| 04 | Admin shell, auth flows, CRUD screens, CI, verification | ⬜ Next |
+| 04 | Admin shell, auth flows, CRUD screens, CI, verification | ✅ Complete |
 
 ---
 
 ## Repository State
 
-- Fresh git history on `dev`; planning + Phase 1 Plans 01 and 02 committed.
-- Root Bun workspace with catalogs; `@gikautos/shared` (roles, permissions, branch codes)
-  and `@gikautos/db` (Drizzle client, config, migrations) exist and pass typecheck/tests.
-- API boots on Node 24 with Node's native TypeScript type stripping (no build step):
-  `bun run dev:api`. Validated env, pino logs, request IDs, security headers, CORS,
-  `/health` and `/ready` are implemented and covered by 8 tests.
-- Postgres 18 runs via `compose.yaml` on host port **5433** (5432 is taken by a system
-  Postgres). `wal_level=logical` and 10 replication slots are enabled for Phase 6.
-- Migration `0000` applied: `branch`, `terminal`, `device`, `terminal_enrollment`,
-  `audit_log`, `setting`. Migration `0001` adds Better Auth tables: `user`, `session`,
-  `account`, `verification`, `two_factor`. Tables are defined in the owning module's
-  `*.schema.ts`; migrations and seeds now live in `api/` (`packages/db` is the
-  Postgres client).
-- API now serves auth (`/api/auth/*`, public sign-up blocked), branches, terminals,
-  enrollment codes (`/api/enrollments/redeem` returns 501 until Phase 6), devices,
-  staff, `/api/me/password`, audit, and settings. Middleware: session loading,
-  permission checks, fresh-session gate, branch scoping, request rate limiting.
-- Seeds implemented: `bun run db:seed` (admin) and `bun run db:seed --demo`
-  (ACC-SPX, ACC-WH1, terminals, manager + cashier, settings defaults). Both are
-  idempotent and verified against the dev database.
-- Tests run against a dedicated `gikautos_test` database: `bun run db:test:prepare`
-  creates and migrates it; `TEST_DATABASE_URL` overrides in CI. 79 API tests,
-  13 shared tests; vitest runs files serially for deterministic fixtures.
-- Old-build containers (`gikautos-powersync-*`, `infra-postgres-1`) were removed; their
-  volumes were left untouched for now.
-- Local `.env` exists (gitignored) with a generated auth secret and dev admin credentials.
-- Desktop app, PowerSync config, and infrastructure are created in later phases
-  (6, 6, and 9 respectively). A bundle of the deleted prototype's git history is stored at
-  `/tmp/opencode/gikautos-old-history.bundle` (safe to delete).
+- Fresh git history on `dev`; planning + Phase 1 committed. **No git remote exists yet.**
+- Root Bun workspace with catalogs; `@gikautos/shared` (roles, permissions, branch
+  codes) and `@gikautos/db` (Drizzle client, config, migrations).
+- API boots on Node 24 with native TypeScript type stripping: `bun run dev:api`.
+  Validated env, pino logs, request IDs, security headers, CORS, `/health`, `/ready`.
+- Postgres 18 via `compose.yaml` on host port **5433**. `wal_level=logical` and 10
+  replication slots for Phase 6.
+- API serves auth (public sign-up blocked), branches, terminals, enrollment, devices,
+  staff, `/api/me/password`, audit (with `actorId` + `actorStaffId` filters), settings.
+  Middleware: session loading (cookie cache bypassed for authorization), permission
+  checks, fresh-session gate, branch scoping, rate limiting.
+- Admin console (`admin/`, TanStack Start 1.169 + React 19 + Tailwind v4 + shadcn
+  Radix/new-york): login/forgot/reset/2FA pages, forced password change, forced TOTP for
+  admins, permission-aware shell with branch switcher, and CRUD screens for branches,
+  terminals (enrollment + devices), staff (temp passwords, resets), audit (diff viewer),
+  and settings. Dense neutral design (system font stack, zinc tokens).
+- Dev email: file provider writes to `api/.mail/` in development (gitignored); console
+  provider elsewhere; Resend when `RESEND_API_KEY` is set.
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 13/13, api 83/83 against
+  `gikautos_test`.
+- CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
+  check-types → migrate → test → build). Validated with actionlint; full sequence run
+  locally. **Remote run pending a git remote.**
+- `.planning/phases/01-foundation/01-VERIFICATION.md` records all evidence, deviations,
+  and the human verification checklist.
 
 ---
 
@@ -94,11 +92,22 @@
 | 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
 | 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); `schema` = Drizzle tables, `validation` = Zod schemas + validators. See AGENTS.md. |
 | 2026-10-17 | Drizzle tables live in `api/src/modules/*/*.schema.ts`; drizzle-kit config, migrations, and seeds live in `api/`; `packages/db` is only the Postgres client. |
+| 2026-10-18 | Console design: dense neutral ops console (system font stack, zinc tokens, compact tables); decorative scaffold styling pruned. Radix/new-york shadcn kept (no Base UI migration mid-project). |
+| 2026-10-18 | Development email writes to `api/.mail/` (file provider); message bodies and tokens never reach logs. |
+| 2026-10-18 | `GET /api/audit` supports `actorId` (user id) and `actorStaffId` (e.g. GA-0001) filters. |
+| 2026-10-18 | Authorization never reads the session cookie cache: `loadSession` always fetches fresh (`disableCookieCache: true`), so role/branch/2FA/mustChangePassword changes apply immediately. |
+| 2026-10-18 | Admin build script pins `NODE_ENV=production` (SSR bundle mixes dev JSX runtime otherwise). |
+| 2026-10-18 | Vite: `envDir` = repo root; `resolve.dedupe` + `ssr.noExternal: ["sonner"]` prevent a second React copy from the Bun store. |
+| 2026-10-18 | Forced flows order: password change first (API lock), then TOTP setup for admins; `/change-password` renders standalone. |
 
 ---
 
 ## Open Items (carry forward)
 
+- **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
+  on GitHub (workflow is written and locally verified).
+- Human verification from Plan 04 (TOTP with an authenticator app, console walkthroughs,
+  dev-mail password reset) — see `01-VERIFICATION.md`.
 - GRA E-VAT onboarding: credentials, QR encoding, submission API shape (mock until then).
 - Paystack registered business and keys; `PAYSTACK_MODE=mock` until then.
 - VPS provider, domain, and DNS (Phase 9 setup gate).
@@ -116,19 +125,27 @@
 - Plans are prompts. Implement one task at a time and commit atomically.
 - Stop and ask before decisions that affect money, credit, stock, loyalty, permissions,
   or production infrastructure.
-- The API runs TypeScript directly on Node 24 (`node src/index.ts`) using erasable-syntax
-  type stripping; keep source free of TS enums, namespaces, and parameter properties.
+- The API runs TypeScript directly on Node 24 (`node src/index.ts`); keep source free of
+  TS enums, namespaces, and parameter properties.
 - Branch code suggestions use first/second/last consonant for long area names
   (Spintex → SPX, Adum → ADM); codes stay editable before save.
 - Root scripts: `bun run db:up`, `dev:api`, `dev:admin`, `lint`, `check-types`, `test`,
-  `db:generate`, `db:migrate`, `db:seed`, `db:test:prepare`.
+  `build`, `db:generate`, `db:migrate`, `db:seed`, `db:test:prepare`.
 - Run `bun run db:test:prepare` after migrations before running API tests; integration
   suites are skipped when the test database is unreachable.
-- Email: console provider in dev (recipients redacted, bodies not logged); staff temp
-  passwords are returned once in API responses and emailed, never logged.
+- Email: console provider in dev (recipients redacted, bodies not logged); the file
+  provider (`api/.mail/`) exists in development; temp passwords are returned once in API
+  responses and emailed, never logged.
 - Regenerating `packages/db/src/schema/auth.ts` with the Better Auth CLI will overwrite
-  manual hardening (NOT NULL defaults, branch FK, index names); re-apply and regenerate
-  a migration afterwards.
+  manual hardening; re-apply and regenerate a migration afterwards.
 - New API modules: copy the seven-file layout documented in AGENTS.md. Pure scope
-  helpers live in `api/src/auth/scope.ts`; request context adapters in
-  `api/src/http/` (e.g. `audit-context.ts`).
+  helpers live in `api/src/auth/scope.ts`; request context adapters in `api/src/http/`.
+- Admin console: server functions live in `admin/src/lib/*.functions.ts`; the session
+  guard is `admin/src/routes/_authenticated/route.tsx`; permission helpers in
+  `admin/src/lib/role.ts`; API client + types in `admin/src/lib/api.ts` / `api-types.ts`
+  (hand-maintained — revisit a shared contracts package in Phase 2).
+- Long-running dev servers in this environment: start with
+  `(setsid nohup bun run dev > log 2>&1 < /dev/null &)` and kill with
+  `pkill -f "[v]ite dev"` (bracket pattern avoids killing the calling shell).
+- Better Auth CSRF: browser requests carry `Origin`; scripted clients must send a trusted
+  `Origin` header on POSTs or the API rejects with `MISSING_OR_NULL_ORIGIN`.

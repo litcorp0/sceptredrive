@@ -18,6 +18,7 @@ hardening come last. Only the POS is offline-first; the admin console and API ar
 (branches, warehouses, terminals, staff) exists; permissions and audit are enforced;
 CI is green.
 
+**Status:** ✅ Complete (verified 2026-10-18 — see `phases/01-foundation/01-VERIFICATION.md`)
 **Dependencies:** none
 **Requirements:** FOUND-01…14, ADM-01, ADM-09
 
