@@ -1,0 +1,304 @@
+import { db } from '@gikautos/db'
+import { eq, inArray } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'
+import { ConflictError, ForbiddenError, ValidationError } from '../../http/errors.ts'
+import type { SessionUser } from '../../http/factory.ts'
+import { creditProfile } from '../credit/credit.schema.ts'
+import { loyaltyAccount } from '../loyalty/loyalty.schema.ts'
+import { branch } from '../org/branches.schema.ts'
+import { auditLog } from '../platform/audit.schema.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
+import { customer } from './customers.schema.ts'
+import * as customersService from './customers.service.ts'
+import type { CustomerCreateBody, CustomerListQuery, CustomerListRow } from './customers.types.ts'
+
+const available = await databaseAvailable()
+if (!available) console.warn('[customers.test] database unavailable; integration tests skipped')
+
+const actor: AuditActor = {
+  actorId: 'test-actor',
+  actorStaffId: 'GA-TEST',
+  ip: null,
+  userAgent: null,
+  requestId: null,
+}
+
+async function captureError(run: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await run()
+    return null
+  } catch (error) {
+    return error
+  }
+}
+
+describe.skipIf(!available)('customers service', () => {
+  const suffix = uniqueSuffix()
+  const branchIds: string[] = []
+  const customerIds: string[] = []
+  let branchAId = ''
+  let branchBId = ''
+  let managerUser: SessionUser
+  let adminUser: SessionUser
+  let phoneCounter = 0
+
+  function makeUser(overrides: Partial<SessionUser>): SessionUser {
+    return {
+      id: `user-${suffix}`,
+      email: `user-${suffix}@gikautos.test`,
+      name: 'Fixture User',
+      emailVerified: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      role: 'MANAGER',
+      branchId: null,
+      staffId: null,
+      phone: null,
+      isActive: true,
+      mustChangePassword: false,
+      twoFactorEnabled: false,
+      image: null,
+      ...overrides,
+    } as SessionUser
+  }
+
+  function nextPhone(prefix: '024' | '027' | '028' | '054' | '059'): string {
+    phoneCounter += 1
+    return `${prefix}123${String(1000 + phoneCounter).slice(-4)}`
+  }
+
+  async function createCustomer(
+    user: SessionUser,
+    input: CustomerCreateBody,
+  ): Promise<CustomerListRow> {
+    const created = await customersService.createCustomer(actor, user, input)
+    customerIds.push(created.id)
+    return created
+  }
+
+  function searchQuery(overrides: Partial<CustomerListQuery> = {}): CustomerListQuery {
+    return { page: 1, pageSize: 20, includeArchived: false, ...overrides }
+  }
+
+  beforeAll(async () => {
+    const branches = await db
+      .insert(branch)
+      .values([
+        { code: `CUS-${suffix}-A`, name: `Customers A ${suffix}`, type: 'RETAIL', city: 'Accra' },
+        { code: `CUS-${suffix}-B`, name: `Customers B ${suffix}`, type: 'RETAIL', city: 'Kumasi' },
+      ])
+      .returning({ id: branch.id })
+    branchAId = branches[0]?.id ?? ''
+    branchBId = branches[1]?.id ?? ''
+    branchIds.push(branchAId, branchBId)
+
+    managerUser = makeUser({ role: 'MANAGER', branchId: branchAId })
+    adminUser = makeUser({ role: 'ADMIN', branchId: null })
+  })
+
+  afterAll(async () => {
+    if (customerIds.length > 0) {
+      const accounts = await db
+        .select({ id: loyaltyAccount.id })
+        .from(loyaltyAccount)
+        .where(inArray(loyaltyAccount.customerId, customerIds))
+      const accountIds = accounts.map((row) => row.id)
+      if (accountIds.length > 0) {
+        await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.id, accountIds))
+      }
+      await db.delete(creditProfile).where(inArray(creditProfile.customerId, customerIds))
+      await db.delete(customer).where(inArray(customer.id, customerIds))
+      await db.delete(auditLog).where(inArray(auditLog.entityId, customerIds))
+    }
+    if (branchIds.length > 0) {
+      await db.delete(branch).where(inArray(branch.id, branchIds))
+    }
+  })
+
+  it('creates a customer with a normalized phone, loyalty account, and audit trail', async () => {
+    const created = await createCustomer(managerUser, {
+      name: `Akosua ${suffix}`,
+      phone: '0241234567',
+    })
+
+    expect(created.phone).toBe('+233241234567')
+    expect(created.status).toBe('ACTIVE')
+    expect(created.createdBranchId).toBe(branchAId)
+    expect(created.createdBranchCode).toBe(`CUS-${suffix}-A`)
+
+    const accounts = await db
+      .select({ balancePoints: loyaltyAccount.balancePoints })
+      .from(loyaltyAccount)
+      .where(eq(loyaltyAccount.customerId, created.id))
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0]?.balancePoints).toBe(0)
+
+    const audits = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.entityId, created.id))
+    expect(audits.map((row) => row.action)).toContain('customer.created')
+  })
+
+  it('rejects invalid phone numbers with a 400', async () => {
+    const error = await captureError(() =>
+      customersService.createCustomer(actor, managerUser, {
+        name: `Bad Phone ${suffix}`,
+        phone: '12345',
+      }),
+    )
+    expect(error).toBeInstanceOf(ValidationError)
+  })
+
+  it('rejects a duplicate phone with the existing customer id in the message', async () => {
+    const phone = nextPhone('024')
+    const first = await createCustomer(managerUser, { name: `First ${suffix}`, phone })
+
+    const error = await captureError(() =>
+      customersService.createCustomer(actor, managerUser, { name: `Second ${suffix}`, phone }),
+    )
+    expect(error).toBeInstanceOf(ConflictError)
+    if (!(error instanceof ConflictError)) throw new Error('expected ConflictError')
+    expect(error.message).toContain(first.id)
+  })
+
+  it('requires admins to pick a creation branch', async () => {
+    const missingBranch = await captureError(() =>
+      customersService.createCustomer(actor, adminUser, {
+        name: `Admin No Branch ${suffix}`,
+        phone: nextPhone('027'),
+      }),
+    )
+    expect(missingBranch).toBeInstanceOf(ValidationError)
+
+    const created = await createCustomer(adminUser, {
+      name: `Admin Branch B ${suffix}`,
+      phone: nextPhone('027'),
+      branchId: branchBId,
+    })
+    expect(created.createdBranchId).toBe(branchBId)
+  })
+
+  it('finds customers by phone suffix and by name fragment', async () => {
+    const phone = nextPhone('054')
+    const created = await createCustomer(managerUser, {
+      name: `Searchable ${suffix}`,
+      phone,
+    })
+    const last4 = phone.slice(-4)
+
+    const bySuffix = await customersService.searchCustomers(managerUser, searchQuery({ q: last4 }))
+    expect(bySuffix.customers.map((row) => row.id)).toContain(created.id)
+
+    const byName = await customersService.searchCustomers(
+      managerUser,
+      searchQuery({ q: `Searchable ${suffix}` }),
+    )
+    expect(byName.customers.map((row) => row.id)).toContain(created.id)
+    expect(byName.total).toBeGreaterThanOrEqual(1)
+  })
+
+  it('hides archived customers unless an admin asks for them', async () => {
+    const created = await createCustomer(managerUser, {
+      name: `Archived ${suffix}`,
+      phone: nextPhone('059'),
+    })
+    await db.update(customer).set({ status: 'ARCHIVED' }).where(eq(customer.id, created.id))
+
+    const defaults = await customersService.searchCustomers(
+      managerUser,
+      searchQuery({ q: `Archived ${suffix}` }),
+    )
+    expect(defaults.customers).toHaveLength(0)
+
+    const adminView = await customersService.searchCustomers(
+      adminUser,
+      searchQuery({ q: `Archived ${suffix}`, includeArchived: true }),
+    )
+    expect(adminView.customers.map((row) => row.id)).toContain(created.id)
+
+    const managerOverride = await captureError(() =>
+      customersService.searchCustomers(managerUser, searchQuery({ includeArchived: true })),
+    )
+    expect(managerOverride).toBeInstanceOf(ForbiddenError)
+
+    const managerBranchFilter = await captureError(() =>
+      customersService.searchCustomers(managerUser, searchQuery({ branchId: branchAId })),
+    )
+    expect(managerBranchFilter).toBeInstanceOf(ForbiddenError)
+
+    const adminBranchFilter = await customersService.searchCustomers(
+      adminUser,
+      searchQuery({ q: `Admin Branch B ${suffix}`, branchId: branchBId }),
+    )
+    expect(adminBranchFilter.customers.every((row) => row.createdBranchId === branchBId)).toBe(true)
+  })
+
+  it('updates a customer, re-checking phone uniqueness, and audits the change', async () => {
+    const phoneA = nextPhone('028')
+    const phoneB = nextPhone('028')
+    const first = await createCustomer(managerUser, { name: `Updater A ${suffix}`, phone: phoneA })
+    const second = await createCustomer(managerUser, { name: `Updater B ${suffix}`, phone: phoneB })
+
+    const clash = await captureError(() =>
+      customersService.updateCustomer(actor, second.id, { phone: phoneA }),
+    )
+    expect(clash).toBeInstanceOf(ConflictError)
+    if (!(clash instanceof ConflictError)) throw new Error('expected ConflictError')
+    expect(clash.message).toContain(first.id)
+
+    const updated = await customersService.updateCustomer(actor, second.id, {
+      name: `Updated B ${suffix}`,
+      email: `updated-${suffix}@example.com`,
+    })
+    expect(updated.name).toBe(`Updated B ${suffix}`)
+    expect(updated.email).toBe(`updated-${suffix}@example.com`)
+
+    const audits = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.entityId, second.id))
+    expect(audits.map((row) => row.action)).toContain('customer.updated')
+  })
+
+  it('returns credit profiles scoped to the caller plus the loyalty balance', async () => {
+    const created = await createCustomer(managerUser, {
+      name: `Detail ${suffix}`,
+      phone: nextPhone('054'),
+    })
+
+    await db.insert(creditProfile).values([
+      {
+        customerId: created.id,
+        branchId: branchAId,
+        limitMinor: 50_000,
+        paymentTermDays: 14,
+        balanceMinor: 12_000,
+        createdBy: 'test',
+      },
+      {
+        customerId: created.id,
+        branchId: branchBId,
+        limitMinor: 10_000,
+        balanceMinor: 0,
+        createdBy: 'test',
+      },
+    ])
+    await db
+      .update(loyaltyAccount)
+      .set({ balancePoints: 250 })
+      .where(eq(loyaltyAccount.customerId, created.id))
+
+    const asManager = await customersService.getCustomer(managerUser, created.id)
+    expect(asManager.creditProfiles).toHaveLength(1)
+    expect(asManager.creditProfiles[0]?.branchId).toBe(branchAId)
+    expect(asManager.creditProfiles[0]?.balanceMinor).toBe(12_000)
+    expect(asManager.creditProfiles[0]?.paymentTermDays).toBe(14)
+    expect(asManager.loyalty?.balancePoints).toBe(250)
+
+    const asAdmin = await customersService.getCustomer(adminUser, created.id)
+    expect(asAdmin.creditProfiles).toHaveLength(2)
+    expect(asAdmin.creditProfiles.map((row) => row.branchId)).toEqual([branchAId, branchBId])
+  })
+})
