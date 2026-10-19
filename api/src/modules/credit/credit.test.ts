@@ -18,7 +18,13 @@ import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { sumForCustomerBranch } from './credit.repository.ts'
 import { creditLedgerEntry, creditProfile } from './credit.schema.ts'
-import { postEntry, settleCharges, updateProfile } from './credit.service.ts'
+import {
+  getAging,
+  getStatement,
+  postEntry,
+  settleCharges,
+  updateProfile,
+} from './credit.service.ts'
 import type { PostEntryInput, SettleableEntry } from './credit.types.ts'
 
 const available = await databaseAvailable()
@@ -39,7 +45,9 @@ describe.skipIf(!available)('credit service', () => {
   const customerIds: string[] = []
   let branchAId = ''
   let branchBId = ''
+  let branchCId = ''
   let managerUser: SessionUser
+  let managerCUser: SessionUser
   let adminUser: SessionUser
   let cashierUser: SessionUser
 
@@ -113,13 +121,16 @@ describe.skipIf(!available)('credit service', () => {
       .values([
         { code: `CRD-${suffix}-A`, name: `Credit A ${suffix}`, type: 'RETAIL', city: 'Accra' },
         { code: `CRD-${suffix}-B`, name: `Credit B ${suffix}`, type: 'RETAIL', city: 'Kumasi' },
+        { code: `CRD-${suffix}-C`, name: `Credit C ${suffix}`, type: 'RETAIL', city: 'Takoradi' },
       ])
       .returning({ id: branch.id })
     branchAId = branches[0]?.id ?? ''
     branchBId = branches[1]?.id ?? ''
-    branchIds.push(branchAId, branchBId)
+    branchCId = branches[2]?.id ?? ''
+    branchIds.push(branchAId, branchBId, branchCId)
 
     managerUser = makeUser({ role: 'MANAGER', branchId: branchAId })
+    managerCUser = makeUser({ role: 'MANAGER', branchId: branchCId })
     adminUser = makeUser({ role: 'ADMIN', branchId: null })
     cashierUser = makeUser({ role: 'CASHIER', branchId: branchAId })
   })
@@ -597,6 +608,194 @@ describe.skipIf(!available)('credit service', () => {
     )
     expect(crossBranch).toBeInstanceOf(ForbiddenError)
   })
+
+  it('ages charges into fixed buckets from their due dates', async () => {
+    const asOf = new Date('2026-10-16T09:00:00Z')
+    const customerId = await createCustomerRow('Aging')
+    await updateProfile(actor, managerCUser, customerId, {
+      limitMinor: 1_000_000,
+      paymentTermDays: 30,
+    })
+
+    // Due 2026-07-01 → 107 days past due → over90 (10_000).
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 10_000,
+      reasonCode: 'SALE',
+      occurredAt: new Date('2026-06-01T10:00:00Z'),
+    })
+    // Due 2026-08-19 → 58 days past due → days31To60 (5_000).
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 5_000,
+      reasonCode: 'SALE',
+      occurredAt: new Date('2026-07-20T10:00:00Z'),
+    })
+    // Collects the oldest charge down to 6_000.
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'REPAYMENT',
+      amountMinor: -4_000,
+      method: 'CASH',
+      occurredAt: new Date('2026-08-01T10:00:00Z'),
+    })
+    // Terms shrink to 0: due 2026-10-15 → 1 day past due → days1To30 (2_000).
+    await updateProfile(actor, managerCUser, customerId, { paymentTermDays: 0 })
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 2_000,
+      reasonCode: 'SALE',
+      occurredAt: new Date('2026-10-15T10:00:00Z'),
+    })
+
+    // A credit-only customer (negative balance) never appears in aging.
+    const creditOnlyId = await createCustomerRow('Aging Credit')
+    await postEntry(actor, managerCUser, {
+      customerId: creditOnlyId,
+      branchId: branchCId,
+      kind: 'REPAYMENT',
+      amountMinor: -500,
+      method: 'CASH',
+    })
+
+    const aging = await getAging(managerCUser, { asOf })
+    expect(aging.asOf).toBe('2026-10-16')
+    expect(aging.branches).toHaveLength(1)
+    const branchAging = aging.branches[0]
+    expect(branchAging?.branch.id).toBe(branchCId)
+
+    const row = branchAging?.customers.find((entry) => entry.customerId === customerId)
+    expect(row?.buckets).toEqual({
+      current: 0,
+      days1To30: 2_000,
+      days31To60: 5_000,
+      days61To90: 0,
+      over90: 6_000,
+    })
+    expect(row?.totalMinor).toBe(13_000)
+    expect(row?.oldestDueDate).toBe('2026-07-01')
+    expect(branchAging?.customers.map((entry) => entry.customerId)).not.toContain(creditOnlyId)
+
+    // Branch totals are the sum of the customer rows, once each.
+    const bucketSum = (branchAging?.customers ?? []).reduce(
+      (sum, entry) => sum + entry.totalMinor,
+      0,
+    )
+    expect(branchAging?.totals.total).toBe(bucketSum)
+
+    // Managers cannot peek at another branch's aging.
+    const crossAging = await captureError(() => getAging(managerCUser, { branchId: branchAId }))
+    expect(crossAging).toBeInstanceOf(ForbiddenError)
+
+    // Admins see every branch separately (each branch id appears once).
+    const adminAging = await getAging(adminUser, { asOf })
+    const ids = adminAging.branches.map((entry) => entry.branch.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).toContain(branchAId)
+    expect(ids).toContain(branchBId)
+    expect(ids).toContain(branchCId)
+    const adminBranchC = adminAging.branches.find((entry) => entry.branch.id === branchCId)
+    expect(
+      adminBranchC?.customers.find((entry) => entry.customerId === customerId)?.totalMinor,
+    ).toBe(13_000)
+  })
+
+  it('reconciles statements: opening + ranged = closing = balance', async () => {
+    const customerId = await createCustomerRow('Statement')
+    await updateProfile(actor, managerCUser, customerId, {
+      limitMinor: 1_000_000,
+      paymentTermDays: 14,
+    })
+
+    // Before the range.
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 3_000,
+      reasonCode: 'OPENING_BALANCE',
+      occurredAt: new Date('2026-08-01T10:00:00Z'),
+    })
+    // Inside the range: due 2026-09-24, then a partial collection.
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 5_000,
+      reasonCode: 'SALE',
+      occurredAt: new Date('2026-09-10T10:00:00Z'),
+    })
+    const repayment = await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'REPAYMENT',
+      amountMinor: -2_000,
+      method: 'CASH',
+      occurredAt: new Date('2026-09-20T10:00:00Z'),
+    })
+    // After the range.
+    await postEntry(actor, managerCUser, {
+      customerId,
+      branchId: branchCId,
+      kind: 'CHARGE',
+      amountMinor: 1_000,
+      reasonCode: 'SALE',
+      occurredAt: new Date('2026-10-05T10:00:00Z'),
+    })
+
+    const statement = await getStatement(managerCUser, customerId, {
+      from: new Date('2026-09-01T00:00:00Z'),
+      to: new Date('2026-09-30T23:59:59.999Z'),
+    })
+    expect(statement.from).toBe('2026-09-01')
+    expect(statement.to).toBe('2026-09-30')
+    expect(statement.openingBalanceMinor).toBe(3_000)
+    expect(statement.entries.map((entry) => entry.amountMinor)).toEqual([5_000, -2_000])
+    expect(statement.entries.map((entry) => entry.id)).toContain(repayment.entry.id)
+    expect(statement.closingBalanceMinor).toBe(6_000)
+    expect(statement.currentBalanceMinor).toBe(7_000)
+    expect(statement.customer.name).toContain('Statement')
+    expect(statement.branch.code).toBe(`CRD-${suffix}-C`)
+
+    // Aging snapshot as of `to`: the August charge keeps 1_000 (46 days due),
+    // the September charge 5_000 (6 days due); the October charge is excluded.
+    expect(statement.aging.map((charge) => [charge.outstandingMinor, charge.bucket])).toEqual([
+      [1_000, 'days31To60'],
+      [5_000, 'days1To30'],
+    ])
+    expect(statement.aging.reduce((sum, charge) => sum + charge.outstandingMinor, 0)).toBe(
+      statement.closingBalanceMinor,
+    )
+
+    // A full-range statement reconciles to the profile balance exactly.
+    const full = await getStatement(managerCUser, customerId, {})
+    expect(full.from).toBeNull()
+    expect(full.openingBalanceMinor).toBe(0)
+    expect(full.entries).toHaveLength(4)
+    expect(full.closingBalanceMinor).toBe(7_000)
+    expect(full.closingBalanceMinor).toBe(full.currentBalanceMinor)
+    expect(await profileBalance(customerId, branchCId)).toBe(7_000)
+
+    // Statement guards: missing profile → 404, cross-branch → 403, admin must name a branch.
+    const noProfileId = await createCustomerRow('Statement Missing')
+    const missing = await captureError(() => getStatement(managerCUser, noProfileId, {}))
+    expect(missing).toBeInstanceOf(NotFoundError)
+
+    const crossBranch = await captureError(() =>
+      getStatement(managerCUser, customerId, { branchId: branchAId }),
+    )
+    expect(crossBranch).toBeInstanceOf(ForbiddenError)
+
+    const noBranch = await captureError(() => getStatement(adminUser, customerId, {}))
+    expect(noBranch).toBeInstanceOf(ValidationError)
+  })
 })
 
 describe.skipIf(!available)('credit HTTP surface', () => {
@@ -925,5 +1124,82 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       }),
     })
     expect(withBranch.status).toBe(201)
+  })
+
+  it('serves scoped aging and a reconciling statement over HTTP', async () => {
+    const customerId = await createCustomerRow('HTTP Report')
+    await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ limitMinor: 20_000, paymentTermDays: 0 }),
+    })
+    await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 8_000, reasonCode: 'SALE' }),
+    })
+    await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, amountMinor: 3_000, method: 'CASH' }),
+    })
+
+    const aging = await app.request('/api/credit/aging', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(aging.status).toBe(200)
+    const agingBody = await readJson<{
+      asOf: string
+      branches: {
+        branch: { id: string }
+        customers: { customerId: string; totalMinor: number }[]
+        totals: { total: number }
+      }[]
+    }>(aging)
+    expect(agingBody.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(agingBody.branches).toHaveLength(1)
+    expect(agingBody.branches[0]?.branch.id).toBe(branchAId)
+    expect(
+      agingBody.branches[0]?.customers.find((row) => row.customerId === customerId)?.totalMinor,
+    ).toBe(5_000)
+
+    const crossAging = await app.request(`/api/credit/aging?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(crossAging.status).toBe(403)
+
+    const adminAging = await app.request('/api/credit/aging', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(adminAging.status).toBe(200)
+    const adminBody = await readJson<{
+      branches: { branch: { id: string }; totals: { total: number } }[]
+    }>(adminAging)
+    const adminBranchIds = adminBody.branches.map((entry) => entry.branch.id)
+    expect(adminBranchIds).toContain(branchAId)
+    expect(adminBranchIds).toContain(branchBId)
+
+    const statement = await app.request(`/api/credit/statements/${customerId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(statement.status).toBe(200)
+    const statementBody = await readJson<{
+      customer: { id: string }
+      openingBalanceMinor: number
+      closingBalanceMinor: number
+      currentBalanceMinor: number
+      entries: unknown[]
+    }>(statement)
+    expect(statementBody.customer.id).toBe(customerId)
+    expect(statementBody.openingBalanceMinor).toBe(0)
+    expect(statementBody.entries).toHaveLength(2)
+    expect(statementBody.closingBalanceMinor).toBe(5_000)
+    expect(statementBody.closingBalanceMinor).toBe(statementBody.currentBalanceMinor)
+
+    const noProfileId = await createCustomerRow('HTTP No Profile')
+    const missing = await app.request(`/api/credit/statements/${noProfileId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(missing.status).toBe(404)
   })
 })

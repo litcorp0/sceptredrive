@@ -1,10 +1,16 @@
 import { db } from '@gikautos/db'
 import { hasPermission, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
-import { AppError, ConflictError, ForbiddenError, ValidationError } from '../../http/errors.ts'
+import {
+  AppError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { requireCustomer } from '../customers/customers.service.ts'
-import { getBranch } from '../org/branches.service.ts'
+import { getBranch, listBranches } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
@@ -16,17 +22,29 @@ import {
   listEntryRows,
   listProfilesByBranch,
   listProfilesByCustomer,
+  listSettlementEntries,
+  listSettlementEntriesByBranch,
   lockOrCreateProfile,
+  sumEntriesBefore,
+  sumForCustomerBranch,
   updateProfileBalance,
   updateProfileSettings,
 } from './credit.repository.ts'
 import type {
+  AgingBucketKey,
+  AgingBuckets,
+  AgingChargeRow,
+  AgingQuery,
+  AgingResult,
+  BranchAging,
   ChargeSettlement,
   CreditEntryListResult,
+  CreditLedgerEntryRow,
   CreditOverrideReason,
   CreditPostingResult,
   CreditProfileListResult,
   CreditProfileRow,
+  CreditStatement,
   EntryCreateBody,
   EntryListQuery,
   PostEntryInput,
@@ -35,6 +53,8 @@ import type {
   RepaymentCreateBody,
   SettleableEntry,
   SettlementResult,
+  StatementEntry,
+  StatementQuery,
 } from './credit.types.ts'
 import {
   ADJUSTMENT_REASON_CODES,
@@ -495,4 +515,176 @@ export async function listEntries(
   ])
 
   return { entries, total, page: query.page, pageSize: query.pageSize }
+}
+
+const AGING_BUCKET_KEYS = ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'] as const
+
+function emptyBuckets(): AgingBuckets {
+  return { current: 0, days1To30: 0, days31To60: 0, days61To90: 0, over90: 0 }
+}
+
+function utcMidnight(isoDay: string): number {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  return Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1)
+}
+
+/** Fixed buckets from the due date; due today or in the future is Current. */
+function chargeAging(
+  dueDate: string,
+  asOf: string,
+): { daysPastDue: number; bucket: AgingBucketKey } {
+  const daysPastDue = Math.floor((utcMidnight(asOf) - utcMidnight(dueDate)) / 86_400_000)
+  if (daysPastDue > 90) return { daysPastDue, bucket: 'over90' }
+  if (daysPastDue > 60) return { daysPastDue, bucket: 'days61To90' }
+  if (daysPastDue > 30) return { daysPastDue, bucket: 'days31To60' }
+  if (daysPastDue > 0) return { daysPastDue, bucket: 'days1To30' }
+  return { daysPastDue, bucket: 'current' }
+}
+
+/**
+ * Aging report: for every customer with a profile at the branch and a
+ * non-zero outstanding, per-charge buckets derived from settlement. Managers
+ * see their own branch; admins see one branch or all branches separately.
+ */
+export async function getAging(user: SessionUser, query: AgingQuery): Promise<AgingResult> {
+  const asOf = isoDate(query.asOf ?? new Date())
+  const requested = resolveBranchFilter(user, query.branchId ?? null)
+
+  const targets = requested
+    ? [await getBranch(user, requested)]
+    : await listBranches(user, { includeInactive: false })
+
+  const branches: BranchAging[] = []
+  for (const target of targets) {
+    const branch: BranchAging = {
+      branch: { id: target.id, code: target.code, name: target.name },
+      customers: [],
+      totals: { ...emptyBuckets(), total: 0 },
+    }
+
+    const profiles = await listProfilesByBranch(target.id)
+    if (profiles.length > 0) {
+      const entries = await listSettlementEntriesByBranch(target.id)
+      const byCustomer = new Map<string, CreditLedgerEntryRow[]>()
+      for (const entry of entries) {
+        const list = byCustomer.get(entry.customerId)
+        if (list) list.push(entry)
+        else byCustomer.set(entry.customerId, [entry])
+      }
+
+      for (const profile of profiles) {
+        const settlement = settleCharges(byCustomer.get(profile.customerId) ?? [])
+        const buckets = emptyBuckets()
+        let total = 0
+        let oldestDueDate: string | null = null
+
+        for (const charge of settlement.charges) {
+          if (charge.outstandingMinor === 0) continue
+          const { bucket } = chargeAging(charge.dueDate, asOf)
+          buckets[bucket] += charge.outstandingMinor
+          total += charge.outstandingMinor
+          if (!oldestDueDate || charge.dueDate < oldestDueDate) oldestDueDate = charge.dueDate
+        }
+
+        if (total === 0) continue
+        branch.customers.push({
+          customerId: profile.customerId,
+          customerName: profile.customerName,
+          branchId: target.id,
+          buckets,
+          totalMinor: total,
+          oldestDueDate,
+        })
+        for (const key of AGING_BUCKET_KEYS) branch.totals[key] += buckets[key]
+        branch.totals.total += total
+      }
+    }
+
+    branches.push(branch)
+  }
+
+  return { asOf, branches }
+}
+
+/**
+ * Printable statement data (printing is the console's concern): opening
+ * balance, ranged entries, closing balance that equals the profile balance,
+ * and an aging snapshot as of `to`.
+ */
+export async function getStatement(
+  user: SessionUser,
+  customerId: string,
+  query: StatementQuery,
+): Promise<CreditStatement> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  if (!branchId)
+    throw new ValidationError('branchId is required when an admin requests a statement')
+  const branchRow = await getBranch(user, branchId)
+
+  const profile = await findProfile(customerId, branchId)
+  if (!profile) throw new NotFoundError('No credit profile exists for this customer at this branch')
+  const customerRow = await requireCustomer(customerId)
+
+  const from = query.from ?? null
+  const to = query.to ? inclusiveEnd(query.to) : new Date()
+
+  const [openingBalanceMinor, rangedSum, rangedEntries] = await Promise.all([
+    from ? sumEntriesBefore(customerId, branchId, from) : Promise.resolve(0),
+    sumForCustomerBranch(customerId, branchId, { from: from ?? undefined, to }),
+    // Statements are per customer; one generous page covers the full ledger.
+    listEntryRows({
+      customerId,
+      branchId,
+      from: from ?? undefined,
+      to,
+      limit: 5000,
+      offset: 0,
+      newestFirst: false,
+    }),
+  ])
+
+  const toDay = isoDate(to)
+  const allEntries = await listSettlementEntries(customerId, branchId)
+  const upTo = allEntries.filter((entry) => entry.occurredAt.getTime() <= to.getTime())
+  const settlement = settleCharges(upTo)
+  const aging: AgingChargeRow[] = settlement.charges
+    .filter((charge) => charge.outstandingMinor > 0)
+    .map((charge) => {
+      const { daysPastDue, bucket } = chargeAging(charge.dueDate, toDay)
+      return {
+        entryId: charge.entryId,
+        occurredAt: charge.occurredAt,
+        dueDate: charge.dueDate,
+        amountMinor: charge.amountMinor,
+        outstandingMinor: charge.outstandingMinor,
+        daysPastDue,
+        bucket,
+      }
+    })
+
+  const entries: StatementEntry[] = rangedEntries.map((entry) => ({
+    id: entry.id,
+    kind: entry.kind,
+    occurredAt: entry.occurredAt,
+    dueDate: entry.dueDate,
+    amountMinor: entry.amountMinor,
+    referenceType: entry.referenceType,
+    referenceNumber: entry.referenceNumber,
+    reasonCode: entry.reasonCode,
+    method: entry.method,
+    note: entry.note,
+    createdBy: entry.createdBy,
+  }))
+
+  return {
+    customer: { id: customerRow.id, name: customerRow.name, phone: customerRow.phone },
+    branch: { id: branchRow.id, code: branchRow.code, name: branchRow.name },
+    from: from ? isoDate(from) : null,
+    to: toDay,
+    openingBalanceMinor,
+    entries,
+    closingBalanceMinor: openingBalanceMinor + rangedSum,
+    currentBalanceMinor: profile.balanceMinor,
+    aging,
+  }
 }

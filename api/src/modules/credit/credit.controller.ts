@@ -4,11 +4,13 @@ import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as creditService from './credit.service.ts'
 import type {
+  AgingQuery,
   EntryCreateBody,
   EntryListQuery,
   ProfileListQuery,
   ProfileUpdateBody,
   RepaymentCreateBody,
+  StatementQuery,
 } from './credit.types.ts'
 
 export async function listProfiles(c: Context<AppEnv>, query: ProfileListQuery) {
@@ -42,4 +44,14 @@ export async function createEntry(c: Context<AppEnv>, input: EntryCreateBody) {
 export async function listEntries(c: Context<AppEnv>, query: EntryListQuery) {
   const user = currentUser(c)
   return c.json(await creditService.listEntries(user, query))
+}
+
+export async function getAging(c: Context<AppEnv>, query: AgingQuery) {
+  const user = currentUser(c)
+  return c.json(await creditService.getAging(user, query))
+}
+
+export async function getStatement(c: Context<AppEnv>, customerId: string, query: StatementQuery) {
+  const user = currentUser(c)
+  return c.json(await creditService.getStatement(user, customerId, query))
 }

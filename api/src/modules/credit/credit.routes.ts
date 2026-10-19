@@ -3,12 +3,15 @@ import { factory } from '../../http/factory.ts'
 import { requireSession } from '../../http/session.ts'
 import * as creditController from './credit.controller.ts'
 import {
+  validateAgingQuery,
   validateCreditProfileParam,
   validateEntryCreate,
   validateEntryListQuery,
   validateProfileListQuery,
   validateProfileUpdate,
   validateRepaymentCreate,
+  validateStatementParam,
+  validateStatementQuery,
 } from './credit.validation.ts'
 
 export const creditRoutes = factory.createApp()
@@ -52,4 +55,21 @@ creditRoutes.get(
   requirePermission('credit.read'),
   validateEntryListQuery,
   (c) => creditController.listEntries(c, c.req.valid('query')),
+)
+
+creditRoutes.get(
+  '/api/credit/aging',
+  requireSession,
+  requirePermission('credit.read'),
+  validateAgingQuery,
+  (c) => creditController.getAging(c, c.req.valid('query')),
+)
+
+creditRoutes.get(
+  '/api/credit/statements/:customerId',
+  requireSession,
+  requirePermission('credit.read'),
+  validateStatementParam,
+  validateStatementQuery,
+  (c) => creditController.getStatement(c, c.req.valid('param').customerId, c.req.valid('query')),
 )
