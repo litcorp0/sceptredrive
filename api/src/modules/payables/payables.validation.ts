@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { validateJson, validateParam, validateQuery } from '../../http/validation.ts'
 
 export const invoiceIdParamSchema = z.object({ id: z.uuid() })
+export const paymentIdParamSchema = z.object({ id: z.uuid() })
 
 const limitSchema = z.coerce.number().int().min(1).max(100).default(50)
 const offsetSchema = z.coerce.number().int().min(0).default(0)
@@ -120,6 +121,7 @@ export const agingQuerySchema = z.object({
 })
 
 export const validateInvoiceIdParam = validateParam(invoiceIdParamSchema)
+export const validatePaymentIdParam = validateParam(paymentIdParamSchema)
 export const validateInvoiceCreate = validateJson(invoiceCreateSchema)
 export const validateInvoiceVoid = validateJson(invoiceVoidSchema)
 export const validateInvoiceListQuery = validateQuery(invoiceListQuerySchema)

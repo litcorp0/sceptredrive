@@ -23,7 +23,12 @@ import { auditLog } from '../platform/audit.schema.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierProduct } from '../suppliers/suppliers.schema.ts'
-import { supplierInvoice, supplierInvoiceLine } from './payables.schema.ts'
+import {
+  supplierInvoice,
+  supplierInvoiceLine,
+  supplierPayment,
+  supplierPaymentAllocation,
+} from './payables.schema.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[payables.api.test] database unavailable; integration tests skipped')
@@ -62,6 +67,37 @@ interface InvoiceDetailResponse {
   allocations: unknown[]
 }
 
+interface PaymentResponse {
+  id: string
+  number: string
+  supplierId: string
+  branchId: string
+  method: string
+  amountMinor: number
+  allocatedMinor: number
+  unallocatedMinor: number
+  status: string
+  voidReason: string | null
+}
+
+interface PaymentAllocationResponse {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  supplierInvoiceNumber: string
+  kind: string
+  amountMinor: number
+  reversesAllocationId: string | null
+}
+
+interface PaymentDetailResponse {
+  payment: PaymentResponse
+  supplier: { id: string; code: string; name: string }
+  allocations: PaymentAllocationResponse[]
+  allocatedMinor: number
+  unallocatedMinor: number
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
@@ -74,6 +110,7 @@ describe.skipIf(!available)('payables API', () => {
   const createdSupplierIds: string[] = []
   const createdReceiptIds: string[] = []
   const createdInvoiceIds: string[] = []
+  const createdPaymentIds: string[] = []
   let adminCookie = ''
   let managerCookie = ''
   let cashierCookie = ''
@@ -200,6 +237,12 @@ describe.skipIf(!available)('payables API', () => {
   })
 
   afterAll(async () => {
+    if (createdPaymentIds.length > 0) {
+      await db
+        .delete(supplierPaymentAllocation)
+        .where(inArray(supplierPaymentAllocation.paymentId, createdPaymentIds))
+      await db.delete(supplierPayment).where(inArray(supplierPayment.id, createdPaymentIds))
+    }
     if (createdInvoiceIds.length > 0) {
       await db
         .delete(supplierInvoiceLine)
@@ -222,7 +265,12 @@ describe.skipIf(!available)('payables API', () => {
     if (createdSupplierIds.length > 0) {
       await db.delete(supplier).where(inArray(supplier.id, createdSupplierIds))
     }
-    const auditIds = [...createdInvoiceIds, ...createdReceiptIds, ...createdSupplierIds]
+    const auditIds = [
+      ...createdInvoiceIds,
+      ...createdReceiptIds,
+      ...createdPaymentIds,
+      ...createdSupplierIds,
+    ]
     if (auditIds.length > 0) {
       await db.delete(auditLog).where(inArray(auditLog.entityId, auditIds))
     }
@@ -264,6 +312,44 @@ describe.skipIf(!available)('payables API', () => {
       },
     )
     expect(voided.status).toBe(403)
+
+    const paymentList = await app.request('/api/payables/payments', {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(paymentList.status).toBe(403)
+
+    const paymentCreate = await app.request('/api/payables/payments', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({}),
+    })
+    expect(paymentCreate.status).toBe(403)
+
+    const paymentRead = await app.request(
+      '/api/payables/payments/00000000-0000-0000-0000-000000000000',
+      { headers: authedHeaders(cashierCookie) },
+    )
+    expect(paymentRead.status).toBe(403)
+
+    const paymentVoid = await app.request(
+      '/api/payables/payments/00000000-0000-0000-0000-000000000000/void',
+      {
+        method: 'POST',
+        headers: authedHeaders(cashierCookie),
+        body: JSON.stringify({ reason: 'ERROR' }),
+      },
+    )
+    expect(paymentVoid.status).toBe(403)
+
+    const balances = await app.request('/api/payables/balances', {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(balances.status).toBe(403)
+
+    const aging = await app.request('/api/payables/aging', {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(aging.status).toBe(403)
   })
 
   it('creates, reads, lists, and validates invoices over HTTP', async () => {
@@ -487,5 +573,221 @@ describe.skipIf(!available)('payables API', () => {
       },
     )
     expect(badReason.status).toBe(400)
+  })
+
+  it('records, reads, lists, voids, and validates payments over HTTP', async () => {
+    const invoiceResponse = await app.request('/api/payables/invoices', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        supplierId,
+        supplierInvoiceNumber: `APIPAY-${suffix}-1`,
+        invoiceDate: today,
+        lines: [{ description: 'HTTP payment target', quantity: 1, unitCostMinor: 9_000 }],
+      }),
+    })
+    expect(invoiceResponse.status).toBe(201)
+    const invoice = await readJson<{ invoice: InvoiceDetailResponse }>(invoiceResponse)
+    createdInvoiceIds.push(invoice.invoice.invoice.id)
+
+    const overAllocated = await app.request('/api/payables/payments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        supplierId,
+        method: 'CASH',
+        amountMinor: 1_000,
+        paidAt: new Date().toISOString(),
+        allocations: [{ invoiceId: invoice.invoice.invoice.id, amountMinor: 1_500 }],
+      }),
+    })
+    expect(overAllocated.status).toBe(400)
+
+    const badPaidAt = await app.request('/api/payables/payments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ supplierId, method: 'CASH', amountMinor: 1_000, paidAt: today }),
+    })
+    expect(badPaidAt.status).toBe(400)
+
+    const paymentBody = {
+      supplierId,
+      method: 'MOMO',
+      amountMinor: 10_000,
+      paidAt: new Date().toISOString(),
+      reference: 'MM-123',
+      allocations: [{ invoiceId: invoice.invoice.invoice.id, amountMinor: 9_000 }],
+      idempotencyKey: `api-pay-${suffix}`,
+    }
+    const created = await app.request('/api/payables/payments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify(paymentBody),
+    })
+    expect(created.status).toBe(201)
+    const createdBody = await readJson<{ payment: PaymentDetailResponse; replayed: boolean }>(
+      created,
+    )
+    createdPaymentIds.push(createdBody.payment.payment.id)
+    expect(createdBody.replayed).toBe(false)
+    expect(createdBody.payment.payment.number).toMatch(/^PAY-\d{5}$/)
+    expect(createdBody.payment.payment.branchId).toBe(branchAId)
+    expect(createdBody.payment.allocatedMinor).toBe(9_000)
+    expect(createdBody.payment.unallocatedMinor).toBe(1_000)
+    expect(createdBody.payment.allocations[0]?.invoiceNumber).toBe(invoice.invoice.invoice.number)
+
+    const replay = await app.request('/api/payables/payments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify(paymentBody),
+    })
+    expect(replay.status).toBe(200)
+    const replayBody = await readJson<{ payment: PaymentDetailResponse; replayed: boolean }>(replay)
+    expect(replayBody.replayed).toBe(true)
+    expect(replayBody.payment.payment.id).toBe(createdBody.payment.payment.id)
+
+    const read = await app.request(`/api/payables/payments/${createdBody.payment.payment.id}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(read.status).toBe(200)
+    const readBody = await readJson<PaymentDetailResponse>(read)
+    expect(readBody.supplier.id).toBe(supplierId)
+    expect(readBody.allocations).toHaveLength(1)
+
+    const list = await app.request('/api/payables/payments?method=MOMO', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(list.status).toBe(200)
+    const listBody = await readJson<{
+      payments: PaymentResponse[]
+      total: number
+      branchId: string | null
+    }>(list)
+    expect(listBody.branchId).toBe(branchAId)
+    const listed = listBody.payments.find((row) => row.id === createdBody.payment.payment.id)
+    expect(listed?.allocatedMinor).toBe(9_000)
+    expect(listed?.unallocatedMinor).toBe(1_000)
+
+    const missing = await app.request(
+      '/api/payables/payments/00000000-0000-0000-0000-000000000000',
+      { headers: authedHeaders(managerCookie) },
+    )
+    expect(missing.status).toBe(404)
+
+    const badId = await app.request('/api/payables/payments/not-a-uuid', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(badId.status).toBe(400)
+
+    const badReason = await app.request(
+      `/api/payables/payments/${createdBody.payment.payment.id}/void`,
+      {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ reason: 'NOPE' }),
+      },
+    )
+    expect(badReason.status).toBe(400)
+
+    const voided = await app.request(
+      `/api/payables/payments/${createdBody.payment.payment.id}/void`,
+      {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ reason: 'RETURNED' }),
+      },
+    )
+    expect(voided.status).toBe(200)
+    const voidedBody = await readJson<{ payment: PaymentDetailResponse }>(voided)
+    expect(voidedBody.payment.payment.status).toBe('VOID')
+    expect(voidedBody.payment.payment.voidReason).toBe('RETURNED')
+    expect(voidedBody.payment.allocations.some((row) => row.kind === 'RELEASE')).toBe(true)
+
+    const reVoid = await app.request(
+      `/api/payables/payments/${createdBody.payment.payment.id}/void`,
+      {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ reason: 'ERROR' }),
+      },
+    )
+    expect(reVoid.status).toBe(409)
+
+    // The release flips the invoice back to OPEN.
+    const invoiceAfter = await app.request(`/api/payables/invoices/${invoice.invoice.invoice.id}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    const invoiceAfterBody = await readJson<InvoiceDetailResponse>(invoiceAfter)
+    expect(invoiceAfterBody.invoice.status).toBe('OPEN')
+    expect(invoiceAfterBody.invoice.amountPaidMinor).toBe(0)
+  })
+
+  it('serves balances and aging scoped to the caller', async () => {
+    const invoiceResponse = await app.request('/api/payables/invoices', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        supplierId,
+        supplierInvoiceNumber: `APIAGE-${suffix}`,
+        invoiceDate: today,
+        lines: [{ description: 'HTTP aging', quantity: 1, unitCostMinor: 4_000 }],
+      }),
+    })
+    expect(invoiceResponse.status).toBe(201)
+    const invoice = await readJson<{ invoice: InvoiceDetailResponse }>(invoiceResponse)
+    createdInvoiceIds.push(invoice.invoice.invoice.id)
+
+    const managerBalances = await app.request('/api/payables/balances', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(managerBalances.status).toBe(200)
+    const balancesBody = await readJson<{
+      balances: { supplierId: string; branchId: string | null; invoiceOutstandingMinor: number }[]
+      branchId: string | null
+    }>(managerBalances)
+    expect(balancesBody.branchId).toBe(branchAId)
+    expect(balancesBody.balances.every((row) => row.branchId === branchAId)).toBe(true)
+    expect(balancesBody.balances.some((row) => row.supplierId === supplierId)).toBe(true)
+
+    const adminBalances = await app.request('/api/payables/balances', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(adminBalances.status).toBe(200)
+    const adminBalancesBody = await readJson<{ branchId: string | null }>(adminBalances)
+    expect(adminBalancesBody.branchId).toBeNull()
+
+    const crossBranch = await app.request(`/api/payables/balances?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(crossBranch.status).toBe(403)
+
+    const badBranch = await app.request('/api/payables/balances?branchId=nope', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(badBranch.status).toBe(400)
+
+    const aging = await app.request(`/api/payables/aging?asOf=${today}&supplierId=${supplierId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(aging.status).toBe(200)
+    const agingBody = await readJson<{
+      asOf: string
+      branchId: string | null
+      suppliers: {
+        supplierId: string
+        buckets: Record<string, number>
+        totalOutstandingMinor: number
+      }[]
+      totals: Record<string, number>
+    }>(aging)
+    expect(agingBody.asOf).toBe(today)
+    expect(agingBody.branchId).toBe(branchAId)
+    expect(agingBody.suppliers.map((row) => row.supplierId)).toEqual([supplierId])
+    expect(agingBody.suppliers[0]?.totalOutstandingMinor).toBeGreaterThanOrEqual(4_000)
+
+    const badAsOf = await app.request('/api/payables/aging?asOf=yesterday', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(badAsOf.status).toBe(400)
   })
 })

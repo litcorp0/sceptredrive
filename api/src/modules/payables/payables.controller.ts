@@ -3,7 +3,16 @@ import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as payablesService from './payables.service.ts'
-import type { InvoiceCreateBody, InvoiceListQuery, InvoiceVoidBody } from './payables.types.ts'
+import type {
+  AgingQuery,
+  BalancesQuery,
+  InvoiceCreateBody,
+  InvoiceListQuery,
+  InvoiceVoidBody,
+  PaymentCreateBody,
+  PaymentListQuery,
+  PaymentVoidBody,
+} from './payables.types.ts'
 
 export async function listInvoices(c: Context<AppEnv>, query: InvoiceListQuery) {
   const user = currentUser(c)
@@ -29,4 +38,42 @@ export async function voidInvoice(c: Context<AppEnv>, id: string, input: Invoice
   const actor = actorFromContext(c)
   const invoice = await payablesService.voidInvoice(user, actor, id, input.reason)
   return c.json({ invoice })
+}
+
+export async function listPayments(c: Context<AppEnv>, query: PaymentListQuery) {
+  const user = currentUser(c)
+  const result = await payablesService.listPayments(user, query)
+  return c.json(result)
+}
+
+export async function createPayment(c: Context<AppEnv>, input: PaymentCreateBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await payablesService.createPayment(user, actor, input)
+  return c.json({ payment: result.payment, replayed: result.replayed }, result.replayed ? 200 : 201)
+}
+
+export async function getPayment(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const detail = await payablesService.getPayment(user, id)
+  return c.json(detail)
+}
+
+export async function voidPayment(c: Context<AppEnv>, id: string, input: PaymentVoidBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const payment = await payablesService.voidPayment(user, actor, id, input.reason)
+  return c.json({ payment })
+}
+
+export async function listBalances(c: Context<AppEnv>, query: BalancesQuery) {
+  const user = currentUser(c)
+  const result = await payablesService.listSupplierBalances(user, query)
+  return c.json(result)
+}
+
+export async function getAging(c: Context<AppEnv>, query: AgingQuery) {
+  const user = currentUser(c)
+  const result = await payablesService.getAging(user, query)
+  return c.json(result)
 }
