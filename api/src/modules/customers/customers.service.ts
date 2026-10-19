@@ -32,6 +32,7 @@ import type {
   CustomerDetail,
   CustomerListQuery,
   CustomerListRow,
+  CustomerRow,
   CustomerSearchFilters,
   CustomerSearchResult,
   CustomerUpdateBody,
@@ -175,6 +176,16 @@ export async function updateCustomer(
   const listRow = await findCustomerListRowById(id)
   if (!listRow) throw new AppError(500, 'INTERNAL', 'Failed to load the updated customer')
   return listRow
+}
+
+/**
+ * Narrow identity lookup for cross-module service calls (credit postings,
+ * statements). Unscoped — the caller is responsible for branch permissions.
+ */
+export async function requireCustomer(id: string): Promise<CustomerRow> {
+  const row = await findCustomerById(id)
+  if (!row) throw new NotFoundError('Customer not found')
+  return row
 }
 
 /**
