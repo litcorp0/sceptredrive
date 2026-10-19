@@ -123,6 +123,51 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 1,
     branchScoped: false,
   },
+  'supplier.codePrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'SUP',
+    branchScoped: false,
+  },
+  'supplier.codeSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
+  'payable.invoicePrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'SINV',
+    branchScoped: false,
+  },
+  'payable.invoiceSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
+  'payable.paymentPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'PAY',
+    branchScoped: false,
+  },
+  'payable.paymentSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS

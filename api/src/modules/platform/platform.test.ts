@@ -237,6 +237,20 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'loyalty.earnPointsPerCedi', value: 1.5 }),
     })
     expect(fractionalEarn.status).toBe(400)
+
+    const badSupplierPrefix = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'supplier.codePrefix', value: 'bad prefix!' }),
+    })
+    expect(badSupplierPrefix.status).toBe(400)
+
+    const zeroInvoiceSequence = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'payable.invoiceSequence', value: 0 }),
+    })
+    expect(zeroInvoiceSequence.status).toBe(400)
   })
 
   it('allocates inventory document numbers from their sequences', async () => {
@@ -261,6 +275,14 @@ describe.skipIf(!available)('audit and settings API', () => {
     await advanceSequencePast('credit.repaymentSequence', 'REP-00042', db)
     const afterRepaymentAdvance = await allocateFromSequence('credit.repaymentSequence', db)
     expect(Number(afterRepaymentAdvance.split('-')[1])).toBeGreaterThan(42)
+
+    expect(await allocateFromSequence('supplier.codeSequence', db)).toMatch(/^SUP-\d{5}$/)
+    expect(await allocateFromSequence('payable.invoiceSequence', db)).toMatch(/^SINV-\d{5}$/)
+    expect(await allocateFromSequence('payable.paymentSequence', db)).toMatch(/^PAY-\d{5}$/)
+
+    await advanceSequencePast('payable.invoiceSequence', 'SINV-00077', db)
+    const afterInvoiceAdvance = await allocateFromSequence('payable.invoiceSequence', db)
+    expect(Number(afterInvoiceAdvance.split('-')[1])).toBeGreaterThan(77)
   })
 
   it('forbids managers from changing global settings', async () => {
@@ -278,6 +300,20 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'credit.repaymentPrefix', value: 'RCP' }),
     })
     expect(creditAttempt.status).toBe(403)
+
+    const supplierAttempt = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'supplier.codePrefix', value: 'VEN' }),
+    })
+    expect(supplierAttempt.status).toBe(403)
+
+    const payableAttempt = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'payable.invoicePrefix', value: 'BILL' }),
+    })
+    expect(payableAttempt.status).toBe(403)
   })
 
   it('lets managers set branch-scoped settings for their branch only', async () => {

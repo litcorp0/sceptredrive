@@ -167,6 +167,9 @@ export type SequenceKey =
   | 'inventory.transferSequence'
   | 'inventory.countSequence'
   | 'credit.repaymentSequence'
+  | 'supplier.codeSequence'
+  | 'payable.invoiceSequence'
+  | 'payable.paymentSequence'
 
 const SEQUENCE_FORMATS: Record<
   SequenceKey,
@@ -178,6 +181,9 @@ const SEQUENCE_FORMATS: Record<
       | 'inventory.transferPrefix'
       | 'inventory.countPrefix'
       | 'credit.repaymentPrefix'
+      | 'supplier.codePrefix'
+      | 'payable.invoicePrefix'
+      | 'payable.paymentPrefix'
     pad: number
     label: string
   }
@@ -203,6 +209,21 @@ const SEQUENCE_FORMATS: Record<
     prefixKey: 'credit.repaymentPrefix',
     pad: 5,
     label: 'repayment receipt number',
+  },
+  'supplier.codeSequence': {
+    prefixKey: 'supplier.codePrefix',
+    pad: 5,
+    label: 'supplier code',
+  },
+  'payable.invoiceSequence': {
+    prefixKey: 'payable.invoicePrefix',
+    pad: 5,
+    label: 'supplier invoice number',
+  },
+  'payable.paymentSequence': {
+    prefixKey: 'payable.paymentPrefix',
+    pad: 5,
+    label: 'supplier payment number',
   },
 }
 
