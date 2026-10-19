@@ -2,6 +2,7 @@ import { closeDb } from '@gikautos/db'
 import { serve } from '@hono/node-server'
 import { app } from './app.ts'
 import { env } from './config/env.ts'
+import { startJobs, stopJobs } from './jobs/index.ts'
 import { logger } from './logger.ts'
 
 const server = serve({ fetch: app.fetch, hostname: '0.0.0.0', port: env.API_PORT }, (info) =>
@@ -10,6 +11,13 @@ const server = serve({ fetch: app.fetch, hostname: '0.0.0.0', port: env.API_PORT
 
 // serve() returns a node:http server in practice; the union type also allows HTTP/2.
 const httpServer = server as typeof server & { closeIdleConnections?: () => void }
+
+try {
+  await startJobs()
+} catch (error) {
+  logger.fatal({ err: error }, 'failed to start jobs')
+  process.exit(1)
+}
 
 let shuttingDown = false
 
@@ -25,6 +33,11 @@ function shutdown(signal: string): void {
   deadline.unref()
 
   httpServer.close(async (error) => {
+    try {
+      await stopJobs()
+    } catch (stopError) {
+      logger.error({ err: stopError }, 'failed to stop jobs')
+    }
     try {
       await closeDb()
     } catch (closeError) {
