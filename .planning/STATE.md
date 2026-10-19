@@ -2,10 +2,11 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-19
-**Status:** Phase 4 execution in progress — Plans 01–05 complete and green (api 234/234,
-shared 54/54); live smoke test passed (charge → repayment → aging → statement reconcile).
-**Next action:** Execute Plan 06 (console — customers, credit ledger, repayments,
-statements, aging) following the GSD waves in `00-CONTEXT.md`.
+**Status:** Phase 4 execution in progress — Plans 01–06 complete and green (api 234/234,
+shared 54/54); console credit flows smoke-verified (repayments with REP refs, over-limit
+override with audit, A4 statement print, aging buckets, archive/reactivate/anonymize).
+**Next action:** Execute Plan 07 (console — loyalty history, liability report, and
+settings) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
@@ -17,7 +18,7 @@ statements, aging) following the GSD waves in `00-CONTEXT.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟨 Executing (5/8 plans) |
+| 4 | Customers, Credit & Loyalty | 🟨 Executing (6/8 plans) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -66,7 +67,7 @@ statements, aging) following the GSD waves in `00-CONTEXT.md`.
 | 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ✅ Complete |
 | 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ✅ Complete |
 | 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ✅ Complete |
-| 06 | Console — customers, credit ledger, repayments, statements, aging | ⬜ Pending |
+| 06 | Console — customers, credit ledger, repayments, statements, aging | ✅ Complete |
 | 07 | Console — loyalty history, liability report, and settings | ⬜ Pending |
 | 08 | Phase 4 verification and state update | ⬜ Pending |
 
@@ -225,6 +226,15 @@ statements, aging) following the GSD waves in `00-CONTEXT.md`.
   (5s grace) then closes the pool. `POST /api/loyalty/expiry-run` (admin-only,
   `loyalty.settings`) runs the same seam synchronously, returns the summary, and the
   engine writes one `loyalty.expiry_run` audit row per run.
+- Console (Plan 06, `admin/src/components/customers/`): Customers section — list with
+  search + archived toggle, create/edit dialogs; profile with Overview / Credit / Ledger
+  tabs; credit settings, repayment (REP toast, received-by from the session), and entry
+  dialogs (kind-specific reason sets, live headroom hint, 409-driven override block
+  re-submitted as `override: { reasonCode, note }`); printable A4 statement rendering the
+  exact API payload (`statement-view.tsx`); aging tab (manager's branch fixed, admin
+  all-branches or one, as-of date, zero buckets muted); archive/reactivate/anonymize with
+  a live zero-balance checklist and server 409s surfaced readably. Money dialogs keep one
+  idempotency key per form session (kept on network failure, cleared on any API response).
 
 ---
 
@@ -400,3 +410,9 @@ statements, aging) following the GSD waves in `00-CONTEXT.md`.
   `schedule: false` + `__test__enableSpies` and unschedules/stops in `afterAll`. A dev
   server under `node --watch` restarts into the jobs code automatically; two API
   instances share the `pgboss` schema safely.
+- Phase 4 console: print support = `@media print { @page A4 }` in `admin/src/styles.css`
+  plus `print:hidden` on the app shell and the customers layout; verify print output with
+  Playwright's `page.emulateMedia({ media: "print" })`.
+- Phase 4 console: while a Radix dialog is open it marks the rest of the page
+  `aria-hidden`, and Playwright's `getByRole` excludes aria-hidden content while
+  `getByText` does not — wait for dialogs to close before counting role-based locators.
