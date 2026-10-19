@@ -62,3 +62,53 @@ export interface LoyaltyEntryListOptions {
   offset?: number
   newestFirst?: boolean
 }
+
+/** Account summary, live lots, and recent entries for one customer. */
+export interface LoyaltyAccountDetail {
+  accountId: string
+  customerId: string
+  balancePoints: number
+  lots: LoyaltyLotRow[]
+  entries: LoyaltyLedgerEntryRow[]
+  entryTotal: number
+}
+
+export interface LoyaltyBranchActivityTotals {
+  branchId: string | null
+  earnedPoints: number
+  redeemedPoints: number
+  clawedBackPoints: number
+  adjustedPoints: number
+  expiredPoints: number
+}
+
+export interface LoyaltyBranchActivity extends LoyaltyBranchActivityTotals {
+  netPoints: number
+}
+
+export interface LoyaltyNegativeBalance {
+  customerId: string
+  customerName: string
+  branchId: string | null
+  balancePoints: number
+}
+
+export interface LoyaltyOutstandingTotals {
+  accounts: number
+  points: number
+}
+
+export interface LoyaltyLiabilityReport {
+  asOf: string
+  pointsPerCedi: number
+  outstandingPoints: number
+  outstandingValueMinor: number
+  activity: {
+    from: string | null
+    to: string | null
+    /** Null means every branch (admin); managers are always scoped to their own. */
+    branchId: string | null
+    rows: LoyaltyBranchActivity[]
+  }
+  negativeBalances: LoyaltyNegativeBalance[]
+}

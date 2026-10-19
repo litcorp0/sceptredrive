@@ -1,28 +1,41 @@
 import { db } from '@gikautos/db'
+import { resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
-import { AppError, ConflictError, ValidationError } from '../../http/errors.ts'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import type { SessionUser } from '../../http/factory.ts'
 import { requireCustomer } from '../customers/customers.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
 import {
   appendConsumption,
+  branchActivity,
+  countEntries,
   findAccountByCustomerId,
   findEntryByIdempotencyKey,
+  insertAccountForCustomer,
   insertEntry,
   insertLot,
   listAccountIdsWithExpiredLots,
+  listEntries,
+  listLots,
+  listNegativeBalances,
   lockAccountById,
   lockExpiredLotsFefo,
   lockLotsFefo,
   lockOrCreateAccount,
+  sumOutstanding,
   updateAccountBalance,
   updateLotRemaining,
 } from './loyalty.repository.ts'
 import type {
   ExpiryRunResult,
+  LiabilityQuery,
+  LoyaltyAccountDetail,
   LoyaltyAccountRow,
+  LoyaltyEntryCreateBody,
   LoyaltyLedgerEntryRow,
+  LoyaltyLiabilityReport,
   LoyaltyLotConsumptionRow,
   LoyaltyLotRow,
   LoyaltyPostEntryInput,
@@ -349,4 +362,115 @@ export async function expireDueLots(now: Date = new Date()): Promise<ExpiryRunRe
   })
 
   return { accounts, lots, points }
+}
+
+function requirePostingBranch(user: SessionUser, requested: string | null | undefined): string {
+  const branchId = resolveBranchFilter(user, requested ?? null)
+  if (!branchId) throw new ValidationError('branchId is required to post a loyalty entry')
+  return branchId
+}
+
+/** Staff postings from the console and the POS (Phase 6/7 reuse this path). */
+export async function createEntry(
+  actor: AuditActor,
+  user: SessionUser,
+  input: LoyaltyEntryCreateBody,
+): Promise<LoyaltyPostingResult> {
+  return postEntry(actor, {
+    customerId: input.customerId,
+    branchId: requirePostingBranch(user, input.branchId),
+    kind: input.kind,
+    netPaidMinor: input.netPaidMinor,
+    pointsDelta: input.pointsDelta,
+    reasonCode: input.reasonCode,
+    note: input.note ?? null,
+    occurredAt: input.occurredAt,
+    referenceType: input.referenceType ?? null,
+    referenceId: input.referenceId ?? null,
+    referenceNumber: input.referenceNumber ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+  })
+}
+
+/** A date-only boundary (`midnight UTC`) means the whole day, inclusive. */
+function inclusiveEnd(date: Date): Date {
+  const isMidnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  return isMidnight ? new Date(date.getTime() + 86_400_000 - 1) : date
+}
+
+const RECENT_ENTRY_LIMIT = 20
+
+/**
+ * Global read: loyalty is one balance per customer across branches; entries
+ * carry their branch for display. Bootstraps the account if it is missing so
+ * the 1:1 guarantee stays total.
+ */
+export async function getAccountDetail(customerId: string): Promise<LoyaltyAccountDetail> {
+  await requireCustomer(customerId)
+  await insertAccountForCustomer(customerId)
+  const account = await findAccountByCustomerId(customerId)
+  if (!account) throw new NotFoundError('Loyalty account not found')
+
+  const [lots, entries, entryTotal] = await Promise.all([
+    listLots(account.id),
+    listEntries(account.id, { limit: RECENT_ENTRY_LIMIT }),
+    countEntries(account.id),
+  ])
+
+  return {
+    accountId: account.id,
+    customerId,
+    balancePoints: account.balancePoints,
+    lots,
+    entries,
+    entryTotal,
+  }
+}
+
+/**
+ * Liability report: outstanding points and their redemption value, activity
+ * totals per branch for the range (managers are scoped to their own branch
+ * plus global expiry rows; admins see every branch), and negative balances
+ * (managers see the customers their branch owns).
+ */
+export async function getLiability(
+  user: SessionUser,
+  query: LiabilityQuery,
+): Promise<LoyaltyLiabilityReport> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const from = query.from ?? null
+  const to = query.to ? inclusiveEnd(query.to) : null
+  const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {})
+
+  const [totals, activityRows, negativeBalances] = await Promise.all([
+    sumOutstanding(),
+    branchActivity({ from, to, branchId }),
+    listNegativeBalances(branchId),
+  ])
+
+  return {
+    asOf: new Date().toISOString(),
+    pointsPerCedi,
+    outstandingPoints: totals.points,
+    outstandingValueMinor: Math.floor((totals.points * 100) / pointsPerCedi),
+    activity: {
+      from: from?.toISOString() ?? null,
+      to: to?.toISOString() ?? null,
+      branchId,
+      rows: activityRows.map((row) => ({
+        ...row,
+        netPoints:
+          row.earnedPoints -
+          row.redeemedPoints -
+          row.clawedBackPoints +
+          row.adjustedPoints -
+          row.expiredPoints,
+      })),
+    },
+    negativeBalances,
+  }
 }

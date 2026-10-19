@@ -1,5 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { and, asc, count, desc, eq, gt, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, lt, lte, type SQL, sql } from 'drizzle-orm'
+import { customer } from '../customers/customers.schema.ts'
 import {
   loyaltyAccount,
   loyaltyLedgerEntry,
@@ -8,10 +9,13 @@ import {
 } from './loyalty.schema.ts'
 import type {
   LoyaltyAccountRow,
+  LoyaltyBranchActivityTotals,
   LoyaltyEntryListOptions,
   LoyaltyLedgerEntryRow,
   LoyaltyLotConsumptionRow,
   LoyaltyLotRow,
+  LoyaltyNegativeBalance,
+  LoyaltyOutstandingTotals,
 } from './loyalty.types.ts'
 
 /** Bootstrap helper: guarantees the 1:1 account exists before it is locked. */
@@ -263,4 +267,83 @@ export async function lockExpiredLotsFefo(
     )
     .orderBy(asc(loyaltyLot.expiresAt), asc(loyaltyLot.earnEntryId))
     .for('update')
+}
+
+/**
+ * Per-branch activity totals for the range. Managers get their own branch plus
+ * the global (branch-less) expiry rows; admins see every branch.
+ */
+export async function branchActivity(
+  filter: { from: Date | null; to: Date | null; branchId: string | null },
+  executor: DbExecutor = db,
+): Promise<LoyaltyBranchActivityTotals[]> {
+  const conditions: SQL[] = []
+  if (filter.from) conditions.push(gte(loyaltyLedgerEntry.occurredAt, filter.from))
+  if (filter.to) conditions.push(lte(loyaltyLedgerEntry.occurredAt, filter.to))
+  if (filter.branchId) {
+    conditions.push(
+      sql`(${loyaltyLedgerEntry.branchId} = ${filter.branchId} or (${loyaltyLedgerEntry.branchId} is null and ${loyaltyLedgerEntry.kind} = 'EXPIRE'))`,
+    )
+  }
+
+  const sumFor = (condition: SQL) =>
+    sql<number>`coalesce(sum(case when ${condition} then ${loyaltyLedgerEntry.pointsDelta} else 0 end), 0)`.mapWith(
+      Number,
+    )
+
+  return executor
+    .select({
+      branchId: loyaltyLedgerEntry.branchId,
+      earnedPoints: sumFor(sql`${loyaltyLedgerEntry.kind} = 'EARN'`),
+      redeemedPoints:
+        sql<number>`coalesce(sum(case when ${loyaltyLedgerEntry.kind} = 'REDEEM' then -(${loyaltyLedgerEntry.pointsDelta}) else 0 end), 0)`.mapWith(
+          Number,
+        ),
+      clawedBackPoints:
+        sql<number>`coalesce(sum(case when ${loyaltyLedgerEntry.kind} = 'CLAWBACK' then -(${loyaltyLedgerEntry.pointsDelta}) else 0 end), 0)`.mapWith(
+          Number,
+        ),
+      adjustedPoints: sumFor(sql`${loyaltyLedgerEntry.kind} = 'ADJUST'`),
+      expiredPoints:
+        sql<number>`coalesce(sum(case when ${loyaltyLedgerEntry.kind} = 'EXPIRE' then -(${loyaltyLedgerEntry.pointsDelta}) else 0 end), 0)`.mapWith(
+          Number,
+        ),
+    })
+    .from(loyaltyLedgerEntry)
+    .where(and(...conditions))
+    .groupBy(loyaltyLedgerEntry.branchId)
+    .orderBy(asc(loyaltyLedgerEntry.branchId))
+}
+
+/** Outstanding points across every account (the loyalty liability). */
+export async function sumOutstanding(executor: DbExecutor = db): Promise<LoyaltyOutstandingTotals> {
+  const rows = await executor
+    .select({
+      accounts: count(),
+      points: sql<number>`coalesce(sum(${loyaltyAccount.balancePoints}), 0)`.mapWith(Number),
+    })
+    .from(loyaltyAccount)
+  return { accounts: Number(rows[0]?.accounts ?? 0), points: rows[0]?.points ?? 0 }
+}
+
+/** Accounts with a negative balance, optionally scoped to a customer branch. */
+export async function listNegativeBalances(
+  branchId: string | null,
+  executor: DbExecutor = db,
+): Promise<LoyaltyNegativeBalance[]> {
+  const conditions: SQL[] = [lt(loyaltyAccount.balancePoints, 0)]
+  if (branchId) conditions.push(eq(customer.createdBranchId, branchId))
+
+  return executor
+    .select({
+      customerId: loyaltyAccount.customerId,
+      customerName: customer.name,
+      branchId: customer.createdBranchId,
+      balancePoints: loyaltyAccount.balancePoints,
+    })
+    .from(loyaltyAccount)
+    .innerJoin(customer, eq(loyaltyAccount.customerId, customer.id))
+    .where(and(...conditions))
+    .orderBy(asc(loyaltyAccount.balancePoints))
+    .limit(200)
 }

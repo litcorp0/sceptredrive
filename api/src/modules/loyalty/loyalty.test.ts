@@ -1,9 +1,17 @@
 import { db } from '@gikautos/db'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  signIn,
+  uniqueSuffix,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
 import { ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import { customer } from '../customers/customers.schema.ts'
+import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -15,7 +23,7 @@ import {
   loyaltyLotConsumption,
 } from './loyalty.schema.ts'
 import { earnPointsForSale, expireDueLots, postEntry, quoteRedeem } from './loyalty.service.ts'
-import type { LoyaltyPostEntryInput } from './loyalty.types.ts'
+import type { LoyaltyLiabilityReport, LoyaltyPostEntryInput } from './loyalty.types.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[loyalty.test] database unavailable; integration tests skipped')
@@ -38,7 +46,7 @@ describe.skipIf(!available)('loyalty service', () => {
 
   const actorIds: string[] = []
 
-  function makeActor(label: string): AuditActor {
+  function makeActor(label: string): AuditActor & { actorId: string } {
     const id = `loyalty-actor-${suffix}-${label}`
     actorIds.push(id)
     return {
@@ -424,5 +432,332 @@ describe.skipIf(!available)('loyalty service', () => {
       post({ customerId: crypto.randomUUID(), kind: 'EARN', netPaidMinor: 1_000 }),
     )
     expect(unknown).toBeInstanceOf(NotFoundError)
+  })
+})
+
+describe.skipIf(!available)('loyalty HTTP', () => {
+  const suffix = uniqueSuffix()
+  const createdUserIds: string[] = []
+  const createdCustomerIds: string[] = []
+  let branchAId = ''
+  let branchBId = ''
+  let adminCookie = ''
+  let managerCookie = ''
+  let cashierCookie = ''
+
+  async function createCustomerRow(name: string, createdBranchId: string): Promise<string> {
+    const rows = await db
+      .insert(customer)
+      .values({ name: `${name} ${suffix}`, createdBranchId })
+      .returning({ id: customer.id })
+    const id = rows[0]?.id
+    if (!id) throw new Error('customer fixture insert failed')
+    createdCustomerIds.push(id)
+    return id
+  }
+
+  async function readJson<T>(response: Response): Promise<T> {
+    return (await response.json()) as T
+  }
+
+  beforeAll(async () => {
+    const branches = await db
+      .insert(branch)
+      .values([
+        {
+          code: `LOYHTTP-${suffix}-A`,
+          name: `Loyalty HTTP A ${suffix}`,
+          type: 'RETAIL',
+          city: 'Accra',
+        },
+        {
+          code: `LOYHTTP-${suffix}-B`,
+          name: `Loyalty HTTP B ${suffix}`,
+          type: 'RETAIL',
+          city: 'Kumasi',
+        },
+      ])
+      .returning({ id: branch.id })
+    branchAId = branches[0]?.id ?? ''
+    branchBId = branches[1]?.id ?? ''
+
+    const admin = await createTestUser({ role: 'ADMIN' })
+    createdUserIds.push(admin.id)
+    adminCookie = await signIn(admin.email)
+
+    const manager = await createTestUser({ role: 'MANAGER', branchId: branchAId })
+    createdUserIds.push(manager.id)
+    managerCookie = await signIn(manager.email)
+
+    const cashier = await createTestUser({ role: 'CASHIER', branchId: branchAId })
+    createdUserIds.push(cashier.id)
+    cashierCookie = await signIn(cashier.email)
+  })
+
+  afterAll(async () => {
+    for (const customerId of createdCustomerIds) {
+      const account = await findAccountByCustomerId(customerId)
+      if (account) {
+        const lots = await db
+          .select({ id: loyaltyLot.id })
+          .from(loyaltyLot)
+          .where(eq(loyaltyLot.accountId, account.id))
+        const lotIds = lots.map((lot) => lot.id)
+        if (lotIds.length > 0) {
+          await db.delete(loyaltyLotConsumption).where(inArray(loyaltyLotConsumption.lotId, lotIds))
+        }
+        await db.delete(loyaltyLot).where(eq(loyaltyLot.accountId, account.id))
+        await db.delete(loyaltyLedgerEntry).where(eq(loyaltyLedgerEntry.accountId, account.id))
+        await db.delete(loyaltyAccount).where(eq(loyaltyAccount.id, account.id))
+      }
+    }
+    if (createdCustomerIds.length > 0) {
+      await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
+    }
+    if (createdUserIds.length > 0) {
+      await db.delete(auditLog).where(inArray(auditLog.actorId, createdUserIds))
+      await db.delete(userTable).where(inArray(userTable.id, createdUserIds))
+    }
+    for (const id of [branchAId, branchBId]) {
+      if (id) await db.delete(branch).where(eq(branch.id, id))
+    }
+  })
+
+  it('requires a session', async () => {
+    const response = await app.request(`/api/loyalty/accounts/${crypto.randomUUID()}`)
+    expect(response.status).toBe(401)
+  })
+
+  it('denies cashiers on every loyalty endpoint', async () => {
+    const account = await app.request(`/api/loyalty/accounts/${crypto.randomUUID()}`, {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(account.status).toBe(403)
+
+    const entry = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({ customerId: crypto.randomUUID(), kind: 'EARN', netPaidMinor: 1_000 }),
+    })
+    expect(entry.status).toBe(403)
+
+    const liability = await app.request('/api/loyalty/liability', {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(liability.status).toBe(403)
+  })
+
+  it('lets a manager earn, redeem with a quote, and read the account', async () => {
+    const customerId = await createCustomerRow('HTTP Flow', branchAId)
+
+    const earn = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'EARN', netPaidMinor: 1_075 }),
+    })
+    expect(earn.status).toBe(201)
+    const earnBody = await readJson<{
+      entry: { pointsDelta: number; branchId: string | null }
+      account: { balancePoints: number }
+      lot: { expiresAt: string } | null
+    }>(earn)
+    expect(earnBody.entry.pointsDelta).toBe(10)
+    // The manager posts to their own branch without naming it.
+    expect(earnBody.entry.branchId).toBe(branchAId)
+    expect(earnBody.account.balancePoints).toBe(10)
+    expect(earnBody.lot?.expiresAt).toBeTruthy()
+
+    const topUp = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'EARN', netPaidMinor: 30_000 }),
+    })
+    expect(topUp.status).toBe(201)
+
+    // 250 points at 100 points per cedi → GHS 2.50 = 250 pesewas.
+    const redeem = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'REDEEM', points: 250 }),
+    })
+    expect(redeem.status).toBe(201)
+    const redeemBody = await readJson<{
+      entry: { kind: string; pointsDelta: number }
+      account: { balancePoints: number }
+      quote: { points: number; discountMinor: number } | null
+      consumption: Array<{ points: number }>
+    }>(redeem)
+    expect(redeemBody.entry.kind).toBe('REDEEM')
+    expect(redeemBody.entry.pointsDelta).toBe(-250)
+    expect(redeemBody.quote).toEqual({ points: 250, discountMinor: 250 })
+    expect(redeemBody.account.balancePoints).toBe(60)
+    expect(redeemBody.consumption.length).toBeGreaterThan(0)
+
+    const belowMinimum = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'REDEEM', points: 50 }),
+    })
+    expect(belowMinimum.status).toBe(409)
+
+    const account = await app.request(`/api/loyalty/accounts/${customerId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(account.status).toBe(200)
+    const accountBody = await readJson<{
+      balancePoints: number
+      lots: Array<{ points: number; remainingPoints: number }>
+      entries: Array<{ kind: string }>
+      entryTotal: number
+    }>(account)
+    expect(accountBody.balancePoints).toBe(60)
+    expect(accountBody.entryTotal).toBe(3)
+    expect(accountBody.entries[0]?.kind).toBe('REDEEM')
+    expect(accountBody.lots.reduce((sum, lot) => sum + lot.remainingPoints, 0)).toBe(60)
+  })
+
+  it('validates postings at the edge and requires a branch for admins', async () => {
+    const customerId = await createCustomerRow('HTTP Invalid', branchAId)
+
+    const adjustWithoutReason = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'ADJUST', points: 10 }),
+    })
+    expect(adjustWithoutReason.status).toBe(400)
+
+    const clawbackWrongReason = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CLAWBACK', points: 10, reasonCode: 'OTHER' }),
+    })
+    expect(clawbackWrongReason.status).toBe(400)
+
+    const earnWithPoints = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'EARN', netPaidMinor: 1_000, points: 5 }),
+    })
+    expect(earnWithPoints.status).toBe(400)
+
+    const unknownCustomer = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId: crypto.randomUUID(), kind: 'EARN', netPaidMinor: 1_000 }),
+    })
+    expect(unknownCustomer.status).toBe(404)
+
+    // Admins must name the posting branch.
+    const adminNoBranch = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ customerId, kind: 'EARN', netPaidMinor: 1_000 }),
+    })
+    expect(adminNoBranch.status).toBe(400)
+  })
+
+  it('reports liability with per-branch activity and negative balances', async () => {
+    const customerB = await createCustomerRow('HTTP Branch B', branchBId)
+    const branchBEarn = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        customerId: customerB,
+        branchId: branchBId,
+        kind: 'EARN',
+        netPaidMinor: 10_000,
+      }),
+    })
+    expect(branchBEarn.status).toBe(201)
+
+    const negativeA = await createCustomerRow('HTTP Negative A', branchAId)
+    await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId: negativeA, kind: 'EARN', netPaidMinor: 5_000 }),
+    })
+    const clawbackA = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId: negativeA, kind: 'CLAWBACK', points: 80 }),
+    })
+    expect(clawbackA.status).toBe(201)
+    const clawbackABody = await readJson<{ account: { balancePoints: number } }>(clawbackA)
+    expect(clawbackABody.account.balancePoints).toBe(-30)
+
+    const negativeB = await createCustomerRow('HTTP Negative B', branchBId)
+    await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        customerId: negativeB,
+        branchId: branchBId,
+        kind: 'EARN',
+        netPaidMinor: 2_000,
+      }),
+    })
+    const clawbackB = await app.request('/api/loyalty/entries', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        customerId: negativeB,
+        branchId: branchBId,
+        kind: 'CLAWBACK',
+        points: 50,
+      }),
+    })
+    expect(clawbackB.status).toBe(201)
+
+    const adminReport = await app.request('/api/loyalty/liability', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(adminReport.status).toBe(200)
+    const adminBody = await readJson<LoyaltyLiabilityReport>(adminReport)
+    expect(adminBody.pointsPerCedi).toBe(100)
+    // The GHS value always follows the redemption-rate maths.
+    expect(adminBody.outstandingValueMinor).toBe(
+      Math.floor((adminBody.outstandingPoints * 100) / adminBody.pointsPerCedi),
+    )
+
+    const rowA = adminBody.activity.rows.find((row) => row.branchId === branchAId)
+    expect(rowA).toMatchObject({
+      earnedPoints: 360,
+      redeemedPoints: 250,
+      clawedBackPoints: 80,
+      adjustedPoints: 0,
+      expiredPoints: 0,
+      netPoints: 30,
+    })
+    const rowB = adminBody.activity.rows.find((row) => row.branchId === branchBId)
+    expect(rowB).toMatchObject({ earnedPoints: 120, clawedBackPoints: 50, netPoints: 70 })
+
+    expect(adminBody.negativeBalances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ customerId: negativeA, balancePoints: -30 }),
+        expect.objectContaining({ customerId: negativeB, balancePoints: -30 }),
+      ]),
+    )
+
+    // Managers see their own branch's activity plus the all-branch balance.
+    const managerReport = await app.request('/api/loyalty/liability', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(managerReport.status).toBe(200)
+    const managerBody = await readJson<LoyaltyLiabilityReport>(managerReport)
+    expect(managerBody.activity.branchId).toBe(branchAId)
+    expect(managerBody.activity.rows.some((row) => row.branchId === branchAId)).toBe(true)
+    expect(managerBody.activity.rows.some((row) => row.branchId === branchBId)).toBe(false)
+    // All-branch balance: includes branch B's +100 net, not just own-branch totals.
+    expect(managerBody.outstandingPoints).toBeGreaterThanOrEqual(100)
+    expect(managerBody.outstandingValueMinor).toBe(
+      Math.floor((managerBody.outstandingPoints * 100) / managerBody.pointsPerCedi),
+    )
+    expect(managerBody.negativeBalances.some((row) => row.customerId === negativeA)).toBe(true)
+    expect(managerBody.negativeBalances.some((row) => row.customerId === negativeB)).toBe(false)
+
+    const crossBranch = await app.request(`/api/loyalty/liability?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(crossBranch.status).toBe(403)
   })
 })
