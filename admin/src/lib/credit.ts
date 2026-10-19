@@ -1,4 +1,9 @@
-import type { CreditEntryKind, CreditMethod, CreditReasonCode } from "#/lib/api-types"
+import type {
+	CreditEntryKind,
+	CreditMethod,
+	CreditOverrideReason,
+	CreditReasonCode,
+} from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
 
 export const CREDIT_KIND_LABELS: Record<CreditEntryKind, string> = {
@@ -28,6 +33,13 @@ export const CREDIT_REASON_LABELS: Record<CreditReasonCode, string> = {
 	WRITE_OFF: "Write-off",
 	DISPUTE: "Dispute",
 	RETURN: "Return",
+	OTHER: "Other",
+}
+
+export const CREDIT_OVERRIDE_LABELS: Record<CreditOverrideReason, string> = {
+	TEMPORARY_APPROVAL: "Temporary approval",
+	TRUSTED_CUSTOMER: "Trusted customer",
+	URGENT_NEED: "Urgent need",
 	OTHER: "Other",
 }
 

@@ -725,6 +725,40 @@ export interface CreditProfileUpdateInput {
 	notes?: string | null
 }
 
+export type CreditOverrideReason =
+	| "TEMPORARY_APPROVAL"
+	| "TRUSTED_CUSTOMER"
+	| "URGENT_NEED"
+	| "OTHER"
+
+export interface RepaymentCreateInput {
+	customerId: string
+	branchId?: string
+	/** Positive minor units; the server stores the negative ledger sign. */
+	amountMinor: number
+	method: CreditMethod
+	note?: string
+	idempotencyKey?: string
+}
+
+export interface CreditEntryCreateInput {
+	customerId: string
+	branchId?: string
+	kind: "CHARGE" | "REFUND" | "ADJUSTMENT"
+	/** CHARGE/REFUND positive; ADJUSTMENT signed non-zero. */
+	amountMinor: number
+	reasonCode?: CreditReasonCode
+	referenceNumber?: string
+	note?: string
+	idempotencyKey?: string
+	override?: { reasonCode: CreditOverrideReason; note?: string }
+}
+
+export interface CreditPostingResult {
+	entry: CreditEntry
+	profile: CreditProfile
+}
+
 export interface CreditEntry {
 	id: string
 	customerId: string

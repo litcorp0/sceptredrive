@@ -20,8 +20,10 @@ import type {
 	CountCreateInput,
 	CountListQuery,
 	CreateStaffResult,
+	CreditEntryCreateInput,
 	CreditEntryListQuery,
 	CreditEntryListResult,
+	CreditPostingResult,
 	CreditProfile,
 	CreditProfileListRow,
 	CreditProfileUpdateInput,
@@ -46,6 +48,7 @@ import type {
 	ProductWithBarcodes,
 	ReceiptCreateInput,
 	ReceiptListQuery,
+	RepaymentCreateInput,
 	ResetPasswordResult,
 	ResolvedSetting,
 	SettingsUpdateInput,
@@ -241,6 +244,15 @@ export const api = {
 		entries: {
 			list: (query: CreditEntryListQuery) =>
 				apiRequest<CreditEntryListResult>("/api/credit/entries", { query }),
+			create: (input: CreditEntryCreateInput) =>
+				apiRequest<CreditPostingResult>("/api/credit/entries", { method: "POST", body: input }),
+		},
+		repayments: {
+			create: (input: RepaymentCreateInput) =>
+				apiRequest<CreditPostingResult>("/api/credit/repayments", {
+					method: "POST",
+					body: input,
+				}),
 		},
 	},
 

@@ -4,9 +4,11 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { ActiveBadge, StatusBadge } from "#/components/common/status-badge"
+import { CreditEntryDialog } from "#/components/customers/credit-entry-dialog"
 import { CreditLedgerTable } from "#/components/customers/credit-ledger-table"
 import { CreditProfileDialog } from "#/components/customers/credit-profile-dialog"
 import { CustomerFormDialog } from "#/components/customers/customer-form-dialog"
+import { RepaymentDialog } from "#/components/customers/repayment-dialog"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -48,10 +50,15 @@ function CustomerProfilePage() {
 	const { branches, activeBranchId, canSelectBranch } = useBranch()
 	const canEdit = hasPermission(session.user.role, "customer.update")
 	const canManageCredit = hasPermission(session.user.role, "credit.profile.manage")
+	const canRecordRepayment = hasPermission(session.user.role, "credit.repayment")
+	const canAdjust = hasPermission(session.user.role, "credit.adjust")
+	const canOverride = hasPermission(session.user.role, "credit.override")
 
 	const [tab, setTab] = useState("overview")
 	const [editOpen, setEditOpen] = useState(false)
 	const [creditDialogOpen, setCreditDialogOpen] = useState(false)
+	const [repaymentOpen, setRepaymentOpen] = useState(false)
+	const [entryOpen, setEntryOpen] = useState(false)
 	const [creditBranchId, setCreditBranchId] = useState<string | null>(null)
 
 	const customerQuery = useQuery({
@@ -193,11 +200,23 @@ function CustomerProfilePage() {
 								Credit limit and terms apply per branch; the balance always follows the ledger.
 							</CardDescription>
 							<CardAction>
-								{canManageCredit && effectiveBranchId ? (
-									<Button size="sm" variant="outline" onClick={() => setCreditDialogOpen(true)}>
-										{selectedProfile ? "Credit settings" : "Set up credit"}
-									</Button>
-								) : null}
+								<div className="flex flex-wrap items-center justify-end gap-2">
+									{canRecordRepayment && effectiveBranchId ? (
+										<Button size="sm" onClick={() => setRepaymentOpen(true)}>
+											Record repayment
+										</Button>
+									) : null}
+									{canAdjust && effectiveBranchId ? (
+										<Button size="sm" variant="outline" onClick={() => setEntryOpen(true)}>
+											New entry
+										</Button>
+									) : null}
+									{canManageCredit && effectiveBranchId ? (
+										<Button size="sm" variant="outline" onClick={() => setCreditDialogOpen(true)}>
+											{selectedProfile ? "Credit settings" : "Set up credit"}
+										</Button>
+									) : null}
+								</div>
 							</CardAction>
 						</CardHeader>
 						<CardContent className="grid gap-4">
@@ -340,6 +359,25 @@ function CustomerProfilePage() {
 				branchId={effectiveBranchId}
 				branchName={selectedBranch?.name ?? null}
 				profile={selectedProfile}
+			/>
+			<RepaymentDialog
+				open={repaymentOpen}
+				onOpenChange={setRepaymentOpen}
+				customerId={id}
+				branchId={effectiveBranchId}
+				branchName={selectedBranch?.name ?? null}
+				currentBalanceMinor={selectedProfile?.balanceMinor ?? null}
+				receivedBy={session.user.name}
+			/>
+			<CreditEntryDialog
+				open={entryOpen}
+				onOpenChange={setEntryOpen}
+				customerId={id}
+				branchId={effectiveBranchId}
+				branchName={selectedBranch?.name ?? null}
+				currentBalanceMinor={selectedProfile?.balanceMinor ?? null}
+				limitMinor={selectedProfile?.limitMinor ?? null}
+				canOverride={canOverride}
 			/>
 		</div>
 	)
