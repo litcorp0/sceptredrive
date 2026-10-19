@@ -85,6 +85,30 @@ describe('permissions', () => {
     expect(can('CASHIER', 'loyalty.read')).toBe(false)
   })
 
+  it('lets managers read suppliers and run payables, but not edit the supplier master', () => {
+    expect(can('MANAGER', 'supplier.read')).toBe(true)
+    expect(can('MANAGER', 'supplier.create')).toBe(false)
+    expect(can('MANAGER', 'supplier.update')).toBe(false)
+    expect(can('MANAGER', 'supplier.archive')).toBe(false)
+
+    expect(can('MANAGER', 'payable.read')).toBe(true)
+    expect(can('MANAGER', 'payable.invoice.manage')).toBe(true)
+    expect(can('MANAGER', 'payable.payment')).toBe(true)
+    expect(can('MANAGER', 'payable.void')).toBe(true)
+
+    expect(can('ADMIN', 'supplier.create')).toBe(true)
+    expect(can('ADMIN', 'supplier.archive')).toBe(true)
+    expect(can('ADMIN', 'payable.void')).toBe(true)
+  })
+
+  it('keeps cashiers out of phase 5 permissions', () => {
+    expect(can('CASHIER', 'supplier.read')).toBe(false)
+    expect(can('CASHIER', 'payable.read')).toBe(false)
+    expect(can('CASHIER', 'payable.invoice.manage')).toBe(false)
+    expect(can('CASHIER', 'payable.payment')).toBe(false)
+    expect(can('CASHIER', 'payable.void')).toBe(false)
+  })
+
   it('has no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
