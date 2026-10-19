@@ -84,8 +84,8 @@ const SETTING_META: SettingMeta[] = [
 		key: "loyalty.earnPointsPerCedi",
 		group: "Loyalty",
 		label: "Points earned per GHS 1",
-		description: "How many points a customer earns per cedi spent.",
-		type: "decimal",
+		description: "Whole points earned per cedi spent (calculated with a floor per sale).",
+		type: "int",
 	},
 	{
 		key: "loyalty.pointsPerCedi",
@@ -99,6 +99,27 @@ const SETTING_META: SettingMeta[] = [
 		group: "Loyalty",
 		label: "Points expiry (months)",
 		description: "Points expire after this many months.",
+		type: "int",
+	},
+	{
+		key: "loyalty.minimumRedeemPoints",
+		group: "Loyalty",
+		label: "Minimum redemption (points)",
+		description: "The smallest redemption accepted at the till and in the console.",
+		type: "int",
+	},
+	{
+		key: "credit.repaymentPrefix",
+		group: "Credit",
+		label: "Repayment receipt prefix",
+		description: "Prefix for credit repayment receipts, e.g. REP-00001.",
+		type: "text",
+	},
+	{
+		key: "credit.repaymentSequence",
+		group: "Credit",
+		label: "Next repayment number",
+		description: "The next repayment number to allocate. Changing this affects new receipts only.",
 		type: "int",
 	},
 ]
