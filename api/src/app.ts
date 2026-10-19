@@ -21,6 +21,7 @@ import { terminalsRoutes } from './modules/org/terminals.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
+import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -47,6 +48,7 @@ app.route('/', countsRoutes)
 app.route('/', customersRoutes)
 app.route('/', creditRoutes)
 app.route('/', loyaltyRoutes)
+app.route('/', suppliersRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
