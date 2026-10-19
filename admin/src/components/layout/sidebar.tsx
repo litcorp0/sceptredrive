@@ -21,6 +21,7 @@ interface NavItem {
 		| "/branches"
 		| "/terminals"
 		| "/staff"
+		| "/customers"
 		| "/catalog"
 		| "/inventory"
 		| "/audit"
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/branches", label: "Branches", icon: Building2, permission: "branch.read" },
 	{ to: "/terminals", label: "Terminals", icon: MonitorSmartphone, permission: "terminal.read" },
 	{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },
+	{ to: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
 	{ to: "/audit", label: "Audit log", icon: ScrollText, permission: "audit.read" },
 	{ to: "/settings", label: "Settings", icon: Settings2, permission: "settings.read" },
 ]

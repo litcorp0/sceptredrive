@@ -20,6 +20,11 @@ import type {
 	CountCreateInput,
 	CountListQuery,
 	CreateStaffResult,
+	CustomerCreateInput,
+	CustomerDetail,
+	CustomerListQuery,
+	CustomerListRow,
+	CustomerSearchResult,
 	Device,
 	Enrollment,
 	InventoryReceipt,
@@ -199,6 +204,17 @@ export const api = {
 			apiRequest<{ staff: Staff }>(`/api/staff/${id}/reactivate`, { method: "POST" }),
 		changeOwnPassword: (input: ChangePasswordInput) =>
 			apiRequest<{ ok: true }>("/api/me/password", { method: "POST", body: input }),
+	},
+
+	customers: {
+		list: (query: CustomerListQuery = {}) =>
+			apiRequest<CustomerSearchResult>("/api/customers", { query }),
+		get: (id: string) => apiRequest<CustomerDetail>(`/api/customers/${id}`),
+		create: (input: CustomerCreateInput) =>
+			apiRequest<{ customer: CustomerListRow }>("/api/customers", {
+				method: "POST",
+				body: input,
+			}),
 	},
 
 	audit: {

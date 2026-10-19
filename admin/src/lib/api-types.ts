@@ -615,3 +615,66 @@ export type CountListQuery = {
 	limit?: number
 	offset?: number
 }
+
+export type CustomerStatus = "ACTIVE" | "ARCHIVED"
+
+export interface CustomerListRow {
+	id: string
+	name: string
+	phone: string | null
+	email: string | null
+	address: string | null
+	status: CustomerStatus
+	anonymizedAt: string | null
+	createdBranchId: string
+	createdBranchCode: string
+	createdBranchName: string
+	createdAt: string
+	updatedAt: string
+}
+
+export interface CustomerCreditProfileRow {
+	id: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	limitMinor: number
+	hold: boolean
+	paymentTermDays: number
+	balanceMinor: number
+}
+
+export interface CustomerLoyaltySummary {
+	accountId: string
+	balancePoints: number
+}
+
+export interface CustomerDetail {
+	customer: CustomerListRow
+	creditProfiles: CustomerCreditProfileRow[]
+	loyalty: CustomerLoyaltySummary | null
+}
+
+export interface CustomerSearchResult {
+	customers: CustomerListRow[]
+	total: number
+	page: number
+	pageSize: number
+}
+
+export type CustomerListQuery = {
+	q?: string
+	page?: number
+	pageSize?: number
+	includeArchived?: boolean
+	branchId?: string
+}
+
+export interface CustomerCreateInput {
+	name: string
+	phone: string
+	email?: string
+	address?: string
+	/** Required when an admin creates (managers default to their own branch). */
+	branchId?: string
+}
