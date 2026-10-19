@@ -17,6 +17,7 @@ import { branch } from '../org/branches.schema.ts'
 import { supplierInvoice, supplierPayment } from '../payables/payables.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
+import { allocateFromSequence } from '../platform/settings.service.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierPaymentDetail, supplierProduct } from './suppliers.schema.ts'
 import * as suppliersService from './suppliers.service.ts'
@@ -97,6 +98,11 @@ describe.skipIf(!available)('suppliers module', () => {
   }
 
   beforeAll(async () => {
+    // Skip the demo supplier codes (SUP-00001/2) that seed fixtures insert with
+    // explicit values into the shared test database.
+    await allocateFromSequence('supplier.codeSequence', db)
+    await allocateFromSequence('supplier.codeSequence', db)
+
     const branches = await db
       .insert(branch)
       .values({
