@@ -1,5 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { and, asc, count, desc, eq, gte, inArray, lt, lte, type SQL, sql } from 'drizzle-orm'
+import { stockReceipt } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier } from '../suppliers/suppliers.schema.ts'
@@ -11,6 +12,7 @@ import {
 } from './payables.schema.ts'
 import type {
   InvoiceAllocationRow,
+  InvoiceDetailHeader,
   InvoiceLineView,
   InvoiceListFilters,
   InvoiceListRow,
@@ -68,6 +70,61 @@ export async function findInvoiceById(
     .where(eq(supplierInvoice.id, id))
     .limit(1)
   return rows[0] ?? null
+}
+
+/** Invoice header joined with supplier and linked receipt summaries (detail view). */
+export async function selectInvoiceDetailHeader(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<InvoiceDetailHeader | null> {
+  const rows = await executor
+    .select({
+      id: supplierInvoice.id,
+      number: supplierInvoice.number,
+      supplierId: supplierInvoice.supplierId,
+      branchId: supplierInvoice.branchId,
+      supplierInvoiceNumber: supplierInvoice.supplierInvoiceNumber,
+      invoiceDate: supplierInvoice.invoiceDate,
+      dueDate: supplierInvoice.dueDate,
+      receiptId: supplierInvoice.receiptId,
+      subtotalMinor: supplierInvoice.subtotalMinor,
+      vatMinor: supplierInvoice.vatMinor,
+      nhilMinor: supplierInvoice.nhilMinor,
+      getfundMinor: supplierInvoice.getfundMinor,
+      totalMinor: supplierInvoice.totalMinor,
+      amountPaidMinor: supplierInvoice.amountPaidMinor,
+      status: supplierInvoice.status,
+      voidReason: supplierInvoice.voidReason,
+      voidedBy: supplierInvoice.voidedBy,
+      voidedAt: supplierInvoice.voidedAt,
+      note: supplierInvoice.note,
+      idempotencyKey: supplierInvoice.idempotencyKey,
+      createdBy: supplierInvoice.createdBy,
+      createdAt: supplierInvoice.createdAt,
+      updatedAt: supplierInvoice.updatedAt,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      receiptNumber: stockReceipt.number,
+      receiptBranchId: stockReceipt.branchId,
+    })
+    .from(supplierInvoice)
+    .innerJoin(supplier, eq(supplier.id, supplierInvoice.supplierId))
+    .leftJoin(stockReceipt, eq(stockReceipt.id, supplierInvoice.receiptId))
+    .where(eq(supplierInvoice.id, id))
+    .limit(1)
+
+  const row = rows[0]
+  if (!row) return null
+
+  const { supplierCode, supplierName, receiptNumber, receiptBranchId, ...invoice } = row
+  return {
+    invoice,
+    supplier: { id: invoice.supplierId, code: supplierCode, name: supplierName },
+    receipt:
+      receiptNumber && receiptBranchId && invoice.receiptId
+        ? { id: invoice.receiptId, number: receiptNumber, branchId: receiptBranchId }
+        : null,
+  }
 }
 
 export async function findInvoiceByReceipt(

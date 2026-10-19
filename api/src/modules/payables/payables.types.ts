@@ -117,6 +117,17 @@ export interface InvoiceListResult {
   branchId: string | null
 }
 
+export interface InvoiceDetailHeader {
+  invoice: SupplierInvoiceRow
+  supplier: InvoiceSupplierSummary
+  receipt: InvoiceReceiptSummary | null
+}
+
+export interface InvoiceCreateResult {
+  invoice: InvoiceDetail
+  replayed: boolean
+}
+
 /** Payment row enriched with its allocated total (Plan 04 surfaces). */
 export interface PaymentListRow extends SupplierPaymentRow {
   allocatedMinor: number
