@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
 	Building2,
+	Gift,
 	LayoutDashboard,
 	type LucideIcon,
 	MonitorSmartphone,
@@ -22,6 +23,7 @@ interface NavItem {
 		| "/terminals"
 		| "/staff"
 		| "/customers"
+		| "/loyalty"
 		| "/catalog"
 		| "/inventory"
 		| "/audit"
@@ -39,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/terminals", label: "Terminals", icon: MonitorSmartphone, permission: "terminal.read" },
 	{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },
 	{ to: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
+	{ to: "/loyalty", label: "Loyalty", icon: Gift, permission: "loyalty.read" },
 	{ to: "/audit", label: "Audit log", icon: ScrollText, permission: "audit.read" },
 	{ to: "/settings", label: "Settings", icon: Settings2, permission: "settings.read" },
 ]

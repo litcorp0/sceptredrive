@@ -21,6 +21,7 @@ import { Route as AuthenticatedCatalogRouteRouteImport } from './routes/_authent
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
 import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
 import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authenticated/inventory/route'
+import { Route as AuthenticatedLoyaltyRouteImport } from './routes/_authenticated/loyalty'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedTerminalsRouteImport } from './routes/_authenticated/terminals'
@@ -112,6 +113,11 @@ const AuthenticatedInventoryRouteRoute =
     path: '/inventory',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLoyaltyRoute = AuthenticatedLoyaltyRouteImport.update({
+  id: '/loyalty',
+  path: '/loyalty',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -283,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AuthenticatedAuditRoute
   '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/loyalty': typeof AuthenticatedLoyaltyRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
@@ -319,6 +326,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AuthenticatedAuditRoute
   '/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/loyalty': typeof AuthenticatedLoyaltyRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
@@ -358,6 +366,7 @@ export interface FileRoutesById {
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRouteWithChildren
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
+  '/_authenticated/loyalty': typeof AuthenticatedLoyaltyRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
   '/_authenticated/terminals': typeof AuthenticatedTerminalsRoute
@@ -401,6 +410,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/branches'
     | '/change-password'
+    | '/loyalty'
     | '/settings'
     | '/staff'
     | '/terminals'
@@ -437,6 +447,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/branches'
     | '/change-password'
+    | '/loyalty'
     | '/settings'
     | '/staff'
     | '/terminals'
@@ -475,6 +486,7 @@ export interface FileRouteTypes {
     | '/_authenticated/audit'
     | '/_authenticated/branches'
     | '/_authenticated/change-password'
+    | '/_authenticated/loyalty'
     | '/_authenticated/settings'
     | '/_authenticated/staff'
     | '/_authenticated/terminals'
@@ -597,6 +609,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof AuthenticatedInventoryRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/loyalty': {
+      id: '/_authenticated/loyalty'
+      path: '/loyalty'
+      fullPath: '/loyalty'
+      preLoaderRoute: typeof AuthenticatedLoyaltyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -940,6 +959,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRouteWithChildren
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
+  AuthenticatedLoyaltyRoute: typeof AuthenticatedLoyaltyRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
   AuthenticatedTerminalsRoute: typeof AuthenticatedTerminalsRoute
@@ -955,6 +975,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedBranchesRoute: AuthenticatedBranchesRouteWithChildren,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
+  AuthenticatedLoyaltyRoute: AuthenticatedLoyaltyRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,
   AuthenticatedTerminalsRoute: AuthenticatedTerminalsRoute,
