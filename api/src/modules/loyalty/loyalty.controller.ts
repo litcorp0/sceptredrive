@@ -19,3 +19,8 @@ export async function getLiability(c: Context<AppEnv>, query: LiabilityQuery) {
   const user = currentUser(c)
   return c.json(await loyaltyService.getLiability(user, query))
 }
+
+/** Manual run of the same expiry seam the scheduled job calls; the run is audited. */
+export async function runExpiry(c: Context<AppEnv>) {
+  return c.json(await loyaltyService.expireDueLots())
+}

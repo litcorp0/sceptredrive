@@ -33,3 +33,10 @@ loyaltyRoutes.get(
   validateLiabilityQuery,
   (c) => loyaltyController.getLiability(c, c.req.valid('query')),
 )
+
+loyaltyRoutes.post(
+  '/api/loyalty/expiry-run',
+  requireSession,
+  requirePermission('loyalty.settings'),
+  (c) => loyaltyController.runExpiry(c),
+)

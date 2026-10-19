@@ -1,5 +1,6 @@
 import { db } from '@gikautos/db'
 import { eq, inArray } from 'drizzle-orm'
+import { PgBoss } from 'pg-boss'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   authedHeaders,
@@ -9,7 +10,9 @@ import {
   uniqueSuffix,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
+import { env } from '../../config/env.ts'
 import { ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import { LOYALTY_EXPIRY_QUEUE, registerJobHandlers } from '../../jobs/queues.ts'
 import { customer } from '../customers/customers.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -29,7 +32,11 @@ import {
   quoteRedeem,
   reconcileAccounts,
 } from './loyalty.service.ts'
-import type { LoyaltyLiabilityReport, LoyaltyPostEntryInput } from './loyalty.types.ts'
+import type {
+  ExpiryRunResult,
+  LoyaltyLiabilityReport,
+  LoyaltyPostEntryInput,
+} from './loyalty.types.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[loyalty.test] database unavailable; integration tests skipped')
@@ -654,6 +661,42 @@ describe.skipIf(!available)('loyalty HTTP', () => {
       headers: authedHeaders(cashierCookie),
     })
     expect(liability.status).toBe(403)
+
+    const expiryRun = await app.request('/api/loyalty/expiry-run', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(expiryRun.status).toBe(403)
+  })
+
+  it('gates the expiry trigger to admins and audits the run it returns', async () => {
+    const denied = await app.request('/api/loyalty/expiry-run', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+    })
+    expect(denied.status).toBe(403)
+
+    const runsBefore = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(eq(auditLog.action, 'loyalty.expiry_run'))
+
+    const response = await app.request('/api/loyalty/expiry-run', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+    })
+    expect(response.status).toBe(200)
+    const body = await readJson<ExpiryRunResult>(response)
+    expect(body.accounts).toBeGreaterThanOrEqual(0)
+    expect(body.lots).toBeGreaterThanOrEqual(0)
+    expect(body.points).toBeGreaterThanOrEqual(0)
+
+    // The engine writes one run-audit row per call, even when nothing was due.
+    const runsAfter = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(eq(auditLog.action, 'loyalty.expiry_run'))
+    expect(runsAfter.length).toBe(runsBefore.length + 1)
   })
 
   it('lets a manager earn, redeem with a quote, and read the account', async () => {
@@ -868,5 +911,152 @@ describe.skipIf(!available)('loyalty HTTP', () => {
       headers: authedHeaders(managerCookie),
     })
     expect(crossBranch.status).toBe(403)
+  })
+})
+
+describe.skipIf(!available)('loyalty expiry job', () => {
+  const suffix = uniqueSuffix()
+  const actorIds: string[] = []
+  const branchIds: string[] = []
+  const customerIds: string[] = []
+  let boss: PgBoss | null = null
+
+  function makeActor(label: string): AuditActor & { actorId: string } {
+    const id = `loyalty-job-actor-${suffix}-${label}`
+    actorIds.push(id)
+    return {
+      actorId: id,
+      actorStaffId: `GA-LOYALTY-JOB-${suffix}`,
+      ip: null,
+      userAgent: null,
+      requestId: null,
+    }
+  }
+
+  beforeAll(async () => {
+    const branches = await db
+      .insert(branch)
+      .values({
+        code: `LOYJOB-${suffix}`,
+        name: `Loyalty Job ${suffix}`,
+        type: 'RETAIL',
+        city: 'Accra',
+      })
+      .returning({ id: branch.id })
+    const branchId = branches[0]?.id
+    if (!branchId) throw new Error('branch fixture insert failed')
+    branchIds.push(branchId)
+
+    boss = new PgBoss({
+      connectionString: env.DATABASE_URL,
+      schedule: false,
+      __test__enableSpies: true,
+    })
+    boss.on('error', (error) => console.warn('[loyalty.test] pg-boss error', error))
+    await boss.start()
+    await registerJobHandlers(boss)
+  })
+
+  afterAll(async () => {
+    if (boss) {
+      await boss.unschedule(LOYALTY_EXPIRY_QUEUE)
+      await boss.stop()
+      boss = null
+    }
+    await db.delete(auditLog).where(inArray(auditLog.actorId, actorIds))
+    for (const customerId of customerIds) {
+      const account = await findAccountByCustomerId(customerId)
+      if (account) {
+        const lots = await db
+          .select({ id: loyaltyLot.id })
+          .from(loyaltyLot)
+          .where(eq(loyaltyLot.accountId, account.id))
+        const lotIds = lots.map((lot) => lot.id)
+        if (lotIds.length > 0) {
+          await db.delete(loyaltyLotConsumption).where(inArray(loyaltyLotConsumption.lotId, lotIds))
+        }
+        await db.delete(loyaltyLot).where(eq(loyaltyLot.accountId, account.id))
+        await db.delete(loyaltyLedgerEntry).where(eq(loyaltyLedgerEntry.accountId, account.id))
+        await db.delete(loyaltyAccount).where(eq(loyaltyAccount.id, account.id))
+      }
+    }
+    if (customerIds.length > 0) {
+      await db.delete(customer).where(inArray(customer.id, customerIds))
+    }
+    if (branchIds.length > 0) {
+      await db.delete(branch).where(inArray(branch.id, branchIds))
+    }
+  })
+
+  it('expires a due lot through the queue and no-ops on a re-run', {
+    timeout: 30_000,
+  }, async () => {
+    if (!boss) throw new Error('pg-boss was not started')
+    const branchId = branchIds[0]
+    if (!branchId) throw new Error('branch fixture is missing')
+
+    const customerRows = await db
+      .insert(customer)
+      .values({ name: `Loyalty Job Customer ${suffix}`, createdBranchId: branchId })
+      .returning({ id: customer.id })
+    const customerId = customerRows[0]?.id
+    if (!customerId) throw new Error('customer fixture insert failed')
+    customerIds.push(customerId)
+
+    // Earned January 2025, so the lot was already due when the job runs.
+    const posted = await postEntry(makeActor('job'), {
+      branchId,
+      customerId,
+      kind: 'EARN',
+      netPaidMinor: 3_000,
+      occurredAt: new Date('2025-01-01T00:00:00Z'),
+    })
+    const lot = posted.lot
+    if (!lot) throw new Error('lot was not created')
+    expect(posted.account.balancePoints).toBe(30)
+    expect(lot.expiresAt.getTime()).toBeLessThan(Date.now())
+
+    const spy = boss.getSpy(LOYALTY_EXPIRY_QUEUE)
+    const firstJobId = await boss.send(LOYALTY_EXPIRY_QUEUE, {})
+    if (!firstJobId) throw new Error('first job was not enqueued')
+    const first = await spy.waitForJobWithId(firstJobId, 'completed')
+    expect(first.output).toEqual({ accounts: 1, lots: 1, points: 30 })
+
+    const account = await findAccountByCustomerId(customerId)
+    if (!account) throw new Error('account was not created')
+    expect(account.balancePoints).toBe(0)
+
+    const entries = await db
+      .select()
+      .from(loyaltyLedgerEntry)
+      .where(eq(loyaltyLedgerEntry.accountId, account.id))
+    expect(entries).toHaveLength(2)
+    const expireEntry = entries.find((entry) => entry.kind === 'EXPIRE')
+    expect(expireEntry?.pointsDelta).toBe(-30)
+    expect(expireEntry?.reasonCode).toBe('EXPIRY')
+    expect(expireEntry?.branchId).toBeNull()
+    expect(expireEntry?.createdBy).toBeNull()
+    if (!expireEntry) throw new Error('expiry entry was not written')
+
+    const consumptions = await db
+      .select()
+      .from(loyaltyLotConsumption)
+      .where(eq(loyaltyLotConsumption.entryId, expireEntry.id))
+    expect(consumptions.map((row) => [row.lotId, row.points])).toEqual([[lot.id, 30]])
+    const lots = await listLots(account.id)
+    expect(lots.find((row) => row.id === lot.id)?.remainingPoints).toBe(0)
+
+    // A re-run through the queue finds nothing due and changes nothing.
+    const secondJobId = await boss.send(LOYALTY_EXPIRY_QUEUE, {})
+    if (!secondJobId) throw new Error('second job was not enqueued')
+    const second = await spy.waitForJobWithId(secondJobId, 'completed')
+    expect(second.output).toEqual({ accounts: 0, lots: 0, points: 0 })
+
+    const entriesAfter = await db
+      .select({ id: loyaltyLedgerEntry.id })
+      .from(loyaltyLedgerEntry)
+      .where(eq(loyaltyLedgerEntry.accountId, account.id))
+    expect(entriesAfter).toHaveLength(entries.length)
+    expect((await findAccountByCustomerId(customerId))?.balancePoints).toBe(0)
   })
 })
