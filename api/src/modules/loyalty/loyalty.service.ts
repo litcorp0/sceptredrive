@@ -1,0 +1,352 @@
+import { db } from '@gikautos/db'
+import { actorLabel } from '../../http/audit-context.ts'
+import { AppError, ConflictError, ValidationError } from '../../http/errors.ts'
+import { requireCustomer } from '../customers/customers.service.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
+import { getSettingValue } from '../platform/settings.service.ts'
+import {
+  appendConsumption,
+  findAccountByCustomerId,
+  findEntryByIdempotencyKey,
+  insertEntry,
+  insertLot,
+  listAccountIdsWithExpiredLots,
+  lockAccountById,
+  lockExpiredLotsFefo,
+  lockLotsFefo,
+  lockOrCreateAccount,
+  updateAccountBalance,
+  updateLotRemaining,
+} from './loyalty.repository.ts'
+import type {
+  ExpiryRunResult,
+  LoyaltyAccountRow,
+  LoyaltyLedgerEntryRow,
+  LoyaltyLotConsumptionRow,
+  LoyaltyLotRow,
+  LoyaltyPostEntryInput,
+  LoyaltyPostingResult,
+  LoyaltyReasonCode,
+  RedeemQuote,
+} from './loyalty.types.ts'
+import { LOYALTY_ADJUST_REASON_CODES } from './loyalty.validation.ts'
+
+const AUDIT_ACTIONS = {
+  EARN: 'loyalty.earned',
+  REDEEM: 'loyalty.redeemed',
+  CLAWBACK: 'loyalty.clawback',
+  ADJUST: 'loyalty.adjusted',
+} as const
+
+function isUniqueViolation(error: unknown): boolean {
+  let current: unknown = error
+  let depth = 0
+  while (current && typeof current === 'object' && depth < 5) {
+    if ((current as { code?: unknown }).code === '23505') return true
+    current = (current as { cause?: unknown }).cause
+    depth += 1
+  }
+  return false
+}
+
+/** Calendar-month shift in UTC, mirroring how lots were first seeded. */
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date)
+  result.setUTCMonth(result.getUTCMonth() + months)
+  return result
+}
+
+/** Points earned by a sale: floor(GHS × rate), no carry (D15). */
+export async function earnPointsForSale(netPaidMinor: number): Promise<number> {
+  const rate = await getSettingValue('loyalty.earnPointsPerCedi', {})
+  return Math.floor((netPaidMinor * rate) / 100)
+}
+
+/** Redemption value in pesewas for the POS/console to display. */
+export async function quoteRedeem(points: number): Promise<RedeemQuote> {
+  const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {})
+  return { points, discountMinor: Math.floor((points * 100) / pointsPerCedi) }
+}
+
+interface NormalizedPosting {
+  pointsDelta: number
+  reasonCode: LoyaltyReasonCode | null
+  netPaidMinor: number | null
+}
+
+/** Kind-specific rules for the single write path. */
+function normalizePosting(input: LoyaltyPostEntryInput): NormalizedPosting {
+  if (input.kind === 'EARN') {
+    if (
+      input.netPaidMinor === undefined ||
+      !Number.isInteger(input.netPaidMinor) ||
+      input.netPaidMinor < 1
+    ) {
+      throw new ValidationError('EARN requires the net amount paid in minor units')
+    }
+    if (input.pointsDelta !== undefined) {
+      throw new ValidationError('EARN points are computed from the amount paid')
+    }
+    return {
+      pointsDelta: 0,
+      reasonCode: input.reasonCode ?? null,
+      netPaidMinor: input.netPaidMinor,
+    }
+  }
+
+  const delta = input.pointsDelta
+  if (delta === undefined || !Number.isInteger(delta) || delta === 0) {
+    throw new ValidationError('Points must be a non-zero integer')
+  }
+
+  if (input.kind === 'REDEEM') {
+    if (delta > 0) throw new ValidationError('A redemption must be posted as negative points')
+    return { pointsDelta: delta, reasonCode: input.reasonCode ?? null, netPaidMinor: null }
+  }
+
+  if (input.kind === 'CLAWBACK') {
+    if (delta > 0) throw new ValidationError('A clawback must be posted as negative points')
+    if (
+      input.reasonCode !== undefined &&
+      input.reasonCode !== null &&
+      input.reasonCode !== 'RETURN'
+    ) {
+      throw new ValidationError('A clawback is always reason RETURN')
+    }
+    return { pointsDelta: delta, reasonCode: 'RETURN', netPaidMinor: null }
+  }
+
+  if (
+    input.reasonCode === undefined ||
+    input.reasonCode === null ||
+    !LOYALTY_ADJUST_REASON_CODES.includes(
+      input.reasonCode as (typeof LOYALTY_ADJUST_REASON_CODES)[number],
+    )
+  ) {
+    throw new ValidationError('Adjustments require a reason: CORRECTION, GOODWILL, or OTHER')
+  }
+  return { pointsDelta: delta, reasonCode: input.reasonCode, netPaidMinor: null }
+}
+
+async function replayResult(
+  entry: LoyaltyLedgerEntryRow,
+  account: LoyaltyAccountRow,
+): Promise<LoyaltyPostingResult> {
+  const quote = entry.kind === 'REDEEM' ? await quoteRedeem(Math.abs(entry.pointsDelta)) : null
+  return { entry, account, lot: null, consumption: [], quote }
+}
+
+/**
+ * Single write path for loyalty activity. Locks the account row, applies
+ * kind-specific rules, consumes lots earliest-expiry-first, projects the
+ * balance, audits the posting, and replays idempotently by
+ * `(branchId, idempotencyKey)`.
+ */
+export async function postEntry(
+  actor: AuditActor,
+  input: LoyaltyPostEntryInput,
+): Promise<LoyaltyPostingResult> {
+  const normalized = normalizePosting(input)
+  const occurredAt = input.occurredAt ?? new Date()
+
+  if (input.idempotencyKey && input.branchId) {
+    const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey)
+    if (existing) {
+      const account = await findAccountByCustomerId(input.customerId)
+      if (account) return replayResult(existing, account)
+    }
+  }
+
+  try {
+    return await db.transaction(async (tx) => {
+      const customerRow = await requireCustomer(input.customerId)
+      if (customerRow.anonymizedAt) {
+        throw new ConflictError('Anonymized customers cannot receive loyalty activity')
+      }
+
+      const account = await lockOrCreateAccount(tx, input.customerId)
+      let pointsDelta = normalized.pointsDelta
+      let quote: RedeemQuote | null = null
+
+      if (input.kind === 'EARN') {
+        const rate = await getSettingValue('loyalty.earnPointsPerCedi', {}, tx)
+        const earned = Math.floor(((normalized.netPaidMinor ?? 0) * rate) / 100)
+        if (earned < 1) {
+          // Floor per sale, no carry: a sale below one point writes nothing.
+          return { entry: null, account, lot: null, consumption: [], quote: null }
+        }
+        pointsDelta = earned
+      }
+
+      if (input.kind === 'REDEEM') {
+        const requested = Math.abs(pointsDelta)
+        const minimumRedeem = await getSettingValue('loyalty.minimumRedeemPoints', {}, tx)
+        if (requested < minimumRedeem) {
+          throw new ConflictError(`A redemption requires at least ${minimumRedeem} points`)
+        }
+        if (account.balancePoints < requested) {
+          throw new ConflictError('The customer does not have enough points for this redemption')
+        }
+        quote = await quoteRedeem(requested)
+      }
+
+      const entry = await insertEntry(
+        {
+          accountId: account.id,
+          customerId: input.customerId,
+          branchId: input.branchId,
+          kind: input.kind,
+          pointsDelta,
+          reasonCode: normalized.reasonCode,
+          note: input.note ?? null,
+          referenceType: input.referenceType ?? null,
+          referenceId: input.referenceId ?? null,
+          referenceNumber: input.referenceNumber ?? null,
+          idempotencyKey: input.idempotencyKey ?? null,
+          createdBy: actorLabel(actor),
+          occurredAt,
+        },
+        tx,
+      )
+      if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the loyalty entry')
+
+      let lot: LoyaltyLotRow | null = null
+      const consumption: LoyaltyLotConsumptionRow[] = []
+
+      if (pointsDelta > 0) {
+        // Every positive posting creates a lot so expiry stays total (D14).
+        const expiryMonths = await getSettingValue('loyalty.expiryMonths', {}, tx)
+        lot = await insertLot(
+          {
+            accountId: account.id,
+            earnEntryId: entry.id,
+            points: pointsDelta,
+            remainingPoints: pointsDelta,
+            expiresAt: addMonths(occurredAt, expiryMonths),
+          },
+          tx,
+        )
+      } else {
+        let outstanding = Math.abs(pointsDelta)
+        const lots = await lockLotsFefo(tx, account.id)
+        for (const lotRow of lots) {
+          if (outstanding <= 0) break
+          const take = Math.min(lotRow.remainingPoints, outstanding)
+          if (take <= 0) continue
+          const consumed = await appendConsumption(
+            { lotId: lotRow.id, entryId: entry.id, points: take },
+            tx,
+          )
+          if (consumed) consumption.push(consumed)
+          await updateLotRemaining(lotRow.id, lotRow.remainingPoints - take, tx)
+          outstanding -= take
+        }
+        if (input.kind === 'REDEEM' && outstanding > 0) {
+          // The balance guard guarantees full coverage; anything else is drift.
+          throw new AppError(500, 'INTERNAL', 'Redemption exceeded the available lot points')
+        }
+      }
+
+      const nextBalance = account.balancePoints + pointsDelta
+      await updateAccountBalance(account.id, nextBalance, tx)
+
+      await writeAudit(
+        {
+          ...actor,
+          action: AUDIT_ACTIONS[input.kind],
+          entity: 'loyalty_ledger_entry',
+          entityId: entry.id,
+          branchId: input.branchId,
+          after: {
+            kind: entry.kind,
+            pointsDelta,
+            reasonCode: normalized.reasonCode,
+            netPaidMinor: normalized.netPaidMinor,
+            referenceNumber: entry.referenceNumber,
+            balancePoints: nextBalance,
+            lotsConsumed: consumption.length,
+            expiresAt: lot?.expiresAt ?? null,
+          },
+        },
+        tx,
+      )
+
+      return { entry, account: { ...account, balancePoints: nextBalance }, lot, consumption, quote }
+    })
+  } catch (error) {
+    if (input.idempotencyKey && input.branchId && isUniqueViolation(error)) {
+      const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey)
+      if (existing) {
+        const account = await findAccountByCustomerId(input.customerId)
+        if (account) return replayResult(existing, account)
+      }
+    }
+    throw error
+  }
+}
+
+/**
+ * Expires every live lot past `expiresAt`, one transaction per account: a
+ * single EXPIRE entry (global — no branch, no creator) plus one consumption
+ * row per lot. The jobs plan (05) schedules this daily; a second run with the
+ * same `now` finds nothing and no-ops.
+ */
+export async function expireDueLots(now: Date = new Date()): Promise<ExpiryRunResult> {
+  const accountIds = await listAccountIdsWithExpiredLots(now)
+  let accounts = 0
+  let lots = 0
+  let points = 0
+
+  for (const accountId of accountIds) {
+    const expired = await db.transaction(async (tx) => {
+      const account = await lockAccountById(tx, accountId)
+      const dueLots = await lockExpiredLotsFefo(tx, accountId, now)
+      const duePoints = dueLots.reduce((sum, lot) => sum + lot.remainingPoints, 0)
+      if (dueLots.length === 0 || duePoints <= 0) return null
+
+      const entry = await insertEntry(
+        {
+          accountId,
+          customerId: account.customerId,
+          branchId: null,
+          kind: 'EXPIRE',
+          pointsDelta: -duePoints,
+          reasonCode: 'EXPIRY',
+          note: null,
+          idempotencyKey: null,
+          createdBy: null,
+          occurredAt: now,
+        },
+        tx,
+      )
+      if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the expiry entry')
+
+      for (const lot of dueLots) {
+        await appendConsumption(
+          { lotId: lot.id, entryId: entry.id, points: lot.remainingPoints },
+          tx,
+        )
+        await updateLotRemaining(lot.id, 0, tx)
+      }
+      await updateAccountBalance(accountId, account.balancePoints - duePoints, tx)
+      return { lots: dueLots.length, points: duePoints }
+    })
+
+    if (expired) {
+      accounts += 1
+      lots += expired.lots
+      points += expired.points
+    }
+  }
+
+  await writeAudit({
+    action: 'loyalty.expiry_run',
+    entity: 'loyalty_account',
+    entityId: null,
+    branchId: null,
+    after: { accounts, lots, points, asOf: now.toISOString() },
+  })
+
+  return { accounts, lots, points }
+}
