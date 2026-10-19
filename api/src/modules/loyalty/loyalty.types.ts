@@ -103,6 +103,8 @@ export interface LoyaltyLiabilityReport {
   pointsPerCedi: number
   outstandingPoints: number
   outstandingValueMinor: number
+  /** Remaining live points that expire within the next 30 days. */
+  expiringSoonPoints: number
   activity: {
     from: string | null
     to: string | null

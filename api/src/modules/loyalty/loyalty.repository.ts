@@ -330,6 +330,31 @@ export async function sumOutstanding(executor: DbExecutor = db): Promise<Loyalty
   return { accounts: Number(rows[0]?.accounts ?? 0), points: rows[0]?.points ?? 0 }
 }
 
+/**
+ * Remaining points in live lots that expire within a window — the liability
+ * headline "expiring soon" figure. Lots already past expiry are excluded (the
+ * daily expiry run converts them), as are fully consumed lots.
+ */
+export async function sumExpiringPoints(
+  from: Date,
+  until: Date,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({
+      points: sql<number>`coalesce(sum(${loyaltyLot.remainingPoints}), 0)`.mapWith(Number),
+    })
+    .from(loyaltyLot)
+    .where(
+      and(
+        gt(loyaltyLot.remainingPoints, 0),
+        gt(loyaltyLot.expiresAt, from),
+        lte(loyaltyLot.expiresAt, until),
+      ),
+    )
+  return rows[0]?.points ?? 0
+}
+
 /** Accounts with a negative balance, optionally scoped to a customer branch. */
 export async function listNegativeBalances(
   branchId: string | null,

@@ -821,6 +821,18 @@ describe.skipIf(!available)('loyalty HTTP', () => {
       }),
     })
     expect(branchBEarn.status).toBe(201)
+    const branchBEarnBody = await readJson<{ lot: { id: string; expiresAt: string } | null }>(
+      branchBEarn,
+    )
+    const soonLot = branchBEarnBody.lot
+    expect(soonLot).not.toBeNull()
+    if (soonLot === null) throw new Error('Expected the earn to create a lot')
+    // Move the lot inside the 30-day window to exercise the liability headline;
+    // restored after the assertions so later suites see the original expiry.
+    await db
+      .update(loyaltyLot)
+      .set({ expiresAt: new Date(Date.now() + 10 * 86_400_000) })
+      .where(eq(loyaltyLot.id, soonLot.id))
 
     const negativeA = await createCustomerRow('HTTP Negative A', branchAId)
     await app.request('/api/loyalty/entries', {
@@ -870,6 +882,8 @@ describe.skipIf(!available)('loyalty HTTP', () => {
     expect(adminBody.outstandingValueMinor).toBe(
       Math.floor((adminBody.outstandingPoints * 100) / adminBody.pointsPerCedi),
     )
+    // The near-expiry lot (100 earned − 50 clawed back) is inside the 30-day window.
+    expect(adminBody.expiringSoonPoints).toBeGreaterThanOrEqual(50)
 
     const rowA = adminBody.activity.rows.find((row) => row.branchId === branchAId)
     expect(rowA).toMatchObject({
@@ -911,6 +925,11 @@ describe.skipIf(!available)('loyalty HTTP', () => {
       headers: authedHeaders(managerCookie),
     })
     expect(crossBranch.status).toBe(403)
+
+    await db
+      .update(loyaltyLot)
+      .set({ expiresAt: new Date(soonLot.expiresAt) })
+      .where(eq(loyaltyLot.id, soonLot.id))
   })
 })
 

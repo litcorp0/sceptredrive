@@ -27,6 +27,7 @@ import {
   lockOrCreateAccount,
   sumConsumedByAccount,
   sumEntriesByAccount,
+  sumExpiringPoints,
   sumLotRemainingByAccount,
   sumOutstanding,
   updateAccountBalance,
@@ -436,11 +437,15 @@ export async function getAccountDetail(customerId: string): Promise<LoyaltyAccou
   }
 }
 
+/** The liability headline looks 30 days ahead for near-expiry exposure. */
+const EXPIRING_SOON_DAYS = 30
+
 /**
- * Liability report: outstanding points and their redemption value, activity
- * totals per branch for the range (managers are scoped to their own branch
- * plus global expiry rows; admins see every branch), and negative balances
- * (managers see the customers their branch owns).
+ * Liability report: outstanding points and their redemption value, points
+ * expiring within 30 days, activity totals per branch for the range (managers
+ * are scoped to their own branch plus global expiry rows; admins see every
+ * branch), and negative balances (managers see the customers their branch
+ * owns).
  */
 export async function getLiability(
   user: SessionUser,
@@ -450,18 +455,22 @@ export async function getLiability(
   const from = query.from ?? null
   const to = query.to ? inclusiveEnd(query.to) : null
   const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {})
+  const now = new Date()
+  const expiringUntil = new Date(now.getTime() + EXPIRING_SOON_DAYS * 86_400_000)
 
-  const [totals, activityRows, negativeBalances] = await Promise.all([
+  const [totals, expiringSoonPoints, activityRows, negativeBalances] = await Promise.all([
     sumOutstanding(),
+    sumExpiringPoints(now, expiringUntil),
     branchActivity({ from, to, branchId }),
     listNegativeBalances(branchId),
   ])
 
   return {
-    asOf: new Date().toISOString(),
+    asOf: now.toISOString(),
     pointsPerCedi,
     outstandingPoints: totals.points,
     outstandingValueMinor: Math.floor((totals.points * 100) / pointsPerCedi),
+    expiringSoonPoints,
     activity: {
       from: from?.toISOString() ?? null,
       to: to?.toISOString() ?? null,
