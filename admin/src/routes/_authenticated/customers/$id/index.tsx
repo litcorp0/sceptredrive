@@ -8,6 +8,11 @@ import { CreditEntryDialog } from "#/components/customers/credit-entry-dialog"
 import { CreditLedgerTable } from "#/components/customers/credit-ledger-table"
 import { CreditProfileDialog } from "#/components/customers/credit-profile-dialog"
 import { CustomerFormDialog } from "#/components/customers/customer-form-dialog"
+import {
+	AnonymizeCustomerDialog,
+	ArchiveCustomerDialog,
+	ReactivateCustomerButton,
+} from "#/components/customers/customer-lifecycle-dialogs"
 import { RepaymentDialog } from "#/components/customers/repayment-dialog"
 import { Button } from "#/components/ui/button"
 import {
@@ -53,12 +58,16 @@ function CustomerProfilePage() {
 	const canRecordRepayment = hasPermission(session.user.role, "credit.repayment")
 	const canAdjust = hasPermission(session.user.role, "credit.adjust")
 	const canOverride = hasPermission(session.user.role, "credit.override")
+	const canArchive = hasPermission(session.user.role, "customer.archive")
+	const canAnonymize = hasPermission(session.user.role, "customer.anonymize")
 
 	const [tab, setTab] = useState("overview")
 	const [editOpen, setEditOpen] = useState(false)
 	const [creditDialogOpen, setCreditDialogOpen] = useState(false)
 	const [repaymentOpen, setRepaymentOpen] = useState(false)
 	const [entryOpen, setEntryOpen] = useState(false)
+	const [archiveOpen, setArchiveOpen] = useState(false)
+	const [anonymizeOpen, setAnonymizeOpen] = useState(false)
 	const [creditBranchId, setCreditBranchId] = useState<string | null>(null)
 
 	const customerQuery = useQuery({
@@ -110,11 +119,36 @@ function CustomerProfilePage() {
 					</p>
 				</div>
 
-				{canEdit && !customer.anonymizedAt ? (
-					<Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-						Edit details
+				<div className="flex flex-wrap items-center gap-2">
+					<Button size="sm" variant="outline" asChild>
+						<Link to="/customers/$id/statement" params={{ id }}>
+							Statement
+						</Link>
 					</Button>
-				) : null}
+					{canEdit && !customer.anonymizedAt ? (
+						<Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+							Edit details
+						</Button>
+					) : null}
+					{!customer.anonymizedAt && canArchive && customer.status === "ACTIVE" ? (
+						<Button size="sm" variant="outline" onClick={() => setArchiveOpen(true)}>
+							Archive
+						</Button>
+					) : null}
+					{!customer.anonymizedAt && canArchive && customer.status === "ARCHIVED" ? (
+						<ReactivateCustomerButton customer={customer} />
+					) : null}
+					{!customer.anonymizedAt && canAnonymize ? (
+						<Button
+							size="sm"
+							variant="outline"
+							className="text-destructive hover:text-destructive"
+							onClick={() => setAnonymizeOpen(true)}
+						>
+							Anonymize
+						</Button>
+					) : null}
+				</div>
 			</div>
 
 			<Tabs value={tab} onValueChange={setTab}>
@@ -378,6 +412,14 @@ function CustomerProfilePage() {
 				currentBalanceMinor={selectedProfile?.balanceMinor ?? null}
 				limitMinor={selectedProfile?.limitMinor ?? null}
 				canOverride={canOverride}
+			/>
+			<ArchiveCustomerDialog open={archiveOpen} onOpenChange={setArchiveOpen} customer={customer} />
+			<AnonymizeCustomerDialog
+				open={anonymizeOpen}
+				onOpenChange={setAnonymizeOpen}
+				customer={customer}
+				profiles={profiles}
+				loyaltyPoints={detail.loyalty?.balancePoints ?? null}
 			/>
 		</div>
 	)

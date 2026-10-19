@@ -759,6 +759,83 @@ export interface CreditPostingResult {
 	profile: CreditProfile
 }
 
+export type AgingBucketKey = "current" | "days1To30" | "days31To60" | "days61To90" | "over90"
+
+export interface AgingBuckets {
+	current: number
+	days1To30: number
+	days31To60: number
+	days61To90: number
+	over90: number
+}
+
+export interface AgingChargeRow {
+	entryId: string
+	occurredAt: string
+	dueDate: string
+	amountMinor: number
+	outstandingMinor: number
+	daysPastDue: number
+	bucket: AgingBucketKey
+}
+
+export interface AgingCustomerRow {
+	customerId: string
+	customerName: string
+	branchId: string
+	buckets: AgingBuckets
+	totalMinor: number
+	oldestDueDate: string | null
+}
+
+export interface BranchAging {
+	branch: { id: string; code: string; name: string }
+	customers: AgingCustomerRow[]
+	totals: AgingBuckets & { total: number }
+}
+
+export interface AgingResult {
+	asOf: string
+	branches: BranchAging[]
+}
+
+export type AgingQuery = {
+	branchId?: string
+	asOf?: string
+}
+
+export interface StatementEntry {
+	id: string
+	kind: CreditEntryKind
+	occurredAt: string
+	dueDate: string | null
+	amountMinor: number
+	referenceType: string | null
+	referenceNumber: string | null
+	reasonCode: CreditReasonCode | null
+	method: CreditMethod | null
+	note: string | null
+	createdBy: string | null
+}
+
+export interface CreditStatement {
+	customer: { id: string; name: string; phone: string | null }
+	branch: { id: string; code: string; name: string }
+	from: string | null
+	to: string
+	openingBalanceMinor: number
+	entries: StatementEntry[]
+	closingBalanceMinor: number
+	currentBalanceMinor: number
+	aging: AgingChargeRow[]
+}
+
+export type StatementQuery = {
+	branchId?: string
+	from?: string
+	to?: string
+}
+
 export interface CreditEntry {
 	id: string
 	customerId: string

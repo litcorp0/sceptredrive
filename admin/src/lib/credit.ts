@@ -1,4 +1,5 @@
 import type {
+	AgingBucketKey,
 	CreditEntryKind,
 	CreditMethod,
 	CreditOverrideReason,
@@ -41,6 +42,32 @@ export const CREDIT_OVERRIDE_LABELS: Record<CreditOverrideReason, string> = {
 	TRUSTED_CUSTOMER: "Trusted customer",
 	URGENT_NEED: "Urgent need",
 	OTHER: "Other",
+}
+
+/** Fixed oldest-first order of the aging buckets. */
+export const AGING_BUCKET_KEYS: AgingBucketKey[] = [
+	"current",
+	"days1To30",
+	"days31To60",
+	"days61To90",
+	"over90",
+]
+
+/** Compact column headers for the aging report. */
+export const AGING_BUCKET_SHORT: Record<AgingBucketKey, string> = {
+	current: "Current",
+	days1To30: "1–30",
+	days31To60: "31–60",
+	days61To90: "61–90",
+	over90: "90+",
+}
+
+export const AGING_BUCKET_LABELS: Record<AgingBucketKey, string> = {
+	current: "Current (not yet due)",
+	days1To30: "1–30 days past due",
+	days31To60: "31–60 days past due",
+	days61To90: "61–90 days past due",
+	over90: "Over 90 days past due",
 }
 
 /** "+GHS 50.00" for charges, "−GHS 15.00" for collections and credits. */

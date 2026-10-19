@@ -127,3 +127,11 @@
 		-moz-osx-font-smoothing: grayscale;
 	}
 }
+
+/* Printable documents (customer statements, aging) print as clean A4 pages. */
+@media print {
+	@page {
+		size: A4;
+		margin: 16mm;
+	}
+}

@@ -13,7 +13,7 @@ export function AppShell({ session }: { session: Session }) {
 
 	return (
 		<div className="flex min-h-svh">
-			<aside className="sticky top-0 hidden h-svh w-58 shrink-0 flex-col border-r bg-sidebar lg:flex">
+			<aside className="sticky top-0 hidden h-svh w-58 shrink-0 flex-col border-r bg-sidebar lg:flex print:hidden">
 				<SidebarBrand />
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					<SidebarNav role={session.user.role} />
@@ -21,7 +21,7 @@ export function AppShell({ session }: { session: Session }) {
 			</aside>
 
 			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur">
+				<header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur print:hidden">
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
 							<Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open menu">
@@ -42,7 +42,7 @@ export function AppShell({ session }: { session: Session }) {
 					</div>
 				</header>
 
-				<main className="min-w-0 flex-1 p-4 md:p-6">
+				<main className="min-w-0 flex-1 p-4 md:p-6 print:p-0">
 					<Outlet />
 				</main>
 			</div>

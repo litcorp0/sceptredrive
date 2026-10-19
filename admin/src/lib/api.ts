@@ -1,6 +1,8 @@
 import { env } from "#/env"
 import type {
 	AdjustmentCreateInput,
+	AgingQuery,
+	AgingResult,
 	AuditEntry,
 	AuditListQuery,
 	Barcode,
@@ -27,6 +29,7 @@ import type {
 	CreditProfile,
 	CreditProfileListRow,
 	CreditProfileUpdateInput,
+	CreditStatement,
 	CustomerCreateInput,
 	CustomerDetail,
 	CustomerListQuery,
@@ -56,6 +59,7 @@ import type {
 	StaffCreateInput,
 	StaffListQuery,
 	StaffUpdateInput,
+	StatementQuery,
 	StockCount,
 	StockDetail,
 	StockListQuery,
@@ -229,9 +233,26 @@ export const api = {
 				method: "PATCH",
 				body: input,
 			}),
+		archive: (id: string, note?: string) =>
+			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/archive`, {
+				method: "POST",
+				body: { note: note || undefined },
+			}),
+		reactivate: (id: string) =>
+			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/reactivate`, {
+				method: "POST",
+			}),
+		anonymize: (id: string, note?: string) =>
+			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/anonymize`, {
+				method: "POST",
+				body: { note: note || undefined },
+			}),
 	},
 
 	credit: {
+		aging: (query: AgingQuery) => apiRequest<AgingResult>("/api/credit/aging", { query }),
+		statement: (customerId: string, query: StatementQuery) =>
+			apiRequest<CreditStatement>(`/api/credit/statements/${customerId}`, { query }),
 		profiles: {
 			list: (query: { customerId: string; branchId?: string }) =>
 				apiRequest<{ profiles: CreditProfileListRow[] }>("/api/credit/profiles", { query }),

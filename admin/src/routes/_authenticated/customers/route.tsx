@@ -22,22 +22,24 @@ function CustomersLayout() {
 
 	return (
 		<div className="mx-auto max-w-6xl">
-			<PageHeader
-				title="Customers"
-				description="Customer records, branch credit, repayments, and aging."
-			/>
+			<div className="print:hidden">
+				<PageHeader
+					title="Customers"
+					description="Customer records, branch credit, repayments, and aging."
+				/>
 
-			<Tabs
-				value={active}
-				onValueChange={(value) => void navigate({ to: TAB_LINKS[value as CustomersTab] })}
-			>
-				<TabsList>
-					<TabsTrigger value="customers">Customers</TabsTrigger>
-					<TabsTrigger value="aging">Aging</TabsTrigger>
-				</TabsList>
-			</Tabs>
+				<Tabs
+					value={active}
+					onValueChange={(value) => void navigate({ to: TAB_LINKS[value as CustomersTab] })}
+				>
+					<TabsList>
+						<TabsTrigger value="customers">Customers</TabsTrigger>
+						<TabsTrigger value="aging">Aging</TabsTrigger>
+					</TabsList>
+				</Tabs>
+			</div>
 
-			<div className="mt-4">
+			<div className="mt-4 print:mt-0">
 				<Outlet />
 			</div>
 		</div>
