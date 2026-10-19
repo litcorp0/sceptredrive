@@ -112,3 +112,35 @@ export interface LoyaltyLiabilityReport {
   }
   negativeBalances: LoyaltyNegativeBalance[]
 }
+
+export interface LoyaltyAccountBalanceRow {
+  accountId: string
+  customerId: string
+  balancePoints: number
+}
+
+export interface LoyaltyAccountSumRow {
+  accountId: string
+  /** Signed ledger sum. */
+  points: number
+  /** Sum of positive deltas (the lot backing). */
+  positivePoints: number
+}
+
+export interface LoyaltyAccountLotsRow {
+  accountId: string
+  remainingPoints: number
+}
+
+export interface LoyaltyAccountConsumedRow {
+  accountId: string
+  points: number
+}
+
+export interface LoyaltyReconciliationDivergence {
+  accountId: string
+  customerId: string
+  kind: 'ledger' | 'lots'
+  expected: number
+  actual: number
+}

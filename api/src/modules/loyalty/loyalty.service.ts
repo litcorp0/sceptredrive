@@ -16,6 +16,7 @@ import {
   insertAccountForCustomer,
   insertEntry,
   insertLot,
+  listAccountBalances,
   listAccountIdsWithExpiredLots,
   listEntries,
   listLots,
@@ -24,6 +25,9 @@ import {
   lockExpiredLotsFefo,
   lockLotsFefo,
   lockOrCreateAccount,
+  sumConsumedByAccount,
+  sumEntriesByAccount,
+  sumLotRemainingByAccount,
   sumOutstanding,
   updateAccountBalance,
   updateLotRemaining,
@@ -41,6 +45,7 @@ import type {
   LoyaltyPostEntryInput,
   LoyaltyPostingResult,
   LoyaltyReasonCode,
+  LoyaltyReconciliationDivergence,
   RedeemQuote,
 } from './loyalty.types.ts'
 import { LOYALTY_ADJUST_REASON_CODES } from './loyalty.validation.ts'
@@ -473,4 +478,53 @@ export async function getLiability(
     },
     negativeBalances,
   }
+}
+
+/**
+ * Read-only reconciliation across every account (no writes): the projected
+ * balance must equal the ledger sum, and live lot remainders must equal the
+ * positive ledger backing minus consumption. Used by tests and the Phase 8
+ * reports.
+ */
+export async function reconcileAccounts(): Promise<LoyaltyReconciliationDivergence[]> {
+  const [accounts, entrySums, lotSums, consumedSums] = await Promise.all([
+    listAccountBalances(),
+    sumEntriesByAccount(),
+    sumLotRemainingByAccount(),
+    sumConsumedByAccount(),
+  ])
+
+  const entriesByAccount = new Map(entrySums.map((row) => [row.accountId, row]))
+  const lotsByAccount = new Map(lotSums.map((row) => [row.accountId, row.remainingPoints]))
+  const consumedByAccount = new Map(consumedSums.map((row) => [row.accountId, row.points]))
+
+  const divergences: LoyaltyReconciliationDivergence[] = []
+  for (const account of accounts) {
+    const entries = entriesByAccount.get(account.accountId)
+    const expectedBalance = entries?.points ?? 0
+    if (account.balancePoints !== expectedBalance) {
+      divergences.push({
+        accountId: account.accountId,
+        customerId: account.customerId,
+        kind: 'ledger',
+        expected: expectedBalance,
+        actual: account.balancePoints,
+      })
+    }
+
+    const expectedRemaining =
+      (entries?.positivePoints ?? 0) - (consumedByAccount.get(account.accountId) ?? 0)
+    const actualRemaining = lotsByAccount.get(account.accountId) ?? 0
+    if (actualRemaining !== expectedRemaining) {
+      divergences.push({
+        accountId: account.accountId,
+        customerId: account.customerId,
+        kind: 'lots',
+        expected: expectedRemaining,
+        actual: actualRemaining,
+      })
+    }
+  }
+
+  return divergences
 }

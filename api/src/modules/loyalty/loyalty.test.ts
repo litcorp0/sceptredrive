@@ -22,7 +22,13 @@ import {
   loyaltyLot,
   loyaltyLotConsumption,
 } from './loyalty.schema.ts'
-import { earnPointsForSale, expireDueLots, postEntry, quoteRedeem } from './loyalty.service.ts'
+import {
+  earnPointsForSale,
+  expireDueLots,
+  postEntry,
+  quoteRedeem,
+  reconcileAccounts,
+} from './loyalty.service.ts'
 import type { LoyaltyLiabilityReport, LoyaltyPostEntryInput } from './loyalty.types.ts'
 
 const available = await databaseAvailable()
@@ -432,6 +438,109 @@ describe.skipIf(!available)('loyalty service', () => {
       post({ customerId: crypto.randomUUID(), kind: 'EARN', netPaidMinor: 1_000 }),
     )
     expect(unknown).toBeInstanceOf(NotFoundError)
+  })
+
+  it('journeys earn → redeem → clawback → adjust → expire with reconciliation', async () => {
+    const customerId = await createCustomerRow('Journey')
+    const journeyActor = makeActor('journey')
+    const run = (
+      input: Partial<LoyaltyPostEntryInput> & Pick<LoyaltyPostEntryInput, 'customerId' | 'kind'>,
+    ) => postEntry(journeyActor, { branchId: branchAId, ...input })
+
+    // Two earns, two lots with different expiries.
+    const earn1 = await run({
+      customerId,
+      kind: 'EARN',
+      netPaidMinor: 20_000,
+      occurredAt: new Date('2026-06-01T10:00:00Z'),
+    })
+    const earn2 = await run({
+      customerId,
+      kind: 'EARN',
+      netPaidMinor: 15_000,
+      occurredAt: new Date('2026-07-15T10:00:00Z'),
+    })
+    const lot1 = earn1.lot
+    const lot2 = earn2.lot
+    if (!lot1 || !lot2) throw new Error('lots were not created')
+    const accountId = earn1.account.id
+    expect(earn2.account.balancePoints).toBe(350)
+
+    // Redeem 250 FEFO: 200 from the June lot, 50 from the July lot.
+    const redeem = await run({
+      customerId,
+      kind: 'REDEEM',
+      pointsDelta: -250,
+      occurredAt: new Date('2026-08-01T10:00:00Z'),
+    })
+    expect(redeem.account.balancePoints).toBe(100)
+    expect(redeem.consumption.map((row) => [row.lotId, row.points])).toEqual([
+      [lot1.id, 200],
+      [lot2.id, 50],
+    ])
+
+    // Clawback 180 against 100 available: the shortfall leaves -80 on the balance.
+    const clawback = await run({
+      customerId,
+      kind: 'CLAWBACK',
+      pointsDelta: -180,
+      occurredAt: new Date('2026-09-10T10:00:00Z'),
+    })
+    expect(clawback.account.balancePoints).toBe(-80)
+    expect(clawback.consumption.map((row) => [row.lotId, row.points])).toEqual([[lot2.id, 100]])
+
+    // A negative balance still reconciles exactly.
+    expect(await sumEntriesForAccount(accountId)).toBe(-80)
+    const midDivergences = await reconcileAccounts()
+    expect(midDivergences.filter((row) => row.customerId === customerId)).toEqual([])
+
+    // A positive adjustment creates a fresh lot.
+    const adjust = await run({
+      customerId,
+      kind: 'ADJUST',
+      pointsDelta: 50,
+      reasonCode: 'GOODWILL',
+      occurredAt: new Date('2026-10-05T10:00:00Z'),
+    })
+    const lot3 = adjust.lot
+    if (!lot3) throw new Error('adjustment lot was not created')
+    expect(adjust.account.balancePoints).toBe(-30)
+    expect(lot3.remainingPoints).toBe(50)
+
+    // The adjustment lot (2027-10) expires; the balance stays negative.
+    const expiry = await expireDueLots(new Date('2027-11-01T00:00:00Z'))
+    expect(expiry.points).toBeGreaterThanOrEqual(50)
+
+    const entries = await db
+      .select()
+      .from(loyaltyLedgerEntry)
+      .where(eq(loyaltyLedgerEntry.accountId, accountId))
+    const expireEntry = entries.find((entry) => entry.kind === 'EXPIRE')
+    if (!expireEntry) throw new Error('expiry entry was not written')
+    expect(expireEntry.pointsDelta).toBe(-50)
+    expect(expireEntry.reasonCode).toBe('EXPIRY')
+
+    const expireConsumption = await db
+      .select()
+      .from(loyaltyLotConsumption)
+      .where(eq(loyaltyLotConsumption.entryId, expireEntry.id))
+    expect(expireConsumption.map((row) => [row.lotId, row.points])).toEqual([[lot3.id, 50]])
+
+    const finalAccount = await findAccountByCustomerId(customerId)
+    if (!finalAccount) throw new Error('account was not created')
+    expect(finalAccount.balancePoints).toBe(-80)
+    expect(await sumEntriesForAccount(accountId)).toBe(-80)
+    const lots = await listLots(accountId)
+    expect(lots.map((lot) => [lot.id, lot.remainingPoints])).toEqual([
+      [lot1.id, 0],
+      [lot2.id, 0],
+      [lot3.id, 0],
+    ])
+
+    // Every account this suite touched reconciles: balance = ledger sum,
+    // lots = positive backing - consumption.
+    const divergences = await reconcileAccounts()
+    expect(divergences.filter((row) => customerIds.includes(row.customerId))).toEqual([])
   })
 })
 

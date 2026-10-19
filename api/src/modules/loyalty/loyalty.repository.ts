@@ -8,7 +8,11 @@ import {
   loyaltyLotConsumption,
 } from './loyalty.schema.ts'
 import type {
+  LoyaltyAccountBalanceRow,
+  LoyaltyAccountConsumedRow,
+  LoyaltyAccountLotsRow,
   LoyaltyAccountRow,
+  LoyaltyAccountSumRow,
   LoyaltyBranchActivityTotals,
   LoyaltyEntryListOptions,
   LoyaltyLedgerEntryRow,
@@ -346,4 +350,61 @@ export async function listNegativeBalances(
     .where(and(...conditions))
     .orderBy(asc(loyaltyAccount.balancePoints))
     .limit(200)
+}
+
+/** Projected balances for every account (reconciliation scan). */
+export async function listAccountBalances(
+  executor: DbExecutor = db,
+): Promise<LoyaltyAccountBalanceRow[]> {
+  return executor
+    .select({
+      accountId: loyaltyAccount.id,
+      customerId: loyaltyAccount.customerId,
+      balancePoints: loyaltyAccount.balancePoints,
+    })
+    .from(loyaltyAccount)
+}
+
+/** Signed and positive ledger sums per account (reconciliation scan). */
+export async function sumEntriesByAccount(
+  executor: DbExecutor = db,
+): Promise<LoyaltyAccountSumRow[]> {
+  return executor
+    .select({
+      accountId: loyaltyLedgerEntry.accountId,
+      points: sql<number>`coalesce(sum(${loyaltyLedgerEntry.pointsDelta}), 0)`.mapWith(Number),
+      positivePoints:
+        sql<number>`coalesce(sum(case when ${loyaltyLedgerEntry.pointsDelta} > 0 then ${loyaltyLedgerEntry.pointsDelta} else 0 end), 0)`.mapWith(
+          Number,
+        ),
+    })
+    .from(loyaltyLedgerEntry)
+    .groupBy(loyaltyLedgerEntry.accountId)
+}
+
+/** Live lot remainders per account (reconciliation scan). */
+export async function sumLotRemainingByAccount(
+  executor: DbExecutor = db,
+): Promise<LoyaltyAccountLotsRow[]> {
+  return executor
+    .select({
+      accountId: loyaltyLot.accountId,
+      remainingPoints: sql<number>`coalesce(sum(${loyaltyLot.remainingPoints}), 0)`.mapWith(Number),
+    })
+    .from(loyaltyLot)
+    .groupBy(loyaltyLot.accountId)
+}
+
+/** Consumed points per account (reconciliation scan). */
+export async function sumConsumedByAccount(
+  executor: DbExecutor = db,
+): Promise<LoyaltyAccountConsumedRow[]> {
+  return executor
+    .select({
+      accountId: loyaltyLot.accountId,
+      points: sql<number>`coalesce(sum(${loyaltyLotConsumption.points}), 0)`.mapWith(Number),
+    })
+    .from(loyaltyLotConsumption)
+    .innerJoin(loyaltyLot, eq(loyaltyLotConsumption.lotId, loyaltyLot.id))
+    .groupBy(loyaltyLot.accountId)
 }
