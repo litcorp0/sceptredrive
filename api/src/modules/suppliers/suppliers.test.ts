@@ -13,6 +13,7 @@ import { app } from '../../app.ts'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { category, uom } from '../catalog/catalog.schema.ts'
+import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { supplierInvoice, supplierPayment } from '../payables/payables.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
@@ -54,6 +55,7 @@ describe.skipIf(!available)('suppliers module', () => {
   const mappingIds: string[] = []
   const invoiceIds: string[] = []
   const paymentIds: string[] = []
+  const httpUserIds: string[] = []
   let branchId = ''
   let productAId = ''
   let productBId = ''
@@ -156,6 +158,9 @@ describe.skipIf(!available)('suppliers module', () => {
   })
 
   afterAll(async () => {
+    if (httpUserIds.length > 0) {
+      await db.delete(userTable).where(inArray(userTable.id, httpUserIds))
+    }
     if (paymentIds.length > 0) {
       await db.delete(supplierPayment).where(inArray(supplierPayment.id, paymentIds))
     }
@@ -480,6 +485,7 @@ describe.skipIf(!available)('suppliers module', () => {
       const admin = await createTestUser({ role: 'ADMIN' })
       const manager = await createTestUser({ role: 'MANAGER', branchId })
       const cashier = await createTestUser({ role: 'CASHIER', branchId })
+      httpUserIds.push(admin.id, manager.id, cashier.id)
       adminCookie = await signIn(admin.email)
       managerCookie = await signIn(manager.email)
       cashierCookie = await signIn(cashier.email)
