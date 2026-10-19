@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import {
   date,
   index,
@@ -10,7 +11,6 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { stockReceipt } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
@@ -31,11 +31,7 @@ export const supplierInvoiceVoidReasonEnum = pgEnum('supplier_invoice_void_reaso
 ])
 
 /** PAYSTACK joins this enum in Phase 8 when supplier transfers go live. */
-export const supplierPaymentMethodEnum = pgEnum('supplier_payment_method', [
-  'CASH',
-  'BANK',
-  'MOMO',
-])
+export const supplierPaymentMethodEnum = pgEnum('supplier_payment_method', ['CASH', 'BANK', 'MOMO'])
 
 export const supplierPaymentStatusEnum = pgEnum('supplier_payment_status', ['COMPLETED', 'VOID'])
 

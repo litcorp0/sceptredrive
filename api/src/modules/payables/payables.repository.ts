@@ -1,0 +1,355 @@
+import { type DbExecutor, db } from '@gikautos/db'
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, type SQL, sql } from 'drizzle-orm'
+import { branch } from '../org/branches.schema.ts'
+import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
+import {
+  supplierInvoice,
+  supplierInvoiceLine,
+  supplierPayment,
+  supplierPaymentAllocation,
+} from './payables.schema.ts'
+import type {
+  InvoiceAllocationRow,
+  InvoiceLineView,
+  InvoiceListFilters,
+  InvoiceListRow,
+  InvoiceStatus,
+  PaymentListRow,
+  SupplierInvoiceRow,
+  SupplierPaymentAllocationRow,
+  SupplierPaymentRow,
+} from './payables.types.ts'
+
+const paymentSelection = {
+  id: supplierPayment.id,
+  number: supplierPayment.number,
+  supplierId: supplierPayment.supplierId,
+  branchId: supplierPayment.branchId,
+  method: supplierPayment.method,
+  amountMinor: supplierPayment.amountMinor,
+  reference: supplierPayment.reference,
+  paidAt: supplierPayment.paidAt,
+  paymentDetailId: supplierPayment.paymentDetailId,
+  status: supplierPayment.status,
+  voidReason: supplierPayment.voidReason,
+  voidedBy: supplierPayment.voidedBy,
+  voidedAt: supplierPayment.voidedAt,
+  note: supplierPayment.note,
+  idempotencyKey: supplierPayment.idempotencyKey,
+  createdBy: supplierPayment.createdBy,
+  createdAt: supplierPayment.createdAt,
+  updatedAt: supplierPayment.updatedAt,
+}
+
+export async function insertInvoice(
+  values: typeof supplierInvoice.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor.insert(supplierInvoice).values(values).returning()
+  return rows[0] ?? null
+}
+
+export async function insertInvoiceLines(
+  values: (typeof supplierInvoiceLine.$inferInsert)[],
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (values.length === 0) return
+  await executor.insert(supplierInvoiceLine).values(values)
+}
+
+export async function findInvoiceById(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierInvoice)
+    .where(eq(supplierInvoice.id, id))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function findInvoiceByReceipt(
+  receiptId: string,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierInvoice)
+    .where(eq(supplierInvoice.receiptId, receiptId))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function findInvoiceBySupplierNumber(
+  supplierId: string,
+  branchId: string,
+  supplierInvoiceNumber: string,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierInvoice)
+    .where(
+      and(
+        eq(supplierInvoice.supplierId, supplierId),
+        eq(supplierInvoice.branchId, branchId),
+        eq(supplierInvoice.supplierInvoiceNumber, supplierInvoiceNumber),
+        sql`${supplierInvoice.status} <> 'VOID'`,
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function findInvoiceByIdempotency(
+  branchId: string,
+  idempotencyKey: string,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierInvoice)
+    .where(
+      and(
+        eq(supplierInvoice.branchId, branchId),
+        eq(supplierInvoice.idempotencyKey, idempotencyKey),
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function lockInvoiceForUpdate(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierInvoice)
+    .where(eq(supplierInvoice.id, id))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
+/** Locks many invoices in a stable sorted order (deadlock-safe, D12). */
+export async function lockInvoicesForUpdate(
+  ids: readonly string[],
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow[]> {
+  if (ids.length === 0) return []
+  const sorted = [...new Set(ids)].sort()
+  return executor
+    .select()
+    .from(supplierInvoice)
+    .where(inArray(supplierInvoice.id, sorted))
+    .orderBy(asc(supplierInvoice.id))
+    .for('update')
+}
+
+export async function setInvoiceAmountPaid(
+  id: string,
+  amountPaidMinor: number,
+  status: InvoiceStatus,
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .update(supplierInvoice)
+    .set({ amountPaidMinor, status })
+    .where(eq(supplierInvoice.id, id))
+    .returning()
+  return rows[0] ?? null
+}
+
+export async function voidInvoiceRow(
+  id: string,
+  values: { voidReason: SupplierInvoiceRow['voidReason']; voidedBy: string | null; voidedAt: Date },
+  executor: DbExecutor = db,
+): Promise<SupplierInvoiceRow | null> {
+  const rows = await executor
+    .update(supplierInvoice)
+    .set({ status: 'VOID', ...values })
+    .where(eq(supplierInvoice.id, id))
+    .returning()
+  return rows[0] ?? null
+}
+
+function invoiceConditions(filters: InvoiceListFilters): SQL | undefined {
+  const conditions: SQL[] = []
+  if (filters.supplierId) conditions.push(eq(supplierInvoice.supplierId, filters.supplierId))
+  if (filters.branchId) conditions.push(eq(supplierInvoice.branchId, filters.branchId))
+  if (filters.status) conditions.push(eq(supplierInvoice.status, filters.status))
+  if (filters.overdue) {
+    conditions.push(inArray(supplierInvoice.status, ['OPEN', 'PARTIAL']))
+    conditions.push(lt(supplierInvoice.dueDate, filters.asOfDate))
+  }
+  if (filters.from) conditions.push(gte(supplierInvoice.invoiceDate, filters.from))
+  if (filters.to) conditions.push(lte(supplierInvoice.invoiceDate, filters.to))
+  return and(...conditions)
+}
+
+export async function selectInvoicePage(filters: InvoiceListFilters): Promise<InvoiceListRow[]> {
+  const rows = await db
+    .select({
+      id: supplierInvoice.id,
+      number: supplierInvoice.number,
+      supplierId: supplierInvoice.supplierId,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      branchId: supplierInvoice.branchId,
+      branchCode: branch.code,
+      branchName: branch.name,
+      supplierInvoiceNumber: supplierInvoice.supplierInvoiceNumber,
+      invoiceDate: supplierInvoice.invoiceDate,
+      dueDate: supplierInvoice.dueDate,
+      receiptId: supplierInvoice.receiptId,
+      subtotalMinor: supplierInvoice.subtotalMinor,
+      vatMinor: supplierInvoice.vatMinor,
+      nhilMinor: supplierInvoice.nhilMinor,
+      getfundMinor: supplierInvoice.getfundMinor,
+      totalMinor: supplierInvoice.totalMinor,
+      amountPaidMinor: supplierInvoice.amountPaidMinor,
+      status: supplierInvoice.status,
+      createdAt: supplierInvoice.createdAt,
+    })
+    .from(supplierInvoice)
+    .innerJoin(supplier, eq(supplier.id, supplierInvoice.supplierId))
+    .innerJoin(branch, eq(branch.id, supplierInvoice.branchId))
+    .where(invoiceConditions(filters))
+    .orderBy(desc(supplierInvoice.invoiceDate), desc(supplierInvoice.number))
+    .limit(filters.limit)
+    .offset(filters.offset)
+
+  return rows.map((row) => ({
+    ...row,
+    outstandingMinor: row.totalMinor - row.amountPaidMinor,
+  }))
+}
+
+export async function countInvoices(filters: InvoiceListFilters): Promise<number> {
+  const rows = await db
+    .select({ total: count() })
+    .from(supplierInvoice)
+    .where(invoiceConditions(filters))
+  return rows[0]?.total ?? 0
+}
+
+export async function selectInvoiceLines(
+  invoiceId: string,
+  executor: DbExecutor = db,
+): Promise<InvoiceLineView[]> {
+  return executor
+    .select({
+      id: supplierInvoiceLine.id,
+      productId: supplierInvoiceLine.productId,
+      sku: product.sku,
+      productName: product.name,
+      description: supplierInvoiceLine.description,
+      quantity: supplierInvoiceLine.quantity,
+      unitCostMinor: supplierInvoiceLine.unitCostMinor,
+      lineTotalMinor: supplierInvoiceLine.lineTotalMinor,
+    })
+    .from(supplierInvoiceLine)
+    .leftJoin(product, eq(product.id, supplierInvoiceLine.productId))
+    .where(eq(supplierInvoiceLine.invoiceId, invoiceId))
+    .orderBy(asc(supplierInvoiceLine.createdAt), asc(supplierInvoiceLine.id))
+}
+
+export async function selectAllocationsByInvoice(
+  invoiceId: string,
+  executor: DbExecutor = db,
+): Promise<InvoiceAllocationRow[]> {
+  return executor
+    .select({
+      id: supplierPaymentAllocation.id,
+      paymentId: supplierPaymentAllocation.paymentId,
+      paymentNumber: supplierPayment.number,
+      method: supplierPayment.method,
+      paymentStatus: supplierPayment.status,
+      paidAt: supplierPayment.paidAt,
+      kind: supplierPaymentAllocation.kind,
+      amountMinor: supplierPaymentAllocation.amountMinor,
+      reversesAllocationId: supplierPaymentAllocation.reversesAllocationId,
+      note: supplierPaymentAllocation.note,
+      createdAt: supplierPaymentAllocation.createdAt,
+    })
+    .from(supplierPaymentAllocation)
+    .innerJoin(supplierPayment, eq(supplierPayment.id, supplierPaymentAllocation.paymentId))
+    .where(eq(supplierPaymentAllocation.invoiceId, invoiceId))
+    .orderBy(asc(supplierPaymentAllocation.createdAt), asc(supplierPaymentAllocation.id))
+}
+
+/** Signed sum: APPLY rows are positive, RELEASE rows negative. */
+export async function sumAllocationsForInvoice(
+  invoiceId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({
+      total: sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(supplierPaymentAllocation)
+    .where(eq(supplierPaymentAllocation.invoiceId, invoiceId))
+  return rows[0]?.total ?? 0
+}
+
+export async function insertPayment(
+  values: typeof supplierPayment.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentRow | null> {
+  const rows = await executor.insert(supplierPayment).values(values).returning()
+  return rows[0] ?? null
+}
+
+export async function findPaymentById(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierPayment)
+    .where(eq(supplierPayment.id, id))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function insertAllocation(
+  values: typeof supplierPaymentAllocation.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentAllocationRow | null> {
+  const rows = await executor.insert(supplierPaymentAllocation).values(values).returning()
+  return rows[0] ?? null
+}
+
+/** Payments that have at least one allocation against the invoice, with totals. */
+export async function selectPaymentsByInvoice(
+  invoiceId: string,
+  executor: DbExecutor = db,
+): Promise<PaymentListRow[]> {
+  const allocatedMinor = sql<number>`coalesce((
+    select sum(${supplierPaymentAllocation.amountMinor})
+    from ${supplierPaymentAllocation}
+    where ${supplierPaymentAllocation.paymentId} = ${supplierPayment.id}
+  ), 0)`.mapWith(Number)
+
+  const rows = await executor
+    .select({ ...paymentSelection, allocatedMinor })
+    .from(supplierPayment)
+    .where(
+      sql`exists (
+        select 1 from ${supplierPaymentAllocation}
+        where ${supplierPaymentAllocation.paymentId} = ${supplierPayment.id}
+          and ${supplierPaymentAllocation.invoiceId} = ${invoiceId}
+      )`,
+    )
+    .orderBy(asc(supplierPayment.paidAt), asc(supplierPayment.number))
+
+  return rows.map((row) => ({
+    ...row,
+    unallocatedMinor: row.amountMinor - row.allocatedMinor,
+  }))
+}
