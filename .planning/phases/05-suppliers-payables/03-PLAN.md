@@ -87,11 +87,17 @@ server-side, refuses duplicates, and can be voided while untouched.
      index); when the receipt has a `supplierId` it must equal the invoice's supplier.
      When created from a receipt with `copyFromReceipt: true`, the service builds the
      lines from the receipt's lines (product, quantity, cost) unless lines are supplied.
-  5. Tax: when `vatMinor`/`nhilMinor`/`getfundMinor` are omitted, derive the split from
-     the subtotal with `taxBreakdown(subtotal, 'STANDARD', 'INCLUSIVE')` from
-     `@gikautos/shared` (total equals the tax-inclusive costs by construction); when
-     provided, use them (each integer ≥ 0). `totalMinor = subtotal + vat + nhil + getfund`
-     always recomputed server-side.
+  5. Tax: the line sum (`lineTotalMinor = quantity × unitCostMinor`) is the recorded,
+     tax-inclusive cost unless the operator supplies explicit tax values. When
+     `vatMinor`/`nhilMinor`/`getfundMinor` are omitted, derive
+     `breakdown = taxBreakdown(lineSum, 'STANDARD', 'INCLUSIVE')` from `@gikautos/shared`
+     and store `subtotalMinor = breakdown.baseMinor`, the three components, and
+     `totalMinor = breakdown.totalMinor` — so `subtotal + vat + nhil + getfund` equals the
+     recorded line sum (and the receipt total) exactly. When the tax fields are provided
+     (including zeroed tax for non-registered suppliers), lines are treated as net:
+     `subtotalMinor = lineSum` and
+     `totalMinor = subtotalMinor + vatMinor + nhilMinor + getfundMinor`. Totals are always
+     recomputed server-side; never trust client totals.
   6. `invoiceDate` required (ISO date); `dueDate` defaults to `invoiceDate + supplier
      paymentTermDays` (0 = same day) and is editable; `dueDate ≥ invoiceDate` validated.
   7. Duplicate supplier invoice number for the supplier+branch (non-VOID) → 409 with
