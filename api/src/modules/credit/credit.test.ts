@@ -1202,4 +1202,55 @@ describe.skipIf(!available)('credit HTTP surface', () => {
     })
     expect(missing.status).toBe(404)
   })
+
+  it('filters entry lists by kind over HTTP', async () => {
+    const customerId = await createCustomerRow('HTTP Kind Filter')
+    await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ limitMinor: 20_000, paymentTermDays: 0 }),
+    })
+    await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 5_000, reasonCode: 'SALE' }),
+    })
+    await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 2_000, reasonCode: 'OTHER' }),
+    })
+    await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, amountMinor: 1_000, method: 'CASH' }),
+    })
+
+    const repayments = await app.request(
+      `/api/credit/entries?customerId=${customerId}&kind=REPAYMENT`,
+      {
+        headers: authedHeaders(managerCookie),
+      },
+    )
+    expect(repayments.status).toBe(200)
+    const repaymentBody = await readJson<{
+      entries: { kind: string }[]
+      total: number
+      page: number
+      pageSize: number
+    }>(repayments)
+    expect(repaymentBody.total).toBe(1)
+    expect(repaymentBody.entries.map((entry) => entry.kind)).toEqual(['REPAYMENT'])
+
+    const charges = await app.request(`/api/credit/entries?customerId=${customerId}&kind=CHARGE`, {
+      headers: authedHeaders(managerCookie),
+    })
+    const chargeBody = await readJson<{ total: number }>(charges)
+    expect(chargeBody.total).toBe(2)
+
+    const bogus = await app.request(`/api/credit/entries?customerId=${customerId}&kind=BOGUS`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(bogus.status).toBe(400)
+  })
 })

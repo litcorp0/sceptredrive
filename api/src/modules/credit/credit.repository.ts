@@ -4,6 +4,7 @@ import { customer } from '../customers/customers.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { creditLedgerEntry, creditProfile } from './credit.schema.ts'
 import type {
+  CreditEntryKind,
   CreditEntryListRow,
   CreditLedgerEntryRow,
   CreditProfileListRow,
@@ -100,6 +101,7 @@ export async function findEntryByIdempotencyKey(
 export interface EntryFilters {
   customerId?: string
   branchId?: string | null
+  kind?: CreditEntryKind
   from?: Date
   to?: Date
 }
@@ -108,6 +110,7 @@ function buildEntryCondition(filters: EntryFilters): SQL | undefined {
   const conditions: SQL[] = []
   if (filters.customerId) conditions.push(eq(creditLedgerEntry.customerId, filters.customerId))
   if (filters.branchId) conditions.push(eq(creditLedgerEntry.branchId, filters.branchId))
+  if (filters.kind) conditions.push(eq(creditLedgerEntry.kind, filters.kind))
   if (filters.from) conditions.push(gte(creditLedgerEntry.occurredAt, filters.from))
   if (filters.to) conditions.push(lte(creditLedgerEntry.occurredAt, filters.to))
   return conditions.length > 0 ? and(...conditions) : undefined

@@ -146,6 +146,7 @@ export const entryCreateSchema = z
 export const entryListQuerySchema = z.object({
   customerId: z.uuid(),
   branchId: z.uuid().optional(),
+  kind: z.enum(['CHARGE', 'REPAYMENT', 'REFUND', 'ADJUSTMENT']).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),

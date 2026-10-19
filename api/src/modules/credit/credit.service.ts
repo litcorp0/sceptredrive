@@ -500,6 +500,7 @@ export async function listEntries(
   const filters = {
     customerId: query.customerId,
     branchId,
+    kind: query.kind,
     from: query.from,
     to: query.to ? inclusiveEnd(query.to) : undefined,
   }
