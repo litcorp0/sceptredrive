@@ -2,10 +2,10 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-19
-**Status:** Phase 4 execution in progress — Plans 01–03 complete and green (api 216/216,
+**Status:** Phase 4 execution in progress — Plans 01–04 complete and green (api 232/232,
 shared 54/54); live smoke test passed (charge → repayment → aging → statement reconcile).
-**Next action:** Execute Plan 04 (loyalty module — account, ledger, lots, FEFO, expiry
-engine) following the GSD waves in `00-CONTEXT.md`.
+**Next action:** Execute Plan 05 (pg-boss jobs infrastructure and the loyalty expiry
+schedule) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
@@ -17,7 +17,7 @@ engine) following the GSD waves in `00-CONTEXT.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟨 Executing (3/8 plans) |
+| 4 | Customers, Credit & Loyalty | 🟨 Executing (4/8 plans) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -64,7 +64,7 @@ engine) following the GSD waves in `00-CONTEXT.md`.
 | 01 | Phase 4 schema, settings, permissions, phone helper, and demo seed | ✅ Complete |
 | 02 | Customers module — identity, search, lifecycle | ✅ Complete |
 | 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ✅ Complete |
-| 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ⬜ Pending |
+| 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ✅ Complete |
 | 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ⬜ Pending |
 | 06 | Console — customers, credit ledger, repayments, statements, aging | ⬜ Pending |
 | 07 | Console — loyalty history, liability report, and settings | ⬜ Pending |
@@ -193,6 +193,30 @@ engine) following the GSD waves in `00-CONTEXT.md`.
 - Routes: `GET/PUT /api/credit/profiles(/:customerId)`, `POST /api/credit/repayments`,
   `POST/GET /api/credit/entries`, `GET /api/credit/aging`,
   `GET /api/credit/statements/:customerId` wired in `app.ts`.
+- Loyalty module (`api/src/modules/loyalty`): one write path `postEntry` — locks the
+  global account `FOR UPDATE` (upsert-then-lock, D16), computes EARN points
+  `floor(netPaidMinor × loyalty.earnPointsPerCedi / 100)` (floor per sale, no carry —
+  a sale below one point writes nothing), requires REDEEM ≥ `loyalty.minimumRedeemPoints`
+  and ≤ balance (409 otherwise), stores redemptions/clawbacks negative, consumes live lots
+  earliest-expiry-first with per-lot `loyalty_lot_consumption` rows (lots locked
+  `FOR UPDATE` ordered `(expiresAt, earnEntryId)`), creates a lot for every positive
+  posting (`expiresAt = occurredAt + loyalty.expiryMonths`), allows clawback shortfall as
+  a negative balance with lots clamped at zero, projects the balance, audits
+  (`loyalty.earned/redeemed/clawback/adjusted`), and replays idempotently per
+  `(branchId, idempotencyKey)` — pre-check plus unique-violation replay. `expireDueLots(now)`
+  expires per account in one transaction (single global EXPIRE entry with
+  `branchId`/`createdBy` null plus consumption rows) and no-ops on a second run; audit
+  `loyalty.expiry_run`.
+- Loyalty reads: `getAccountDetail` (global — one balance across branches; account
+  bootstrapped if missing) and `getLiability` (outstanding points + GHS value at the
+  current rate, per-branch activity totals for the range, negative balances — managers
+  scoped to their own branch activity plus their customers, admins to all), plus read-only
+  `reconcileAccounts` proving `balance = Σ deltas` and
+  `lots remaining = Σ positive deltas − Σ consumed` across every account.
+- Loyalty routes: `GET /api/loyalty/accounts/:customerId` (`loyalty.read`),
+  `POST /api/loyalty/entries` (`loyalty.adjust` — the staff path Phase 6/7 POS flows
+  reuse), `GET /api/loyalty/liability` (`loyalty.read`) wired in `app.ts`; redeem quote
+  250 pts = GHS 2.50 (250 pesewas) at the 100 pts/GHS default.
 
 ---
 
@@ -251,6 +275,9 @@ engine) following the GSD waves in `00-CONTEXT.md`.
 | 2026-10-19 | Phase 4 Plan 03: credit profiles are created lazily (upsert-then-lock) by the first settings change or posting; the default limit is 0, so charges need a manager to raise the limit first. |
 | 2026-10-19 | Phase 4 Plan 03: a hold blocks new CHARGE only (collections stay open); anonymized customers accept no credit writes at all; archived customers block charge but allow repayment. |
 | 2026-10-19 | Phase 4 Plan 03: an over-limit override writes two audit rows — the posting plus `credit.override` (reason, note, approver, limit snapshot). Aging buckets are fixed from the due date and only non-zero outstanding appears; statement closing is computed as opening + ranged so it reconciles by construction. |
+| 2026-10-19 | Phase 4 Plan 04: earn is floor per sale with no carry (`floor(netPaidMinor × rate / 100)`); a sale below one point writes nothing. Redemptions are accepted positive at the HTTP edge, stored negative, and require ≥ `loyalty.minimumRedeemPoints` and enough balance (409). EARN carries the net amount paid; the engine computes points. |
+| 2026-10-19 | Phase 4 Plan 04: redemption and clawback consume lots earliest-expiry-first; a clawback shortfall leaves the balance negative with lots clamped at zero (surfaced in the liability negative-balances list). Positive adjustments create a lot so expiry stays total; ADJUST is reason-coded, CLAWBACK is always RETURN, and EXPIRE is engine-only (`branchId`/`createdBy` null), one entry per account per run, idempotent across runs. |
+| 2026-10-19 | Phase 4 Plan 04: reconciliation compares each projection to its ledger sum and lot remainders to positive backing − consumption; the liability value uses `floor(points × 100 / pointsPerCedi)`. Liability scoping: outstanding is global (all-branch), activity rows are manager-scoped plus global expiry rows, negative balances are manager-scoped by customer branch. |
 
 ---
 
@@ -346,3 +373,14 @@ engine) following the GSD waves in `00-CONTEXT.md`.
 - Phase 4: customer archive/anonymize POST bodies are `{}` or `{ "note": "…" }`; the
   customer module owns bootstrap of the `loyalty_account` row (schema import only, no
   loyalty-module dependency) per D22.
+- Phase 4: every loyalty write goes through `postEntry` in
+  `api/src/modules/loyalty/loyalty.service.ts` (account locked `FOR UPDATE`, a lot per
+  positive posting, FEFO consumption ordered `(expires_at, earn_entry_id)`, balance
+  projection, audit). `expireDueLots` is the seam Plan 05 schedules; read-only
+  `reconcileAccounts` backs the journey test and the Phase 8 reports — keep both green.
+- Phase 4: loyalty settings stay at defaults in tests (`earnPointsPerCedi` 1,
+  `pointsPerCedi` 100, `expiryMonths` 12, `minimumRedeemPoints` 100); platform tests only
+  read them or reject invalid writes, so no suite should mutate global loyalty settings.
+- Phase 4: loyalty reads are global, but `getLiability` activity is manager-scoped
+  (own branch plus branch-less EXPIRE rows); tests assert per-branch totals only for
+  their own uniquely-coded branches because all suites share `gikautos_test`.
