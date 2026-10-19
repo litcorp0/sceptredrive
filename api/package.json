@@ -25,6 +25,7 @@
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "pg-boss": "catalog:",
     "pino": "catalog:",
     "resend": "catalog:",
     "zod": "catalog:"
