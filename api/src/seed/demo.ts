@@ -13,9 +13,16 @@ import {
   ensureSetting,
   ensureStockReceipt,
   ensureStockThreshold,
+  ensureSupplier,
+  ensureSupplierInvoice,
+  ensureSupplierPayment,
+  ensureSupplierPaymentDetail,
+  ensureSupplierProduct,
   ensureTerminal,
   ensureUom,
+  findStockReceiptId,
   findUserByEmail,
+  linkReceiptSuppliers,
 } from './helpers.ts'
 
 export interface SeedDemoResult {
@@ -381,6 +388,185 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     })
   ) {
     created.push('opening stock GRN-00002 @ ACC-SPX')
+  }
+
+  const accraParts = await ensureSupplier({
+    code: 'SUP-00001',
+    name: 'Accra Parts Depot',
+    contactName: 'Nana Adjei',
+    phone: '+233302555001',
+    email: 'accounts@accraparts.example',
+    address: 'Industrial Area, Accra',
+    tin: 'C0012345678',
+    vatNumber: 'V0012345678',
+    paymentTermDays: 30,
+  })
+  if (accraParts.created) created.push('supplier SUP-00001 Accra Parts Depot')
+
+  const gikAutosImports = await ensureSupplier({
+    code: 'SUP-00002',
+    name: 'GikAutos Imports',
+    contactName: 'Esi Danso',
+    phone: '+233302555002',
+    email: 'finance@gikautosimports.example',
+    address: 'Tema Harbour Area, Tema',
+    tin: 'C0098765432',
+    paymentTermDays: 14,
+  })
+  if (gikAutosImports.created) created.push('supplier SUP-00002 GikAutos Imports')
+
+  if (
+    await ensureSupplierPaymentDetail({
+      supplierId: accraParts.id,
+      method: 'BANK',
+      accountName: 'Accra Parts Depot Ltd',
+      accountNumber: '1234567890',
+      bankName: 'GCB Bank',
+      bankCode: 'GCB',
+    })
+  ) {
+    created.push('supplier bank detail SUP-00001')
+  }
+
+  if (
+    await ensureSupplierPaymentDetail({
+      supplierId: accraParts.id,
+      method: 'MOMO',
+      accountName: 'Accra Parts Depot',
+      accountNumber: '0244000001',
+      momoNetwork: 'MTN',
+      phone: '+233244000001',
+      isDefault: true,
+    })
+  ) {
+    created.push('supplier MoMo detail SUP-00001')
+  }
+
+  if (
+    await ensureSupplierPaymentDetail({
+      supplierId: gikAutosImports.id,
+      method: 'MOMO',
+      accountName: 'GikAutos Imports',
+      accountNumber: '0244000002',
+      momoNetwork: 'MTN',
+      phone: '+233244000002',
+      isDefault: true,
+    })
+  ) {
+    created.push('supplier MoMo detail SUP-00002')
+  }
+
+  const linkedReceipts = await linkReceiptSuppliers({
+    'Accra Parts Depot': accraParts.id,
+    'GikAutos Imports': gikAutosImports.id,
+  })
+  if (linkedReceipts > 0) created.push(`linked ${linkedReceipts} receipt(s) to suppliers`)
+
+  const supplierProductMappings = [
+    ['SUP-00001', 'GIK-00001', 'APD-OF-4501', 7, 4_500, true],
+    ['SUP-00001', 'GIK-00006', 'APD-BP-1275', 10, 12_000, false],
+    ['SUP-00002', 'GIK-00002', 'GIKIMP-OF-0500', 21, 5_000, false],
+    ['SUP-00002', 'GIK-00007', 'GIKIMP-BP-9910', 21, 10_500, false],
+  ] as const
+
+  for (const [supplierCode, sku, supplierSku, leadTimeDays, lastCostMinor, isPreferred] of
+    supplierProductMappings) {
+    const supplierId = supplierCode === 'SUP-00001' ? accraParts.id : gikAutosImports.id
+    if (
+      await ensureSupplierProduct({
+        supplierId,
+        productId: productIdFor(sku),
+        supplierSku,
+        leadTimeDays,
+        lastCostMinor,
+        isPreferred,
+      })
+    ) {
+      created.push(`supplier product ${supplierCode} × ${sku}`)
+    }
+  }
+
+  const grnTwoId = await findStockReceiptId('GRN-00002')
+  if (!grnTwoId) throw new Error('Demo receipt GRN-00002 is missing')
+
+  const receiptInvoice = await ensureSupplierInvoice({
+    number: 'SINV-00001',
+    supplierId: accraParts.id,
+    branchId: retail.id,
+    supplierInvoiceNumber: 'APD-0451',
+    invoiceDate: '2026-10-02',
+    dueDate: '2026-11-01',
+    receiptId: grnTwoId,
+    note: 'Opened from GRN-00002',
+    tax: 'DERIVED',
+    lines: DEMO_PRODUCTS.map((item, index) => ({
+      productId: productIdFor(item.sku),
+      quantity: retailQuantityOverrides.get(item.sku) ?? 6 + (index % 4) * 3,
+      unitCostMinor: item.costPriceMinor,
+    })),
+  })
+  if (receiptInvoice.created) created.push('supplier invoice SINV-00001 @ ACC-SPX')
+
+  const partPaymentMinor = Math.floor((receiptInvoice.totalMinor * 40) / 100)
+  if (
+    await ensureSupplierPayment({
+      number: 'PAY-00001',
+      supplierId: accraParts.id,
+      branchId: retail.id,
+      method: 'MOMO',
+      amountMinor: partPaymentMinor,
+      paidAt: new Date('2026-10-09T10:30:00.000Z'),
+      reference: 'MOMO-APD-1009',
+      allocations: [{ invoiceId: receiptInvoice.id, amountMinor: partPaymentMinor }],
+    })
+  ) {
+    created.push('supplier payment PAY-00001 @ ACC-SPX')
+  }
+
+  const standaloneInvoice = await ensureSupplierInvoice({
+    number: 'SINV-00002',
+    supplierId: gikAutosImports.id,
+    branchId: retail.id,
+    supplierInvoiceNumber: 'GIKIMP-7781',
+    invoiceDate: '2026-10-08',
+    dueDate: '2026-10-22',
+    note: 'Standalone invoice — no stock receipt',
+    tax: 'NONE',
+    lines: [
+      {
+        description: 'Freight and clearing — Tema port',
+        quantity: 1,
+        unitCostMinor: 35_000,
+      },
+    ],
+  })
+  if (standaloneInvoice.created) created.push('supplier invoice SINV-00002 @ ACC-SPX')
+
+  if (
+    await ensureSupplierPayment({
+      number: 'PAY-00002',
+      supplierId: gikAutosImports.id,
+      branchId: retail.id,
+      method: 'BANK',
+      amountMinor: 20_000,
+      paidAt: new Date('2026-10-12T09:15:00.000Z'),
+      reference: 'GCB-TRF-778812',
+      allocations: [],
+    })
+  ) {
+    created.push('supplier payment PAY-00002 @ ACC-SPX (on account)')
+  }
+
+  if (await ensureSequenceAtLeast('supplier.codeSequence', 3)) {
+    created.push('supplier code sequence')
+  }
+
+  if (await ensureSequenceAtLeast('payable.invoiceSequence', 3)) {
+    created.push('supplier invoice sequence')
+  }
+
+  if (await ensureSequenceAtLeast('payable.paymentSequence', 3)) {
+    created.push('supplier payment sequence')
   }
 
   for (const [sku, threshold] of [

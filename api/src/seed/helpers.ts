@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { db } from '@gikautos/db'
-import { averageCostAfterReceipt } from '@gikautos/shared'
+import { averageCostAfterReceipt, taxBreakdown } from '@gikautos/shared'
 import { hash, type Options } from '@node-rs/argon2'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
@@ -21,8 +21,19 @@ import {
 } from '../modules/loyalty/loyalty.schema.ts'
 import { branch } from '../modules/org/branches.schema.ts'
 import { terminal } from '../modules/org/terminals.schema.ts'
+import {
+  supplierInvoice,
+  supplierInvoiceLine,
+  supplierPayment,
+  supplierPaymentAllocation,
+} from '../modules/payables/payables.schema.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
 import { barcode, product, productPrice } from '../modules/products/products.schema.ts'
+import {
+  supplier,
+  supplierPaymentDetail,
+  supplierProduct,
+} from '../modules/suppliers/suppliers.schema.ts'
 
 type SeedRole = 'ADMIN' | 'MANAGER' | 'CASHIER'
 
@@ -346,6 +357,158 @@ export async function ensureProductPrice(input: {
   return true
 }
 
+export async function ensureSupplier(input: {
+  code: string
+  name: string
+  contactName?: string
+  phone?: string
+  email?: string
+  address?: string
+  tin?: string
+  vatNumber?: string
+  paymentTermDays?: number
+}): Promise<{ id: string; created: boolean }> {
+  const existing = await db
+    .select({ id: supplier.id })
+    .from(supplier)
+    .where(eq(supplier.code, input.code))
+    .limit(1)
+  if (existing[0]) return { id: existing[0].id, created: false }
+
+  const rows = await db
+    .insert(supplier)
+    .values({
+      code: input.code,
+      name: input.name,
+      contactName: input.contactName ?? null,
+      phone: input.phone ?? null,
+      email: input.email ?? null,
+      address: input.address ?? null,
+      tin: input.tin ?? null,
+      vatNumber: input.vatNumber ?? null,
+      paymentTermDays: input.paymentTermDays ?? 0,
+      createdBy: 'seed',
+    })
+    .onConflictDoNothing()
+    .returning({ id: supplier.id })
+
+  if (rows[0]) return { id: rows[0].id, created: true }
+
+  const raced = await db
+    .select({ id: supplier.id })
+    .from(supplier)
+    .where(eq(supplier.code, input.code))
+    .limit(1)
+  if (!raced[0]) throw new Error(`Could not create supplier ${input.code}`)
+  return { id: raced[0].id, created: false }
+}
+
+export async function ensureSupplierPaymentDetail(input: {
+  supplierId: string
+  method: 'BANK' | 'MOMO'
+  accountName: string
+  accountNumber: string
+  bankName?: string
+  bankCode?: string
+  momoNetwork?: 'MTN' | 'VOD' | 'ATL'
+  phone?: string
+  isDefault?: boolean
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: supplierPaymentDetail.id })
+    .from(supplierPaymentDetail)
+    .where(
+      and(
+        eq(supplierPaymentDetail.supplierId, input.supplierId),
+        eq(supplierPaymentDetail.method, input.method),
+        eq(supplierPaymentDetail.accountNumber, input.accountNumber),
+      ),
+    )
+    .limit(1)
+  if (existing[0]) return false
+
+  const rows = await db
+    .insert(supplierPaymentDetail)
+    .values({
+      supplierId: input.supplierId,
+      method: input.method,
+      accountName: input.accountName,
+      accountNumber: input.accountNumber,
+      bankName: input.bankName ?? null,
+      bankCode: input.bankCode ?? null,
+      momoNetwork: input.momoNetwork ?? null,
+      phone: input.phone ?? null,
+      isDefault: input.isDefault ?? false,
+      createdBy: 'seed',
+    })
+    .onConflictDoNothing()
+    .returning({ id: supplierPaymentDetail.id })
+  return Boolean(rows[0])
+}
+
+export async function ensureSupplierProduct(input: {
+  supplierId: string
+  productId: string
+  supplierSku: string
+  leadTimeDays?: number
+  lastCostMinor?: number
+  isPreferred?: boolean
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: supplierProduct.id })
+    .from(supplierProduct)
+    .where(
+      and(
+        eq(supplierProduct.supplierId, input.supplierId),
+        eq(supplierProduct.productId, input.productId),
+      ),
+    )
+    .limit(1)
+  if (existing[0]) return false
+
+  const rows = await db
+    .insert(supplierProduct)
+    .values({
+      supplierId: input.supplierId,
+      productId: input.productId,
+      supplierSku: input.supplierSku,
+      leadTimeDays: input.leadTimeDays ?? null,
+      lastCostMinor: input.lastCostMinor ?? 0,
+      lastCostAt: input.lastCostMinor === undefined ? null : new Date(),
+      isPreferred: input.isPreferred ?? false,
+      createdBy: 'seed',
+    })
+    .onConflictDoNothing()
+    .returning({ id: supplierProduct.id })
+  return Boolean(rows[0])
+}
+
+export async function findStockReceiptId(number: string): Promise<string | null> {
+  const rows = await db
+    .select({ id: stockReceipt.id })
+    .from(stockReceipt)
+    .where(eq(stockReceipt.number, number))
+    .limit(1)
+  return rows[0]?.id ?? null
+}
+
+/**
+ * Backfills the supplier link on receipts that carry a matching free-text
+ * supplier name and no link yet. Idempotent; returns the number of rows linked.
+ */
+export async function linkReceiptSuppliers(map: Record<string, string>): Promise<number> {
+  let linked = 0
+  for (const [supplierName, supplierId] of Object.entries(map)) {
+    const rows = await db
+      .update(stockReceipt)
+      .set({ supplierId })
+      .where(and(eq(stockReceipt.supplierName, supplierName), isNull(stockReceipt.supplierId)))
+      .returning({ id: stockReceipt.id })
+    linked += rows.length
+  }
+  return linked
+}
+
 /**
  * Seeds an immutable opening-stock receipt (document + lines + movements +
  * level projection) in one transaction, mirroring the production posting rules.
@@ -355,6 +518,7 @@ export async function ensureStockReceipt(input: {
   number: string
   branchId: string
   lines: readonly { productId: string; quantity: number; unitCostMinor: number }[]
+  supplierId?: string
   supplierName?: string
   supplierInvoiceNumber?: string
   note?: string
@@ -375,6 +539,7 @@ export async function ensureStockReceipt(input: {
       .values({
         number: input.number,
         branchId: input.branchId,
+        supplierId: input.supplierId ?? null,
         supplierName: input.supplierName ?? null,
         supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
         note: input.note ?? null,
@@ -478,6 +643,184 @@ export async function ensureStockThreshold(input: {
     })
     .onConflictDoNothing()
   return true
+}
+
+/**
+ * Seeds a supplier invoice with its lines, mirroring the production posting
+ * rules. Line unit costs are tax-inclusive; when `tax` is `DERIVED` the split
+ * is derived from the line sum with the shared Ghana engine, so
+ * `subtotal + vat + nhil + getfund` equals the recorded line total exactly.
+ * Idempotent by invoice number; returns the invoice id and total either way.
+ */
+export async function ensureSupplierInvoice(input: {
+  number: string
+  supplierId: string
+  branchId: string
+  supplierInvoiceNumber: string
+  invoiceDate: string
+  dueDate: string
+  receiptId?: string | null
+  lines: readonly {
+    productId?: string | null
+    description?: string | null
+    quantity: number
+    unitCostMinor: number
+  }[]
+  tax: 'DERIVED' | 'NONE'
+  note?: string
+}): Promise<{ id: string; totalMinor: number; created: boolean }> {
+  const existing = await db
+    .select({ id: supplierInvoice.id, totalMinor: supplierInvoice.totalMinor })
+    .from(supplierInvoice)
+    .where(eq(supplierInvoice.number, input.number))
+    .limit(1)
+  if (existing[0]) return { ...existing[0], created: false }
+
+  const linesTotal = input.lines.reduce(
+    (sum, line) => sum + line.quantity * line.unitCostMinor,
+    0,
+  )
+  let subtotalMinor = linesTotal
+  let vatMinor = 0
+  let nhilMinor = 0
+  let getfundMinor = 0
+  let totalMinor = linesTotal
+
+  if (input.tax === 'DERIVED') {
+    const breakdown = taxBreakdown(linesTotal, 'STANDARD', 'INCLUSIVE')
+    subtotalMinor = breakdown.baseMinor
+    vatMinor = breakdown.vatMinor
+    nhilMinor = breakdown.nhilMinor
+    getfundMinor = breakdown.getfundMinor
+    totalMinor = breakdown.totalMinor
+  }
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(supplierInvoice)
+      .values({
+        number: input.number,
+        supplierId: input.supplierId,
+        branchId: input.branchId,
+        supplierInvoiceNumber: input.supplierInvoiceNumber,
+        invoiceDate: input.invoiceDate,
+        dueDate: input.dueDate,
+        receiptId: input.receiptId ?? null,
+        subtotalMinor,
+        vatMinor,
+        nhilMinor,
+        getfundMinor,
+        totalMinor,
+        note: input.note ?? null,
+        createdBy: 'seed',
+      })
+      .onConflictDoNothing()
+      .returning({ id: supplierInvoice.id })
+
+    const header = rows[0]
+    if (!header) {
+      const raced = await tx
+        .select({ id: supplierInvoice.id, totalMinor: supplierInvoice.totalMinor })
+        .from(supplierInvoice)
+        .where(eq(supplierInvoice.number, input.number))
+        .limit(1)
+      if (!raced[0]) throw new Error(`Could not create supplier invoice ${input.number}`)
+      return { ...raced[0], created: false }
+    }
+
+    await tx.insert(supplierInvoiceLine).values(
+      input.lines.map((line) => ({
+        invoiceId: header.id,
+        productId: line.productId ?? null,
+        description: line.description ?? null,
+        quantity: line.quantity,
+        unitCostMinor: line.unitCostMinor,
+        lineTotalMinor: line.quantity * line.unitCostMinor,
+      })),
+    )
+
+    return { id: header.id, totalMinor, created: true }
+  })
+}
+
+async function recomputeInvoicePaid(tx: Tx, invoiceId: string): Promise<void> {
+  const sums = await tx
+    .select({
+      paid: sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number),
+    })
+    .from(supplierPaymentAllocation)
+    .where(eq(supplierPaymentAllocation.invoiceId, invoiceId))
+  const paid = sums[0]?.paid ?? 0
+
+  const rows = await tx
+    .select({ totalMinor: supplierInvoice.totalMinor, status: supplierInvoice.status })
+    .from(supplierInvoice)
+    .where(eq(supplierInvoice.id, invoiceId))
+    .limit(1)
+  const invoice = rows[0]
+  if (!invoice || invoice.status === 'VOID') return
+
+  const status =
+    paid <= 0 ? ('OPEN' as const) : paid >= invoice.totalMinor ? ('PAID' as const) : ('PARTIAL' as const)
+  await tx
+    .update(supplierInvoice)
+    .set({ amountPaidMinor: paid, status })
+    .where(eq(supplierInvoice.id, invoiceId))
+}
+
+/**
+ * Seeds a supplier payment with its APPLY allocations and refreshes each
+ * touched invoice's paid projection. Idempotent by payment number.
+ */
+export async function ensureSupplierPayment(input: {
+  number: string
+  supplierId: string
+  branchId: string
+  method: 'CASH' | 'BANK' | 'MOMO'
+  amountMinor: number
+  paidAt: Date
+  reference?: string
+  allocations: readonly { invoiceId: string; amountMinor: number }[]
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: supplierPayment.id })
+    .from(supplierPayment)
+    .where(eq(supplierPayment.number, input.number))
+    .limit(1)
+  if (existing[0]) return false
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(supplierPayment)
+      .values({
+        number: input.number,
+        supplierId: input.supplierId,
+        branchId: input.branchId,
+        method: input.method,
+        amountMinor: input.amountMinor,
+        paidAt: input.paidAt,
+        reference: input.reference ?? null,
+        createdBy: 'seed',
+      })
+      .onConflictDoNothing()
+      .returning({ id: supplierPayment.id })
+
+    const payment = rows[0]
+    if (!payment) return false
+
+    for (const allocation of input.allocations) {
+      await tx.insert(supplierPaymentAllocation).values({
+        paymentId: payment.id,
+        invoiceId: allocation.invoiceId,
+        kind: 'APPLY',
+        amountMinor: allocation.amountMinor,
+        createdBy: 'seed',
+      })
+      await recomputeInvoicePaid(tx, allocation.invoiceId)
+    }
+
+    return true
+  })
 }
 
 export async function ensureSequenceAtLeast(key: string, value: number): Promise<boolean> {
