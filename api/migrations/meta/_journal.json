@@ -36,6 +36,13 @@
       "when": 1792362016569,
       "tag": "0004_cute_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792423305646,
+      "tag": "0005_peaceful_synch",
+      "breakpoints": true
     }
   ]
 }
