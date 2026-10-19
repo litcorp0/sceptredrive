@@ -2,10 +2,10 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-19
-**Status:** Phase 4 execution in progress — Plans 01–04 complete and green (api 232/232,
+**Status:** Phase 4 execution in progress — Plans 01–05 complete and green (api 234/234,
 shared 54/54); live smoke test passed (charge → repayment → aging → statement reconcile).
-**Next action:** Execute Plan 05 (pg-boss jobs infrastructure and the loyalty expiry
-schedule) following the GSD waves in `00-CONTEXT.md`.
+**Next action:** Execute Plan 06 (console — customers, credit ledger, repayments,
+statements, aging) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
@@ -17,7 +17,7 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟨 Executing (4/8 plans) |
+| 4 | Customers, Credit & Loyalty | 🟨 Executing (5/8 plans) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -65,7 +65,7 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
 | 02 | Customers module — identity, search, lifecycle | ✅ Complete |
 | 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ✅ Complete |
 | 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ✅ Complete |
-| 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ⬜ Pending |
+| 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ✅ Complete |
 | 06 | Console — customers, credit ledger, repayments, statements, aging | ⬜ Pending |
 | 07 | Console — loyalty history, liability report, and settings | ⬜ Pending |
 | 08 | Phase 4 verification and state update | ⬜ Pending |
@@ -92,7 +92,7 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 216/216 against
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 234/234 against
   `gikautos_test`.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -217,6 +217,14 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
   `POST /api/loyalty/entries` (`loyalty.adjust` — the staff path Phase 6/7 POS flows
   reuse), `GET /api/loyalty/liability` (`loyalty.read`) wired in `app.ts`; redeem quote
   250 pts = GHS 2.50 (250 pesewas) at the 100 pts/GHS default.
+- Jobs (`api/src/jobs/`): pg-boss 12 against the API database (own `pgboss` schema,
+  installed on first boot with start retries). Started after the HTTP server with
+  pino-bridged `error`/`warning` events; `loyalty-expiry` worker calls `expireDueLots()`
+  and logs the `{ accounts, lots, points }` summary; schedule `5 0 * * *` in
+  `Africa/Accra` with `missed: 'once'` catch-up; graceful shutdown stops jobs first
+  (5s grace) then closes the pool. `POST /api/loyalty/expiry-run` (admin-only,
+  `loyalty.settings`) runs the same seam synchronously, returns the summary, and the
+  engine writes one `loyalty.expiry_run` audit row per run.
 
 ---
 
@@ -278,6 +286,8 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
 | 2026-10-19 | Phase 4 Plan 04: earn is floor per sale with no carry (`floor(netPaidMinor × rate / 100)`); a sale below one point writes nothing. Redemptions are accepted positive at the HTTP edge, stored negative, and require ≥ `loyalty.minimumRedeemPoints` and enough balance (409). EARN carries the net amount paid; the engine computes points. |
 | 2026-10-19 | Phase 4 Plan 04: redemption and clawback consume lots earliest-expiry-first; a clawback shortfall leaves the balance negative with lots clamped at zero (surfaced in the liability negative-balances list). Positive adjustments create a lot so expiry stays total; ADJUST is reason-coded, CLAWBACK is always RETURN, and EXPIRE is engine-only (`branchId`/`createdBy` null), one entry per account per run, idempotent across runs. |
 | 2026-10-19 | Phase 4 Plan 04: reconciliation compares each projection to its ledger sum and lot remainders to positive backing − consumption; the liability value uses `floor(points × 100 / pointsPerCedi)`. Liability scoping: outstanding is global (all-branch), activity rows are manager-scoped plus global expiry rows, negative balances are manager-scoped by customer branch. |
+| 2026-10-19 | Phase 4 Plan 05: background jobs run on pg-boss 12 against the API database (own `pgboss` schema); the loyalty expiry worker is the only queue so far. The schedule fires daily at 00:05 Africa/Accra with `missed: 'once'` so an outage catches up on boot; jobs start after HTTP listening and stop before the DB pool closes. |
+| 2026-10-19 | Phase 4 Plan 05: the admin expiry trigger is `POST /api/loyalty/expiry-run` gated by the admin-only `loyalty.settings` permission; it calls the same `expireDueLots()` seam directly (no queue hop) so operators get an immediate, audited summary. |
 
 ---
 
@@ -384,3 +394,9 @@ schedule) following the GSD waves in `00-CONTEXT.md`.
 - Phase 4: loyalty reads are global, but `getLiability` activity is manager-scoped
   (own branch plus branch-less EXPIRE rows); tests assert per-branch totals only for
   their own uniquely-coded branches because all suites share `gikautos_test`.
+- Phase 4: pg-boss lives in `api/src/jobs/` (`boss.ts` singleton, `queues.ts`
+  queue/worker/schedule, `index.ts` start/stop); tests import `app.ts` only, never
+  `src/index.ts`. The loyalty job test starts its own instance against the test DB with
+  `schedule: false` + `__test__enableSpies` and unschedules/stops in `afterAll`. A dev
+  server under `node --watch` restarts into the jobs code automatically; two API
+  instances share the `pgboss` schema safely.
