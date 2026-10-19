@@ -94,6 +94,12 @@ Three mechanics were pinned during planning; intent is unchanged:
 
 ## Bootstrap Order
 
+> **Execution notes:** load `hono` before the API plans (02–04),
+> `supabase-postgres-best-practices` before schema/query work (01, 04),
+> `web-design-guidelines` / `frontend-design` before the console plans (05–06), and
+> `owasp-security` throughout (AGENTS.md mandate). `powersync` is not needed in Phase 5 —
+> no sync surface changes.
+
 1. Schema (suppliers, payment details, supplier products, invoices, invoice lines,
    payments, allocations, `stock_receipt.supplier_id`), migration, settings, sequences,
    permissions, demo seed (Plan 01).
