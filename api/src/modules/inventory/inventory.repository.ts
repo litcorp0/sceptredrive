@@ -3,6 +3,7 @@ import { and, count, desc, eq, gte, ilike, isNotNull, lte, or, sql } from 'drizz
 import { category } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
 import {
   stockLevel,
   stockMovement,
@@ -131,6 +132,7 @@ export async function insertReceipt(
   values: {
     number: string
     branchId: string
+    supplierId: string | null
     supplierName: string | null
     supplierInvoiceNumber: string | null
     note: string | null
@@ -174,7 +176,8 @@ export async function selectReceiptPage(
       branchId: stockReceipt.branchId,
       branchCode: branch.code,
       branchName: branch.name,
-      supplierName: stockReceipt.supplierName,
+      supplierId: stockReceipt.supplierId,
+      supplierName: sql<string | null>`coalesce(${supplier.name}, ${stockReceipt.supplierName})`,
       supplierInvoiceNumber: stockReceipt.supplierInvoiceNumber,
       note: stockReceipt.note,
       createdBy: stockReceipt.createdBy,
@@ -187,9 +190,10 @@ export async function selectReceiptPage(
     })
     .from(stockReceipt)
     .innerJoin(branch, eq(branch.id, stockReceipt.branchId))
+    .leftJoin(supplier, eq(supplier.id, stockReceipt.supplierId))
     .leftJoin(stockReceiptLine, eq(stockReceiptLine.receiptId, stockReceipt.id))
     .where(and(...receiptConditions(filters)))
-    .groupBy(stockReceipt.id, branch.code, branch.name)
+    .groupBy(stockReceipt.id, branch.code, branch.name, supplier.name)
     .orderBy(desc(stockReceipt.createdAt))
     .limit(filters.limit)
     .offset(filters.offset)
@@ -217,7 +221,8 @@ export async function findReceiptBase(
       branchId: stockReceipt.branchId,
       branchCode: branch.code,
       branchName: branch.name,
-      supplierName: stockReceipt.supplierName,
+      supplierId: stockReceipt.supplierId,
+      supplierName: sql<string | null>`coalesce(${supplier.name}, ${stockReceipt.supplierName})`,
       supplierInvoiceNumber: stockReceipt.supplierInvoiceNumber,
       note: stockReceipt.note,
       createdBy: stockReceipt.createdBy,
@@ -225,6 +230,7 @@ export async function findReceiptBase(
     })
     .from(stockReceipt)
     .innerJoin(branch, eq(branch.id, stockReceipt.branchId))
+    .leftJoin(supplier, eq(supplier.id, stockReceipt.supplierId))
     .where(eq(stockReceipt.id, id))
     .limit(1)
   return rows[0] ?? null

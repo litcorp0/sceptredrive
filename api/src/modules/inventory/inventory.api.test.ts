@@ -15,6 +15,7 @@ import { category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
 import {
   stockLevel,
   stockMovement,
@@ -38,6 +39,7 @@ interface ReceiptResponse {
   id: string
   number: string
   branchId: string
+  supplierId: string | null
   supplierName: string | null
   supplierInvoiceNumber: string | null
   lineCount: number
@@ -75,6 +77,7 @@ describe.skipIf(!available)('inventory API', () => {
   const createdUserIds: string[] = []
   const createdReceiptIds: string[] = []
   const createdProductIds: string[] = []
+  const createdSupplierIds: string[] = []
   let adminCookie = ''
   let managerCookie = ''
   let branchAId = ''
@@ -178,6 +181,9 @@ describe.skipIf(!available)('inventory API', () => {
     if (createdProductIds.length > 0) {
       await db.delete(product).where(inArray(product.id, createdProductIds))
     }
+    if (createdSupplierIds.length > 0) {
+      await db.delete(supplier).where(inArray(supplier.id, createdSupplierIds))
+    }
     if (categoryId) await db.delete(category).where(eq(category.id, categoryId))
     if (uomId) await db.delete(uom).where(eq(uom.id, uomId))
     for (const userId of createdUserIds) await deleteTestUser(userId)
@@ -220,6 +226,69 @@ describe.skipIf(!available)('inventory API', () => {
     }>(stock)
     expect(stockBody.stock.quantityOnHand).toBe(10)
     expect(stockBody.stock.avgCostMinor).toBe(1_000)
+  })
+
+  it('links receipts to the supplier master and rejects archived or unknown suppliers', async () => {
+    const supplierResponse = await app.request('/api/suppliers', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ name: `Inventory Supplier ${suffix}` }),
+    })
+    expect(supplierResponse.status).toBe(201)
+    const { supplier: createdSupplier } = await readJson<{
+      supplier: { id: string; name: string }
+    }>(supplierResponse)
+    createdSupplierIds.push(createdSupplier.id)
+
+    const body = {
+      branchId: branchAId,
+      supplierId: createdSupplier.id,
+      supplierInvoiceNumber: 'LINK-9001',
+      lines: [{ productId: productBId, quantity: 2, unitCostMinor: 750 }],
+    }
+
+    const response = await app.request('/api/inventory/receipts', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify(body),
+    })
+    expect(response.status).toBe(201)
+    const { receipt } = await readJson<{ receipt: ReceiptResponse }>(response)
+    createdReceiptIds.push(receipt.id)
+    expect(receipt.supplierId).toBe(createdSupplier.id)
+    expect(receipt.supplierName).toBe(createdSupplier.name)
+
+    const list = await app.request(`/api/inventory/receipts?branchId=${branchAId}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(list.status).toBe(200)
+    const listBody = await readJson<{ receipts: ReceiptResponse[] }>(list)
+    const listed = listBody.receipts.find((row) => row.id === receipt.id)
+    expect(listed?.supplierId).toBe(createdSupplier.id)
+
+    const archive = await app.request(`/api/suppliers/${createdSupplier.id}/archive`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({}),
+    })
+    expect(archive.status).toBe(200)
+
+    const archivedAttempt = await app.request('/api/inventory/receipts', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify(body),
+    })
+    expect(archivedAttempt.status).toBe(409)
+
+    const unknownAttempt = await app.request('/api/inventory/receipts', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        ...body,
+        supplierId: '00000000-0000-0000-0000-000000000000',
+      }),
+    })
+    expect(unknownAttempt.status).toBe(404)
   })
 
   it('lets a manager receive at their own branch only', async () => {

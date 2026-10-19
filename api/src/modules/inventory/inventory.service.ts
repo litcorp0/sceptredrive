@@ -1,5 +1,6 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { averageCostAfterReceipt } from '@gikautos/shared'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
@@ -9,6 +10,8 @@ import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import { findProductById } from '../products/products.repository.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
+import { requireSupplier } from '../suppliers/suppliers.service.ts'
 import {
   countMovements,
   countReceipts,
@@ -33,6 +36,7 @@ import {
   updateLevel,
   upsertThresholdRow,
 } from './inventory.repository.ts'
+import { stockReceipt } from './inventory.schema.ts'
 import type {
   AdjustmentCreateInput,
   BranchReconciliation,
@@ -43,6 +47,7 @@ import type {
   PostMovementsResult,
   ReceiptCreateInput,
   ReceiptDetail,
+  ReceiptForPayables,
   ReceiptListQuery,
   StockDetail,
   StockLevelRow,
@@ -258,6 +263,52 @@ async function loadReceipt(receiptId: string): Promise<ReceiptDetail> {
   }
 }
 
+/**
+ * Permission-free receipt view for the payables service (service-to-service
+ * seam; authorization stays with the caller, mirroring `requireCustomer`).
+ */
+export async function loadReceiptForPayables(
+  receiptId: string,
+  executor: DbExecutor = db,
+): Promise<ReceiptForPayables> {
+  const base = await findReceiptBase(receiptId, executor)
+  if (!base) throw new NotFoundError('Receipt not found')
+  const lines = await selectReceiptLines(receiptId, executor)
+  return {
+    id: base.id,
+    number: base.number,
+    branchId: base.branchId,
+    supplierId: base.supplierId,
+    supplierName: base.supplierName,
+    supplierInvoiceNumber: base.supplierInvoiceNumber,
+    note: base.note,
+    lines: lines.map((line) => ({
+      productId: line.productId,
+      quantity: line.quantity,
+      unitCostMinor: line.unitCostMinor,
+    })),
+  }
+}
+
+/**
+ * Links a receipt to its supplier when an invoice is raised from it. Sets
+ * `supplier_id` and fills the `supplier_name` snapshot when empty; a no-op when
+ * the receipt is already linked.
+ */
+export async function attachReceiptSupplier(
+  receiptId: string,
+  supplierId: string,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor
+    .update(stockReceipt)
+    .set({
+      supplierId,
+      supplierName: sql`coalesce(${stockReceipt.supplierName}, (select ${supplier.name} from ${supplier} where ${supplier.id} = ${supplierId}))`,
+    })
+    .where(and(eq(stockReceipt.id, receiptId), isNull(stockReceipt.supplierId)))
+}
+
 /** Creates an immutable goods receipt and posts its movements atomically. */
 export async function createReceipt(
   user: SessionUser,
@@ -265,6 +316,7 @@ export async function createReceipt(
   input: ReceiptCreateInput,
 ): Promise<ReceiptDetail> {
   await requireActiveBranch(user, input.branchId)
+  const supplier = input.supplierId ? await requireSupplier(input.supplierId) : null
 
   const productNames = new Map<string, string>()
   for (const line of input.lines) {
@@ -278,7 +330,8 @@ export async function createReceipt(
       {
         number,
         branchId: input.branchId,
-        supplierName: input.supplierName ?? null,
+        supplierId: supplier?.id ?? null,
+        supplierName: supplier ? supplier.name : (input.supplierName ?? null),
         supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
         note: input.note ?? null,
         createdBy: actorLabel(actor),
@@ -328,7 +381,8 @@ export async function createReceipt(
         branchId: input.branchId,
         after: {
           number,
-          supplierName: input.supplierName ?? null,
+          supplierId: supplier?.id ?? null,
+          supplierName: supplier ? supplier.name : (input.supplierName ?? null),
           supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
           lines: input.lines,
         },

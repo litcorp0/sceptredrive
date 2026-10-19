@@ -56,6 +56,7 @@ export interface ReceiptLineInput {
 
 export interface ReceiptCreateInput {
   branchId: string
+  supplierId?: string
   supplierName?: string
   supplierInvoiceNumber?: string
   note?: string
@@ -94,6 +95,7 @@ export interface StockReceiptRow {
   branchId: string
   branchCode: string
   branchName: string
+  supplierId: string | null
   supplierName: string | null
   supplierInvoiceNumber: string | null
   note: string | null
@@ -105,6 +107,18 @@ export interface StockReceiptRow {
 
 export interface ReceiptDetail extends StockReceiptRow {
   lines: ReceiptLineRow[]
+}
+
+/** Permission-free receipt view for the payables service (service-to-service). */
+export interface ReceiptForPayables {
+  id: string
+  number: string
+  branchId: string
+  supplierId: string | null
+  supplierName: string | null
+  supplierInvoiceNumber: string | null
+  note: string | null
+  lines: { productId: string; quantity: number; unitCostMinor: number }[]
 }
 
 export interface AdjustmentCreateInput {

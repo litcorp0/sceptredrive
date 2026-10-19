@@ -15,6 +15,7 @@ const receiptLineSchema = z
 export const receiptCreateSchema = z
   .object({
     branchId: z.uuid(),
+    supplierId: z.uuid().optional(),
     supplierName: z.string().trim().min(1).max(120).optional(),
     supplierInvoiceNumber: z.string().trim().min(1).max(60).optional(),
     note: z.string().trim().min(1).max(300).optional(),
