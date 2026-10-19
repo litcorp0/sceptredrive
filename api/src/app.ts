@@ -18,6 +18,7 @@ import { loyaltyRoutes } from './modules/loyalty/loyalty.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
+import { payablesRoutes } from './modules/payables/payables.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
@@ -49,6 +50,7 @@ app.route('/', customersRoutes)
 app.route('/', creditRoutes)
 app.route('/', loyaltyRoutes)
 app.route('/', suppliersRoutes)
+app.route('/', payablesRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
