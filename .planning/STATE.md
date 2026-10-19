@@ -6,8 +6,10 @@
 statements/aging, loyalty with FEFO and the expiry job, liability report and Settings,
 all proven on a fresh database (API walkthrough 154/154, browser walkthrough 29/29;
 api 235/235, shared 54/54).
-**Next action:** Plan Phase 5 (Suppliers & Payables) with `/gsd:plan-phase 5` — link
-supplier invoices to Phase 3 receipts, then payables, payments, and aging.
+**Next action:** Phase 5 (Suppliers & Payables) is planned — 7 plans in
+`.planning/phases/05-suppliers-payables/` with operator decisions locked in
+`00-CONTEXT.md`. Execute with `/gsd:execute-phase 5` starting at Plan 01 (schema,
+receipt link, settings, permissions, demo seed).
 
 ---
 
