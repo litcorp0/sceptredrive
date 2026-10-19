@@ -2,11 +2,12 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-19
-**Status:** Phase 4 execution in progress — Plans 01–07 complete and green (api 235/235,
-shared 54/54); console verified end to end (credit flows, statements, aging, lifecycle,
-loyalty adjustments with FEFO, liability report, Phase 4 settings).
-**Next action:** Execute Plan 08 (phase verification — full walkthrough and evidence
-pass) following the GSD waves in `00-CONTEXT.md`.
+**Status:** Phase 4 complete and verified (8/8 plans) — customers, branch-local credit,
+statements/aging, loyalty with FEFO and the expiry job, liability report and Settings,
+all proven on a fresh database (API walkthrough 154/154, browser walkthrough 29/29;
+api 235/235, shared 54/54).
+**Next action:** Plan Phase 5 (Suppliers & Payables) with `/gsd:plan-phase 5` — link
+supplier invoices to Phase 3 receipts, then payables, payments, and aging.
 
 ---
 
@@ -18,7 +19,7 @@ pass) following the GSD waves in `00-CONTEXT.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟨 Executing (7/8 plans) |
+| 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -69,7 +70,7 @@ pass) following the GSD waves in `00-CONTEXT.md`.
 | 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ✅ Complete |
 | 06 | Console — customers, credit ledger, repayments, statements, aging | ✅ Complete |
 | 07 | Console — loyalty history, liability report, and settings | ✅ Complete |
-| 08 | Phase 4 verification and state update | ⬜ Pending |
+| 08 | Phase 4 verification and state update | ✅ Complete |
 
 ---
 
@@ -93,7 +94,7 @@ pass) following the GSD waves in `00-CONTEXT.md`.
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 234/234 against
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 235/235 against
   `gikautos_test`.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -148,7 +149,7 @@ pass) following the GSD waves in `00-CONTEXT.md`.
   browser walkthroughs 15/15 + 6/6; scripts and screenshots under
   `.planning/phases/03-inventory-transfers/evidence/`.
 
-### Phase 4 additions (in progress)
+### Phase 4 additions
 
 - Schema (migration `0004_cute_namor.sql`): `customer` (global identity, partial unique
   phone index `WHERE anonymized_at IS NULL`), `credit_profile` + append-only
@@ -248,6 +249,14 @@ pass) following the GSD waves in `00-CONTEXT.md`.
   groups (minimum redemption, repayment prefix/sequence; earn rate now integer-only).
   The liability API gained `expiringSoonPoints` (remaining live lots expiring within 30
   days).
+- Verification: fresh-DB cycle (volume reset → migrate → seed → demo seed; TOTP
+  re-bootstrapped), HTTP + SQL walkthrough **154/154** (FIFO reconstruction, statement and
+  aging arithmetic incl. an as-of date, FEFO consumption rows, expiry job + idempotent
+  second run, liability + activity, branch scoping 403s, anonymization guards, credit and
+  loyalty reconciliation SQL, audit coverage), browser walkthrough **29/29** with
+  screenshots; scripts and evidence under
+  `.planning/phases/04-customers-credit/evidence/`, verification record in
+  `01-VERIFICATION.md`.
 
 ---
 
@@ -311,6 +320,11 @@ pass) following the GSD waves in `00-CONTEXT.md`.
 | 2026-10-19 | Phase 4 Plan 04: reconciliation compares each projection to its ledger sum and lot remainders to positive backing − consumption; the liability value uses `floor(points × 100 / pointsPerCedi)`. Liability scoping: outstanding is global (all-branch), activity rows are manager-scoped plus global expiry rows, negative balances are manager-scoped by customer branch. |
 | 2026-10-19 | Phase 4 Plan 05: background jobs run on pg-boss 12 against the API database (own `pgboss` schema); the loyalty expiry worker is the only queue so far. The schedule fires daily at 00:05 Africa/Accra with `missed: 'once'` so an outage catches up on boot; jobs start after HTTP listening and stop before the DB pool closes. |
 | 2026-10-19 | Phase 4 Plan 05: the admin expiry trigger is `POST /api/loyalty/expiry-run` gated by the admin-only `loyalty.settings` permission; it calls the same `expireDueLots()` seam directly (no queue hop) so operators get an immediate, audited summary. |
+| 2026-10-19 | Phase 4 Plan 06: console money dialogs keep one idempotency key per form session — kept on network failure, cleared on any API response — so retries never double-post while a corrected entry stays possible. |
+| 2026-10-19 | Phase 4 Plan 06: statements print from the same API payload through a dedicated A4 print stylesheet (`@media print`, app shell hidden) rather than a second document generator. |
+| 2026-10-19 | Phase 4 Plan 07: "expiring soon" is the sum of remaining live lot points expiring within 30 days; the liability headline value is `floor(points × 100 / pointsPerCedi)` and is legitimately negative when clawback shortfalls exist. |
+| 2026-10-19 | Phase 4 Plan 08: verification runs the API/SQL walkthrough first on a fresh volume, then the browser walkthrough against the same data; exact REP numbers and staff emails are asserted by design, so `walkthrough-phase4.mjs` is fresh-DB-only and documented as such. |
+| 2026-10-19 | Phase 4 Plan 08: a deactivated staff session fails closed with 401 (the session no longer resolves); the walkthrough asserts the lockout without depending on the exact status code. |
 
 ---
 
@@ -318,6 +332,9 @@ pass) following the GSD waves in `00-CONTEXT.md`.
 
 - **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
   on GitHub (workflow is written and locally verified).
+- Phase 4 is verified (`phases/04-customers-credit/01-VERIFICATION.md`); the dev database
+  now holds the walkthrough and browser fixtures — reset the volume and reseed before a
+  demo, and rerun the admin TOTP bootstrap afterwards.
 - Phase 5 must create payables from existing receipts: Phase 3 stores supplier name +
   invoice number on the receipt; the `payable` table does not exist yet.
 - Human verification from Plan 04: TOTP with an authenticator app is now machine-verified
@@ -433,3 +450,12 @@ pass) following the GSD waves in `00-CONTEXT.md`.
   rerunnable) and may tweak non-reconciled columns directly for edge states (e.g.
   `loyalty_lot.expires_at` into the 30-day window) — the ledgers stay truthful because
   expiry dates are not part of reconciliation.
+- Phase 4 evidence scripts: `.planning/phases/04-customers-credit/evidence/`
+  (`walkthrough-phase4.mjs`, `smoke-console-credit-loyalty.mjs`). The API walkthrough is
+  fresh-DB-only (asserts exact REP numbers and staff emails), restores the demo passwords,
+  and must run before the browser walkthrough; the browser script runs from a
+  Playwright-capable directory with `SHOTS_DIR` pointed at `evidence/`.
+- Phase 4 console: statements print through `@media print` (A4, shell hidden); verify with
+  `page.emulateMedia({ media: "print" })` and expect the sidebar to be hidden. Full-page
+  screenshots include dialogs; card labels can duplicate page descriptions, so use exact
+  text locators for them.

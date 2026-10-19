@@ -87,6 +87,7 @@ inventory API and console; stock history.
 **Goal:** One customer identity across the business, branch-local credit with limits and
 ledgers, and a global loyalty program with earning, redemption, and expiry.
 
+**Status:** ✅ Complete (verified 2026-10-19 — see `phases/04-customers-credit/01-VERIFICATION.md`)
 **Dependencies:** Phases 1–3
 **Requirements:** CUS-01…06, LOY-01…06, ADM-05
 
