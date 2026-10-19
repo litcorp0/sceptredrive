@@ -22,6 +22,7 @@ import {
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
+import type { CustomerListRow } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
 
@@ -34,12 +35,16 @@ const DUPLICATE_PHONE = /\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 export function CustomerFormDialog({
 	open,
 	onOpenChange,
+	customer = null,
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
+	/** When set, the dialog edits this customer instead of creating one. */
+	customer?: CustomerListRow | null
 }) {
 	const queryClient = useQueryClient()
 	const { branches, activeBranchId, canSelectBranch } = useBranch()
+	const isEdit = customer !== null
 
 	const [name, setName] = useState("")
 	const [phone, setPhone] = useState("")
@@ -50,26 +55,39 @@ export function CustomerFormDialog({
 
 	useEffect(() => {
 		if (!open) return
-		setName("")
-		setPhone("")
-		setEmail("")
-		setAddress("")
+		setName(customer?.name ?? "")
+		setPhone(customer?.phone ?? "")
+		setEmail(customer?.email ?? "")
+		setAddress(customer?.address ?? "")
 		setBranchId(activeBranchId ?? branches[0]?.id ?? "")
 		setFormError(null)
-	}, [open, activeBranchId, branches])
+	}, [open, customer, activeBranchId, branches])
 
-	const createMutation = useMutation({
-		mutationFn: () =>
-			api.customers.create({
+	const saveMutation = useMutation({
+		mutationFn: () => {
+			const input = {
 				name: name.trim(),
 				phone: phone.trim(),
-				email: email.trim() || undefined,
-				address: address.trim() || undefined,
-				branchId: canSelectBranch ? branchId || undefined : undefined,
-			}),
+				email: email.trim() || null,
+				address: address.trim() || null,
+			}
+			return isEdit && customer
+				? api.customers.update(customer.id, input)
+				: api.customers.create({
+						...input,
+						email: input.email ?? undefined,
+						address: input.address ?? undefined,
+						branchId: canSelectBranch ? branchId || undefined : undefined,
+					})
+		},
 		onSuccess: async (data) => {
-			toast.success(`Customer ${data.customer.name} created`)
+			toast.success(
+				isEdit
+					? `Customer ${data.customer.name} updated`
+					: `Customer ${data.customer.name} created`,
+			)
 			await queryClient.invalidateQueries({ queryKey: ["customers"] })
+			await queryClient.invalidateQueries({ queryKey: ["customer", data.customer.id] })
 			onOpenChange(false)
 		},
 		onError: (error) => {
@@ -84,11 +102,11 @@ export function CustomerFormDialog({
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setFormError(null)
-		if (canSelectBranch && !branchId) {
+		if (!isEdit && canSelectBranch && !branchId) {
 			setFormError("Choose the branch that owns this customer.")
 			return
 		}
-		createMutation.mutate()
+		saveMutation.mutate()
 	}
 
 	const duplicateMatch = formError ? DUPLICATE_PHONE.exec(formError) : null
@@ -97,9 +115,11 @@ export function CustomerFormDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>New customer</DialogTitle>
+					<DialogTitle>{isEdit ? "Edit customer" : "New customer"}</DialogTitle>
 					<DialogDescription>
-						Customers are shared across branches; credit and repayments stay per branch.
+						{isEdit
+							? "Changes apply everywhere this customer is used."
+							: "Customers are shared across branches; credit and repayments stay per branch."}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -160,7 +180,7 @@ export function CustomerFormDialog({
 						/>
 					</div>
 
-					{canSelectBranch ? (
+					{!isEdit && canSelectBranch ? (
 						<div className="grid gap-1.5">
 							<Label htmlFor="customer-branch">Branch</Label>
 							<Select value={branchId} onValueChange={setBranchId}>
@@ -202,8 +222,8 @@ export function CustomerFormDialog({
 						<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
 							Cancel
 						</Button>
-						<Button type="submit" disabled={createMutation.isPending}>
-							{createMutation.isPending ? "Saving…" : "Create customer"}
+						<Button type="submit" disabled={saveMutation.isPending}>
+							{saveMutation.isPending ? "Saving…" : isEdit ? "Save changes" : "Create customer"}
 						</Button>
 					</DialogFooter>
 				</form>

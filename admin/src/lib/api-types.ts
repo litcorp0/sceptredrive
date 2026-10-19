@@ -678,3 +678,89 @@ export interface CustomerCreateInput {
 	/** Required when an admin creates (managers default to their own branch). */
 	branchId?: string
 }
+
+export interface CustomerUpdateInput {
+	name?: string
+	phone?: string
+	email?: string | null
+	address?: string | null
+}
+
+export type CreditEntryKind = "CHARGE" | "REPAYMENT" | "REFUND" | "ADJUSTMENT"
+export type CreditMethod = "CASH" | "MOMO" | "BANK"
+export type CreditReasonCode =
+	| "SALE"
+	| "OPENING_BALANCE"
+	| "CORRECTION"
+	| "WRITE_OFF"
+	| "DISPUTE"
+	| "RETURN"
+	| "OTHER"
+
+export interface CreditProfile {
+	id: string
+	customerId: string
+	branchId: string
+	limitMinor: number
+	hold: boolean
+	paymentTermDays: number
+	notes: string | null
+	balanceMinor: number
+	createdAt: string
+	updatedAt: string
+}
+
+export interface CreditProfileListRow extends CreditProfile {
+	customerName: string
+	customerPhone: string | null
+	branchCode: string
+	branchName: string
+}
+
+export interface CreditProfileUpdateInput {
+	branchId?: string
+	limitMinor?: number
+	hold?: boolean
+	paymentTermDays?: number
+	notes?: string | null
+}
+
+export interface CreditEntry {
+	id: string
+	customerId: string
+	branchId: string
+	kind: CreditEntryKind
+	amountMinor: number
+	reasonCode: CreditReasonCode | null
+	method: CreditMethod | null
+	note: string | null
+	dueDate: string | null
+	referenceType: string | null
+	referenceId: string | null
+	referenceNumber: string | null
+	overrideReason: string | null
+	overriddenBy: string | null
+	receivedBy: string | null
+	idempotencyKey: string | null
+	createdBy: string | null
+	occurredAt: string
+	createdAt: string
+	branchCode: string
+}
+
+export type CreditEntryListQuery = {
+	customerId: string
+	branchId?: string
+	kind?: CreditEntryKind
+	from?: string
+	to?: string
+	page?: number
+	pageSize?: number
+}
+
+export interface CreditEntryListResult {
+	entries: CreditEntry[]
+	total: number
+	page: number
+	pageSize: number
+}

@@ -20,11 +20,17 @@ import type {
 	CountCreateInput,
 	CountListQuery,
 	CreateStaffResult,
+	CreditEntryListQuery,
+	CreditEntryListResult,
+	CreditProfile,
+	CreditProfileListRow,
+	CreditProfileUpdateInput,
 	CustomerCreateInput,
 	CustomerDetail,
 	CustomerListQuery,
 	CustomerListRow,
 	CustomerSearchResult,
+	CustomerUpdateInput,
 	Device,
 	Enrollment,
 	InventoryReceipt,
@@ -215,6 +221,27 @@ export const api = {
 				method: "POST",
 				body: input,
 			}),
+		update: (id: string, input: CustomerUpdateInput) =>
+			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}`, {
+				method: "PATCH",
+				body: input,
+			}),
+	},
+
+	credit: {
+		profiles: {
+			list: (query: { customerId: string; branchId?: string }) =>
+				apiRequest<{ profiles: CreditProfileListRow[] }>("/api/credit/profiles", { query }),
+			update: (customerId: string, input: CreditProfileUpdateInput) =>
+				apiRequest<{ profile: CreditProfile }>(`/api/credit/profiles/${customerId}`, {
+					method: "PUT",
+					body: input,
+				}),
+		},
+		entries: {
+			list: (query: CreditEntryListQuery) =>
+				apiRequest<CreditEntryListResult>("/api/credit/entries", { query }),
+		},
 	},
 
 	audit: {

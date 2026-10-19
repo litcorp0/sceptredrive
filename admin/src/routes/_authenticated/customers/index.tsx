@@ -163,5 +163,6 @@ function CustomersTab() {
 
 function customerStatus(customer: CustomerListRow) {
 	if (customer.anonymizedAt) return <StatusBadge tone="zinc">Anonymized</StatusBadge>
-	return <ActiveBadge active={customer.status === "ACTIVE"} />
+	if (customer.status === "ARCHIVED") return <StatusBadge tone="zinc">Archived</StatusBadge>
+	return <ActiveBadge active />
 }
