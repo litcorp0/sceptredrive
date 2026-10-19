@@ -1,5 +1,5 @@
 import { type DbExecutor, db } from '@gikautos/db'
-import { and, asc, count, desc, eq, gte, inArray, lt, lte, type SQL, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, ne, type SQL, sql } from 'drizzle-orm'
 import { stockReceipt } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
@@ -16,12 +16,16 @@ import type {
   InvoiceLineView,
   InvoiceListFilters,
   InvoiceListRow,
+  InvoiceReconciliationRow,
   InvoiceStatus,
+  PayableAgingInvoiceSourceRow,
   PaymentAllocationView,
   PaymentDetailHeader,
   PaymentListFilters,
   PaymentListRow,
   SupplierInvoiceRow,
+  SupplierOnAccountRow,
+  SupplierOutstandingRow,
   SupplierPaymentAllocationRow,
   SupplierPaymentRow,
 } from './payables.types.ts'
@@ -564,4 +568,153 @@ export async function countPayments(filters: PaymentListFilters): Promise<number
     .from(supplierPayment)
     .where(and(...paymentConditions(filters)))
   return rows[0]?.value ?? 0
+}
+
+/** Per-supplier invoice aggregates for the balances view (branch optional). */
+export async function selectOutstandingBySupplier(
+  branchId: string | null,
+  todayIso: string,
+  executor: DbExecutor = db,
+): Promise<SupplierOutstandingRow[]> {
+  const outstandingMinor =
+    sql<number>`coalesce(sum(${supplierInvoice.totalMinor} - ${supplierInvoice.amountPaidMinor}), 0)`.mapWith(
+      Number,
+    )
+  const overdueMinor =
+    sql<number>`coalesce(sum(case when ${supplierInvoice.dueDate} < ${todayIso} then ${supplierInvoice.totalMinor} - ${supplierInvoice.amountPaidMinor} else 0 end), 0)`.mapWith(
+      Number,
+    )
+
+  const conditions: SQL[] = [
+    ne(supplierInvoice.status, 'VOID'),
+    sql`${supplierInvoice.totalMinor} - ${supplierInvoice.amountPaidMinor} > 0`,
+  ]
+  if (branchId) conditions.push(eq(supplierInvoice.branchId, branchId))
+
+  return executor
+    .select({
+      supplierId: supplierInvoice.supplierId,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      outstandingMinor,
+      overdueMinor,
+      invoiceCount: count(),
+    })
+    .from(supplierInvoice)
+    .innerJoin(supplier, eq(supplier.id, supplierInvoice.supplierId))
+    .where(and(...conditions))
+    .groupBy(supplierInvoice.supplierId, supplier.code, supplier.name)
+    .orderBy(asc(supplier.name))
+}
+
+/**
+ * Per-supplier on-account position: completed payment totals minus the signed
+ * sum of their allocations (RELEASE rows are negative). Bulk mirror of the
+ * suppliers module `sumSupplierOwed` formula.
+ */
+export async function selectOnAccountBySupplier(
+  branchId: string | null,
+  supplierId: string | null,
+  executor: DbExecutor = db,
+): Promise<SupplierOnAccountRow[]> {
+  const conditions: SQL[] = [eq(supplierPayment.status, 'COMPLETED')]
+  if (branchId) conditions.push(eq(supplierPayment.branchId, branchId))
+  if (supplierId) conditions.push(eq(supplierPayment.supplierId, supplierId))
+
+  const [payments, allocations] = await Promise.all([
+    executor
+      .select({
+        supplierId: supplierPayment.supplierId,
+        supplierCode: supplier.code,
+        supplierName: supplier.name,
+        total: sql<number>`coalesce(sum(${supplierPayment.amountMinor}), 0)`.mapWith(Number),
+      })
+      .from(supplierPayment)
+      .innerJoin(supplier, eq(supplier.id, supplierPayment.supplierId))
+      .where(and(...conditions))
+      .groupBy(supplierPayment.supplierId, supplier.code, supplier.name),
+    executor
+      .select({
+        supplierId: supplierPayment.supplierId,
+        total: sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(
+          Number,
+        ),
+      })
+      .from(supplierPaymentAllocation)
+      .innerJoin(supplierPayment, eq(supplierPayment.id, supplierPaymentAllocation.paymentId))
+      .where(and(...conditions))
+      .groupBy(supplierPayment.supplierId),
+  ])
+
+  const allocatedBySupplier = new Map(allocations.map((row) => [row.supplierId, row.total]))
+  return payments.map((row) => ({
+    supplierId: row.supplierId,
+    supplierCode: row.supplierCode,
+    supplierName: row.supplierName,
+    onAccountMinor: row.total - (allocatedBySupplier.get(row.supplierId) ?? 0),
+  }))
+}
+
+/** Outstanding invoices joined to their supplier, for the aging report. */
+export async function selectAgingInvoiceRows(
+  filters: { branchId: string | null; supplierId: string | null },
+  executor: DbExecutor = db,
+): Promise<PayableAgingInvoiceSourceRow[]> {
+  const conditions: SQL[] = [
+    inArray(supplierInvoice.status, ['OPEN', 'PARTIAL']),
+    sql`${supplierInvoice.totalMinor} - ${supplierInvoice.amountPaidMinor} > 0`,
+  ]
+  if (filters.branchId) conditions.push(eq(supplierInvoice.branchId, filters.branchId))
+  if (filters.supplierId) conditions.push(eq(supplierInvoice.supplierId, filters.supplierId))
+
+  return executor
+    .select({
+      invoiceId: supplierInvoice.id,
+      number: supplierInvoice.number,
+      supplierInvoiceNumber: supplierInvoice.supplierInvoiceNumber,
+      dueDate: supplierInvoice.dueDate,
+      outstandingMinor:
+        sql<number>`${supplierInvoice.totalMinor} - ${supplierInvoice.amountPaidMinor}`.mapWith(
+          Number,
+        ),
+      supplierId: supplierInvoice.supplierId,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+    })
+    .from(supplierInvoice)
+    .innerJoin(supplier, eq(supplier.id, supplierInvoice.supplierId))
+    .where(and(...conditions))
+    .orderBy(asc(supplier.name), asc(supplierInvoice.dueDate), asc(supplierInvoice.number))
+}
+
+/** Every invoice with its signed allocation sum, for reconciliation. */
+export async function selectInvoiceReconciliationRows(
+  executor: DbExecutor = db,
+): Promise<InvoiceReconciliationRow[]> {
+  return executor
+    .select({
+      id: supplierInvoice.id,
+      number: supplierInvoice.number,
+      status: supplierInvoice.status,
+      totalMinor: supplierInvoice.totalMinor,
+      amountPaidMinor: supplierInvoice.amountPaidMinor,
+      netAllocatedMinor:
+        sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number),
+    })
+    .from(supplierInvoice)
+    .leftJoin(
+      supplierPaymentAllocation,
+      eq(supplierPaymentAllocation.invoiceId, supplierInvoice.id),
+    )
+    .groupBy(supplierInvoice.id)
+    .orderBy(asc(supplierInvoice.number))
+}
+
+/** Suppliers that own at least one invoice or payment. */
+export async function selectSupplierIdsWithActivity(executor: DbExecutor = db): Promise<string[]> {
+  const [invoiceRows, paymentRows] = await Promise.all([
+    executor.selectDistinct({ supplierId: supplierInvoice.supplierId }).from(supplierInvoice),
+    executor.selectDistinct({ supplierId: supplierPayment.supplierId }).from(supplierPayment),
+  ])
+  return [...new Set([...invoiceRows, ...paymentRows].map((row) => row.supplierId))].sort()
 }

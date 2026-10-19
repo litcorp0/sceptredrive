@@ -247,3 +247,43 @@ export interface PayablesReconciliationResult {
   invoicesChecked: number
   suppliersChecked: number
 }
+
+/** Per-supplier invoice aggregates feeding the balances view. */
+export interface SupplierOutstandingRow {
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  outstandingMinor: number
+  overdueMinor: number
+  invoiceCount: number
+}
+
+/** Per-supplier on-account position: completed payments minus their allocations. */
+export interface SupplierOnAccountRow {
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  onAccountMinor: number
+}
+
+/** Outstanding invoice joined to its supplier, for the aging report. */
+export interface PayableAgingInvoiceSourceRow {
+  invoiceId: string
+  number: string
+  supplierInvoiceNumber: string
+  dueDate: string
+  outstandingMinor: number
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+}
+
+/** Invoice row plus its signed allocation sum, for reconciliation. */
+export interface InvoiceReconciliationRow {
+  id: string
+  number: string
+  status: InvoiceStatus
+  totalMinor: number
+  amountPaidMinor: number
+  netAllocatedMinor: number
+}

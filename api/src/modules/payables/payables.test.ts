@@ -21,7 +21,6 @@ import * as suppliersRepository from '../suppliers/suppliers.repository.ts'
 import { supplier, supplierPaymentDetail, supplierProduct } from '../suppliers/suppliers.schema.ts'
 import * as suppliersService from '../suppliers/suppliers.service.ts'
 import type { SupplierRow } from '../suppliers/suppliers.types.ts'
-import * as payablesRepository from './payables.repository.ts'
 import {
   supplierInvoice,
   supplierInvoiceLine,
@@ -689,25 +688,16 @@ describe.skipIf(!available)('payables module', () => {
       lines: [{ description: 'Allocated', quantity: 1, unitCostMinor: 6_000 }],
     })
 
-    const payment = await payablesRepository.insertPayment({
-      number: `PAY-${randomToken(6)}`,
-      supplierId: supplier.id,
-      branchId: branchAId,
-      method: 'CASH',
-      amountMinor: 6_000,
-      paidAt: new Date(),
-      createdBy: 'test',
-    })
-    if (!payment) throw new Error('payment fixture failed')
-    paymentIds.push(payment.id)
-
-    const allocation = await payablesRepository.insertAllocation({
-      paymentId: payment.id,
-      invoiceId: detail.invoice.id,
-      kind: 'APPLY',
-      amountMinor: 6_000,
-    })
-    if (!allocation) throw new Error('allocation fixture failed')
+    const payment = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 6_000,
+        allocations: [{ invoiceId: detail.invoice.id, amountMinor: 6_000 }],
+      }),
+    )
+    expect(payment.payment.payment.id).toBeTruthy()
 
     const error = await captureError(() =>
       payablesService.voidInvoice(managerA, actor, detail.invoice.id, 'CANCELLED'),
@@ -1319,5 +1309,214 @@ describe.skipIf(!available)('payables module', () => {
     )
     expect(page.payments).toHaveLength(1)
     expect(page.total).toBeGreaterThanOrEqual(2)
+  })
+
+  it('buckets payables aging by days past due with on-account kept separate', async () => {
+    const supplier = await createSupplier()
+    const asOf = '2026-10-01'
+    const makeAgedInvoice = (label: string, dueOffset: number, amountMinor: number) =>
+      createInvoice(managerA, {
+        supplierId: supplier.id,
+        branchId: branchAId,
+        supplierInvoiceNumber: `${label}-${suffix}`,
+        invoiceDate: addDaysToIsoDate(asOf, -120),
+        dueDate: addDaysToIsoDate(asOf, dueOffset),
+        lines: [{ description: label, quantity: 1, unitCostMinor: amountMinor }],
+      })
+
+    await makeAgedInvoice('AGE-CUR', 0, 1_000)
+    await makeAgedInvoice('AGE-1-30', -1, 1_100)
+    await makeAgedInvoice('AGE-31-60', -31, 1_200)
+    await makeAgedInvoice('AGE-61-90', -61, 1_300)
+    await makeAgedInvoice('AGE-OVER90', -91, 1_400)
+    const settled = await makeAgedInvoice('AGE-PAID', -10, 2_000)
+    await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 2_000,
+        allocations: [{ invoiceId: settled.invoice.invoice.id, amountMinor: 2_000 }],
+      }),
+    )
+    await createPayment(
+      managerA,
+      paymentBody({ supplierId: supplier.id, branchId: branchAId, amountMinor: 5_000 }),
+    )
+
+    const aging = await payablesService.getAging(admin, { asOf, branchId: branchAId })
+    const row = aging.suppliers.find((supplierRow) => supplierRow.supplierId === supplier.id)
+    expect(row).toBeDefined()
+    expect(row?.buckets).toEqual({
+      current: 1_000,
+      days1To30: 1_100,
+      days31To60: 1_200,
+      days61To90: 1_300,
+      over90: 1_400,
+    })
+    expect(row?.totalOutstandingMinor).toBe(6_000)
+    expect(row?.onAccountMinor).toBe(5_000)
+    expect(row?.invoices).toHaveLength(5)
+    expect(
+      row?.invoices.find((invoiceRow) => invoiceRow.number === settled.invoice.invoice.number),
+    ).toBeUndefined()
+    expect(
+      row?.invoices.find((invoiceRow) => invoiceRow.supplierInvoiceNumber === `AGE-1-30-${suffix}`)
+        ?.daysPastDue,
+    ).toBe(1)
+
+    // Pure helper boundaries mirror the credit aging style.
+    expect(payablesService.bucketPayableDaysPastDue(0)).toBe('current')
+    expect(payablesService.bucketPayableDaysPastDue(1)).toBe('days1To30')
+    expect(payablesService.bucketPayableDaysPastDue(30)).toBe('days1To30')
+    expect(payablesService.bucketPayableDaysPastDue(31)).toBe('days31To60')
+    expect(payablesService.bucketPayableDaysPastDue(60)).toBe('days31To60')
+    expect(payablesService.bucketPayableDaysPastDue(61)).toBe('days61To90')
+    expect(payablesService.bucketPayableDaysPastDue(90)).toBe('days61To90')
+    expect(payablesService.bucketPayableDaysPastDue(91)).toBe('over90')
+
+    // Totals are exactly the sum of the supplier rows.
+    for (const key of ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'] as const) {
+      expect(aging.totals[key]).toBe(
+        aging.suppliers.reduce((sum, supplierRow) => sum + supplierRow.buckets[key], 0),
+      )
+    }
+    expect(aging.totalOnAccountMinor).toBe(
+      aging.suppliers.reduce((sum, supplierRow) => sum + supplierRow.onAccountMinor, 0),
+    )
+    expect(aging.branchId).toBe(branchAId)
+
+    // Managers are fixed to their branch; the supplier filter narrows to one row.
+    const managerAging = await payablesService.getAging(managerA, { asOf })
+    expect(managerAging.branchId).toBe(branchAId)
+    expect(
+      managerAging.suppliers.some((supplierRow) => supplierRow.supplierId === supplier.id),
+    ).toBe(true)
+    const filtered = await payablesService.getAging(admin, {
+      asOf,
+      branchId: branchAId,
+      supplierId: supplier.id,
+    })
+    expect(filtered.suppliers.map((supplierRow) => supplierRow.supplierId)).toEqual([supplier.id])
+  })
+
+  it('summarizes supplier balances with on-account, overdue, and void awareness', async () => {
+    const supplier = await createSupplier()
+    const overdueInvoice = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `BAL-OVER-${suffix}`,
+      invoiceDate: isoDaysAgo(10),
+      dueDate: isoDaysAgo(5),
+      lines: [{ description: 'Overdue', quantity: 1, unitCostMinor: 10_000 }],
+    })
+    await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `BAL-CUR-${suffix}`,
+      invoiceDate: isoToday(),
+      dueDate: addDaysToIsoDate(isoToday(), 5),
+      lines: [{ description: 'Current', quantity: 1, unitCostMinor: 20_000 }],
+    })
+
+    const payment = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 8_000,
+        allocations: [{ invoiceId: overdueInvoice.invoice.invoice.id, amountMinor: 5_000 }],
+      }),
+    )
+
+    let result = await payablesService.listSupplierBalances(managerA, {})
+    let row = result.balances.find((balance) => balance.supplierId === supplier.id)
+    expect(result.branchId).toBe(branchAId)
+    expect(row).toMatchObject({
+      supplierId: supplier.id,
+      supplierCode: supplier.code,
+      branchId: branchAId,
+      invoiceOutstandingMinor: 25_000,
+      onAccountMinor: 3_000,
+      owedMinor: 22_000,
+      overdueMinor: 5_000,
+      invoiceCount: 2,
+    })
+
+    await payablesService.voidPayment(managerA, actor, payment.payment.payment.id, 'BANK_REVERSAL')
+    result = await payablesService.listSupplierBalances(managerA, {})
+    row = result.balances.find((balance) => balance.supplierId === supplier.id)
+    expect(row).toMatchObject({
+      invoiceOutstandingMinor: 30_000,
+      onAccountMinor: 0,
+      owedMinor: 30_000,
+      overdueMinor: 10_000,
+      invoiceCount: 2,
+    })
+
+    // Admins may filter by branch; this supplier has no activity in branch B.
+    const branchB = await payablesService.listSupplierBalances(admin, { branchId: branchBId })
+    expect(branchB.branchId).toBe(branchBId)
+    expect(branchB.balances.some((balance) => balance.supplierId === supplier.id)).toBe(false)
+    const allBranches = await payablesService.listSupplierBalances(admin, {})
+    expect(allBranches.branchId).toBeNull()
+    expect(
+      allBranches.balances.find((balance) => balance.supplierId === supplier.id)?.owedMinor,
+    ).toBe(30_000)
+  })
+
+  it('reconciles invoice allocations and supplier balances, and detects drift', async () => {
+    const supplier = await createSupplier()
+    const invoiceA = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `REC-A-${suffix}`,
+      invoiceDate: isoToday(),
+      lines: [{ description: 'Rec A', quantity: 1, unitCostMinor: 10_000 }],
+    })
+    const invoiceB = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `REC-B-${suffix}`,
+      invoiceDate: isoToday(),
+      lines: [{ description: 'Rec B', quantity: 1, unitCostMinor: 7_500 }],
+    })
+    await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 12_000,
+        allocations: [
+          { invoiceId: invoiceA.invoice.invoice.id, amountMinor: 6_000 },
+          { invoiceId: invoiceB.invoice.invoice.id, amountMinor: 4_000 },
+        ],
+      }),
+    )
+    const duplicate = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 3_000,
+        allocations: [{ invoiceId: invoiceB.invoice.invoice.id, amountMinor: 3_000 }],
+      }),
+    )
+    await payablesService.voidPayment(managerA, actor, duplicate.payment.payment.id, 'DUPLICATE')
+
+    const result = await payablesService.reconcilePayables()
+    expect(result.invoicesChecked).toBeGreaterThanOrEqual(2)
+    expect(result.suppliersChecked).toBeGreaterThanOrEqual(1)
+
+    // Falsifying a row directly is caught; the transaction rolls back.
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .update(supplierInvoice)
+          .set({ amountPaidMinor: 1 })
+          .where(eq(supplierInvoice.id, invoiceA.invoice.invoice.id))
+        await payablesService.reconcilePayables(tx)
+      }),
+    ).rejects.toMatchObject({ code: 'PAYABLES_DRIFT' })
   })
 })

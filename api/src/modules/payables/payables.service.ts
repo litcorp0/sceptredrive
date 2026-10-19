@@ -12,6 +12,7 @@ import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import { findProductById } from '../products/products.repository.ts'
+import { sumSupplierOwed } from '../suppliers/suppliers.repository.ts'
 import {
   lockSupplier,
   recordInvoiceCosts,
@@ -32,19 +33,28 @@ import {
   lockInvoiceForUpdate,
   lockInvoicesForUpdate,
   lockPaymentForUpdate,
+  selectAgingInvoiceRows,
   selectAllocationsByInvoice,
   selectAllocationsByPayment,
   selectInvoiceDetailHeader,
   selectInvoiceLines,
   selectInvoicePage,
+  selectInvoiceReconciliationRows,
+  selectOnAccountBySupplier,
+  selectOutstandingBySupplier,
   selectPaymentDetailHeader,
   selectPaymentPage,
+  selectSupplierIdsWithActivity,
   setInvoiceAmountPaid,
   sumAllocationsForInvoice,
   voidInvoiceRow,
   voidPaymentRow,
 } from './payables.repository.ts'
 import type {
+  AgingBucketKey,
+  AgingBuckets,
+  AgingQuery,
+  BalancesQuery,
   InvoiceCreateBody,
   InvoiceCreateResult,
   InvoiceDetail,
@@ -53,6 +63,9 @@ import type {
   InvoiceListResult,
   InvoiceStatus,
   InvoiceVoidReason,
+  PayableAgingSupplierRow,
+  PayablesAgingResult,
+  PayablesReconciliationResult,
   PaymentCreateBody,
   PaymentCreateResult,
   PaymentDetail,
@@ -60,6 +73,8 @@ import type {
   PaymentListQuery,
   PaymentListResult,
   PaymentVoidReason,
+  SupplierBalanceResult,
+  SupplierBalanceRow,
   SupplierInvoiceRow,
 } from './payables.types.ts'
 
@@ -692,4 +707,241 @@ export async function listInvoices(
   }
   const [invoices, total] = await Promise.all([selectInvoicePage(filters), countInvoices(filters)])
   return { invoices, total, branchId }
+}
+
+const AGING_BUCKET_KEYS: AgingBucketKey[] = [
+  'current',
+  'days1To30',
+  'days31To60',
+  'days61To90',
+  'over90',
+]
+
+/** UTC calendar day (YYYY-MM-DD) for a Date. */
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+/** Fixed aging buckets from days past due; due today or later is Current. */
+export function bucketPayableDaysPastDue(daysPastDue: number): AgingBucketKey {
+  if (daysPastDue > 90) return 'over90'
+  if (daysPastDue > 60) return 'days61To90'
+  if (daysPastDue > 30) return 'days31To60'
+  if (daysPastDue > 0) return 'days1To30'
+  return 'current'
+}
+
+function utcMidnight(isoDate: string): number {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1)
+}
+
+function payableAging(
+  dueDate: string,
+  asOf: string,
+): { daysPastDue: number; bucket: AgingBucketKey } {
+  const daysPastDue = Math.floor((utcMidnight(asOf) - utcMidnight(dueDate)) / 86_400_000)
+  return { daysPastDue, bucket: bucketPayableDaysPastDue(daysPastDue) }
+}
+
+function emptyAgingBuckets(): AgingBuckets {
+  return { current: 0, days1To30: 0, days31To60: 0, days61To90: 0, over90: 0 }
+}
+
+/**
+ * Balances view: per supplier, invoices outstanding minus on-account credit
+ * (completed payments recorded without an allocation). Managers see their own
+ * branch; admins see every branch combined or one branch.
+ */
+export async function listSupplierBalances(
+  user: SessionUser,
+  query: BalancesQuery,
+): Promise<SupplierBalanceResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const [outstandingRows, onAccountRows] = await Promise.all([
+    selectOutstandingBySupplier(branchId, isoDay(new Date())),
+    selectOnAccountBySupplier(branchId, null),
+  ])
+
+  const bySupplier = new Map<string, SupplierBalanceRow>()
+  for (const row of outstandingRows) {
+    bySupplier.set(row.supplierId, {
+      supplierId: row.supplierId,
+      supplierCode: row.supplierCode,
+      supplierName: row.supplierName,
+      branchId,
+      invoiceOutstandingMinor: row.outstandingMinor,
+      onAccountMinor: 0,
+      owedMinor: row.outstandingMinor,
+      overdueMinor: row.overdueMinor,
+      invoiceCount: row.invoiceCount,
+    })
+  }
+  for (const row of onAccountRows) {
+    if (row.onAccountMinor === 0) continue
+    const balance = bySupplier.get(row.supplierId) ?? {
+      supplierId: row.supplierId,
+      supplierCode: row.supplierCode,
+      supplierName: row.supplierName,
+      branchId,
+      invoiceOutstandingMinor: 0,
+      onAccountMinor: 0,
+      owedMinor: 0,
+      overdueMinor: 0,
+      invoiceCount: 0,
+    }
+    balance.onAccountMinor = row.onAccountMinor
+    balance.owedMinor = balance.invoiceOutstandingMinor - row.onAccountMinor
+    bySupplier.set(row.supplierId, balance)
+  }
+
+  const balances = [...bySupplier.values()].sort(
+    (a, b) => b.owedMinor - a.owedMinor || a.supplierName.localeCompare(b.supplierName),
+  )
+  return { balances, branchId }
+}
+
+/**
+ * Aging report: outstanding invoices bucketed by days past due as of `asOf`
+ * (defaults to today). On-account credit is reported per supplier but never
+ * netted into the buckets (D9).
+ */
+export async function getAging(user: SessionUser, query: AgingQuery): Promise<PayablesAgingResult> {
+  const asOf = query.asOf ?? isoDay(new Date())
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const supplierId = query.supplierId ?? null
+
+  const [invoiceRows, onAccountRows] = await Promise.all([
+    selectAgingInvoiceRows({ branchId, supplierId }),
+    selectOnAccountBySupplier(branchId, supplierId),
+  ])
+
+  const bySupplier = new Map<string, PayableAgingSupplierRow>()
+  const ensureSupplier = (row: {
+    supplierId: string
+    supplierCode: string
+    supplierName: string
+  }): PayableAgingSupplierRow => {
+    let supplierRow = bySupplier.get(row.supplierId)
+    if (!supplierRow) {
+      supplierRow = {
+        supplierId: row.supplierId,
+        supplierCode: row.supplierCode,
+        supplierName: row.supplierName,
+        buckets: emptyAgingBuckets(),
+        totalOutstandingMinor: 0,
+        onAccountMinor: 0,
+        invoices: [],
+      }
+      bySupplier.set(row.supplierId, supplierRow)
+    }
+    return supplierRow
+  }
+
+  for (const row of invoiceRows) {
+    const supplierRow = ensureSupplier(row)
+    const { daysPastDue, bucket } = payableAging(row.dueDate, asOf)
+    supplierRow.buckets[bucket] += row.outstandingMinor
+    supplierRow.totalOutstandingMinor += row.outstandingMinor
+    supplierRow.invoices.push({
+      invoiceId: row.invoiceId,
+      number: row.number,
+      supplierInvoiceNumber: row.supplierInvoiceNumber,
+      dueDate: row.dueDate,
+      outstandingMinor: row.outstandingMinor,
+      daysPastDue,
+      bucket,
+    })
+  }
+  for (const row of onAccountRows) {
+    if (row.onAccountMinor === 0) continue
+    ensureSupplier(row).onAccountMinor = row.onAccountMinor
+  }
+
+  const suppliers = [...bySupplier.values()].sort((a, b) =>
+    a.supplierName.localeCompare(b.supplierName),
+  )
+  const totals = emptyAgingBuckets()
+  let totalOutstandingMinor = 0
+  let totalOnAccountMinor = 0
+  for (const supplierRow of suppliers) {
+    for (const key of AGING_BUCKET_KEYS) totals[key] += supplierRow.buckets[key]
+    totalOutstandingMinor += supplierRow.totalOutstandingMinor
+    totalOnAccountMinor += supplierRow.onAccountMinor
+  }
+
+  return { asOf, branchId, suppliers, totals, totalOutstandingMinor, totalOnAccountMinor }
+}
+
+/**
+ * Read-only invariant check: every invoice's paid amount equals its signed
+ * allocations and its status follows from them; every supplier's owed figure
+ * (balances query path) equals the suppliers module's independent
+ * `sumSupplierOwed` SQL. Throws on the first mismatch; tests and the Plan 07
+ * walkthrough call it after fixture dances.
+ */
+export async function reconcilePayables(
+  executor: DbExecutor = db,
+): Promise<PayablesReconciliationResult> {
+  const drift = (message: string, details: Record<string, unknown>): AppError =>
+    new AppError(500, 'PAYABLES_DRIFT', message, details)
+
+  const invoiceRows = await selectInvoiceReconciliationRows(executor)
+  for (const row of invoiceRows) {
+    if (row.amountPaidMinor !== row.netAllocatedMinor) {
+      throw drift(
+        `Invoice ${row.number} paid ${row.amountPaidMinor} but allocations sum to ${row.netAllocatedMinor}`,
+        {
+          invoiceId: row.id,
+          amountPaidMinor: row.amountPaidMinor,
+          netAllocatedMinor: row.netAllocatedMinor,
+        },
+      )
+    }
+    if (row.status === 'VOID') {
+      if (row.netAllocatedMinor !== 0) {
+        throw drift(`Void invoice ${row.number} still has net allocations`, { invoiceId: row.id })
+      }
+      continue
+    }
+    const expected: InvoiceStatus =
+      row.netAllocatedMinor >= row.totalMinor
+        ? 'PAID'
+        : row.netAllocatedMinor > 0
+          ? 'PARTIAL'
+          : 'OPEN'
+    if (row.status !== expected) {
+      throw drift(`Invoice ${row.number} status ${row.status} should be ${expected}`, {
+        invoiceId: row.id,
+        status: row.status,
+        expected,
+      })
+    }
+  }
+
+  const supplierIds = await selectSupplierIdsWithActivity(executor)
+  const [outstandingRows, onAccountRows] = await Promise.all([
+    selectOutstandingBySupplier(null, isoDay(new Date()), executor),
+    selectOnAccountBySupplier(null, null, executor),
+  ])
+  const owedBySupplier = new Map<string, number>()
+  for (const row of outstandingRows) owedBySupplier.set(row.supplierId, row.outstandingMinor)
+  for (const row of onAccountRows) {
+    owedBySupplier.set(
+      row.supplierId,
+      (owedBySupplier.get(row.supplierId) ?? 0) - row.onAccountMinor,
+    )
+  }
+  for (const supplierId of supplierIds) {
+    const derived = owedBySupplier.get(supplierId) ?? 0
+    const independent = await sumSupplierOwed(supplierId, executor)
+    if (derived !== independent) {
+      throw drift(
+        `Supplier ${supplierId} owed ${derived} from balances but ${independent} independently`,
+        { supplierId, derived, independent },
+      )
+    }
+  }
+
+  return { invoicesChecked: invoiceRows.length, suppliersChecked: supplierIds.length }
 }
