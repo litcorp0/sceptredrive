@@ -1,11 +1,11 @@
 # STATE — GikAutos v1
 
 **Milestone:** v1
-**Updated:** 2026-10-18
-**Status:** Phase 4 execution in progress — Plans 01–02 complete and green (api 192/192,
-shared 54/54); live smoke test passed (create → suffix search → detail).
-**Next action:** Execute Plan 03 (credit module — profiles, ledger, enforcement,
-repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
+**Updated:** 2026-10-19
+**Status:** Phase 4 execution in progress — Plans 01–03 complete and green (api 216/216,
+shared 54/54); live smoke test passed (charge → repayment → aging → statement reconcile).
+**Next action:** Execute Plan 04 (loyalty module — account, ledger, lots, FEFO, expiry
+engine) following the GSD waves in `00-CONTEXT.md`.
 
 ---
 
@@ -17,7 +17,7 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
 | 1 | Foundation & Platform | ✅ Complete (4/4 plans, verified) |
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
-| 4 | Customers, Credit & Loyalty | 🟨 Executing (2/8 plans) |
+| 4 | Customers, Credit & Loyalty | 🟨 Executing (3/8 plans) |
 | 5 | Suppliers & Payables | ⬜ Not started |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
@@ -63,7 +63,7 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
 |---|---|---|
 | 01 | Phase 4 schema, settings, permissions, phone helper, and demo seed | ✅ Complete |
 | 02 | Customers module — identity, search, lifecycle | ✅ Complete |
-| 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ⬜ Pending |
+| 03 | Credit module — profiles, ledger, enforcement, repayments, aging, statements | ✅ Complete |
 | 04 | Loyalty module — account, ledger, lots, FEFO, expiry engine | ⬜ Pending |
 | 05 | pg-boss jobs infrastructure and the loyalty expiry schedule | ⬜ Pending |
 | 06 | Console — customers, credit ledger, repayments, statements, aging | ⬜ Pending |
@@ -92,7 +92,7 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 46/46, api 176/176 against
+- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 216/216 against
   `gikautos_test`.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -168,6 +168,31 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
   with the existing id), and bootstraps the loyalty account in the same transaction;
   archive/reactivate/anonymize are audited; anonymize requires zero credit balances and
   zero loyalty points, scrubs PII in place, and releases the phone.
+- Credit module (`api/src/modules/credit`): one write path `postEntry` — locks the
+  customer+branch profile `FOR UPDATE` (upsert-then-lock, Phase 3 D16 pattern), applies
+  kind rules (CHARGE positive with reason; REPAYMENT/REFUND negative; ADJUSTMENT signed;
+  method required for repayments), enforces hold (409) and limit (`balance + amount >
+  limit` → 409 unless a `credit.override`-permitted user records `overrideReason` /
+  `overriddenBy`), allocates `REP-#####`, writes the append-only entry, projects
+  `balanceMinor = balance + amount`, and audits (`credit.charge/repayment/refund/
+  adjustment`, plus a second `credit.override` row when applied). Idempotent per
+  `(branchId, idempotencyKey)` — pre-check plus unique-violation replay inside the
+  transaction (parallel same-key race returns one row).
+- Credit reads: `listProfiles` / `listEntries` (branches resolved via
+  `resolveBranchFilter`), pure `settleCharges` (oldest-first application of negative
+  entries to charges, exposing unapplied overpayment) used by `getAging` (fixed buckets
+  Current / 1–30 / 31–60 / 61–90 / 90+ from the due date; only non-zero outstanding;
+  branch totals = sum of customer rows; admin sees every branch separately) and
+  `getStatement` (opening = sum before `from`; ranged entries; closing = opening +
+  ranged, reconciling to `balanceMinor`; aging snapshot as of `to`; 404 without a
+  profile; admins must name `branchId`). Console printing is Plan 06.
+- Repayment API accepts positive amounts (`POST /api/credit/repayments`) and stores them
+  negative; charges/refunds/adjustments post through `POST /api/credit/entries` — two
+  routes so kind-dependent permission middleware (`credit.repayment` vs `credit.adjust`)
+  stays at the edge, with the override re-checked fail-closed in the service.
+- Routes: `GET/PUT /api/credit/profiles(/:customerId)`, `POST /api/credit/repayments`,
+  `POST/GET /api/credit/entries`, `GET /api/credit/aging`,
+  `GET /api/credit/statements/:customerId` wired in `app.ts`.
 
 ---
 
@@ -222,6 +247,10 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
 | 2026-10-18 | Phase 4: customer creation records the creating branch; admins must pass `branchId`, managers default to their own branch. |
 | 2026-10-18 | Phase 4: customer search is `q` + `page`/`pageSize` (default 20); `includeArchived` and `branchId` filters are admin-only, managers search globally. |
 | 2026-10-18 | Phase 4: anonymization requires zero credit balances (all branches) and zero loyalty points; it scrubs PII in place, keeps the ledgers, and releases the phone for re-registration. |
+| 2026-10-19 | Phase 4 Plan 03: repayments are accepted positive at the HTTP edge and stored negative; charges are positive, refunds negative, adjustments signed. A single service path (`postEntry`) keeps one semantic. |
+| 2026-10-19 | Phase 4 Plan 03: credit profiles are created lazily (upsert-then-lock) by the first settings change or posting; the default limit is 0, so charges need a manager to raise the limit first. |
+| 2026-10-19 | Phase 4 Plan 03: a hold blocks new CHARGE only (collections stay open); anonymized customers accept no credit writes at all; archived customers block charge but allow repayment. |
+| 2026-10-19 | Phase 4 Plan 03: an over-limit override writes two audit rows — the posting plus `credit.override` (reason, note, approver, limit snapshot). Aging buckets are fixed from the due date and only non-zero outstanding appears; statement closing is computed as opening + ranged so it reconciles by construction. |
 
 ---
 
@@ -306,6 +335,14 @@ repayments, aging, statements) following the GSD waves in `00-CONTEXT.md`.
 - Phase 4: `writeAudit(entry, executor)` takes the executor as its second positional
   argument. Sequence assertions in tests stay format-based (e.g. `/^REP-\d{5}$/`) because
   the platform suite advances global sequences and test files run in parallel.
+- Phase 4: every credit write goes through `postEntry` in
+  `api/src/modules/credit/credit.service.ts` (profile locked `FOR UPDATE`; kind rules,
+  enforcement, REP allocation, balance projection, audit). `settleCharges` is pure and
+  shared by aging and statements; `balance_minor = SUM(amount_minor)` is test-enforced,
+  including parallel refunds and same-key replay.
+- Phase 4: `credit.service` calls `requireCustomer` (customers.service) for identity —
+  service-to-service keeps the customers → loyalty bootstrap and credit → customers
+  dependency direction acyclic (D22).
 - Phase 4: customer archive/anonymize POST bodies are `{}` or `{ "note": "…" }`; the
   customer module owns bootstrap of the `loyalty_account` row (schema import only, no
   loyalty-module dependency) per D22.
