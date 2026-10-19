@@ -1,5 +1,5 @@
 import { db } from '@gikautos/db'
-import { and, eq, inArray, isNotNull, or } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
 import { brand, category, uom } from '../src/modules/catalog/catalog.schema.ts'
@@ -21,8 +21,19 @@ import {
 } from '../src/modules/loyalty/loyalty.schema.ts'
 import { branch } from '../src/modules/org/branches.schema.ts'
 import { terminal } from '../src/modules/org/terminals.schema.ts'
+import {
+  supplierInvoice,
+  supplierInvoiceLine,
+  supplierPayment,
+  supplierPaymentAllocation,
+} from '../src/modules/payables/payables.schema.ts'
 import { setting } from '../src/modules/platform/settings.schema.ts'
 import { barcode, product, productPrice } from '../src/modules/products/products.schema.ts'
+import {
+  supplier,
+  supplierPaymentDetail,
+  supplierProduct,
+} from '../src/modules/suppliers/suppliers.schema.ts'
 import { DEMO_BRANDS, DEMO_CATEGORIES, DEMO_PRODUCTS, DEMO_UNITS } from '../src/seed/demo.ts'
 import { seedAdmin, seedDemo } from '../src/seed/index.ts'
 import { databaseAvailable, signIn } from './integration.ts'
@@ -52,6 +63,9 @@ const DEMO_SETTING_KEYS = [
   'inventory.receiptSequence',
   'inventory.transferPrefix',
   'inventory.countPrefix',
+  'supplier.codeSequence',
+  'payable.invoiceSequence',
+  'payable.paymentSequence',
 ]
 const DEMO_PHONES = ['+233241000001', '+233241000002', '+233241000003']
 const DEMO_SKUS = DEMO_PRODUCTS.map((item) => item.sku)
@@ -60,6 +74,51 @@ const DEMO_UOM_CODES = DEMO_UNITS.map((unit) => unit.code)
 
 describe.skipIf(!available)('database seeds', () => {
   afterAll(async () => {
+    const demoSupplierRows = await db
+      .select({ id: supplier.id })
+      .from(supplier)
+      .where(inArray(supplier.code, ['SUP-00001', 'SUP-00002']))
+    const demoSupplierIds = demoSupplierRows.map((row) => row.id)
+
+    if (demoSupplierIds.length > 0) {
+      const demoInvoices = await db
+        .select({ id: supplierInvoice.id })
+        .from(supplierInvoice)
+        .where(inArray(supplierInvoice.supplierId, demoSupplierIds))
+      const demoPayments = await db
+        .select({ id: supplierPayment.id })
+        .from(supplierPayment)
+        .where(inArray(supplierPayment.supplierId, demoSupplierIds))
+      const invoiceIds = demoInvoices.map((row) => row.id)
+      const paymentIds = demoPayments.map((row) => row.id)
+
+      if (invoiceIds.length > 0 || paymentIds.length > 0) {
+        await db
+          .delete(supplierPaymentAllocation)
+          .where(
+            or(
+              inArray(supplierPaymentAllocation.invoiceId, invoiceIds),
+              inArray(supplierPaymentAllocation.paymentId, paymentIds),
+            ),
+          )
+      }
+      if (invoiceIds.length > 0) {
+        await db
+          .delete(supplierInvoiceLine)
+          .where(inArray(supplierInvoiceLine.invoiceId, invoiceIds))
+        await db.delete(supplierInvoice).where(inArray(supplierInvoice.id, invoiceIds))
+      }
+      if (paymentIds.length > 0) {
+        await db.delete(supplierPayment).where(inArray(supplierPayment.id, paymentIds))
+      }
+      await db
+        .delete(supplierPaymentDetail)
+        .where(inArray(supplierPaymentDetail.supplierId, demoSupplierIds))
+      await db
+        .delete(supplierProduct)
+        .where(inArray(supplierProduct.supplierId, demoSupplierIds))
+    }
+
     const demoProducts = await db
       .select({ id: product.id })
       .from(product)
@@ -91,6 +150,9 @@ describe.skipIf(!available)('database seeds', () => {
     }
     if (receiptIds.length > 0) {
       await db.delete(stockReceipt).where(inArray(stockReceipt.id, receiptIds))
+    }
+    if (demoSupplierIds.length > 0) {
+      await db.delete(supplier).where(inArray(supplier.id, demoSupplierIds))
     }
     await db
       .delete(category)
@@ -276,5 +338,78 @@ describe.skipIf(!available)('database seeds', () => {
     expect(lots).toHaveLength(1)
     expect(lots[0]?.points).toBe(250)
     expect(lots[0]?.remainingPoints).toBe(account.balancePoints)
+  })
+
+  it('seeds demo suppliers with a reconciled payables story', async () => {
+    const supplierRows = await db
+      .select({ id: supplier.id, code: supplier.code })
+      .from(supplier)
+      .where(inArray(supplier.code, ['SUP-00001', 'SUP-00002']))
+    expect(supplierRows).toHaveLength(2)
+
+    const accraParts = supplierRows.find((row) => row.code === 'SUP-00001')
+    if (!accraParts) throw new Error('demo supplier SUP-00001 was not seeded')
+
+    const details = await db
+      .select({ method: supplierPaymentDetail.method, isDefault: supplierPaymentDetail.isDefault })
+      .from(supplierPaymentDetail)
+      .where(eq(supplierPaymentDetail.supplierId, accraParts.id))
+    expect(details.some((row) => row.method === 'BANK')).toBe(true)
+    expect(details.filter((row) => row.isDefault)).toHaveLength(1)
+
+    const receipts = await db
+      .select({ supplierId: stockReceipt.supplierId })
+      .from(stockReceipt)
+      .where(inArray(stockReceipt.number, ['GRN-00001', 'GRN-00002']))
+    expect(receipts.length).toBeGreaterThan(0)
+    expect(receipts.every((row) => row.supplierId !== null)).toBe(true)
+
+    const invoices = await db
+      .select({
+        id: supplierInvoice.id,
+        number: supplierInvoice.number,
+        subtotalMinor: supplierInvoice.subtotalMinor,
+        vatMinor: supplierInvoice.vatMinor,
+        nhilMinor: supplierInvoice.nhilMinor,
+        getfundMinor: supplierInvoice.getfundMinor,
+        totalMinor: supplierInvoice.totalMinor,
+        amountPaidMinor: supplierInvoice.amountPaidMinor,
+        status: supplierInvoice.status,
+        receiptId: supplierInvoice.receiptId,
+      })
+      .from(supplierInvoice)
+      .where(eq(supplierInvoice.supplierId, accraParts.id))
+    const receiptInvoice = invoices.find((row) => row.number === 'SINV-00001')
+    if (!receiptInvoice) throw new Error('demo invoice SINV-00001 was not seeded')
+    if (!receiptInvoice.receiptId) throw new Error('SINV-00001 is not linked to a receipt')
+
+    expect(
+      receiptInvoice.subtotalMinor +
+        receiptInvoice.vatMinor +
+        receiptInvoice.nhilMinor +
+        receiptInvoice.getfundMinor,
+    ).toBe(receiptInvoice.totalMinor)
+
+    const receiptTotals = await db
+      .select({
+        total: sql<number>`coalesce(sum(${stockReceiptLine.quantity} * ${stockReceiptLine.unitCostMinor}), 0)`.mapWith(
+          Number,
+        ),
+      })
+      .from(stockReceiptLine)
+      .where(eq(stockReceiptLine.receiptId, receiptInvoice.receiptId))
+    expect(receiptInvoice.totalMinor).toBe(receiptTotals[0]?.total ?? -1)
+
+    expect(receiptInvoice.status).toBe('PARTIAL')
+
+    const allocations = await db
+      .select({
+        total: sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(
+          Number,
+        ),
+      })
+      .from(supplierPaymentAllocation)
+      .where(eq(supplierPaymentAllocation.invoiceId, receiptInvoice.id))
+    expect(receiptInvoice.amountPaidMinor).toBe(allocations[0]?.total ?? 0)
   })
 })
