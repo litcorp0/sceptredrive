@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
 
 export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   'RECEIPT',
@@ -126,6 +127,8 @@ export const stockReceipt = pgTable(
     branchId: uuid('branch_id')
       .notNull()
       .references(() => branch.id, { onDelete: 'restrict' }),
+    /** Linked supplier master row; `supplierName` stays as the human-readable snapshot. */
+    supplierId: uuid('supplier_id').references(() => supplier.id, { onDelete: 'restrict' }),
     supplierName: text('supplier_name'),
     supplierInvoiceNumber: text('supplier_invoice_number'),
     note: text('note'),
@@ -135,6 +138,7 @@ export const stockReceipt = pgTable(
   (table) => [
     uniqueIndex('stock_receipt_number_unique').on(table.number),
     index('stock_receipt_branch_idx').on(table.branchId, table.createdAt),
+    index('stock_receipt_supplier_idx').on(table.supplierId),
   ],
 )
 
