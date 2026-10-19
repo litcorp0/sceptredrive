@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { type DbExecutor, db } from '@gikautos/db'
 import { taxBreakdown } from '@gikautos/shared'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
@@ -20,6 +20,7 @@ import {
 } from '../suppliers/suppliers.service.ts'
 import {
   countInvoices,
+  countPayments,
   findInvoiceByIdempotency,
   findInvoiceByReceipt,
   findInvoiceBySupplierNumber,
@@ -30,15 +31,18 @@ import {
   insertPayment,
   lockInvoiceForUpdate,
   lockInvoicesForUpdate,
+  lockPaymentForUpdate,
   selectAllocationsByInvoice,
   selectAllocationsByPayment,
   selectInvoiceDetailHeader,
   selectInvoiceLines,
   selectInvoicePage,
   selectPaymentDetailHeader,
+  selectPaymentPage,
   setInvoiceAmountPaid,
   sumAllocationsForInvoice,
   voidInvoiceRow,
+  voidPaymentRow,
 } from './payables.repository.ts'
 import type {
   InvoiceCreateBody,
@@ -52,6 +56,10 @@ import type {
   PaymentCreateBody,
   PaymentCreateResult,
   PaymentDetail,
+  PaymentListFilters,
+  PaymentListQuery,
+  PaymentListResult,
+  PaymentVoidReason,
   SupplierInvoiceRow,
 } from './payables.types.ts'
 
@@ -377,10 +385,10 @@ export async function voidInvoice(
 /** Clock-skew tolerance for paidAt; anything further ahead is a typo. */
 const PAYMENT_CLOCK_SKEW_MS = 5 * 60_000
 
-async function loadPayment(paymentId: string): Promise<PaymentDetail> {
-  const header = await selectPaymentDetailHeader(paymentId)
+async function loadPayment(paymentId: string, executor: DbExecutor = db): Promise<PaymentDetail> {
+  const header = await selectPaymentDetailHeader(paymentId, executor)
   if (!header) throw new NotFoundError('Supplier payment not found')
-  const allocations = await selectAllocationsByPayment(paymentId)
+  const allocations = await selectAllocationsByPayment(paymentId, executor)
   const allocatedMinor = allocations.reduce((sum, row) => sum + row.amountMinor, 0)
   return {
     payment: header.payment,
@@ -549,6 +557,115 @@ export async function createPayment(
   }
 
   return { payment: await loadPayment(outcome.id), replayed: outcome.replayed }
+}
+
+/**
+ * Voids a payment and releases every net allocation through compensating
+ * RELEASE rows (D8): invoices flip back to their recomputed status, the
+ * unallocated remainder stops counting as on-account credit. A voided payment
+ * is never deleted; re-voiding is a conflict.
+ */
+export async function voidPayment(
+  user: SessionUser,
+  actor: AuditActor,
+  paymentId: string,
+  reason: PaymentVoidReason,
+): Promise<PaymentDetail> {
+  return db.transaction(async (tx) => {
+    const payment = await lockPaymentForUpdate(paymentId, tx)
+    if (!payment) throw new NotFoundError('Supplier payment not found')
+    assertBranchAccess(user, payment.branchId)
+    if (payment.status === 'VOID') throw new ConflictError('The payment is already void')
+
+    const allocations = await selectAllocationsByPayment(paymentId, tx)
+    const netByInvoice = new Map<string, { applyRowId: string | null; net: number }>()
+    for (const row of allocations) {
+      const entry = netByInvoice.get(row.invoiceId) ?? { applyRowId: null, net: 0 }
+      if (row.kind === 'APPLY') entry.applyRowId = row.id
+      entry.net += row.amountMinor
+      netByInvoice.set(row.invoiceId, entry)
+    }
+
+    const releasable = [...netByInvoice.entries()]
+      .filter(([, entry]) => entry.net > 0)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+    const lockedInvoices = await lockInvoicesForUpdate(
+      releasable.map(([invoiceId]) => invoiceId),
+      tx,
+    )
+    const invoicesById = new Map(lockedInvoices.map((row) => [row.id, row]))
+
+    const released: { invoiceId: string; invoiceNumber: string; amountMinor: number }[] = []
+    for (const [invoiceId, entry] of releasable) {
+      const invoice = invoicesById.get(invoiceId)
+      if (!invoice) throw new NotFoundError('Supplier invoice not found')
+
+      await insertAllocation(
+        {
+          paymentId,
+          invoiceId,
+          kind: 'RELEASE',
+          amountMinor: -entry.net,
+          reversesAllocationId: entry.applyRowId,
+          createdBy: actorLabel(actor),
+        },
+        tx,
+      )
+
+      const paid = Math.max(0, invoice.amountPaidMinor - entry.net)
+      const status: InvoiceStatus =
+        paid >= invoice.totalMinor ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OPEN'
+      await setInvoiceAmountPaid(invoiceId, paid, status, tx)
+      released.push({ invoiceId, invoiceNumber: invoice.number, amountMinor: entry.net })
+    }
+
+    const voided = await voidPaymentRow(
+      paymentId,
+      { voidReason: reason, voidedBy: actorLabel(actor), voidedAt: new Date() },
+      tx,
+    )
+    if (!voided) throw new AppError(500, 'INTERNAL_ERROR', 'Failed to void the supplier payment')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_payment.voided',
+        entity: 'supplier_payment',
+        entityId: paymentId,
+        branchId: payment.branchId,
+        before: { status: 'COMPLETED', amountMinor: payment.amountMinor },
+        after: { status: 'VOID', reason, released },
+      },
+      tx,
+    )
+
+    return loadPayment(paymentId, tx)
+  })
+}
+
+export async function getPayment(user: SessionUser, paymentId: string): Promise<PaymentDetail> {
+  const detail = await loadPayment(paymentId)
+  assertBranchAccess(user, detail.payment.branchId)
+  return detail
+}
+
+export async function listPayments(
+  user: SessionUser,
+  query: PaymentListQuery,
+): Promise<PaymentListResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters: PaymentListFilters = {
+    supplierId: query.supplierId ?? null,
+    branchId,
+    method: query.method ?? null,
+    status: query.status ?? null,
+    from: query.from ? new Date(`${query.from}T00:00:00.000Z`) : null,
+    to: query.to ? new Date(`${addDaysToIsoDate(query.to, 1)}T00:00:00.000Z`) : null,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [payments, total] = await Promise.all([selectPaymentPage(filters), countPayments(filters)])
+  return { payments, total, branchId }
 }
 
 export async function getInvoice(user: SessionUser, invoiceId: string): Promise<InvoiceDetail> {

@@ -19,6 +19,7 @@ import type {
   InvoiceStatus,
   PaymentAllocationView,
   PaymentDetailHeader,
+  PaymentListFilters,
   PaymentListRow,
   SupplierInvoiceRow,
   SupplierPaymentAllocationRow,
@@ -467,26 +468,100 @@ export async function selectPaymentsByInvoice(
   invoiceId: string,
   executor: DbExecutor = db,
 ): Promise<PaymentListRow[]> {
-  const allocatedMinor = sql<number>`coalesce((
-    select sum(${supplierPaymentAllocation.amountMinor})
-    from ${supplierPaymentAllocation}
-    where ${supplierPaymentAllocation.paymentId} = ${supplierPayment.id}
-  ), 0)`.mapWith(Number)
+  const allocatedMinor =
+    sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number)
 
   const rows = await executor
     .select({ ...paymentSelection, allocatedMinor })
     .from(supplierPayment)
-    .where(
-      sql`exists (
-        select 1 from ${supplierPaymentAllocation}
-        where ${supplierPaymentAllocation.paymentId} = ${supplierPayment.id}
-          and ${supplierPaymentAllocation.invoiceId} = ${invoiceId}
-      )`,
+    .leftJoin(
+      supplierPaymentAllocation,
+      eq(supplierPaymentAllocation.paymentId, supplierPayment.id),
     )
+    .where(
+      inArray(
+        supplierPayment.id,
+        db
+          .select({ paymentId: supplierPaymentAllocation.paymentId })
+          .from(supplierPaymentAllocation)
+          .where(eq(supplierPaymentAllocation.invoiceId, invoiceId)),
+      ),
+    )
+    .groupBy(supplierPayment.id)
     .orderBy(asc(supplierPayment.paidAt), asc(supplierPayment.number))
 
   return rows.map((row) => ({
     ...row,
     unallocatedMinor: row.amountMinor - row.allocatedMinor,
   }))
+}
+
+/** Locks a payment row for the void transaction. */
+export async function lockPaymentForUpdate(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierPayment)
+    .where(eq(supplierPayment.id, id))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
+export async function voidPaymentRow(
+  id: string,
+  values: Pick<typeof supplierPayment.$inferInsert, 'voidReason' | 'voidedBy' | 'voidedAt'>,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentRow | null> {
+  const rows = await executor
+    .update(supplierPayment)
+    .set({ status: 'VOID', ...values })
+    .where(eq(supplierPayment.id, id))
+    .returning()
+  return rows[0] ?? null
+}
+
+function paymentConditions(filters: PaymentListFilters): SQL[] {
+  const conditions: SQL[] = []
+  if (filters.supplierId) conditions.push(eq(supplierPayment.supplierId, filters.supplierId))
+  if (filters.branchId) conditions.push(eq(supplierPayment.branchId, filters.branchId))
+  if (filters.method) conditions.push(eq(supplierPayment.method, filters.method))
+  if (filters.status) conditions.push(eq(supplierPayment.status, filters.status))
+  if (filters.from) conditions.push(gte(supplierPayment.paidAt, filters.from))
+  // `to` is exclusive (the day after the requested range end).
+  if (filters.to) conditions.push(lt(supplierPayment.paidAt, filters.to))
+  return conditions
+}
+
+export async function selectPaymentPage(filters: PaymentListFilters): Promise<PaymentListRow[]> {
+  const allocatedMinor =
+    sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number)
+
+  const rows = await db
+    .select({ ...paymentSelection, allocatedMinor })
+    .from(supplierPayment)
+    .leftJoin(
+      supplierPaymentAllocation,
+      eq(supplierPaymentAllocation.paymentId, supplierPayment.id),
+    )
+    .where(and(...paymentConditions(filters)))
+    .groupBy(supplierPayment.id)
+    .orderBy(desc(supplierPayment.paidAt), desc(supplierPayment.number))
+    .limit(filters.limit)
+    .offset(filters.offset)
+
+  return rows.map((row) => ({
+    ...row,
+    unallocatedMinor: row.amountMinor - row.allocatedMinor,
+  }))
+}
+
+export async function countPayments(filters: PaymentListFilters): Promise<number> {
+  const rows = await db
+    .select({ value: count() })
+    .from(supplierPayment)
+    .where(and(...paymentConditions(filters)))
+  return rows[0]?.value ?? 0
 }

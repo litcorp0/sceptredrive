@@ -17,6 +17,7 @@ import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import { product } from '../products/products.schema.ts'
+import * as suppliersRepository from '../suppliers/suppliers.repository.ts'
 import { supplier, supplierPaymentDetail, supplierProduct } from '../suppliers/suppliers.schema.ts'
 import * as suppliersService from '../suppliers/suppliers.service.ts'
 import type { SupplierRow } from '../suppliers/suppliers.types.ts'
@@ -28,7 +29,12 @@ import {
   supplierPaymentAllocation,
 } from './payables.schema.ts'
 import * as payablesService from './payables.service.ts'
-import type { InvoiceCreateBody, InvoiceListQuery, PaymentCreateBody } from './payables.types.ts'
+import type {
+  InvoiceCreateBody,
+  InvoiceListQuery,
+  PaymentCreateBody,
+  PaymentListQuery,
+} from './payables.types.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[payables.test] database unavailable; integration tests skipped')
@@ -158,6 +164,10 @@ describe.skipIf(!available)('payables module', () => {
 
   function listQuery(overrides: Partial<InvoiceListQuery> = {}): InvoiceListQuery {
     return { limit: 100, offset: 0, overdue: false, ...overrides }
+  }
+
+  function paymentListQuery(overrides: Partial<PaymentListQuery> = {}): PaymentListQuery {
+    return { limit: 100, offset: 0, ...overrides }
   }
 
   beforeAll(async () => {
@@ -1122,5 +1132,192 @@ describe.skipIf(!available)('payables module', () => {
     const after = await payablesService.getInvoice(managerA, race.invoice.invoice.id)
     expect(after.invoice.amountPaidMinor).toBe(6_000)
     expect(after.invoice.status).toBe('PAID')
+  })
+
+  it('voids payments with release rows, flips invoice status, and blocks re-voiding', async () => {
+    const supplier = await createSupplier()
+    const settled = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `VOIDPAY-A-${suffix}`,
+      invoiceDate: isoToday(),
+      lines: [{ description: 'Settled', quantity: 1, unitCostMinor: 10_000 }],
+    })
+    const partial = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `VOIDPAY-B-${suffix}`,
+      invoiceDate: isoToday(),
+      lines: [{ description: 'Partial', quantity: 1, unitCostMinor: 12_000 }],
+    })
+
+    const fullPayment = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 10_000,
+        allocations: [{ invoiceId: settled.invoice.invoice.id, amountMinor: 10_000 }],
+      }),
+    )
+    expect(
+      (await payablesService.getInvoice(managerA, settled.invoice.invoice.id)).invoice.status,
+    ).toBe('PAID')
+
+    const partialPayment = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 7_000,
+        allocations: [{ invoiceId: partial.invoice.invoice.id, amountMinor: 3_000 }],
+      }),
+    )
+    expect(
+      (await payablesService.getInvoice(managerA, partial.invoice.invoice.id)).invoice.status,
+    ).toBe('PARTIAL')
+    // outstanding 9,000 − on-account 4,000
+    expect(await suppliersRepository.sumSupplierOwed(supplier.id)).toBe(5_000)
+
+    const voidedPartial = await payablesService.voidPayment(
+      managerA,
+      actor,
+      partialPayment.payment.payment.id,
+      'RETURNED',
+    )
+    expect(voidedPartial.payment.status).toBe('VOID')
+    expect(voidedPartial.payment.voidReason).toBe('RETURNED')
+    expect(voidedPartial.allocatedMinor).toBe(0)
+    expect(voidedPartial.unallocatedMinor).toBe(7_000)
+
+    const partialAfter = await payablesService.getInvoice(managerA, partial.invoice.invoice.id)
+    expect(partialAfter.invoice.status).toBe('OPEN')
+    expect(partialAfter.invoice.amountPaidMinor).toBe(0)
+
+    const releaseRows = voidedPartial.allocations.filter((row) => row.kind === 'RELEASE')
+    expect(releaseRows).toHaveLength(1)
+    expect(releaseRows[0]?.amountMinor).toBe(-3_000)
+    expect(releaseRows[0]?.reversesAllocationId).toBe(partialPayment.payment.allocations[0]?.id)
+    expect(releaseRows[0]?.invoiceNumber).toBe(partial.invoice.invoice.number)
+    const signed = voidedPartial.allocations.reduce((sum, row) => sum + row.amountMinor, 0)
+    expect(signed).toBe(0)
+    expect(await suppliersRepository.sumSupplierOwed(supplier.id)).toBe(12_000)
+
+    const reVoid = await captureError(() =>
+      payablesService.voidPayment(managerA, actor, partialPayment.payment.payment.id, 'ERROR'),
+    )
+    expect(reVoid).toBeInstanceOf(ConflictError)
+
+    const voidedFull = await payablesService.voidPayment(
+      managerA,
+      actor,
+      fullPayment.payment.payment.id,
+      'BANK_REVERSAL',
+    )
+    expect(voidedFull.payment.status).toBe('VOID')
+    const settledAfter = await payablesService.getInvoice(managerA, settled.invoice.invoice.id)
+    expect(settledAfter.invoice.status).toBe('OPEN')
+    expect(settledAfter.invoice.amountPaidMinor).toBe(0)
+    expect(await suppliersRepository.sumSupplierOwed(supplier.id)).toBe(22_000)
+
+    const audits = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.entityId, partialPayment.payment.payment.id))
+    expect(audits.map((row) => row.action)).toContain('supplier_payment.voided')
+  })
+
+  it('reads and lists payments with branch scoping, filters, and totals', async () => {
+    const supplier = await createSupplier()
+    const invoice = await createInvoice(managerA, {
+      supplierId: supplier.id,
+      branchId: branchAId,
+      supplierInvoiceNumber: `PAYLIST-${suffix}`,
+      invoiceDate: isoToday(),
+      lines: [{ description: 'Paylist', quantity: 1, unitCostMinor: 8_000 }],
+    })
+    const cash = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        amountMinor: 5_000,
+        allocations: [{ invoiceId: invoice.invoice.invoice.id, amountMinor: 5_000 }],
+      }),
+    )
+    const bank = await createPayment(
+      managerA,
+      paymentBody({
+        supplierId: supplier.id,
+        branchId: branchAId,
+        method: 'BANK',
+        amountMinor: 2_000,
+        reference: 'TRF-123',
+        paidAt: `${isoDaysAgo(3)}T09:00:00.000Z`,
+      }),
+    )
+
+    const detail = await payablesService.getPayment(managerA, cash.payment.payment.id)
+    expect(detail.payment.number).toBe(cash.payment.payment.number)
+    expect(detail.supplier.id).toBe(supplier.id)
+    expect(detail.allocatedMinor).toBe(5_000)
+    expect(detail.unallocatedMinor).toBe(0)
+    expect(detail.allocations[0]?.invoiceNumber).toBe(invoice.invoice.invoice.number)
+    expect(detail.allocations[0]?.supplierInvoiceNumber).toBe(`PAYLIST-${suffix}`)
+
+    const managerList = await payablesService.listPayments(managerA, paymentListQuery())
+    expect(managerList.branchId).toBe(branchAId)
+    expect(managerList.payments.every((row) => row.branchId === branchAId)).toBe(true)
+    const listed = managerList.payments.find((row) => row.id === cash.payment.payment.id)
+    expect(listed?.allocatedMinor).toBe(5_000)
+    expect(listed?.unallocatedMinor).toBe(0)
+    const listedBank = managerList.payments.find((row) => row.id === bank.payment.payment.id)
+    expect(listedBank?.allocatedMinor).toBe(0)
+    expect(listedBank?.unallocatedMinor).toBe(2_000)
+
+    const bankOnly = await payablesService.listPayments(
+      managerA,
+      paymentListQuery({ method: 'BANK' }),
+    )
+    expect(bankOnly.payments.some((row) => row.id === bank.payment.payment.id)).toBe(true)
+    expect(bankOnly.payments.every((row) => row.method === 'BANK')).toBe(true)
+
+    const recent = await payablesService.listPayments(
+      managerA,
+      paymentListQuery({ from: isoDaysAgo(1), to: isoToday() }),
+    )
+    const recentIds = recent.payments.map((row) => row.id)
+    expect(recentIds).toContain(cash.payment.payment.id)
+    expect(recentIds).not.toContain(bank.payment.payment.id)
+
+    const supplierB = await createSupplier()
+    const branchBPayment = await createPayment(
+      managerB,
+      paymentBody({ supplierId: supplierB.id, amountMinor: 1_500 }),
+    )
+    const adminList = await payablesService.listPayments(
+      admin,
+      paymentListQuery({ supplierId: supplierB.id }),
+    )
+    expect(adminList.branchId).toBeNull()
+    expect(adminList.payments.map((row) => row.id)).toContain(branchBPayment.payment.payment.id)
+    expect(adminList.total).toBeGreaterThanOrEqual(1)
+
+    const crossBranchRead = await captureError(() =>
+      payablesService.getPayment(managerA, branchBPayment.payment.payment.id),
+    )
+    expect(crossBranchRead).toBeInstanceOf(ForbiddenError)
+
+    const crossBranchVoid = await captureError(() =>
+      payablesService.voidPayment(managerA, actor, branchBPayment.payment.payment.id, 'ERROR'),
+    )
+    expect(crossBranchVoid).toBeInstanceOf(ForbiddenError)
+
+    const page = await payablesService.listPayments(
+      managerA,
+      paymentListQuery({ limit: 1, offset: 0 }),
+    )
+    expect(page.payments).toHaveLength(1)
+    expect(page.total).toBeGreaterThanOrEqual(2)
   })
 })
