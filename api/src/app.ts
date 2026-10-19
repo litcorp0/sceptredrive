@@ -66,7 +66,14 @@ app.onError((error, c) => {
   if (error instanceof AppError) {
     requestLogger.warn({ err: error, requestId }, 'application error')
     return c.json(
-      { error: { message: error.message, code: error.code, requestId } },
+      {
+        error: {
+          message: error.message,
+          code: error.code,
+          ...(error.details ? { details: error.details } : {}),
+          requestId,
+        },
+      },
       error.statusCode as 400 | 401 | 403 | 404 | 409 | 429,
     )
   }

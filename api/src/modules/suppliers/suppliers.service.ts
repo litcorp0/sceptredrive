@@ -232,6 +232,17 @@ export async function requireSupplier(id: string, executor: DbExecutor = db): Pr
   return row
 }
 
+/**
+ * Locks the supplier row for writes that create debts against it (D12:
+ * invoice/payment creation serializes against archiving).
+ */
+export async function lockSupplier(id: string, executor: DbExecutor = db): Promise<SupplierRow> {
+  const row = await findSupplierByIdForUpdate(id, executor)
+  if (!row) throw new NotFoundError('Supplier not found')
+  if (row.status !== 'ACTIVE') throw new ConflictError('The supplier is archived')
+  return row
+}
+
 export async function getSupplierDetail(id: string): Promise<SupplierDetail> {
   const supplierRow = await findSupplierById(id)
   if (!supplierRow) throw new NotFoundError('Supplier not found')

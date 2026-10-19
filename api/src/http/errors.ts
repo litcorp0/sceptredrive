@@ -1,12 +1,19 @@
 export class AppError extends Error {
   readonly statusCode: number
   readonly code: string
+  readonly details: Record<string, unknown> | undefined
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(
+    statusCode: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message)
     this.name = 'AppError'
     this.statusCode = statusCode
     this.code = code
+    this.details = details
   }
 }
 
@@ -29,8 +36,8 @@ export class NotFoundError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = 'Resource already exists') {
-    super(409, 'CONFLICT', message)
+  constructor(message = 'Resource already exists', details?: Record<string, unknown>) {
+    super(409, 'CONFLICT', message, details)
   }
 }
 
