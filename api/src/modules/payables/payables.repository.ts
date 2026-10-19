@@ -17,6 +17,8 @@ import type {
   InvoiceListFilters,
   InvoiceListRow,
   InvoiceStatus,
+  PaymentAllocationView,
+  PaymentDetailHeader,
   PaymentListRow,
   SupplierInvoiceRow,
   SupplierPaymentAllocationRow,
@@ -372,6 +374,84 @@ export async function findPaymentById(
     .where(eq(supplierPayment.id, id))
     .limit(1)
   return rows[0] ?? null
+}
+
+export async function findPaymentByIdempotency(
+  branchId: string,
+  idempotencyKey: string,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierPayment)
+    .where(
+      and(
+        eq(supplierPayment.branchId, branchId),
+        eq(supplierPayment.idempotencyKey, idempotencyKey),
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** Payment header joined with the supplier summary (detail view). */
+export async function selectPaymentDetailHeader(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<PaymentDetailHeader | null> {
+  const rows = await executor
+    .select({ ...paymentSelection, supplierCode: supplier.code, supplierName: supplier.name })
+    .from(supplierPayment)
+    .innerJoin(supplier, eq(supplier.id, supplierPayment.supplierId))
+    .where(eq(supplierPayment.id, id))
+    .limit(1)
+
+  const row = rows[0]
+  if (!row) return null
+  const { supplierCode, supplierName, ...payment } = row
+  return {
+    payment,
+    supplier: { id: payment.supplierId, code: supplierCode, name: supplierName },
+  }
+}
+
+/** Allocation ledger rows with their invoice references, oldest first. */
+export async function selectAllocationsByPayment(
+  paymentId: string,
+  executor: DbExecutor = db,
+): Promise<PaymentAllocationView[]> {
+  return executor
+    .select({
+      id: supplierPaymentAllocation.id,
+      invoiceId: supplierPaymentAllocation.invoiceId,
+      invoiceNumber: supplierInvoice.number,
+      supplierInvoiceNumber: supplierInvoice.supplierInvoiceNumber,
+      invoiceBranchId: supplierInvoice.branchId,
+      kind: supplierPaymentAllocation.kind,
+      amountMinor: supplierPaymentAllocation.amountMinor,
+      reversesAllocationId: supplierPaymentAllocation.reversesAllocationId,
+      createdAt: supplierPaymentAllocation.createdAt,
+    })
+    .from(supplierPaymentAllocation)
+    .innerJoin(supplierInvoice, eq(supplierInvoice.id, supplierPaymentAllocation.invoiceId))
+    .where(eq(supplierPaymentAllocation.paymentId, paymentId))
+    .orderBy(asc(supplierPaymentAllocation.createdAt), asc(supplierPaymentAllocation.id))
+}
+
+/** Signed sum: APPLY rows are positive, RELEASE rows negative. */
+export async function sumAllocationsForPayment(
+  paymentId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({
+      total: sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(supplierPaymentAllocation)
+    .where(eq(supplierPaymentAllocation.paymentId, paymentId))
+  return rows[0]?.total ?? 0
 }
 
 export async function insertAllocation(

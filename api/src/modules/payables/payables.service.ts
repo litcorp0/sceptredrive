@@ -15,6 +15,7 @@ import { findProductById } from '../products/products.repository.ts'
 import {
   lockSupplier,
   recordInvoiceCosts,
+  requirePaymentDetail,
   requireSupplier,
 } from '../suppliers/suppliers.service.ts'
 import {
@@ -22,13 +23,20 @@ import {
   findInvoiceByIdempotency,
   findInvoiceByReceipt,
   findInvoiceBySupplierNumber,
+  findPaymentByIdempotency,
+  insertAllocation,
   insertInvoice,
   insertInvoiceLines,
+  insertPayment,
   lockInvoiceForUpdate,
+  lockInvoicesForUpdate,
   selectAllocationsByInvoice,
+  selectAllocationsByPayment,
   selectInvoiceDetailHeader,
   selectInvoiceLines,
   selectInvoicePage,
+  selectPaymentDetailHeader,
+  setInvoiceAmountPaid,
   sumAllocationsForInvoice,
   voidInvoiceRow,
 } from './payables.repository.ts'
@@ -39,7 +47,11 @@ import type {
   InvoiceListFilters,
   InvoiceListQuery,
   InvoiceListResult,
+  InvoiceStatus,
   InvoiceVoidReason,
+  PaymentCreateBody,
+  PaymentCreateResult,
+  PaymentDetail,
   SupplierInvoiceRow,
 } from './payables.types.ts'
 
@@ -360,6 +372,183 @@ export async function voidInvoice(
 
     return voided
   })
+}
+
+/** Clock-skew tolerance for paidAt; anything further ahead is a typo. */
+const PAYMENT_CLOCK_SKEW_MS = 5 * 60_000
+
+async function loadPayment(paymentId: string): Promise<PaymentDetail> {
+  const header = await selectPaymentDetailHeader(paymentId)
+  if (!header) throw new NotFoundError('Supplier payment not found')
+  const allocations = await selectAllocationsByPayment(paymentId)
+  const allocatedMinor = allocations.reduce((sum, row) => sum + row.amountMinor, 0)
+  return {
+    payment: header.payment,
+    supplier: header.supplier,
+    allocations,
+    allocatedMinor,
+    unallocatedMinor: header.payment.amountMinor - allocatedMinor,
+  }
+}
+
+/**
+ * Records a payment to a supplier with explicit allocations (D7). The
+ * unallocated remainder is held on account. Allocations lock their invoices
+ * FOR UPDATE in id order so two concurrent payments can never over-apply an
+ * invoice; the status projection is recomputed from the allocation ledger.
+ */
+export async function createPayment(
+  user: SessionUser,
+  actor: AuditActor,
+  input: PaymentCreateBody,
+): Promise<PaymentCreateResult> {
+  const branchId = input.branchId ?? user.branchId
+  if (!branchId) throw new ValidationError('branchId is required for admins')
+  assertBranchAccess(user, branchId)
+  const branchRow = await branchesService.getBranch(user, branchId)
+  if (!branchRow.isActive) throw new ConflictError('The branch is inactive')
+
+  const supplier = await requireSupplier(input.supplierId)
+
+  const paidAt = new Date(input.paidAt)
+  if (Number.isNaN(paidAt.getTime())) throw new ValidationError('paidAt must be a valid timestamp')
+  if (paidAt.getTime() > Date.now() + PAYMENT_CLOCK_SKEW_MS) {
+    throw new ValidationError('paidAt cannot be in the future')
+  }
+
+  if (input.paymentDetailId) {
+    await requirePaymentDetail(supplier.id, input.paymentDetailId)
+  }
+
+  const allocations = input.allocations ?? []
+  const seenInvoices = new Set<string>()
+  for (const allocation of allocations) {
+    if (!Number.isSafeInteger(allocation.amountMinor) || allocation.amountMinor < 1) {
+      throw new ValidationError('Allocation amounts must be positive whole numbers')
+    }
+    if (seenInvoices.has(allocation.invoiceId)) {
+      throw new ValidationError('Each invoice may appear only once in a payment')
+    }
+    seenInvoices.add(allocation.invoiceId)
+  }
+  const allocatedTotal = allocations.reduce((sum, row) => sum + row.amountMinor, 0)
+  if (allocatedTotal > input.amountMinor) {
+    throw new ValidationError('Allocations cannot exceed the payment amount')
+  }
+
+  if (input.idempotencyKey) {
+    const replay = await findPaymentByIdempotency(branchId, input.idempotencyKey)
+    if (replay) return { payment: await loadPayment(replay.id), replayed: true }
+  }
+
+  let outcome: { id: string; replayed: boolean }
+  try {
+    outcome = await db.transaction(async (tx) => {
+      if (input.idempotencyKey) {
+        const raced = await findPaymentByIdempotency(branchId, input.idempotencyKey, tx)
+        if (raced) return { id: raced.id, replayed: true }
+      }
+
+      await lockSupplier(supplier.id, tx)
+      const number = await allocateFromSequence('payable.paymentSequence', tx)
+
+      const lockedInvoices = await lockInvoicesForUpdate(
+        allocations.map((allocation) => allocation.invoiceId),
+        tx,
+      )
+      const invoicesById = new Map(lockedInvoices.map((row) => [row.id, row]))
+
+      // Validate in sorted id order (matches the lock order above).
+      const sortedAllocations = [...allocations].sort((a, b) =>
+        a.invoiceId.localeCompare(b.invoiceId),
+      )
+      for (const allocation of sortedAllocations) {
+        const invoice = invoicesById.get(allocation.invoiceId)
+        if (!invoice) throw new NotFoundError('Supplier invoice not found')
+        if (invoice.supplierId !== supplier.id) {
+          throw new ConflictError('The invoice belongs to another supplier')
+        }
+        if (invoice.status === 'VOID') {
+          throw new ConflictError(`Invoice ${invoice.number} is void and cannot receive payments`)
+        }
+        assertBranchAccess(user, invoice.branchId)
+        const outstanding = invoice.totalMinor - invoice.amountPaidMinor
+        if (allocation.amountMinor > outstanding) {
+          throw new ConflictError(
+            `Allocation exceeds the outstanding balance of invoice ${invoice.number}`,
+            { invoiceId: invoice.id, outstandingMinor: outstanding },
+          )
+        }
+      }
+
+      const payment = await insertPayment(
+        {
+          number,
+          supplierId: supplier.id,
+          branchId,
+          method: input.method,
+          amountMinor: input.amountMinor,
+          reference: input.reference ?? null,
+          paidAt,
+          paymentDetailId: input.paymentDetailId ?? null,
+          note: input.note ?? null,
+          idempotencyKey: input.idempotencyKey ?? null,
+          createdBy: actorLabel(actor),
+        },
+        tx,
+      )
+      if (!payment)
+        throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create the supplier payment')
+
+      for (const allocation of sortedAllocations) {
+        await insertAllocation(
+          {
+            paymentId: payment.id,
+            invoiceId: allocation.invoiceId,
+            kind: 'APPLY',
+            amountMinor: allocation.amountMinor,
+            createdBy: actorLabel(actor),
+          },
+          tx,
+        )
+        const invoice = invoicesById.get(allocation.invoiceId)
+        if (!invoice) continue
+        const paid = invoice.amountPaidMinor + allocation.amountMinor
+        const status: InvoiceStatus =
+          paid >= invoice.totalMinor ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OPEN'
+        await setInvoiceAmountPaid(invoice.id, paid, status, tx)
+      }
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'supplier_payment.created',
+          entity: 'supplier_payment',
+          entityId: payment.id,
+          branchId,
+          after: {
+            number,
+            supplierId: supplier.id,
+            method: input.method,
+            amountMinor: input.amountMinor,
+            allocations: sortedAllocations,
+            onAccountMinor: input.amountMinor - allocatedTotal,
+          },
+        },
+        tx,
+      )
+
+      return { id: payment.id, replayed: false }
+    })
+  } catch (error) {
+    if (isUniqueViolation(error) && input.idempotencyKey) {
+      const replay = await findPaymentByIdempotency(branchId, input.idempotencyKey)
+      if (replay) return { payment: await loadPayment(replay.id), replayed: true }
+    }
+    throw error
+  }
+
+  return { payment: await loadPayment(outcome.id), replayed: outcome.replayed }
 }
 
 export async function getInvoice(user: SessionUser, invoiceId: string): Promise<InvoiceDetail> {

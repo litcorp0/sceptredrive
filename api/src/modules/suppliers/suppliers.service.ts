@@ -243,6 +243,24 @@ export async function lockSupplier(id: string, executor: DbExecutor = db): Promi
   return row
 }
 
+/**
+ * Guards a payment's chosen payout detail: exists, belongs to the supplier,
+ * and is active (service-to-service seam for the payables module).
+ */
+export async function requirePaymentDetail(
+  supplierId: string,
+  detailId: string,
+  executor: DbExecutor = db,
+): Promise<SupplierPaymentDetailRow> {
+  const row = await findPaymentDetailById(detailId, executor)
+  if (!row) throw new NotFoundError('Payment detail not found')
+  if (row.supplierId !== supplierId) {
+    throw new ConflictError('The payment detail belongs to another supplier')
+  }
+  if (!row.isActive) throw new ConflictError('The payment detail is inactive')
+  return row
+}
+
 export async function getSupplierDetail(id: string): Promise<SupplierDetail> {
   const supplierRow = await findSupplierById(id)
   if (!supplierRow) throw new NotFoundError('Supplier not found')

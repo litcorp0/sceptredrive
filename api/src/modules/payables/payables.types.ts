@@ -6,9 +6,14 @@ import type {
   supplierPaymentAllocation,
 } from './payables.schema.ts'
 import type {
+  agingQuerySchema,
+  balancesQuerySchema,
   invoiceCreateSchema,
   invoiceListQuerySchema,
   invoiceVoidSchema,
+  paymentCreateSchema,
+  paymentListQuerySchema,
+  paymentVoidSchema,
 } from './payables.validation.ts'
 
 export type SupplierInvoiceRow = typeof supplierInvoice.$inferSelect
@@ -24,6 +29,12 @@ export type AllocationKind = SupplierPaymentAllocationRow['kind']
 export type InvoiceCreateBody = z.infer<typeof invoiceCreateSchema>
 export type InvoiceVoidBody = z.infer<typeof invoiceVoidSchema>
 export type InvoiceListQuery = z.infer<typeof invoiceListQuerySchema>
+export type PaymentCreateBody = z.infer<typeof paymentCreateSchema>
+export type PaymentVoidBody = z.infer<typeof paymentVoidSchema>
+export type PaymentListQuery = z.infer<typeof paymentListQuerySchema>
+export type BalancesQuery = z.infer<typeof balancesQuerySchema>
+export type AgingQuery = z.infer<typeof agingQuerySchema>
+export type PaymentVoidReason = NonNullable<SupplierPaymentRow['voidReason']>
 export type InvoiceLineInput = InvoiceCreateBody['lines'] extends (infer T)[] | undefined
   ? T
   : never
@@ -128,8 +139,111 @@ export interface InvoiceCreateResult {
   replayed: boolean
 }
 
+export interface PaymentDetailHeader {
+  payment: SupplierPaymentRow
+  supplier: InvoiceSupplierSummary
+}
+
 /** Payment row enriched with its allocated total (Plan 04 surfaces). */
 export interface PaymentListRow extends SupplierPaymentRow {
   allocatedMinor: number
   unallocatedMinor: number
+}
+
+export interface PaymentAllocationView {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  supplierInvoiceNumber: string
+  invoiceBranchId: string
+  kind: AllocationKind
+  amountMinor: number
+  reversesAllocationId: string | null
+  createdAt: Date
+}
+
+export interface PaymentDetail {
+  payment: SupplierPaymentRow
+  supplier: InvoiceSupplierSummary
+  allocations: PaymentAllocationView[]
+  allocatedMinor: number
+  unallocatedMinor: number
+}
+
+export interface PaymentCreateResult {
+  payment: PaymentDetail
+  replayed: boolean
+}
+
+export interface PaymentListFilters {
+  supplierId: string | null
+  branchId: string | null
+  method: PaymentMethod | null
+  status: SupplierPaymentRow['status'] | null
+  from: Date | null
+  to: Date | null
+  limit: number
+  offset: number
+}
+
+export interface PaymentListResult {
+  payments: PaymentListRow[]
+  total: number
+  branchId: string | null
+}
+
+/** A supplier's payable position: invoices outstanding minus on-account credit. */
+export interface SupplierBalanceRow {
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  branchId: string | null
+  invoiceOutstandingMinor: number
+  onAccountMinor: number
+  owedMinor: number
+  overdueMinor: number
+  invoiceCount: number
+}
+
+export interface SupplierBalanceResult {
+  balances: SupplierBalanceRow[]
+  branchId: string | null
+}
+
+export type AgingBucketKey = 'current' | 'days1To30' | 'days31To60' | 'days61To90' | 'over90'
+
+export type AgingBuckets = Record<AgingBucketKey, number>
+
+export interface PayableAgingInvoiceRow {
+  invoiceId: string
+  number: string
+  supplierInvoiceNumber: string
+  dueDate: string
+  outstandingMinor: number
+  daysPastDue: number
+  bucket: AgingBucketKey
+}
+
+export interface PayableAgingSupplierRow {
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  buckets: AgingBuckets
+  totalOutstandingMinor: number
+  onAccountMinor: number
+  invoices: PayableAgingInvoiceRow[]
+}
+
+export interface PayablesAgingResult {
+  asOf: string
+  branchId: string | null
+  suppliers: PayableAgingSupplierRow[]
+  totals: AgingBuckets
+  totalOutstandingMinor: number
+  totalOnAccountMinor: number
+}
+
+export interface PayablesReconciliationResult {
+  invoicesChecked: number
+  suppliersChecked: number
 }
