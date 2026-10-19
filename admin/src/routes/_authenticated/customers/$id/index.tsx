@@ -13,6 +13,7 @@ import {
 	ArchiveCustomerDialog,
 	ReactivateCustomerButton,
 } from "#/components/customers/customer-lifecycle-dialogs"
+import { LoyaltyCard } from "#/components/customers/loyalty-card"
 import { RepaymentDialog } from "#/components/customers/repayment-dialog"
 import { Button } from "#/components/ui/button"
 import {
@@ -57,6 +58,7 @@ function CustomerProfilePage() {
 	const canManageCredit = hasPermission(session.user.role, "credit.profile.manage")
 	const canRecordRepayment = hasPermission(session.user.role, "credit.repayment")
 	const canAdjust = hasPermission(session.user.role, "credit.adjust")
+	const canAdjustLoyalty = hasPermission(session.user.role, "loyalty.adjust")
 	const canOverride = hasPermission(session.user.role, "credit.override")
 	const canArchive = hasPermission(session.user.role, "customer.archive")
 	const canAnonymize = hasPermission(session.user.role, "customer.anonymize")
@@ -155,6 +157,7 @@ function CustomerProfilePage() {
 				<TabsList aria-label="Customer sections">
 					<TabsTrigger value="overview">Overview</TabsTrigger>
 					<TabsTrigger value="credit">Credit</TabsTrigger>
+					<TabsTrigger value="loyalty">Loyalty</TabsTrigger>
 					<TabsTrigger value="ledger">Ledger</TabsTrigger>
 				</TabsList>
 
@@ -374,6 +377,15 @@ function CustomerProfilePage() {
 							</CardContent>
 						</Card>
 					) : null}
+				</TabsContent>
+
+				<TabsContent value="loyalty" className="mt-4">
+					<LoyaltyCard
+						customerId={id}
+						branchId={effectiveBranchId}
+						branchName={selectedBranch?.name ?? null}
+						canAdjust={canAdjustLoyalty}
+					/>
 				</TabsContent>
 
 				<TabsContent value="ledger" className="mt-4">

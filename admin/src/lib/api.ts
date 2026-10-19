@@ -39,6 +39,11 @@ import type {
 	Device,
 	Enrollment,
 	InventoryReceipt,
+	LoyaltyAccountDetail,
+	LoyaltyEntryCreateInput,
+	LoyaltyLiabilityQuery,
+	LoyaltyLiabilityReport,
+	LoyaltyPostingResult,
 	MovementListQuery,
 	MovementRow,
 	PriceOverride,
@@ -275,6 +280,17 @@ export const api = {
 					body: input,
 				}),
 		},
+	},
+
+	loyalty: {
+		account: (customerId: string) =>
+			apiRequest<LoyaltyAccountDetail>(`/api/loyalty/accounts/${customerId}`),
+		entries: {
+			create: (input: LoyaltyEntryCreateInput) =>
+				apiRequest<LoyaltyPostingResult>("/api/loyalty/entries", { method: "POST", body: input }),
+		},
+		liability: (query: LoyaltyLiabilityQuery = {}) =>
+			apiRequest<LoyaltyLiabilityReport>("/api/loyalty/liability", { query }),
 	},
 
 	audit: {
