@@ -1,10 +1,18 @@
 import { db } from '@gikautos/db'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  signIn,
+  uniqueSuffix,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { customer } from '../customers/customers.schema.ts'
+import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -588,5 +596,334 @@ describe.skipIf(!available)('credit service', () => {
       }),
     )
     expect(crossBranch).toBeInstanceOf(ForbiddenError)
+  })
+})
+
+describe.skipIf(!available)('credit HTTP surface', () => {
+  const suffix = uniqueSuffix()
+  const createdUserIds: string[] = []
+  const createdCustomerIds: string[] = []
+  let branchAId = ''
+  let branchBId = ''
+  let adminCookie = ''
+  let managerCookie = ''
+  let cashierCookie = ''
+
+  async function createCustomerRow(name: string): Promise<string> {
+    const rows = await db
+      .insert(customer)
+      .values({ name: `${name} ${suffix}`, createdBranchId: branchAId })
+      .returning({ id: customer.id })
+    const id = rows[0]?.id
+    if (!id) throw new Error('customer fixture insert failed')
+    createdCustomerIds.push(id)
+    return id
+  }
+
+  async function readJson<T>(response: Response): Promise<T> {
+    return (await response.json()) as T
+  }
+
+  beforeAll(async () => {
+    const branches = await db
+      .insert(branch)
+      .values([
+        {
+          code: `CRDHTTP-${suffix}-A`,
+          name: `Credit HTTP A ${suffix}`,
+          type: 'RETAIL',
+          city: 'Accra',
+        },
+        {
+          code: `CRDHTTP-${suffix}-B`,
+          name: `Credit HTTP B ${suffix}`,
+          type: 'RETAIL',
+          city: 'Kumasi',
+        },
+      ])
+      .returning({ id: branch.id })
+    branchAId = branches[0]?.id ?? ''
+    branchBId = branches[1]?.id ?? ''
+
+    const admin = await createTestUser({ role: 'ADMIN' })
+    createdUserIds.push(admin.id)
+    adminCookie = await signIn(admin.email)
+
+    const manager = await createTestUser({ role: 'MANAGER', branchId: branchAId })
+    createdUserIds.push(manager.id)
+    managerCookie = await signIn(manager.email)
+
+    const cashier = await createTestUser({ role: 'CASHIER', branchId: branchAId })
+    createdUserIds.push(cashier.id)
+    cashierCookie = await signIn(cashier.email)
+  })
+
+  afterAll(async () => {
+    if (createdCustomerIds.length > 0) {
+      await db
+        .delete(creditLedgerEntry)
+        .where(inArray(creditLedgerEntry.customerId, createdCustomerIds))
+      await db.delete(creditProfile).where(inArray(creditProfile.customerId, createdCustomerIds))
+      await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
+    }
+    if (createdUserIds.length > 0) {
+      await db.delete(auditLog).where(inArray(auditLog.actorId, createdUserIds))
+      await db.delete(userTable).where(inArray(userTable.id, createdUserIds))
+    }
+    for (const id of [branchAId, branchBId]) {
+      if (id) await db.delete(branch).where(eq(branch.id, id))
+    }
+  })
+
+  it('requires a session', async () => {
+    const response = await app.request(`/api/credit/profiles?branchId=${branchAId}`)
+    expect(response.status).toBe(401)
+  })
+
+  it('denies cashiers on every credit endpoint', async () => {
+    const profiles = await app.request(`/api/credit/profiles?branchId=${branchAId}`, {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(profiles.status).toBe(403)
+
+    const repayment = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({
+        customerId: crypto.randomUUID(),
+        amountMinor: 1_000,
+        method: 'CASH',
+      }),
+    })
+    expect(repayment.status).toBe(403)
+
+    const entry = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({
+        customerId: crypto.randomUUID(),
+        kind: 'CHARGE',
+        amountMinor: 1_000,
+        reasonCode: 'SALE',
+      }),
+    })
+    expect(entry.status).toBe(403)
+  })
+
+  it('lets a manager manage a profile, charge, and collect at their branch', async () => {
+    const customerId = await createCustomerRow('HTTP Flow')
+
+    const put = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        limitMinor: 40_000,
+        paymentTermDays: 14,
+        hold: false,
+        notes: 'HTTP test',
+      }),
+    })
+    expect(put.status).toBe(200)
+    const profile = (
+      await readJson<{
+        profile: { id: string; limitMinor: number; paymentTermDays: number; notes: string | null }
+      }>(put)
+    ).profile
+    expect(profile.limitMinor).toBe(40_000)
+    expect(profile.paymentTermDays).toBe(14)
+    expect(profile.notes).toBe('HTTP test')
+
+    const profileAudits = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.action, 'credit.profile_updated'), eq(auditLog.entityId, profile.id)))
+    expect(profileAudits).toHaveLength(1)
+
+    const charge = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 10_000, reasonCode: 'SALE' }),
+    })
+    expect(charge.status).toBe(201)
+    const chargeBody = await readJson<{
+      entry: { id: string; dueDate: string | null }
+      profile: { balanceMinor: number }
+    }>(charge)
+    expect(chargeBody.profile.balanceMinor).toBe(10_000)
+
+    // 14-day terms project a due date two weeks after today (UTC).
+    const now = new Date()
+    const expectedDue = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 14),
+    )
+      .toISOString()
+      .slice(0, 10)
+    expect(chargeBody.entry.dueDate).toBe(expectedDue)
+
+    const repayment = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, amountMinor: 4_000, method: 'CASH' }),
+    })
+    expect(repayment.status).toBe(201)
+    const repaymentBody = await readJson<{
+      entry: { id: string; referenceNumber: string | null; amountMinor: number }
+      profile: { balanceMinor: number }
+    }>(repayment)
+    expect(repaymentBody.entry.referenceNumber).toMatch(/^REP-\d{5}$/)
+    expect(repaymentBody.entry.amountMinor).toBe(-4_000)
+    expect(repaymentBody.profile.balanceMinor).toBe(6_000)
+
+    const entries = await app.request(`/api/credit/entries?customerId=${customerId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(entries.status).toBe(200)
+    const list = await readJson<{ entries: { id: string }[]; total: number; page: number }>(entries)
+    expect(list.total).toBe(2)
+    expect(list.entries.map((row) => row.id)).toEqual(
+      expect.arrayContaining([chargeBody.entry.id, repaymentBody.entry.id]),
+    )
+
+    const profiles = await app.request(`/api/credit/profiles?customerId=${customerId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(profiles.status).toBe(200)
+    const profileList = await readJson<{
+      profiles: { branchId: string; balanceMinor: number }[]
+    }>(profiles)
+    expect(profileList.profiles).toHaveLength(1)
+    expect(profileList.profiles[0]?.branchId).toBe(branchAId)
+    expect(profileList.profiles[0]?.balanceMinor).toBe(6_000)
+  })
+
+  it('denies managers any access to another branch', async () => {
+    const customerId = await createCustomerRow('HTTP Cross')
+
+    const repayment = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        customerId,
+        branchId: branchBId,
+        amountMinor: 1_000,
+        method: 'CASH',
+      }),
+    })
+    expect(repayment.status).toBe(403)
+
+    const entries = await app.request(
+      `/api/credit/entries?customerId=${customerId}&branchId=${branchBId}`,
+      { headers: authedHeaders(managerCookie) },
+    )
+    expect(entries.status).toBe(403)
+
+    const put = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ branchId: branchBId, limitMinor: 1_000 }),
+    })
+    expect(put.status).toBe(403)
+  })
+
+  it('blocks over-limit charges unless an override is recorded', async () => {
+    const customerId = await createCustomerRow('HTTP Override')
+    const put = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ limitMinor: 1_000 }),
+    })
+    expect(put.status).toBe(200)
+
+    const first = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 1_000, reasonCode: 'SALE' }),
+    })
+    expect(first.status).toBe(201)
+
+    const blocked = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 500, reasonCode: 'SALE' }),
+    })
+    expect(blocked.status).toBe(409)
+
+    const overridden = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        customerId,
+        kind: 'CHARGE',
+        amountMinor: 500,
+        reasonCode: 'SALE',
+        override: { reasonCode: 'URGENT_NEED', note: 'Family emergency' },
+      }),
+    })
+    expect(overridden.status).toBe(201)
+    const overriddenBody = await readJson<{
+      entry: { id: string; overrideReason: string | null }
+    }>(overridden)
+    expect(overriddenBody.entry.overrideReason).toBe('URGENT_NEED')
+
+    const overrideAudits = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(
+        and(eq(auditLog.action, 'credit.override'), eq(auditLog.entityId, overriddenBody.entry.id)),
+      )
+    expect(overrideAudits).toHaveLength(1)
+  })
+
+  it('rejects invalid postings with 400', async () => {
+    const customerId = await createCustomerRow('HTTP Invalid')
+
+    const reasonless = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, kind: 'CHARGE', amountMinor: 100 }),
+    })
+    expect(reasonless.status).toBe(400)
+
+    const zeroAdjustment = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        customerId,
+        kind: 'ADJUSTMENT',
+        amountMinor: 0,
+        reasonCode: 'CORRECTION',
+      }),
+    })
+    expect(zeroAdjustment.status).toBe(400)
+
+    const methodlessRepayment = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ customerId, amountMinor: 100 }),
+    })
+    expect(methodlessRepayment.status).toBe(400)
+  })
+
+  it('requires admins to name the branch when posting', async () => {
+    const customerId = await createCustomerRow('HTTP Admin')
+
+    const missing = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ customerId, amountMinor: 1_000, method: 'CASH' }),
+    })
+    expect(missing.status).toBe(400)
+
+    const withBranch = await app.request('/api/credit/repayments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        customerId,
+        branchId: branchAId,
+        amountMinor: 1_000,
+        method: 'CASH',
+      }),
+    })
+    expect(withBranch.status).toBe(201)
   })
 })

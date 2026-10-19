@@ -9,20 +9,30 @@ import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import {
+  countEntryRows,
   findEntryByIdempotencyKey,
   findProfile,
   insertEntry,
+  listEntryRows,
+  listProfilesByBranch,
+  listProfilesByCustomer,
   lockOrCreateProfile,
   updateProfileBalance,
   updateProfileSettings,
 } from './credit.repository.ts'
 import type {
   ChargeSettlement,
+  CreditEntryListResult,
   CreditOverrideReason,
   CreditPostingResult,
+  CreditProfileListResult,
   CreditProfileRow,
+  EntryCreateBody,
+  EntryListQuery,
   PostEntryInput,
+  ProfileListQuery,
   ProfileUpdateBody,
+  RepaymentCreateBody,
   SettleableEntry,
   SettlementResult,
 } from './credit.types.ts'
@@ -391,4 +401,98 @@ export async function updateProfile(
 
     return updated
   })
+}
+
+function requirePostingBranch(user: SessionUser, requested: string | null | undefined): string {
+  const branchId = resolveBranchFilter(user, requested ?? null)
+  if (!branchId) throw new ValidationError('branchId is required to post a credit entry')
+  return branchId
+}
+
+/** Repayments are posted positive at the API edge and stored negative. */
+export async function createRepayment(
+  actor: AuditActor,
+  user: SessionUser,
+  input: RepaymentCreateBody,
+): Promise<CreditPostingResult> {
+  return postEntry(actor, user, {
+    customerId: input.customerId,
+    branchId: requirePostingBranch(user, input.branchId),
+    kind: 'REPAYMENT',
+    amountMinor: input.amountMinor,
+    method: input.method,
+    note: input.note ?? null,
+    occurredAt: input.occurredAt,
+    idempotencyKey: input.idempotencyKey ?? null,
+  })
+}
+
+/** CHARGE / REFUND / ADJUSTMENT postings from the console and POS. */
+export async function createEntry(
+  actor: AuditActor,
+  user: SessionUser,
+  input: EntryCreateBody,
+): Promise<CreditPostingResult> {
+  return postEntry(actor, user, {
+    customerId: input.customerId,
+    branchId: requirePostingBranch(user, input.branchId),
+    kind: input.kind,
+    amountMinor: input.amountMinor,
+    reasonCode: input.reasonCode ?? null,
+    note: input.note ?? null,
+    occurredAt: input.occurredAt,
+    dueDate: input.dueDate ?? null,
+    referenceType: input.referenceType ?? null,
+    referenceId: input.referenceId ?? null,
+    referenceNumber: input.referenceNumber ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+    override: input.override ?? null,
+  })
+}
+
+/** A date-only boundary (`midnight UTC`) means the whole day, inclusive. */
+function inclusiveEnd(date: Date): Date {
+  const isMidnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  return isMidnight ? new Date(date.getTime() + 86_400_000 - 1) : date
+}
+
+export async function listProfiles(
+  user: SessionUser,
+  query: ProfileListQuery,
+): Promise<CreditProfileListResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  if (query.customerId) {
+    return { profiles: await listProfilesByCustomer(query.customerId, branchId) }
+  }
+  if (!branchId) throw new ValidationError('branchId is required')
+  return { profiles: await listProfilesByBranch(branchId) }
+}
+
+export async function listEntries(
+  user: SessionUser,
+  query: EntryListQuery,
+): Promise<CreditEntryListResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters = {
+    customerId: query.customerId,
+    branchId,
+    from: query.from,
+    to: query.to ? inclusiveEnd(query.to) : undefined,
+  }
+
+  const [entries, total] = await Promise.all([
+    listEntryRows({
+      ...filters,
+      limit: query.pageSize,
+      offset: (query.page - 1) * query.pageSize,
+      newestFirst: true,
+    }),
+    countEntryRows(filters),
+  ])
+
+  return { entries, total, page: query.page, pageSize: query.pageSize }
 }

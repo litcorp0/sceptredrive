@@ -106,3 +106,7 @@ export interface CreditEntryListResult {
   page: number
   pageSize: number
 }
+
+export interface CreditProfileListResult {
+  profiles: CreditProfileListRow[]
+}

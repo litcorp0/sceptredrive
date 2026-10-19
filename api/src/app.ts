@@ -10,6 +10,7 @@ import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
 import { countsRoutes } from './modules/counts/counts.routes.ts'
+import { creditRoutes } from './modules/credit/credit.routes.ts'
 import { customersRoutes } from './modules/customers/customers.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
@@ -43,6 +44,7 @@ app.route('/', inventoryRoutes)
 app.route('/', transfersRoutes)
 app.route('/', countsRoutes)
 app.route('/', customersRoutes)
+app.route('/', creditRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 
