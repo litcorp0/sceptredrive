@@ -11,6 +11,7 @@ import {
 	Package,
 	ScrollText,
 	Settings2,
+	Truck,
 	Users,
 	Warehouse,
 } from "lucide-react"
@@ -26,6 +27,7 @@ interface NavItem {
 		| "/loyalty"
 		| "/catalog"
 		| "/inventory"
+		| "/suppliers"
 		| "/audit"
 		| "/settings"
 	label: string
@@ -37,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/", label: "Dashboard", icon: LayoutDashboard },
 	{ to: "/catalog", label: "Catalog", icon: Package, permission: "catalog.read" },
 	{ to: "/inventory", label: "Inventory", icon: Warehouse, permission: "inventory.read" },
+	{ to: "/suppliers", label: "Suppliers", icon: Truck, permission: "supplier.read" },
 	{ to: "/branches", label: "Branches", icon: Building2, permission: "branch.read" },
 	{ to: "/terminals", label: "Terminals", icon: MonitorSmartphone, permission: "terminal.read" },
 	{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },
