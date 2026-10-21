@@ -122,6 +122,51 @@ const SETTING_META: SettingMeta[] = [
 		description: "The next repayment number to allocate. Changing this affects new receipts only.",
 		type: "int",
 	},
+	{
+		key: "supplier.codePrefix",
+		group: "Suppliers & Payables",
+		label: "Supplier code prefix",
+		description: "Prefix for supplier codes, e.g. SUP-00001. 1–8 letters or digits.",
+		type: "text",
+	},
+	{
+		key: "supplier.codeSequence",
+		group: "Suppliers & Payables",
+		label: "Next supplier number",
+		description:
+			"The next supplier number to allocate. It advances only when a supplier is created; gaps are acceptable.",
+		type: "int",
+	},
+	{
+		key: "payable.invoicePrefix",
+		group: "Suppliers & Payables",
+		label: "Purchase invoice prefix",
+		description: "Prefix for purchase invoice numbers, e.g. SINV-00001. 1–8 letters or digits.",
+		type: "text",
+	},
+	{
+		key: "payable.invoiceSequence",
+		group: "Suppliers & Payables",
+		label: "Next purchase invoice number",
+		description:
+			"The next purchase invoice number to allocate. It advances only when an invoice is recorded; gaps are acceptable.",
+		type: "int",
+	},
+	{
+		key: "payable.paymentPrefix",
+		group: "Suppliers & Payables",
+		label: "Supplier payment prefix",
+		description: "Prefix for supplier payment numbers, e.g. PAY-00001. 1–8 letters or digits.",
+		type: "text",
+	},
+	{
+		key: "payable.paymentSequence",
+		group: "Suppliers & Payables",
+		label: "Next supplier payment number",
+		description:
+			"The next supplier payment number to allocate. It advances only when a payment is recorded; gaps are acceptable.",
+		type: "int",
+	},
 ]
 
 function SettingsPage() {
