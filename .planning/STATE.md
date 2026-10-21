@@ -2,14 +2,13 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-19
-**Status:** Phase 4 complete and verified (8/8 plans) — customers, branch-local credit,
-statements/aging, loyalty with FEFO and the expiry job, liability report and Settings,
-all proven on a fresh database (API walkthrough 154/154, browser walkthrough 29/29;
-api 235/235, shared 54/54).
-**Next action:** Phase 5 (Suppliers & Payables) is planned — 7 plans in
-`.planning/phases/05-suppliers-payables/` with operator decisions locked in
-`00-CONTEXT.md`. Execute with `/gsd:execute-phase 5` starting at Plan 01 (schema,
-receipt link, settings, permissions, demo seed).
+**Status:** Phase 4 complete and verified (8/8 plans). Phase 5 (Suppliers & Payables)
+in progress — 4/7 plans executed: schema/receipt link/settings/permissions/demo seed,
+the suppliers module, payables invoices (receipts + standalone, tax split, voids), and
+payments with explicit allocations, on-account remainders, voids with RELEASE rows,
+balances, aging, and `reconcilePayables()`. All committed on `dev`; API suite green.
+**Next action:** Continue Phase 5 at Plan 05 (console Suppliers section: list + detail,
+payment details, supplied-product mappings, settings group).
 
 ---
 
@@ -22,7 +21,7 @@ receipt link, settings, permissions, demo seed).
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
-| 5 | Suppliers & Payables | ⬜ Not started |
+| 5 | Suppliers & Payables | 🔄 In progress (4/7 plans) |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
@@ -73,6 +72,18 @@ receipt link, settings, permissions, demo seed).
 | 06 | Console — customers, credit ledger, repayments, statements, aging | ✅ Complete |
 | 07 | Console — loyalty history, liability report, and settings | ✅ Complete |
 | 08 | Phase 4 verification and state update | ✅ Complete |
+
+### Phase 5 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Phase 5 schema, receipt link, settings, permissions, and demo seed | ✅ Complete |
+| 02 | Suppliers module — master, payment details, supplied products, last cost | ✅ Complete |
+| 03 | Payables module — invoices from receipts and standalone, totals, voids | ✅ Complete |
+| 04 | Payments, allocations, voids, balances, aging, and reconciliation | ✅ Complete |
+| 05 | Console — suppliers section, payment details, supplied products | ⬜ Not started |
+| 06 | Console — invoices, payments, aging, and goods-receipt linking | ⬜ Not started |
+| 07 | Phase 5 verification and state update | ⬜ Not started |
 
 ---
 
