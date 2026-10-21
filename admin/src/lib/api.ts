@@ -46,6 +46,8 @@ import type {
 	LoyaltyPostingResult,
 	MovementListQuery,
 	MovementRow,
+	PaymentDetailInput,
+	PaymentDetailUpdateInput,
 	PriceOverride,
 	Product,
 	ProductCreateInput,
@@ -71,6 +73,16 @@ import type {
 	StockRow,
 	StockThreshold,
 	SuggestCode,
+	Supplier,
+	SupplierCreateInput,
+	SupplierDetail,
+	SupplierListQuery,
+	SupplierListResult,
+	SupplierPaymentDetail,
+	SupplierProductInput,
+	SupplierProductMapping,
+	SupplierProductUpdateInput,
+	SupplierUpdateInput,
 	Terminal,
 	TerminalCreateInput,
 	TerminalListQuery,
@@ -456,6 +468,55 @@ export const api = {
 				}),
 		},
 	},
+	suppliers: {
+		list: (query: SupplierListQuery = {}) =>
+			apiRequest<SupplierListResult>("/api/suppliers", { query }),
+		get: (id: string) => apiRequest<SupplierDetail>(`/api/suppliers/${id}`),
+		create: (input: SupplierCreateInput) =>
+			apiRequest<{ supplier: Supplier }>("/api/suppliers", {
+				method: "POST",
+				body: input,
+			}),
+		update: (id: string, input: SupplierUpdateInput) =>
+			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}`, {
+				method: "PATCH",
+				body: input,
+			}),
+		archive: (id: string, note?: string) =>
+			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}/archive`, {
+				method: "POST",
+				body: { note: note || undefined },
+			}),
+		reactivate: (id: string) =>
+			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}/reactivate`, {
+				method: "POST",
+			}),
+		addPaymentDetail: (id: string, input: PaymentDetailInput) =>
+			apiRequest<{ paymentDetail: SupplierPaymentDetail }>(`/api/suppliers/${id}/payment-details`, {
+				method: "POST",
+				body: input,
+			}),
+		updatePaymentDetail: (id: string, detailId: string, input: PaymentDetailUpdateInput) =>
+			apiRequest<{ paymentDetail: SupplierPaymentDetail }>(
+				`/api/suppliers/${id}/payment-details/${detailId}`,
+				{ method: "PATCH", body: input },
+			),
+		addProduct: (id: string, input: SupplierProductInput) =>
+			apiRequest<{ mapping: SupplierProductMapping }>(`/api/suppliers/${id}/products`, {
+				method: "POST",
+				body: input,
+			}),
+		updateProduct: (id: string, mappingId: string, input: SupplierProductUpdateInput) =>
+			apiRequest<{ mapping: SupplierProductMapping }>(
+				`/api/suppliers/${id}/products/${mappingId}`,
+				{ method: "PATCH", body: input },
+			),
+		removeProduct: (id: string, mappingId: string) =>
+			apiRequest<{ ok: true }>(`/api/suppliers/${id}/products/${mappingId}`, {
+				method: "DELETE",
+			}),
+	},
+
 	transfers: {
 		list: (query: TransferListQuery = {}) =>
 			apiRequest<{ transfers: Transfer[]; total: number; branchId: string | null }>(
