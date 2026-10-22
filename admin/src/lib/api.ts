@@ -114,13 +114,21 @@ export class ApiError extends Error {
 	readonly status: number
 	readonly code: string
 	readonly requestId: string | undefined
+	readonly details: Record<string, unknown> | undefined
 
-	constructor(status: number, code: string, message: string, requestId?: string) {
+	constructor(
+		status: number,
+		code: string,
+		message: string,
+		requestId?: string,
+		details?: Record<string, unknown>,
+	) {
 		super(message)
 		this.name = "ApiError"
 		this.status = status
 		this.code = code
 		this.requestId = requestId
+		this.details = details
 	}
 }
 
@@ -164,7 +172,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 	})
 
 	if (!response.ok) {
-		let envelope: { message?: string; code?: string; requestId?: string } | undefined
+		let envelope:
+			| { message?: string; code?: string; requestId?: string; details?: Record<string, unknown> }
+			| undefined
 		try {
 			const payload = (await response.json()) as { error?: typeof envelope } | null
 			envelope = payload?.error
@@ -188,6 +198,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 			envelope?.code ?? "HTTP_ERROR",
 			envelope?.message ?? "Request failed",
 			requestId,
+			envelope?.details,
 		)
 	}
 
