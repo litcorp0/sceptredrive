@@ -3,13 +3,15 @@
 **Milestone:** v1
 **Updated:** 2026-10-22
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–02/9 complete**: POS schema, shared cart pricing engine, settings,
-permissions and demo seed (Plan 01); plus the Electron Forge 8 desktop shell, `app://`
-security baseline, async-keychain preload bridge, and the **PowerSync Web SDK phase gate
-(passed)** (Plan 02). Suites: API 277/277, shared 70/70, desktop 51/51; shell E2E 35/35;
-PowerSync gate 8/8. See `.planning/phases/06-pos-offline-core/`.
-**Next action:** Execute **Phase 6 Plan 03** (device auth, PowerSync sync config, local
-schema, connector).
+progress — Plans 01–03/9 complete**: POS schema, shared cart pricing engine, settings,
+permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
+keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
+device session + PowerSync token endpoints, the self-hosted PowerSync service with
+branch-scoped Sync Streams, and the encrypted local schema + download-only connector (03).
+Suites: API 305/305, shared 70/70, desktop 60/60; shell E2E 35/35; PowerSync gate 8/8;
+device/sync walkthrough 24/24; desktop sync E2E 18/18 (all 8 tables match the server).
+**Next action:** Execute **Phase 6 Plan 04** (offline PIN, device bindings, shifts, console
+PIN reset).
 
 ---
 
@@ -92,7 +94,7 @@ schema, connector).
 |---|---|---|
 | 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | ✅ Complete |
 | 02 | Desktop shell, Electron security, keychain, and PowerSync spike | ✅ Complete |
-| 03 | Device auth, PowerSync sync config, local schema, and connector | 📝 Planned |
+| 03 | Device auth, PowerSync sync config, local schema, and connector | ✅ Complete |
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | 📝 Planned |
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | 📝 Planned |
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | 📝 Planned |
@@ -155,6 +157,53 @@ schema, connector).
   - **A hidden-window trap:** a `show: false` window that loads from `app://` never paints,
     so `ready-to-show` never fires and the app is invisible. `windows.ts` now also shows on
     `did-finish-load` and after a 3 s fallback.
+- **Plan 03 complete** (commits `b3f671e`, `5b4999b`, `4aa1fb2`, `bfe2a0f`, `4fc59c9`, `3277930`):
+  - **POS JWT + JWKS:** Ed25519 (`jose`); `POS_JWT_PRIVATE_KEY` required in production
+    (boot fails without it), ephemeral + warn in dev/test. `/.well-known/jwks.json` (and an
+    `/api/...` alias) serves the public JWK only. Device JWTs (`aud=gikautos-pos`,
+    `typ=device`, 15 min) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share the key;
+    `verifyDeviceJwt` collapses every failure into 401 `DEVICE_TOKEN_INVALID`.
+  - **Enrollment → device token:** `POST /api/enrollments/redeem` now issues a 32-byte
+    token once (201) and stores only `HMAC-SHA256(token)`; the row is locked `FOR UPDATE`
+    so one code cannot be redeemed twice. Guards: code used/expired (400), terminal
+    inactive (409), warehouse branch (409), branch inactive (409). Audits
+    `terminal.enrollment.redeemed` and `device.token.issued` with no token material.
+  - **Device session:** `POST /api/pos/session` (Bearer device token, rate limited)
+    returns the terminal/branch identity, a device JWT, and the config snapshot (tax mode,
+    loyalty rates, all `pos.*` policy, receipt header/footer, `Africa/Accra`, server time);
+    it doubles as the refresh path. `POST /api/pos/powersync/token` (device JWT) returns
+    `{endpoint, token, expiresAt}` or 503 `POWERSYNC_NOT_CONFIGURED`. `requireDeviceJwt`
+    re-reads the device/terminal/branch on every call and fails closed (403 revoked /
+    inactive / warehouse, 401 stale claims).
+  - **Self-hosted service:** `compose.yaml` gains `journeyapps/powersync-service:1.27.1`
+    under `profiles: ["sync"]` (unified mode, port 8080, Postgres bucket storage,
+    `extra_hosts` for the JWKS); `powersync/init/powersync.sql` creates `powersync_role`,
+    the `gikautos_powersync` storage database, and a `powersync` publication scoped to the
+    8 synced tables. `sync-config.yaml` (edition 3) streams products/barcodes globally and
+    prices/stock/credit by `auth.parameter('branch_id')`, plus customers and live loyalty
+    lots. Root scripts `sync:init|up|down|logs|config-check`.
+  - **Local client:** `lib/powersync/schema.ts` declares the 8 synced tables plus 15
+    local-only tables (config, session, staff binding, shift, sale/line/tender, cash
+    movement, customer draft, outbox, three delta tables, document sequence, local
+    conflicts); `database.ts` opens one encrypted OPFS database (`WASQLiteOpenFactory`,
+    `enableMultiTabs: false`, SDK worker) with the keychain key; `connector.ts` implements
+    only `fetchCredentials` (`uploadData` throws by design); `provider.tsx` + `status.ts`
+    expose live sync status; `lib/api/client.ts` adds the bearer client with a single 401
+    refresh, typed 403 `DeviceRevokedError`, timeouts and no cookie use.
+  - **Dev diagnostics:** `#dev/sync` shows per-table counts, the local terminal config and
+    live status with offline/reconnect controls; `#pos` shows the minimal shell plus an
+    enrolment/revoked banner.
+  - Verification: `walkthrough-sync.mjs` **24/24** (redeem once, hash-only storage, config
+    snapshot free of credentials, JWT claims, service accepts our token / rejects a bogus
+    one, revocation blocks both endpoints); `test:sync` **18/18** (all 8 tables equal the
+    server counts, `hasSynced=true`, offline readable, reconnect, encrypted file header).
+    API 305/305, desktop 60/60, lint/check-types green.
+  - Findings recorded: `app://gikautos` must be in `CORS_ORIGINS`; the CSP `<meta>`
+    fallback must be a superset of the header (browsers intersect); `allowLocalOrigins`
+    replaces `isDev` for localhost policy; the container-to-host firewall path is bypassed
+    by generating a service config with the public key inlined; the Docker host port is now
+    `POSTGRES_PORT` (5433 was taken locally).
+
   - Verification: fresh `bun install`, `bun run lint`, `bun run check-types` (5/5),
     `bun run build` (admin + desktop package), API 277/277, shared 70/70,
     desktop 51/51; `test:e2e` 35/35; `test:spike` 8/8; `.github/workflows/desktop.yml`
@@ -187,8 +236,8 @@ schema, connector).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 56/56, api 276/276 against `gikautos_test`
-  (`TEST_DATABASE_URL`; migrate it first).
+- Tests: `bun run test` — shared 70/70, api 305/305, desktop 60/60 against
+  `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
   locally. **Remote run pending a git remote.** `desktop/` builds and packages as part of
@@ -514,12 +563,31 @@ schema, connector).
 | 2026-10-22 | Plan 02: the POS renderer is served from `app://gikautos` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
 | 2026-10-22 | Plan 02: the PowerSync Web SDK **passes the phase gate** in the sandboxed `app://` renderer (encrypted WASM SQLite, local-only writes, watch, restart persistence). Production VFS = `OPFSCoopSyncVFS`, fallback `IDBBatchAtomicVFS`; always pass `vfs` explicitly and use `WASQLiteOpenFactory`. |
 | 2026-10-22 | Plan 02: keychain = async `safeStorage` only, `secrets.json` mode 0600, ciphertext only, fail closed with `KEYCHAIN_UNAVAILABLE`. Linux `basic_text` is reported as `secureStorage.level: 'basic'` so Plan 04 enrolment can require `os`. |
+| 2026-10-22 | Plan 03: POS tokens are Ed25519-signed (`jose`); device JWTs (`aud=gikautos-pos`) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share one key served at `/.well-known/jwks.json`. `POS_JWT_PRIVATE_KEY` is required in production (boot fails without it); dev/test fall back to an ephemeral key with one warning. |
+| 2026-10-22 | Plan 03: enrollment redemption issues the device token exactly once and stores only its HMAC-SHA256 hash (row locked `FOR UPDATE`). The device token is also the refresh credential — `/api/pos/session` is both sign-in and refresh. |
+| 2026-10-22 | Plan 03: `allowLocalOrigins = isDev \|\| !app.isPackaged` decides whether `http://localhost` API/PowerSync origins are acceptable; a packaged app still fails closed. `app://gikautos` must be listed in `CORS_ORIGINS`. |
+| 2026-10-22 | Plan 03: the CSP `<meta>` fallback is always built with local origins included, because browsers enforce the *intersection* of header and meta; the runtime header stays authoritative. |
+| 2026-10-22 | Plan 03: local development generates `powersync/.generated/service.yaml` with the API's public JWK inlined (`sync:up`), so sync works even when the host firewall blocks container→host. Staging/production use the committed `service.yaml` with `jwks_uri`. |
+| 2026-10-22 | Plan 03: the compose Postgres host port is `${POSTGRES_PORT:-5433}` (5433 was already taken on this machine; `.env` uses 5434). |
+| 2026-10-22 | Plan 03: the local PowerSync database uses `OPFSCoopSyncVFS` with an explicit `WASQLiteOpenFactory`, `enableMultiTabs: false`, and the SDK's own worker — the configuration the Plan 02 gate proved. |
 | 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
 
 ---
 
 ## Open Items (carry forward)
 
+- Phase 6 Plan 03 carry-forward for Plan 04: the device token lives in the keychain and
+  `/api/pos/session` is the only refresh path; `requireDeviceJwt` re-reads the whole
+  device→terminal→branch chain per request, so revoking a device (or deactivating a
+  terminal/branch) takes effect immediately. `staff_binding` exists with a device-bound
+  verifier and `pin_version`; there is no PIN endpoint yet.
+- Phase 6 Plan 03: local development needs `POS_JWT_PRIVATE_KEY` in `.env` (otherwise the
+  key rotates on every API restart and both stored JWTs and the generated PowerSync service
+  config go stale). Regenerate the service config with `bun run sync:up`.
+- Phase 6 Plan 03: the sync E2E (`bun run --filter desktop test:sync`) needs
+  `DATABASE_URL` (Docker Postgres) and `BETTER_AUTH_SECRET`, plus a running API and
+  PowerSync service; it cleans up the device it enrols.
+- Phase 6 Plan 03: `psql` must be on PATH for the sync E2E and `sync:init`.
 - **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
   on GitHub (workflow is written and locally verified).
 - Phase 4 and Phase 5 are verified (`phases/04-customers-credit/01-VERIFICATION.md`,

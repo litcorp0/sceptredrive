@@ -135,11 +135,14 @@ reconnecting — without blocking a sale.
 
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
-**Status:** 🚧 In progress 2026-10-22 (Plans 01–02/9 complete: schema, shared cart engine,
+**Status:** 🚧 In progress 2026-10-22 (Plans 01–03/9 complete: schema, shared cart engine,
 settings, permissions and demo seed; desktop shell, `app://` security baseline, async
-`safeStorage` keychain, and the **PowerSync Web SDK spike passed** — evidence under
-`phases/06-pos-offline-core/evidence/`) — development/CI use the self-hosted PowerSync
-Docker service, while staging/production use PowerSync Cloud.
+`safeStorage` keychain and the **PowerSync Web SDK gate**; POS JWTs/JWKS, enrollment
+device tokens, device session, the self-hosted PowerSync service with branch-scoped Sync
+Streams, and the **encrypted local schema + download-only connector** — all 8 synced
+tables match the server, evidence under `phases/06-pos-offline-core/evidence/`) —
+development/CI use the self-hosted PowerSync Docker service, while staging/production use
+PowerSync Cloud.
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock
