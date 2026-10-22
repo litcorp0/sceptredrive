@@ -2,14 +2,13 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-22
-**Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is
-planned**: 9 plans covering schema/shared cart math/settings, the hardened Electron shell
-and PowerSync spike, device auth and sync streams, offline PIN/bindings and shifts, the
-idempotent server sale application, the selling UI, receipts/ESC-POS printing, the durable
-outbox/uploader, and verification. See
+**Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
+progress — Plan 01/9 complete**: POS schema + migration, shared cart pricing engine, POS
+settings and permissions, and the demo shift/sales/conflict seed are implemented and
+tested (API suite 277/277, shared 70/70, lint and type-check green). See
 `.planning/phases/06-pos-offline-core/00-CONTEXT.md` and `01-RESEARCH.md`.
-**Next action:** Execute **Phase 6 Plan 01** (schema, shared cart math, settings,
-permissions, demo seed).
+**Next action:** Execute **Phase 6 Plan 02** (desktop shell, Electron security, keychain,
+PowerSync spike).
 
 ---
 
@@ -90,7 +89,7 @@ permissions, demo seed).
 
 | Plan | Title | Status |
 |---|---|---|
-| 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | 📝 Planned |
+| 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | ✅ Complete |
 | 02 | Desktop shell, Electron security, keychain, and PowerSync spike | 📝 Planned |
 | 03 | Device auth, PowerSync sync config, local schema, and connector | 📝 Planned |
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | 📝 Planned |
@@ -99,6 +98,27 @@ permissions, demo seed).
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
 | 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
 | 09 | Phase 6 verification and state update | 📝 Planned |
+
+### Phase 6 execution notes
+
+- **Plan 01 complete** (commits `58c63ec`, `e0caf52`, `d0bd35a`, `c78a439`, `74082d0`):
+  - Migration `0007_common_next_avengers.sql` adds `shift`, `sale`, `sale_line`,
+    `sale_tender`, `cash_movement`, `pos_sync_transaction`, `sync_conflict`, and
+    `pos_staff_binding`, with the one-open-shift and active-binding partial uniques and the
+    terminal/client idempotency uniques; `stock_movement` now accepts `SALE`.
+  - `@gikautos/shared` exports `allocateProportionally` and `priceCart` (integer
+    largest-remainder allocation, line/sale/loyalty discounts, per-line Ghana tax); 20 new
+    tests, 70 shared tests pass.
+  - Eight `pos.*` settings and the `staff.pin.reset` / `pos.discount` permissions.
+  - Demo seed: device `seed-ACC-SPX-T01`, cashier PIN `2468`, closed shift
+    `ACC-SPX-T01-S-20261020-01` (float 20000, expected/counted 42500, variance 0), cash sale
+    `…0001` (22500, change 7500), credit sale `…0002` (18500, Akosua balance 24500), and one
+    RESOLVED `PRICE_MISMATCH` conflict. Re-running `db:seed --demo` is a no-op.
+  - Verification: fresh `gikautos_test` schema → migrate → **API 277/277**, shared 70/70,
+    lint and check-types green; demo seed run twice on `gikautos_dev` with unchanged counts.
+  - Test DB note: the seed suite now cleans POS sales/shift/device/conflict before its
+    fixtures; reset `public` **and** `drizzle` schemas (not just `public`) when rebuilding
+    `gikautos_test`, or Drizzle will believe the migrations already ran.
 
 ---
 

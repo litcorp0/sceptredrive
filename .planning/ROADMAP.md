@@ -135,7 +135,8 @@ reconnecting — without blocking a sale.
 
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
-**Status:** 📝 Planned 2026-10-22 (9 plans) — context, research, and plans in
+**Status:** 🚧 In progress 2026-10-22 (Plan 01/9 complete: schema, shared cart engine,
+settings, permissions, demo seed) — context, research, and plans in
 `phases/06-pos-offline-core/`; development/CI use the self-hosted PowerSync Docker service,
 while staging/production use PowerSync Cloud.
 
