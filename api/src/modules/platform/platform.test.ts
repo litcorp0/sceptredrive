@@ -195,6 +195,18 @@ describe.skipIf(!available)('audit and settings API', () => {
 
     const minimumRedeem = body.settings.find((item) => item.key === 'loyalty.minimumRedeemPoints')
     expect(minimumRedeem?.value).toBe(100)
+
+    const cashierDiscount = body.settings.find(
+      (item) => item.key === 'pos.maxCashierDiscountPercent',
+    )
+    expect(cashierDiscount?.value).toBe(0)
+    expect(cashierDiscount?.source).toBe('default')
+
+    const receiptFooter = body.settings.find((item) => item.key === 'pos.receiptFooter')
+    expect(receiptFooter?.value).toBe('Thank you for your business')
+
+    const requireShift = body.settings.find((item) => item.key === 'pos.salesRequireOpenShift')
+    expect(requireShift?.value).toBe(true)
   })
 
   it('updates global settings as admin and audits the change', async () => {
@@ -251,6 +263,34 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'payable.invoiceSequence', value: 0 }),
     })
     expect(zeroInvoiceSequence.status).toBe(400)
+
+    const discountOutOfRange = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'pos.maxCashierDiscountPercent', value: 101 }),
+    })
+    expect(discountOutOfRange.status).toBe(400)
+
+    const tooFewPinAttempts = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'pos.pinMaxAttempts', value: 2 }),
+    })
+    expect(tooFewPinAttempts.status).toBe(400)
+
+    const oversizedBatch = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'pos.syncBatchSize', value: 51 }),
+    })
+    expect(oversizedBatch.status).toBe(400)
+
+    const emptyFooter = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'pos.receiptFooter', value: '' }),
+    })
+    expect(emptyFooter.status).toBe(400)
   })
 
   it('allocates inventory document numbers from their sequences', async () => {
@@ -314,6 +354,13 @@ describe.skipIf(!available)('audit and settings API', () => {
       body: JSON.stringify({ key: 'payable.invoicePrefix', value: 'BILL' }),
     })
     expect(payableAttempt.status).toBe(403)
+
+    const posAttempt = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'pos.maxCashierDiscountPercent', value: 10 }),
+    })
+    expect(posAttempt.status).toBe(403)
   })
 
   it('lets managers set branch-scoped settings for their branch only', async () => {

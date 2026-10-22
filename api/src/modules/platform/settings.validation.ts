@@ -168,6 +168,46 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 1,
     branchScoped: false,
   },
+  'pos.maxCashierDiscountPercent': {
+    schema: z.number().int().min(0).max(100),
+    defaultValue: 0,
+    branchScoped: false,
+  },
+  'pos.maxManagerDiscountPercent': {
+    schema: z.number().int().min(0).max(100),
+    defaultValue: 100,
+    branchScoped: false,
+  },
+  'pos.pinMaxAttempts': {
+    schema: z.number().int().min(3).max(10),
+    defaultValue: 5,
+    branchScoped: false,
+  },
+  'pos.pinLockMinutes': {
+    schema: z.number().int().min(1).max(60),
+    defaultValue: 5,
+    branchScoped: false,
+  },
+  'pos.clockSkewToleranceMinutes': {
+    schema: z.number().int().min(1).max(120),
+    defaultValue: 10,
+    branchScoped: false,
+  },
+  'pos.syncBatchSize': {
+    schema: z.number().int().min(1).max(50),
+    defaultValue: 25,
+    branchScoped: false,
+  },
+  'pos.receiptFooter': {
+    schema: z.string().trim().min(1).max(200),
+    defaultValue: 'Thank you for your business',
+    branchScoped: false,
+  },
+  'pos.salesRequireOpenShift': {
+    schema: z.boolean(),
+    defaultValue: true,
+    branchScoped: false,
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS
