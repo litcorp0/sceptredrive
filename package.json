@@ -8,6 +8,7 @@
     "packages": [
       "admin",
       "api",
+      "desktop",
       "packages/*"
     ],
     "catalog": {
@@ -45,6 +46,10 @@
     "dev": "bun run --parallel --if-present --filter '*' dev",
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",
+    "dev:pos": "bun run --filter desktop dev",
+    "build:pos": "bun run --filter desktop build",
+    "package:pos": "bun run --filter desktop package",
+    "make:pos": "bun run --filter desktop make",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",

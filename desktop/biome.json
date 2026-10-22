@@ -1,0 +1,22 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+  "extends": "//",
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/src/**/*",
+      "**/test/**/*",
+      "**/scripts/**/*",
+      "**/index.html",
+      "**/*.config.mts",
+      "**/forge.config.mts",
+      "**/components.json",
+      "!**/src/generated"
+    ]
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

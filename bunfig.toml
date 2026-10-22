@@ -1,0 +1,10 @@
+# Electron Forge crawls and re-packages one workspace's `node_modules` and does
+# not follow symlinks. The hoisted linker plus the `desktop` self-contained
+# workspace (root package.json -> workspaces.selfContained) gives
+# `desktop/node_modules` a complete tree of real files, which is what Forge,
+# @electron/packager, and the native-module unpacking step require.
+#
+# The isolated (pnpm-style) default that Bun 1.3 uses for workspaces cannot be
+# made self-contained: `installConfig.hoistingLimits` is a no-op with it.
+[install]
+linker = "hoisted"

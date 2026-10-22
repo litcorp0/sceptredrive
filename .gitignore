@@ -15,6 +15,7 @@ build/
 desktop/out/
 desktop/release/
 desktop/.vite/
+desktop/public/@powersync/
 
 # Environment
 .env
