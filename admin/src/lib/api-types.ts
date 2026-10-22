@@ -1274,6 +1274,7 @@ export interface SupplierInvoiceDetail {
 export type SupplierInvoiceListQuery = {
 	supplierId?: string
 	branchId?: string
+	receiptId?: string
 	status?: SupplierInvoiceStatus
 	overdue?: boolean
 	from?: string

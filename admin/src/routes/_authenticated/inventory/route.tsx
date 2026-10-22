@@ -8,6 +8,7 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 const TAB_LINKS = {
 	stock: "/inventory/stock",
+	receipts: "/inventory/receipts",
 	transfers: "/inventory/transfers",
 	counts: "/inventory/counts",
 } as const
@@ -36,6 +37,9 @@ function InventoryLayout() {
 				<TabsList>
 					<TabsTrigger value="stock" onClick={() => void navigate({ to: TAB_LINKS.stock })}>
 						Stock
+					</TabsTrigger>
+					<TabsTrigger value="receipts" onClick={() => void navigate({ to: TAB_LINKS.receipts })}>
+						Receipts
 					</TabsTrigger>
 					<TabsTrigger value="transfers" onClick={() => void navigate({ to: TAB_LINKS.transfers })}>
 						Transfers

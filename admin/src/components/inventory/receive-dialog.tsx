@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import type { PickedSupplier } from "#/components/suppliers/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
@@ -19,6 +20,7 @@ import type { ReceiptCreateInput } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import { type PickedProduct, ProductPicker } from "./product-picker"
+import { SupplierPicker } from "./supplier-picker"
 
 interface ReceiveRow {
 	key: string
@@ -36,14 +38,18 @@ export function ReceiveDialog({
 	onOpenChange,
 	branchId,
 	branchName,
+	canPickSupplier,
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	branchId: string | null
 	branchName: string | null
+	/** `supplier.read` holders can search the supplier directory. */
+	canPickSupplier: boolean
 }) {
 	const queryClient = useQueryClient()
 	const [rows, setRows] = useState<ReceiveRow[]>([blankRow()])
+	const [supplier, setSupplier] = useState<PickedSupplier | null>(null)
 	const [supplierName, setSupplierName] = useState("")
 	const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("")
 	const [note, setNote] = useState("")
@@ -52,6 +58,7 @@ export function ReceiveDialog({
 	useEffect(() => {
 		if (!open) return
 		setRows([blankRow()])
+		setSupplier(null)
 		setSupplierName("")
 		setSupplierInvoiceNumber("")
 		setNote("")
@@ -130,7 +137,11 @@ export function ReceiveDialog({
 
 		createMutation.mutate({
 			branchId,
-			...(supplierName.trim() ? { supplierName: supplierName.trim() } : {}),
+			...(supplier
+				? { supplierId: supplier.id }
+				: supplierName.trim()
+					? { supplierName: supplierName.trim() }
+					: {}),
 			...(supplierInvoiceNumber.trim()
 				? { supplierInvoiceNumber: supplierInvoiceNumber.trim() }
 				: {}),
@@ -155,14 +166,16 @@ export function ReceiveDialog({
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="grid gap-4">
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div className="grid items-start gap-3 sm:grid-cols-2">
 						<div className="grid gap-1.5">
-							<Label htmlFor="receipt-supplier">Supplier name (optional)</Label>
-							<Input
-								id="receipt-supplier"
-								value={supplierName}
-								onChange={(event) => setSupplierName(event.target.value)}
-								maxLength={120}
+							<Label htmlFor="receipt-supplier">Supplier (optional)</Label>
+							<SupplierPicker
+								supplier={supplier}
+								freeText={supplierName}
+								onSupplierChange={setSupplier}
+								onFreeTextChange={setSupplierName}
+								canSearch={canPickSupplier}
+								disabled={createMutation.isPending}
 							/>
 						</div>
 						<div className="grid gap-1.5">

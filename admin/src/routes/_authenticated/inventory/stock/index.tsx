@@ -212,6 +212,7 @@ function StockTab() {
 				onOpenChange={setReceiveOpen}
 				branchId={activeBranchId}
 				branchName={activeBranch?.name ?? null}
+				canPickSupplier={hasPermission(session.user.role, "supplier.read")}
 			/>
 			<AdjustDialog
 				open={adjustOpen}
