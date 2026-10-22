@@ -112,6 +112,7 @@ screens; permission checks.
 **Goal:** Suppliers, the products they supply, invoices on credit, payments, and balances
 are tracked accurately per branch and in aggregate.
 
+**Status:** ✅ Complete (verified 2026-10-22 — see `phases/05-suppliers-payables/01-VERIFICATION.md`)
 **Dependencies:** Phases 3–4
 **Requirements:** SUP-01…05, ADM-06
 

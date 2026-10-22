@@ -1,14 +1,14 @@
 # STATE — GikAutos v1
 
 **Milestone:** v1
-**Updated:** 2026-10-19
-**Status:** Phase 4 complete and verified (8/8 plans). Phase 5 (Suppliers & Payables)
-in progress — 4/7 plans executed: schema/receipt link/settings/permissions/demo seed,
-the suppliers module, payables invoices (receipts + standalone, tax split, voids), and
-payments with explicit allocations, on-account remainders, voids with RELEASE rows,
-balances, aging, and `reconcilePayables()`. All committed on `dev`; API suite green.
-**Next action:** Continue Phase 5 at Plan 05 (console Suppliers section: list + detail,
-payment details, supplied-product mappings, settings group).
+**Updated:** 2026-10-22
+**Status:** Phase 5 complete and verified (7/7 plans) — supplier master with bank/MoMo
+details and supplied products, invoices from goods receipts and standalone, payments with
+explicit allocations and on-account remainders, reasoned voids with RELEASE history,
+balances, aging, `reconcilePayables()`, and the full console AP story. Proven on a fresh
+database: API/SQL walkthrough **102/102**, console walkthrough **25/25**, api **276/276**,
+shared **56/56**; lint, check-types, and build green.
+**Next action:** Plan **Phase 6 (POS Offline Core)**.
 
 ---
 
@@ -21,7 +21,7 @@ payment details, supplied-product mappings, settings group).
 | 2 | Catalog & Pricing | ✅ Complete (6/6 plans, verified) |
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
-| 5 | Suppliers & Payables | 🔄 In progress (4/7 plans) |
+| 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ⬜ Not started |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
@@ -81,9 +81,9 @@ payment details, supplied-product mappings, settings group).
 | 02 | Suppliers module — master, payment details, supplied products, last cost | ✅ Complete |
 | 03 | Payables module — invoices from receipts and standalone, totals, voids | ✅ Complete |
 | 04 | Payments, allocations, voids, balances, aging, and reconciliation | ✅ Complete |
-| 05 | Console — suppliers section, payment details, supplied products | ⬜ Not started |
-| 06 | Console — invoices, payments, aging, and goods-receipt linking | ⬜ Not started |
-| 07 | Phase 5 verification and state update | ⬜ Not started |
+| 05 | Console — suppliers section, payment details, supplied products | ✅ Complete |
+| 06 | Console — invoices, payments, aging, and goods-receipt linking | ✅ Complete |
+| 07 | Phase 5 verification and state update | ✅ Complete |
 
 ---
 
@@ -94,8 +94,13 @@ payment details, supplied-product mappings, settings group).
   codes) and `@gikautos/db` (Drizzle client, config, migrations).
 - API boots on Node 24 with native TypeScript type stripping: `bun run dev:api`.
   Validated env, pino logs, request IDs, security headers, CORS, `/health`, `/ready`.
-- Postgres 18 via `compose.yaml` on host port **5433**. `wal_level=logical` and 10
-  replication slots for Phase 6.
+- PostgreSQL: the operator's **local instance on `:5432`**. `gikautos_test` holds the
+  current v1 schema (migrated clean after verification). The local `gikautos` database is
+  the **discarded prototype schema** (PascalCase tables) and must not be used for v1;
+  create a dedicated v1 dev database (the `gikautos` role currently lacks `CREATEDB`) or
+  use the Docker stack. `compose.yaml` remains for CI/Docker (host `:5433`,
+  `wal_level=logical`, 10 slots for Phase 6). Migrations need an explicit `DATABASE_URL`;
+  tests honour `TEST_DATABASE_URL`.
 - API serves auth (public sign-up blocked), branches, terminals, enrollment, devices,
   staff, `/api/me/password`, audit (with `actorId` + `actorStaffId` filters), settings.
   Middleware: session loading (cookie cache bypassed for authorization), permission
@@ -107,8 +112,8 @@ payment details, supplied-product mappings, settings group).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run db:test:prepare` then `bun run test` — shared 54/54, api 235/235 against
-  `gikautos_test`.
+- Tests: `bun run test` — shared 56/56, api 276/276 against `gikautos_test`
+  (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
   locally. **Remote run pending a git remote.**
@@ -273,7 +278,64 @@ payment details, supplied-product mappings, settings group).
 
 ---
 
-## Decisions Log
+### Phase 5 additions
+
+- Schema (migrations `0005_peaceful_synch.sql` for suppliers, `0006_calm_swarm.sql` for
+  payables + `stock_receipt.supplier_id`): `supplier` (global master, `SUP-#####`,
+  ACTIVE/ARCHIVED, trigram name index), `supplier_payment_detail` (BANK/MOMO, one active
+  default per supplier via partial unique index, nullable `paystack_recipient_code`),
+  `supplier_product` (unique supplier+product, one preferred supplier per product),
+  `supplier_invoice` (+ lines; status OPEN/PARTIAL/PAID/VOID; supplier number unique per
+  supplier+branch among non-VOID; one invoice per receipt; branch idempotency key),
+  `supplier_payment` (+ append-only `supplier_payment_allocation`: positive APPLY, negative
+  RELEASE with `reverses_allocation_id`; branch idempotency key).
+- Settings: `supplier.codePrefix`/`codeSequence`, `payable.invoicePrefix`/`invoiceSequence`,
+  `payable.paymentPrefix`/`paymentSequence` (defaults SUP/SINV/PAY, pad 5, allocated via
+  `allocateFromSequence`).
+- Permissions: `supplier.read` (admin+manager) and admin-only `supplier.create/update/
+  archive`; `payable.read/invoice.manage/payment/void` (admin all; manager branch-scoped);
+  cashier none.
+- Demo seed: SUP-00001 Accra Parts Depot (bank + MoMo default), SUP-00002 GikAutos Imports
+  (MoMo); receipt links for GRN-00001/00002; four product mappings with last costs;
+  `SINV-00001` from GRN-00002 with the derived split and a 40% `PAY-00001`; standalone
+  freight `SINV-00002`; `PAY-00002` on account; sequences advanced to 3. Fully idempotent.
+- Suppliers module (`api/src/modules/suppliers`): search by name fragment/code (archived
+  hidden unless admin), create allocates `SUP-#####` and normalises the phone, archive
+  blocked while owed ≠ 0 (409 names the amount), reactivate, payment details with
+  default-switch/deactivate semantics and masked account numbers, product mappings with the
+  joined product view, and `recordInvoiceCosts` refreshing `last_cost` from invoice lines.
+- Payables module (`api/src/modules/payables`): `createInvoice` (receipt copy or standalone
+  lines; omitted tax ⇒ `taxBreakdown(STANDARD, INCLUSIVE)` so the total equals the entered
+  tax-inclusive costs; provided tax ⇒ net lines + manual split; server-recomputed totals;
+  supplier row locked; idempotency replay checked before unique-violation mapping; one
+  invoice per receipt), `voidInvoice` (only at zero net allocation), `createPayment`
+  (dedupe allocations, Σ ≤ amount, outstanding/supplier/VOID/branch guards, sorted invoice
+  locks, on-account remainder, status recompute), `voidPayment` (RELEASE rows + invoice
+  flips + audit), payment reads with allocated/on-account totals, `getAging` (fixed buckets,
+  as-of, on-account separate), `listSupplierBalances` (outstanding − remainder per supplier),
+  and `reconcilePayables()` (invoice paid = signed allocations, status derivation, VOID at
+  zero, owed = independent `sumSupplierOwed`).
+- Routes: `/api/suppliers…` (list, create, get, patch, archive, reactivate, payment details,
+  products) and `/api/payables…` (invoices list/create/get/void, payments list/create/get/
+  void, balances, aging), wired in `app.ts`.
+- Console: Suppliers section (Truck icon) with Suppliers / Invoices / Payments / Aging tabs;
+  supplier list + form dialog, detail (overview, payment details with default/deactivate,
+  supplied products with last cost); invoice list with filters and overdue tint, invoice
+  form (receipt picker, product/free-text lines, derived/zero/manual tax panel, live totals,
+  idempotency key) and detail (lines, tax split, linked receipt, allocations, record payment,
+  void); payment list/form (allocation editor with oldest-first and on-account remainder),
+  payment detail and void dialog with release preview; aging page with summary cards and
+  totals row; supplier list owed column fed by balances. Inventory gains the Receipts tab,
+  receipt detail with "Record supplier invoice", and a supplier picker (free-text fallback)
+  in the receive dialog. Settings shows the Suppliers & Payables group.
+- Verification follow-ups committed during the phase: `ca41b50` payment list rows carry
+  supplier/branch names; `9bd652a` product mapping mutations return the joined view;
+  `951499f` invoice list filters by `receiptId`; admin `ApiError.details` surfaces the
+  duplicate-invoice/archived ids for inline links.
+- Tests: suppliers suite 15/15, payables service 19/19, payables HTTP 5/5; the phase adds
+  **41** API tests (235 → 276). Phase 5 verification: API/SQL 102/102, console 25/25.
+
+
 
 | Date | Decision |
 |---|---|
@@ -338,6 +400,13 @@ payment details, supplied-product mappings, settings group).
 | 2026-10-19 | Phase 4 Plan 07: "expiring soon" is the sum of remaining live lot points expiring within 30 days; the liability headline value is `floor(points × 100 / pointsPerCedi)` and is legitimately negative when clawback shortfalls exist. |
 | 2026-10-19 | Phase 4 Plan 08: verification runs the API/SQL walkthrough first on a fresh volume, then the browser walkthrough against the same data; exact REP numbers and staff emails are asserted by design, so `walkthrough-phase4.mjs` is fresh-DB-only and documented as such. |
 | 2026-10-19 | Phase 4 Plan 08: a deactivated staff session fails closed with 401 (the session no longer resolves); the walkthrough asserts the lockout without depending on the exact status code. |
+| 2026-10-22 | Phase 5 implements D1–D18 as locked. Specific mechanics: invoice unit costs are tax-inclusive when the tax fields are omitted (derived STANDARD 20% split, total = entered costs); sending tax fields switches the lines to net amounts and `total = subtotal + vat + nhil + getfund`. |
+| 2026-10-22 | On-account payment remainders are never netted into aging buckets; they reduce the supplier's owed balance and appear as a separate "On account" figure. Aging uses the current due dates shifted by the as-of parameter (not a historical allocation snapshot), mirroring Phase 4 credit aging. |
+| 2026-10-22 | A voided invoice keeps occupying its receipt slot (one invoice per receipt); voiding frees only the supplier's invoice number for re-entry. Payment voids are append-only RELEASE rows and never delete APPLY history. |
+| 2026-10-22 | Supplier creation/archiving and invoice/payment creation serialize on the supplier row (`FOR UPDATE`), so archiving cannot race a new debt; allocation payments lock invoice rows in id order so parallel payments cannot over-apply. |
+| 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
+| 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
+| 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
 
 ---
 
@@ -345,11 +414,17 @@ payment details, supplied-product mappings, settings group).
 
 - **No git remote yet** — push `dev`, add `staging`/`main`, and watch the CI workflow run
   on GitHub (workflow is written and locally verified).
-- Phase 4 is verified (`phases/04-customers-credit/01-VERIFICATION.md`); the dev database
-  now holds the walkthrough and browser fixtures — reset the volume and reseed before a
-  demo, and rerun the admin TOTP bootstrap afterwards.
-- Phase 5 must create payables from existing receipts: Phase 3 stores supplier name +
-  invoice number on the receipt; the `payable` table does not exist yet.
+- Phase 4 and Phase 5 are verified (`phases/04-customers-credit/01-VERIFICATION.md`,
+  `phases/05-suppliers-payables/01-VERIFICATION.md`). The verification fixtures live in the
+  local `gikautos_test` database; reset + reseed it before a demo and rerun the admin TOTP
+  bootstrap afterwards.
+- Phase 5 verification used `gikautos_test`. The local `gikautos` database on `:5432` is
+  the **discarded prototype schema** (PascalCase tables), not the v1 schema; do not point
+  v1 at it. Create a dedicated local v1 dev database (grant `CREATEDB` or run
+  `createdb` as `postgres`) or use the Docker stack, then migrate + seed.
+- Phase 8: Paystack transfers consume `supplier_payment_detail.paystack_recipient_code`
+  and the reserved `PAYSTACK` payment method; E-VAT purchase reporting uses the stored
+  VAT/NHIL/GETFund split. Receipts and payables-aging exports are Phase 8 scope.
 - Human verification from Plan 04: TOTP with an authenticator app is now machine-verified
   end to end (browser walkthrough performs forced setup + verification). Remaining: a
   human visual pass over the Phase 2 console screens and the dev-mail password-reset
@@ -409,6 +484,22 @@ payment details, supplied-product mappings, settings group).
   (`walkthrough-inventory.mjs`, `smoke-console.mjs`, `smoke-transfers-counts.mjs`); run
   the browser scripts from a directory where `playwright` resolves and point `SHOTS_DIR`
   at the `evidence/` folder.
+- Phase 5 evidence: `.planning/phases/05-suppliers-payables/evidence/` holds
+  `walkthrough-payables.mjs` (HTTP + SQL, 102 checks) and
+  `smoke-console-suppliers.mjs` (Playwright, 25 checks, 18 screenshots) with their logs.
+  Both are **fresh-DB-only** (exact `SUP-00003/4`, `SINV-00003`, `PAY-00003` assertions).
+  Rerun cycle on the local instance: reset the `gikautos_test` schema, migrate, `db:seed`,
+  `db:seed --demo` twice, start the API with that `DATABASE_URL`, bootstrap TOTP, run the
+  API walkthrough, then the browser script from a directory where `playwright` resolves
+  (`SHOTS_DIR` pointing at `evidence/`). Tests use `TEST_DATABASE_URL`.
+- Phase 5 invariants to preserve: invoices and payments have one write path
+  (`createInvoice`, `createPayment`); allocations are append-only signed rows; invoice
+  `amount_paid_minor`/status are projections recomputed in the same transaction; supplier
+  rows lock before debts/archive; totals are always server-computed; account numbers stay
+  masked outside the owning supplier detail payload.
+- `bun run db:test:prepare` is Docker-specific; on the local instance, create/migrate
+  `gikautos_test` directly (the role lacks `CREATEDB`, so reset the schema instead of
+  dropping the database).
 - Phase 6 contracts to honour: extend `StockMovementType` (e.g. `SALE`) and add an
   oversell posting mode; keep movements append-only, `reference_number` populated, and
   the ledger-invariant test green.
