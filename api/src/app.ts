@@ -23,6 +23,7 @@ import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
+import { syncRoutes } from './modules/sync/sync.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -55,6 +56,7 @@ app.route('/', suppliersRoutes)
 app.route('/', payablesRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
+app.route('/', syncRoutes)
 
 app.notFound((c) => {
   return c.json(
@@ -78,7 +80,7 @@ app.onError((error, c) => {
           requestId,
         },
       },
-      error.statusCode as 400 | 401 | 403 | 404 | 409 | 429,
+      error.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500 | 503,
     )
   }
 
