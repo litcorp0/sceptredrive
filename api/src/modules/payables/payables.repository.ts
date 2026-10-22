@@ -476,8 +476,17 @@ export async function selectPaymentsByInvoice(
     sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number)
 
   const rows = await executor
-    .select({ ...paymentSelection, allocatedMinor })
+    .select({
+      ...paymentSelection,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      branchCode: branch.code,
+      branchName: branch.name,
+      allocatedMinor,
+    })
     .from(supplierPayment)
+    .innerJoin(supplier, eq(supplier.id, supplierPayment.supplierId))
+    .innerJoin(branch, eq(branch.id, supplierPayment.branchId))
     .leftJoin(
       supplierPaymentAllocation,
       eq(supplierPaymentAllocation.paymentId, supplierPayment.id),
@@ -491,7 +500,7 @@ export async function selectPaymentsByInvoice(
           .where(eq(supplierPaymentAllocation.invoiceId, invoiceId)),
       ),
     )
-    .groupBy(supplierPayment.id)
+    .groupBy(supplierPayment.id, supplier.code, supplier.name, branch.code, branch.name)
     .orderBy(asc(supplierPayment.paidAt), asc(supplierPayment.number))
 
   return rows.map((row) => ({
@@ -544,14 +553,23 @@ export async function selectPaymentPage(filters: PaymentListFilters): Promise<Pa
     sql<number>`coalesce(sum(${supplierPaymentAllocation.amountMinor}), 0)`.mapWith(Number)
 
   const rows = await db
-    .select({ ...paymentSelection, allocatedMinor })
+    .select({
+      ...paymentSelection,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      branchCode: branch.code,
+      branchName: branch.name,
+      allocatedMinor,
+    })
     .from(supplierPayment)
+    .innerJoin(supplier, eq(supplier.id, supplierPayment.supplierId))
+    .innerJoin(branch, eq(branch.id, supplierPayment.branchId))
     .leftJoin(
       supplierPaymentAllocation,
       eq(supplierPaymentAllocation.paymentId, supplierPayment.id),
     )
     .where(and(...paymentConditions(filters)))
-    .groupBy(supplierPayment.id)
+    .groupBy(supplierPayment.id, supplier.code, supplier.name, branch.code, branch.name)
     .orderBy(desc(supplierPayment.paidAt), desc(supplierPayment.number))
     .limit(filters.limit)
     .offset(filters.offset)

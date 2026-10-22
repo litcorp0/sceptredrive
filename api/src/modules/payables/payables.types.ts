@@ -146,6 +146,10 @@ export interface PaymentDetailHeader {
 
 /** Payment row enriched with its allocated total (Plan 04 surfaces). */
 export interface PaymentListRow extends SupplierPaymentRow {
+  supplierCode: string
+  supplierName: string
+  branchCode: string
+  branchName: string
   allocatedMinor: number
   unallocatedMinor: number
 }
