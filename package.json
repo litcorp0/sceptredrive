@@ -42,7 +42,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
-    "db:test:prepare": "docker compose exec -T postgres createdb -U gikautos gikautos_test || true && DATABASE_URL=postgresql://gikautos:gikautos@localhost:5433/gikautos_test bun run --filter api db:migrate",
+    "db:test:prepare": "docker compose exec -T postgres createdb -U gikautos gikautos_test || true && DATABASE_URL=postgresql://gikautos:gikautos@localhost:${POSTGRES_PORT:-5433}/gikautos_test bun run --filter api db:migrate",
     "dev": "bun run --parallel --if-present --filter '*' dev",
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",
@@ -58,9 +58,15 @@
     "build": "bun run --if-present --filter '*' build",
     "db:generate": "bun run --filter api db:generate",
     "db:migrate": "bun run --filter api db:migrate",
-    "db:seed": "bun run --filter api db:seed"
+    "db:seed": "bun run --filter api db:seed",
+    "sync:init": "docker compose exec -T postgres psql -U gikautos -d gikautos < powersync/init/powersync.sql",
+    "sync:up": "bun run scripts/prepare-powersync-service.mjs && docker compose --profile sync up -d powersync",
+    "sync:down": "docker compose stop powersync",
+    "sync:logs": "docker compose logs -f powersync",
+    "sync:config-check": "bun run scripts/check-sync-config.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "catalog:"
+    "@biomejs/biome": "catalog:",
+    "yaml": "2.9.1"
   }
 }

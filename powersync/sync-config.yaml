@@ -1,0 +1,49 @@
+# Sync config — which rows each terminal receives.
+#
+# Edition 3 (Sync Streams). `auto_subscribe` streams start on connect; the
+# branch-scoped streams read `branch_id` from the signed PowerSync JWT, so a
+# terminal can never widen its own scope.
+#
+# Deliberately NOT synced: staff (PIN hashes), settings, sales, credit ledger,
+# loyalty ledger, suppliers, payables, audit. The device gets the catalogue,
+# stock, customers, and credit/loyalty *balances* — never the ledgers.
+#
+# Adding a synced table later also means:
+#   ALTER PUBLICATION powersync ADD TABLE <table>;
+config:
+  edition: 3
+
+streams:
+  # Global reference data: one copy per terminal (5k SKUs at target scale).
+  pos_products:
+    auto_subscribe: true
+    query: SELECT * FROM product WHERE is_active = true
+
+  pos_barcodes:
+    auto_subscribe: true
+    query: SELECT * FROM barcode
+
+  # Branch-scoped: `branch_id` comes from the signed device JWT.
+  pos_prices:
+    auto_subscribe: true
+    query: SELECT * FROM product_price WHERE branch_id = auth.parameter('branch_id')
+
+  pos_stock:
+    auto_subscribe: true
+    query: SELECT * FROM stock_level WHERE branch_id = auth.parameter('branch_id')
+
+  # Customer identity is global (found at any branch); credit is branch-local.
+  pos_customers:
+    auto_subscribe: true
+    query: SELECT * FROM customer WHERE status = 'ACTIVE' AND anonymized_at IS NULL
+
+  pos_credit:
+    auto_subscribe: true
+    query: SELECT * FROM credit_profile WHERE branch_id = auth.parameter('branch_id')
+
+  # Loyalty balance is global; only live lots matter for redemption.
+  pos_loyalty:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM loyalty_account
+      - SELECT * FROM loyalty_lot WHERE remaining_points > 0

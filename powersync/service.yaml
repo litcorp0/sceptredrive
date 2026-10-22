@@ -1,0 +1,50 @@
+# PowerSync Service configuration (development / CI, self-hosted Docker).
+#
+# Staging and production use PowerSync Cloud with the same `sync-config.yaml`;
+# only the endpoint, audience, and deploy command differ (see README.md).
+#
+# Full reference: https://docs.powersync.com/configuration/powersync-service/self-hosted-instances
+replication:
+  connections:
+    # `replication.connections` — NOT a top-level `connections` key.
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      # Must be a separate key: the pgwire replication client ignores
+      # `sslmode` inside the URI and fails with "postgres does not support ssl".
+      sslmode: disable
+      slot_name_prefix: gikautos_
+
+# Bucket storage on Postgres (17+; the source and storage servers may share an
+# instance from Postgres 14). Postgres storage supports storage version 2 only.
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: disable
+
+port: 8080
+
+sync_config:
+  path: sync-config.yaml
+
+# Client authentication: the API's JWKS plus the audience our tokens carry.
+client_auth:
+  jwks_uri: !env PS_JWKS_URI
+  audience:
+    - http://localhost:8080
+
+# Admin API token for the PowerSync CLI against this instance. Development only.
+api:
+  tokens:
+    - !env PS_ADMIN_TOKEN
+
+healthcheck:
+  probes:
+    use_http: true
+
+telemetry:
+  disable_telemetry_sharing: true
+
+system:
+  logging:
+    level: info
+    format: text

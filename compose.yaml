@@ -17,9 +17,10 @@ services:
       POSTGRES_USER: gikautos
       POSTGRES_PASSWORD: gikautos
       POSTGRES_DB: gikautos
-    # Mapped to 5433 on the host so it never clashes with a system Postgres on 5432.
+    # Mapped to 5433 on the host so it never clashes with a system Postgres on
+    # 5432. Override with POSTGRES_PORT when 5433 is taken (see .env.example).
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -28,6 +29,50 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  # Self-hosted PowerSync Service (development / CI only).
+  # Start with: bun run sync:up   (needs `bun run db:up` and `bun run sync:init`)
+  # Staging and production use PowerSync Cloud with the same sync-config.yaml.
+  powersync:
+    image: journeyapps/powersync-service:1.27.1
+    container_name: gikautos-powersync
+    restart: unless-stopped
+    profiles: ["sync"]
+    command: ["start", "-r", "unified"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Container port is 8080; never map 8080:80.
+    ports:
+      - "8080:8080"
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      PS_DATA_SOURCE_URI: ${PS_DATA_SOURCE_URI:-postgresql://powersync_role:powersync_role@postgres:5432/gikautos}
+      PS_STORAGE_URI: ${PS_STORAGE_URI:-postgresql://powersync_storage:powersync_storage@postgres:5432/gikautos_powersync}
+      # The API runs on the host; the container fetches its JWKS over this alias.
+      PS_JWKS_URI: ${PS_JWKS_URI:-http://host.docker.internal:4000/.well-known/jwks.json}
+      PS_ADMIN_TOKEN: ${PS_ADMIN_TOKEN:-dev-powersync-admin-token}
+      PS_LOG_LEVEL: ${PS_LOG_LEVEL:-info}
+    extra_hosts:
+      # Linux containers cannot resolve host.docker.internal without this.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Normally ./powersync/service.yaml; `bun run sync:up` generates the
+      # variant that inlines the API's public key for local development.
+      - ./powersync/.generated/service.yaml:/config/service.yaml:ro
+      - ./powersync/sync-config.yaml:/config/sync-config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8080/probes/liveness').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
 
 volumes:
   postgres-data:

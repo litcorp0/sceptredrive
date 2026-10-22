@@ -52,3 +52,7 @@ api/.mail/
 # Secrets and certificates
 *.pem
 *.key
+
+# Generated PowerSync dev config (inlines the API public key)
+powersync/.generated/
+powersync/cli.yaml
