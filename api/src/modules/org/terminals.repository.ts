@@ -73,6 +73,36 @@ export async function findDeviceById(
   return rows[0] ?? null
 }
 
+export async function insertDevice(
+  values: typeof device.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<DeviceRow | null> {
+  const rows = await executor.insert(device).values(values).returning()
+  return rows[0] ?? null
+}
+
+/** Only ACTIVE devices authenticate; a revoked token must never resolve. */
+export async function findActiveDeviceByTokenHash(
+  tokenHash: string,
+  executor: DbExecutor = db,
+): Promise<DeviceRow | null> {
+  const rows = await executor
+    .select()
+    .from(device)
+    .where(and(eq(device.tokenHash, tokenHash), eq(device.status, 'ACTIVE')))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** Throttled by the caller: `last_seen_at` is metadata, not an audit trail. */
+export async function touchDeviceLastSeen(
+  id: string,
+  seenAt: Date,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor.update(device).set({ lastSeenAt: seenAt }).where(eq(device.id, id))
+}
+
 export async function updateDeviceRow(
   id: string,
   patch: Partial<typeof device.$inferInsert>,

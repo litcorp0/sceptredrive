@@ -39,6 +39,23 @@ export async function findEnrollmentByCodeHash(
   return rows[0] ?? null
 }
 
+/**
+ * Locks the enrollment row so two terminals racing on one code cannot both
+ * redeem it: the second transaction waits, then sees `used_at` set.
+ */
+export async function findEnrollmentByCodeHashForUpdate(
+  codeHash: string,
+  executor: DbExecutor = db,
+): Promise<TerminalEnrollmentRow | null> {
+  const rows = await executor
+    .select()
+    .from(terminalEnrollment)
+    .where(eq(terminalEnrollment.codeHash, codeHash))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
 export async function markEnrollmentUsed(
   id: string,
   usedAt: Date,

@@ -1,17 +1,19 @@
-import { createHmac, randomInt } from 'node:crypto'
+import { createHmac, randomBytes, randomInt } from 'node:crypto'
 import { db } from '@gikautos/db'
 import { env } from '../../config/env.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
+import { findBranchById } from './branches.repository.ts'
 import {
   expireOutstandingEnrollments,
-  findEnrollmentByCodeHash,
+  findEnrollmentByCodeHashForUpdate,
   insertEnrollmentRow,
   markEnrollmentUsed,
 } from './enrollment.repository.ts'
-import type { CreatedEnrollment, RedeemedEnrollment } from './enrollment.types.ts'
+import type { CreatedEnrollment, RedeemedDevice } from './enrollment.types.ts'
+import { findTerminalById, insertDevice } from './terminals.repository.ts'
 import * as terminalsService from './terminals.service.ts'
 
 /** Human-typable alphabet without ambiguous characters (no 0/O, 1/I/L). */
@@ -39,6 +41,19 @@ export function hashEnrollmentCode(code: string): string {
   return createHmac('sha256', env.BETTER_AUTH_SECRET)
     .update(normalizeEnrollmentCode(code))
     .digest('hex')
+}
+
+/** 32 random bytes, URL-safe: 256 bits of device credential. */
+export function generateDeviceToken(): string {
+  return randomBytes(32).toString('base64url')
+}
+
+/**
+ * Device tokens are stored keyed-hashed, exactly like enrollment codes: a
+ * database leak alone cannot produce a usable terminal credential.
+ */
+export function hashDeviceToken(token: string): string {
+  return createHmac('sha256', env.BETTER_AUTH_SECRET).update(token).digest('hex')
 }
 
 export async function createEnrollment(
@@ -82,15 +97,20 @@ export async function createEnrollment(
 }
 
 /**
- * Validates a one-time enrollment code and consumes it. Phase 1 stops short
- * of issuing device tokens (PowerSync arrives in Phase 6); the route turns
- * this into an explicit 501 so the POS contract is already stable.
+ * Validates a one-time enrollment code, consumes it, and issues the terminal's
+ * device token (returned exactly once; only its keyed hash is stored).
+ *
+ * The row is locked for the transaction so a stolen code cannot be redeemed
+ * twice by racing clients.
  */
-export async function redeemEnrollment(code: string): Promise<RedeemedEnrollment> {
+export async function redeemEnrollment(
+  code: string,
+  fingerprint = 'unknown',
+): Promise<RedeemedDevice> {
   const codeHash = hashEnrollmentCode(code)
 
   return db.transaction(async (tx) => {
-    const enrollment = await findEnrollmentByCodeHash(codeHash, tx)
+    const enrollment = await findEnrollmentByCodeHashForUpdate(codeHash, tx)
     if (!enrollment) {
       throw new AppError(400, 'ENROLLMENT_INVALID', 'Enrollment code is invalid or expired')
     }
@@ -101,19 +121,77 @@ export async function redeemEnrollment(code: string): Promise<RedeemedEnrollment
       throw new AppError(400, 'ENROLLMENT_INVALID', 'Enrollment code is invalid or expired')
     }
 
-    await markEnrollmentUsed(enrollment.id, new Date(), tx)
+    const terminal = await findTerminalById(enrollment.terminalId, tx)
+    if (!terminal) {
+      throw new AppError(400, 'ENROLLMENT_INVALID', 'Enrollment code is invalid or expired')
+    }
+    if (!terminal.isActive) {
+      throw new AppError(409, 'TERMINAL_INACTIVE', 'Terminal is not active')
+    }
+
+    const branch = await findBranchById(terminal.branchId, tx)
+    if (!branch) {
+      throw new AppError(400, 'ENROLLMENT_INVALID', 'Enrollment code is invalid or expired')
+    }
+    if (branch.type === 'WAREHOUSE') {
+      throw new AppError(409, 'BRANCH_NOT_RETAIL', 'A warehouse branch cannot host a POS terminal')
+    }
+    if (!branch.isActive) {
+      throw new AppError(409, 'BRANCH_INACTIVE', 'Branch is not active')
+    }
+
+    const deviceToken = generateDeviceToken()
+    const now = new Date()
+
+    await markEnrollmentUsed(enrollment.id, now, tx)
+
+    const deviceRow = await insertDevice(
+      {
+        terminalId: terminal.id,
+        fingerprint,
+        tokenHash: hashDeviceToken(deviceToken),
+        status: 'ACTIVE',
+        enrolledAt: now,
+      },
+      tx,
+    )
+    if (!deviceRow) {
+      throw new AppError(500, 'DEVICE_ENROLLMENT_FAILED', 'Could not enrol this terminal')
+    }
 
     await writeAudit(
       {
         action: 'terminal.enrollment.redeemed',
         entity: 'terminal',
-        entityId: enrollment.terminalId,
-        after: { enrollmentId: enrollment.id },
-        terminalId: enrollment.terminalId,
+        entityId: terminal.id,
+        after: { enrollmentId: enrollment.id, deviceId: deviceRow.id },
+        branchId: branch.id,
+        terminalId: terminal.id,
       },
       tx,
     )
 
-    return { enrollmentId: enrollment.id, terminalId: enrollment.terminalId }
+    // Never log or audit the token itself.
+    await writeAudit(
+      {
+        action: 'device.token.issued',
+        entity: 'device',
+        entityId: deviceRow.id,
+        after: { terminalId: terminal.id, fingerprint },
+        branchId: branch.id,
+        terminalId: terminal.id,
+      },
+      tx,
+    )
+
+    return {
+      deviceId: deviceRow.id,
+      deviceToken,
+      terminalId: terminal.id,
+      terminalCode: terminal.code,
+      branchId: branch.id,
+      branchName: branch.name,
+      branchCode: branch.code,
+    }
   })
 }

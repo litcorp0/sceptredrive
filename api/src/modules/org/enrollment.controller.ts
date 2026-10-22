@@ -16,15 +16,6 @@ export async function createEnrollment(c: Context<AppEnv>, terminalId: string) {
 }
 
 export async function redeemEnrollment(c: Context<AppEnv>, body: RedeemEnrollmentBody) {
-  await enrollmentService.redeemEnrollment(body.code)
-  return c.json(
-    {
-      error: {
-        message: 'Device tokens are issued in Phase 6 (PowerSync enrollment)',
-        code: 'NOT_IMPLEMENTED',
-        requestId: c.get('requestId'),
-      },
-    },
-    501,
-  )
+  const enrolled = await enrollmentService.redeemEnrollment(body.code, body.fingerprint)
+  return c.json(enrolled, 201)
 }

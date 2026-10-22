@@ -15,7 +15,16 @@ export interface CreatedEnrollment {
   expiresAt: Date
 }
 
-export interface RedeemedEnrollment {
-  enrollmentId: string
+/**
+ * Returned once, at redemption. `deviceToken` is the only copy of the terminal
+ * credential the client will ever see; the server keeps a keyed hash.
+ */
+export interface RedeemedDevice {
+  deviceId: string
+  deviceToken: string
   terminalId: string
+  terminalCode: string
+  branchId: string
+  branchName: string
+  branchCode: string
 }

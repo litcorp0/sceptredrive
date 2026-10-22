@@ -14,7 +14,7 @@ import { auditLog } from '../platform/audit.schema.ts'
 import { branch } from './branches.schema.ts'
 import { terminalEnrollment } from './enrollment.schema.ts'
 import { hashEnrollmentCode } from './enrollment.service.ts'
-import { terminal } from './terminals.schema.ts'
+import { device, terminal } from './terminals.schema.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[terminals.test] database unavailable; integration tests skipped')
@@ -88,6 +88,11 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
 
   afterAll(async () => {
     if (createdTerminalIds.length > 0) {
+      // Devices reference terminals with ON DELETE RESTRICT (append-only intent).
+      await db.delete(device).where(inArray(device.terminalId, createdTerminalIds))
+      await db
+        .delete(terminalEnrollment)
+        .where(inArray(terminalEnrollment.terminalId, createdTerminalIds))
       await db.delete(terminal).where(inArray(terminal.id, createdTerminalIds))
     }
     for (const userId of createdUserIds) await deleteTestUser(userId)
@@ -207,7 +212,7 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
     expect(redeemOld.status).toBe(400)
   })
 
-  it('redeems a valid code once and returns the Phase 6 placeholder', async () => {
+  it('redeems a valid code once and issues a device token', async () => {
     const terminalId = createdTerminalIds[0] ?? ''
     const created = await app.request(`/api/terminals/${terminalId}/enrollment`, {
       method: 'POST',
@@ -220,8 +225,16 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code }),
     })
-    expect(redeem.status).toBe(501)
-    expect(await redeem.json()).toMatchObject({ error: { code: 'NOT_IMPLEMENTED' } })
+    expect(redeem.status).toBe(201)
+    const enrolled = await readJson<{
+      deviceToken: string
+      terminalId: string
+      branchId: string
+      terminalCode: string
+    }>(redeem)
+    expect(enrolled.terminalId).toBe(terminalId)
+    expect(enrolled.deviceToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(enrolled.terminalCode).toMatch(/-T\d{2}$/)
 
     const reuse = await app.request('/api/enrollments/redeem', {
       method: 'POST',
@@ -241,7 +254,7 @@ describe.skipIf(!available)('terminal and enrollment API', () => {
     expect(unknown.status).toBe(400)
 
     const terminalId = createdTerminalIds[0] ?? ''
-    const expiredCode = 'EXPIRED9'
+    const expiredCode = `EXP${randomToken(4)}`
     await db.insert(terminalEnrollment).values({
       terminalId,
       codeHash: hashEnrollmentCode(expiredCode),
