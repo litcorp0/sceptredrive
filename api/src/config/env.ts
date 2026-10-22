@@ -40,6 +40,17 @@ const envSchema = z.object({
   STAFF_ID_START: z.coerce.number().int().positive().default(1),
   RESEND_API_KEY: optionalNonEmpty(z.string().min(1)),
   EMAIL_FROM: z.string().min(1).default('GikAutos <no-reply@gikautos.local>'),
+  // --- POS device auth / PowerSync ---
+  // Instance URL of the PowerSync service. Absent means "sync not configured":
+  // the token endpoint answers 503 instead of the API refusing to boot.
+  POWERSYNC_URL: optionalNonEmpty(z.string().url()),
+  // Must match the `client_auth.audience` of the PowerSync service.
+  POWERSYNC_AUDIENCE: optionalNonEmpty(z.string().min(1)),
+  // base64url-encoded PKCS8 Ed25519 private key. Required in production;
+  // development and test generate an ephemeral key and warn once.
+  POS_JWT_PRIVATE_KEY: optionalNonEmpty(z.string().min(1)),
+  POS_JWT_KEY_ID: z.string().min(1).max(64).default('pos-v1'),
+  POS_JWT_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -62,6 +73,12 @@ if (data.NODE_ENV === 'production') {
   }
   if (data.CORS_ORIGINS.trim().length === 0) {
     console.error('CORS_ORIGINS must list the allowed browser origins in production')
+    process.exit(1)
+  }
+  if (!data.POS_JWT_PRIVATE_KEY) {
+    console.error(
+      'POS_JWT_PRIVATE_KEY is required in production (run `bun run --filter api keys:generate`)',
+    )
     process.exit(1)
   }
 }

@@ -16,7 +16,7 @@
       {
         "name": "insert local-only row",
         "ok": true,
-        "detail": "33e6b8f9-c36d-40c6-9735-3352d79afd47"
+        "detail": "6c3cdb1f-4114-4633-827e-7555cf7adf5a"
       },
       {
         "name": "read back",
@@ -48,7 +48,7 @@
         "detail": "row survived restart"
       }
     ],
-    "durationMs": 1103,
+    "durationMs": 1028,
     "persistRuns": 1
   },
   "opfscopysync": {
@@ -68,7 +68,7 @@
       {
         "name": "insert local-only row",
         "ok": true,
-        "detail": "868b2041-5c4e-4d77-b51c-7688f41cf779"
+        "detail": "530b00d6-2311-4281-b867-6ad275cf9598"
       },
       {
         "name": "read back",
@@ -100,7 +100,7 @@
         "detail": "row survived restart"
       }
     ],
-    "durationMs": 607,
+    "durationMs": 614,
     "persistRuns": 1
   },
   "packagedRun1": {
@@ -120,7 +120,7 @@
       {
         "name": "insert local-only row",
         "ok": true,
-        "detail": "0dd07beb-3da6-4795-8024-291cf7a614d4"
+        "detail": "0991067c-c31b-4b0e-9f3c-ff5556c7f734"
       },
       {
         "name": "read back",
@@ -152,7 +152,7 @@
         "detail": "row survived restart"
       }
     ],
-    "durationMs": 1024,
+    "durationMs": 992,
     "persistRuns": 1
   },
   "packagedRun2": {
@@ -172,7 +172,7 @@
       {
         "name": "insert local-only row",
         "ok": true,
-        "detail": "a494c016-1ed8-43f7-b225-5d71a8fe7266"
+        "detail": "c5403890-09e5-4f03-9f15-c6d0b7c5d761"
       },
       {
         "name": "read back",
@@ -204,7 +204,7 @@
         "detail": "row survived restart"
       }
     ],
-    "durationMs": 888,
+    "durationMs": 858,
     "persistRuns": 2
   }
 }

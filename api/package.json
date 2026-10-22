@@ -12,7 +12,8 @@
     "db:seed": "bun run src/seed/run.ts",
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "keys:generate": "bun run scripts/generate-pos-keys.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "catalog:",
@@ -25,6 +26,7 @@
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "jose": "6.2.13",
     "pg-boss": "catalog:",
     "pino": "catalog:",
     "resend": "catalog:",
