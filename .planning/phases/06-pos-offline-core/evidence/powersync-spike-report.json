@@ -1,0 +1,210 @@
+{
+  "default": {
+    "ok": true,
+    "vfs": "default",
+    "steps": [
+      {
+        "name": "keychain encryption key",
+        "ok": true,
+        "detail": "44 chars, source=keychain"
+      },
+      {
+        "name": "open encrypted database",
+        "ok": true,
+        "detail": "vfs=default"
+      },
+      {
+        "name": "insert local-only row",
+        "ok": true,
+        "detail": "33e6b8f9-c36d-40c6-9735-3352d79afd47"
+      },
+      {
+        "name": "read back",
+        "ok": true,
+        "detail": "row matches"
+      },
+      {
+        "name": "update row",
+        "ok": true,
+        "detail": "update visible"
+      },
+      {
+        "name": "watch query notifies",
+        "ok": true,
+        "detail": "callback fired"
+      },
+      {
+        "name": "persist across restarts",
+        "ok": true,
+        "detail": "run #1"
+      },
+      {
+        "name": "close database",
+        "ok": true
+      },
+      {
+        "name": "reopen database and read row back",
+        "ok": true,
+        "detail": "row survived restart"
+      }
+    ],
+    "durationMs": 1103,
+    "persistRuns": 1
+  },
+  "opfscopysync": {
+    "ok": true,
+    "vfs": "opfscopysync",
+    "steps": [
+      {
+        "name": "keychain encryption key",
+        "ok": true,
+        "detail": "44 chars, source=keychain"
+      },
+      {
+        "name": "open encrypted database",
+        "ok": true,
+        "detail": "vfs=opfscopysync"
+      },
+      {
+        "name": "insert local-only row",
+        "ok": true,
+        "detail": "868b2041-5c4e-4d77-b51c-7688f41cf779"
+      },
+      {
+        "name": "read back",
+        "ok": true,
+        "detail": "row matches"
+      },
+      {
+        "name": "update row",
+        "ok": true,
+        "detail": "update visible"
+      },
+      {
+        "name": "watch query notifies",
+        "ok": true,
+        "detail": "callback fired"
+      },
+      {
+        "name": "persist across restarts",
+        "ok": true,
+        "detail": "run #1"
+      },
+      {
+        "name": "close database",
+        "ok": true
+      },
+      {
+        "name": "reopen database and read row back",
+        "ok": true,
+        "detail": "row survived restart"
+      }
+    ],
+    "durationMs": 607,
+    "persistRuns": 1
+  },
+  "packagedRun1": {
+    "ok": true,
+    "vfs": "default",
+    "steps": [
+      {
+        "name": "keychain encryption key",
+        "ok": true,
+        "detail": "44 chars, source=keychain"
+      },
+      {
+        "name": "open encrypted database",
+        "ok": true,
+        "detail": "vfs=default"
+      },
+      {
+        "name": "insert local-only row",
+        "ok": true,
+        "detail": "0dd07beb-3da6-4795-8024-291cf7a614d4"
+      },
+      {
+        "name": "read back",
+        "ok": true,
+        "detail": "row matches"
+      },
+      {
+        "name": "update row",
+        "ok": true,
+        "detail": "update visible"
+      },
+      {
+        "name": "watch query notifies",
+        "ok": true,
+        "detail": "callback fired"
+      },
+      {
+        "name": "persist across restarts",
+        "ok": true,
+        "detail": "run #1"
+      },
+      {
+        "name": "close database",
+        "ok": true
+      },
+      {
+        "name": "reopen database and read row back",
+        "ok": true,
+        "detail": "row survived restart"
+      }
+    ],
+    "durationMs": 1024,
+    "persistRuns": 1
+  },
+  "packagedRun2": {
+    "ok": true,
+    "vfs": "default",
+    "steps": [
+      {
+        "name": "keychain encryption key",
+        "ok": true,
+        "detail": "44 chars, source=keychain"
+      },
+      {
+        "name": "open encrypted database",
+        "ok": true,
+        "detail": "vfs=default"
+      },
+      {
+        "name": "insert local-only row",
+        "ok": true,
+        "detail": "a494c016-1ed8-43f7-b225-5d71a8fe7266"
+      },
+      {
+        "name": "read back",
+        "ok": true,
+        "detail": "row matches"
+      },
+      {
+        "name": "update row",
+        "ok": true,
+        "detail": "update visible"
+      },
+      {
+        "name": "watch query notifies",
+        "ok": true,
+        "detail": "callback fired"
+      },
+      {
+        "name": "persist across restarts",
+        "ok": true,
+        "detail": "run #2"
+      },
+      {
+        "name": "close database",
+        "ok": true
+      },
+      {
+        "name": "reopen database and read row back",
+        "ok": true,
+        "detail": "row survived restart"
+      }
+    ],
+    "durationMs": 888,
+    "persistRuns": 2
+  }
+}

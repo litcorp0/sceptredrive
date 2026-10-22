@@ -11,6 +11,7 @@
  */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { chromium, _electron as electron } from 'playwright'
@@ -47,6 +48,24 @@ function assertBuildPresent() {
   }
 }
 
+/** An ephemeral port, so a zombie instance from an earlier run is never reused. */
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (typeof address === 'string' || address === null) {
+        server.close()
+        reject(new Error('could not reserve a port'))
+        return
+      }
+      const { port } = address
+      server.close(() => resolve(port))
+    })
+  })
+}
+
 async function waitForCdp(port, timeoutMs) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -63,9 +82,12 @@ async function waitForCdp(port, timeoutMs) {
 
 async function checkProductionRenderer() {
   console.log('\nUnpackaged production build (app:// origin)')
+  // A unique profile per launch keeps the single-instance lock and the keychain
+  // probe away from the developer's real terminal profile.
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-pos-smoke-'))
   const app = await electron.launch({
     executablePath: electronBinary(),
-    args: ['.', '--no-sandbox', '--disable-gpu'],
+    args: ['.', '--no-sandbox', '--disable-gpu', `--user-data-dir=${userDataDir}`],
     cwd: desktopDir,
     timeout: 60_000,
   })
@@ -284,20 +306,21 @@ async function checkPackagedBinary() {
   // The app itself still runs: drive it over CDP (Playwright's Electron
   // launcher needs the Node inspector, which the fuses remove on purpose).
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-pos-e2e-'))
+  const port = await freePort()
   const child = spawn(
     packagedBinary,
     [
       '--no-sandbox',
       '--disable-gpu',
-      '--remote-debugging-port=9333',
+      `--remote-debugging-port=${port}`,
       `--user-data-dir=${userDataDir}`,
     ],
     { stdio: 'ignore' },
   )
 
   try {
-    await waitForCdp(9333, 30_000)
-    const browser = await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30_000 })
+    await waitForCdp(port, 30_000)
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 30_000 })
     const context = browser.contexts()[0]
     const page = context.pages()[0] ?? (await context.waitForEvent('page', { timeout: 20_000 }))
     await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })

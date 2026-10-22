@@ -29,7 +29,8 @@
     "prebuild": "bun run setup && bun run copy-assets",
     "prepackage": "bun run setup && bun run copy-assets",
     "premake": "bun run setup && bun run copy-assets",
-    "test:e2e": "node test/e2e/security-smoke.mjs"
+    "test:e2e": "node test/e2e/security-smoke.mjs",
+    "test:spike": "node test/e2e/powersync-spike.mjs"
   },
   "dependencies": {},
   "devDependencies": {
