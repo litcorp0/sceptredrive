@@ -161,7 +161,11 @@ console.log(`Phase 5 walkthrough — fresh database ${DB}, stamp ${stamp}\n`)
 // ---------------------------------------------------------------- sessions
 console.log('-- Sessions and permissions --')
 const adminSession = await adminSignIn()
-check('admin signs in with password + TOTP', adminSession.status === 200, `status ${adminSession.status}`)
+check(
+  'admin signs in with password + TOTP',
+  adminSession.status === 200,
+  `status ${adminSession.status}`,
+)
 const admin = adminSession.cookie
 
 let res = await request('/api/branches', { cookie: admin })
@@ -287,7 +291,11 @@ res = await request('/api/suppliers', {
   },
 })
 const supplier = res.body?.supplier
-check('supplier creation returns SUP-00004 (after the archived probe)', supplier?.code === 'SUP-00004', supplier?.code)
+check(
+  'supplier creation returns SUP-00004 (after the archived probe)',
+  supplier?.code === 'SUP-00004',
+  supplier?.code,
+)
 check('local phone normalises to +233', supplier?.phone === '+233241234567', supplier?.phone)
 
 res = await request(`/api/suppliers?q=${encodeURIComponent('Walkthrough Supply')}&pageSize=10`, {
@@ -339,7 +347,11 @@ res = await request('/api/payables/invoices', {
     lines: [{ description: 'Archived supplier probe', quantity: 1, unitCostMinor: 100 }],
   },
 })
-check('archived supplier cannot take a new invoice (409)', res.status === 409, `status ${res.status}`)
+check(
+  'archived supplier cannot take a new invoice (409)',
+  res.status === 409,
+  `status ${res.status}`,
+)
 
 res = await request(`/api/suppliers/${supplier.id}`, {
   method: 'PATCH',
@@ -385,7 +397,10 @@ res = await request(`/api/suppliers/${supplier.id}/payment-details/${momoDetail.
   cookie: admin,
   body: { isDefault: true },
 })
-check('MoMo default switch succeeds', res.status === 200 && res.body?.paymentDetail?.isDefault === true)
+check(
+  'MoMo default switch succeeds',
+  res.status === 200 && res.body?.paymentDetail?.isDefault === true,
+)
 res = await request(`/api/suppliers/${supplier.id}`, { cookie: admin })
 const detail = res.body
 const bankAfter = detail?.paymentDetails?.find((row) => row.id === bankDetail.id)
@@ -488,9 +503,7 @@ check(
   `status ${res.status}`,
 )
 check('receipt total equals 3 × GHS 45.00', receipt?.totalCostMinor === 13_500)
-const receiptSnapshot = sql(
-  `select supplier_name from stock_receipt where id = ${q(receipt.id)}`,
-)
+const receiptSnapshot = sql(`select supplier_name from stock_receipt where id = ${q(receipt.id)}`)
 check(
   'receipt stores the supplier name snapshot',
   receiptSnapshot === `Walkthrough Supply ${stamp}`,
@@ -521,8 +534,7 @@ check(
     receiptInvoiceRow?.vatMinor +
     receiptInvoiceRow?.nhilMinor +
     receiptInvoiceRow?.getfundMinor ===
-    receiptInvoiceRow?.totalMinor &&
-    receiptInvoiceRow.totalMinor === receipt.totalCostMinor,
+    receiptInvoiceRow?.totalMinor && receiptInvoiceRow.totalMinor === receipt.totalCostMinor,
   JSON.stringify({
     subtotal: receiptInvoiceRow?.subtotalMinor,
     vat: receiptInvoiceRow?.vatMinor,
@@ -589,7 +601,9 @@ check('idempotent invoice recorded', res.status === 201 && Boolean(idemInvoice?.
 res = await request('/api/payables/invoices', { method: 'POST', cookie: manager, body: idemBody })
 check(
   'same key replays the same invoice',
-  res.status === 200 && res.body?.replayed === true && res.body?.invoice?.invoice?.id === idemInvoice.id,
+  res.status === 200 &&
+    res.body?.replayed === true &&
+    res.body?.invoice?.invoice?.id === idemInvoice.id,
 )
 
 const raceBody = {
@@ -606,14 +620,12 @@ const [raceA, raceB] = await Promise.all([
   request('/api/payables/invoices', { method: 'POST', cookie: manager, body: raceBody }),
   request('/api/payables/invoices', { method: 'POST', cookie: manager, body: raceBody }),
 ])
-const raceIds = new Set([
-  raceA.body?.invoice?.invoice?.id,
-  raceB.body?.invoice?.invoice?.id,
-].filter(Boolean))
+const raceIds = new Set(
+  [raceA.body?.invoice?.invoice?.id, raceB.body?.invoice?.invoice?.id].filter(Boolean),
+)
 check(
   'parallel same-key race yields one invoice',
-  [raceA.status, raceB.status].sort().join(',') === '200,201' &&
-    raceIds.size === 1,
+  [raceA.status, raceB.status].sort().join(',') === '200,201' && raceIds.size === 1,
   `statuses ${raceA.status}/${raceB.status}`,
 )
 const raceRows = sql(
@@ -631,7 +643,9 @@ res = await request('/api/payables/invoices', {
     supplierInvoiceNumber: `WD-${stamp}-STD`,
     invoiceDate: today(),
     dueDate: today(7),
-    lines: [{ description: 'Freight and clearing — walkthrough', quantity: 1, unitCostMinor: 25_000 }],
+    lines: [
+      { description: 'Freight and clearing — walkthrough', quantity: 1, unitCostMinor: 25_000 },
+    ],
     vatMinor: 0,
     nhilMinor: 0,
     getfundMinor: 0,
@@ -661,9 +675,7 @@ res = await request('/api/payables/invoices', {
     supplierId: supplier.id,
     supplierInvoiceNumber: `WD-${stamp}-BOTH`,
     invoiceDate: today(),
-    lines: [
-      { productId: productOne.id, description: 'Both', quantity: 1, unitCostMinor: 100 },
-    ],
+    lines: [{ productId: productOne.id, description: 'Both', quantity: 1, unitCostMinor: 100 }],
   },
 })
 check('a line with product and description is rejected (400)', res.status === 400)
@@ -866,8 +878,16 @@ const payBody = (key) => ({
   idempotencyKey: key,
 })
 const [payA, payB] = await Promise.all([
-  request('/api/payables/payments', { method: 'POST', cookie: manager, body: payBody(`race-pay-${stamp}-a`) }),
-  request('/api/payables/payments', { method: 'POST', cookie: manager, body: payBody(`race-pay-${stamp}-b`) }),
+  request('/api/payables/payments', {
+    method: 'POST',
+    cookie: manager,
+    body: payBody(`race-pay-${stamp}-a`),
+  }),
+  request('/api/payables/payments', {
+    method: 'POST',
+    cookie: manager,
+    body: payBody(`race-pay-${stamp}-b`),
+  }),
 ])
 check(
   'one parallel payment wins, the other is refused',
@@ -1079,7 +1099,11 @@ const mismatch = sql(`
   ) a on a.invoice_id = i.id
   where i.amount_paid_minor <> coalesce(a.net, 0)
 `)
-check('SQL: every invoice paid amount equals its signed allocations', mismatch === '0', `rows ${mismatch}`)
+check(
+  'SQL: every invoice paid amount equals its signed allocations',
+  mismatch === '0',
+  `rows ${mismatch}`,
+)
 const voidWithNet = sql(
   `select count(*) from supplier_invoice where status = 'VOID' and amount_paid_minor <> 0`,
 )
@@ -1156,7 +1180,11 @@ const auditActions = [
 const missingAudit = auditActions.filter(
   (action) => sql(`select count(*) from audit_log where action = ${q(action)}`) === '0',
 )
-check('SQL: every Phase 5 audit action is recorded', missingAudit.length === 0, missingAudit.join(','))
+check(
+  'SQL: every Phase 5 audit action is recorded',
+  missingAudit.length === 0,
+  missingAudit.join(','),
+)
 
 // Restore demo credentials so the console walkthrough can sign in as the manager.
 res = await request('/api/me/password', {
@@ -1164,13 +1192,21 @@ res = await request('/api/me/password', {
   cookie: manager,
   body: { currentPassword: WALKTHROUGH_MANAGER_PASSWORD, newPassword: DEMO_PASSWORD },
 })
-check('manager password restored to the demo credential', res.status === 200, `status ${res.status}`)
+check(
+  'manager password restored to the demo credential',
+  res.status === 200,
+  `status ${res.status}`,
+)
 res = await request('/api/me/password', {
   method: 'POST',
   cookie: cashier,
   body: { currentPassword: WALKTHROUGH_CASHIER_PASSWORD, newPassword: DEMO_PASSWORD },
 })
-check('cashier password restored to the demo credential', res.status === 200, `status ${res.status}`)
+check(
+  'cashier password restored to the demo credential',
+  res.status === 200,
+  `status ${res.status}`,
+)
 
 console.log(`\n${passed}/${passed + failed} checks passed`)
 if (failed > 0) {

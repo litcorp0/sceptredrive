@@ -191,7 +191,9 @@ try {
   await robustFill(page, '#supplier-contact', 'Kofi Console')
   await robustFill(page, '#supplier-phone', invalidPhone)
   await dialog().getByRole('button', { name: 'Create supplier' }).click()
-  await dialog().getByText(/valid Ghana phone/i).waitFor({ timeout: 15_000 })
+  await dialog()
+    .getByText(/valid Ghana phone/i)
+    .waitFor({ timeout: 15_000 })
   check('invalid phone renders the server message inline', true)
   await robustFill(page, '#supplier-phone', supplierPhone)
   await robustFill(page, '#supplier-email', `console-${stamp}@example.com`)
@@ -201,7 +203,6 @@ try {
   await page.getByText(`Supplier ${supplierName} created`).first().waitFor({ timeout: 20_000 })
   check('supplier created through the console', true)
 
-  const search = page.getByLabel('Search suppliers by name or code')
   await robustFill(page, 'input[aria-label="Search suppliers by name or code"]', supplierName)
   await page.getByRole('link', { name: supplierName }).waitFor({ timeout: 15_000 })
   check('search finds the new supplier', true)
@@ -272,7 +273,10 @@ try {
     .getByRole('button', { name: /GIK-00001/ })
     .first()
     .waitFor({ timeout: 15_000 })
-  await page.getByRole('button', { name: /GIK-00001/ }).first().click()
+  await page
+    .getByRole('button', { name: /GIK-00001/ })
+    .first()
+    .click()
   await robustFill(page, '#supplier-product-sku', `UI-${stamp}`)
   await robustFill(page, '#supplier-product-lead', '9')
   await dialog().getByRole('button', { name: 'Add product' }).click()
@@ -299,20 +303,30 @@ try {
     .getByRole('button', { name: new RegExp(supplierName) })
     .first()
     .waitFor({ timeout: 15_000 })
-  await dialog().getByRole('button', { name: new RegExp(supplierName) }).first().click()
+  await dialog()
+    .getByRole('button', { name: new RegExp(supplierName) })
+    .first()
+    .click()
   await robustFill(page, 'input[aria-label="Search products"]', 'GIK-00001')
-  await page.getByRole('button', { name: /GIK-00001/ }).first().click()
+  await page
+    .getByRole('button', { name: /GIK-00001/ })
+    .first()
+    .click()
   await robustFill(page, 'input[aria-label="Quantity for line 1"]', '2')
   await robustFill(page, 'input[aria-label="Unit cost for line 1"]', '50.00')
   await robustFill(page, '#receipt-invoice', receiptInvoiceNumber)
   await shot('06-receive-stock')
   await dialog().getByRole('button', { name: 'Receive stock' }).click()
-  await page.getByText(/Received stock as GRN-/).first().waitFor({ timeout: 20_000 })
+  await page
+    .getByText(/Received stock as GRN-/)
+    .first()
+    .waitFor({ timeout: 20_000 })
   check('receipt recorded through the console', true)
 
   const receipts = await apiGet(`/api/inventory/receipts?limit=10`)
   const receipt = receipts.receipts?.find(
-    (row) => row.supplierName === supplierName && row.supplierInvoiceNumber === receiptInvoiceNumber,
+    (row) =>
+      row.supplierName === supplierName && row.supplierInvoiceNumber === receiptInvoiceNumber,
   )
   check('receipt carries the linked supplier', Boolean(receipt?.supplierId))
   await page.goto(`${BASE}/inventory/receipts/${receipt.id}`)
@@ -351,12 +365,14 @@ try {
   check('allocation editor shows the on-account remainder', true)
   await shot('10-payment-dialog')
   await dialog().getByRole('button', { name: 'Record payment' }).click()
-  await page.getByText(/Payment PAY-/).first().waitFor({ timeout: 20_000 })
+  await page
+    .getByText(/Payment PAY-/)
+    .first()
+    .waitFor({ timeout: 20_000 })
   await page.waitForTimeout(800)
   check(
     'invoice flips to PARTIAL with allocations history',
-    (await page.getByText('Partial').count()) >= 1 &&
-      (await page.getByText('Apply').count()) >= 1,
+    (await page.getByText('Partial').count()) >= 1 && (await page.getByText('Apply').count()) >= 1,
   )
   await shot('11-invoice-partial')
 
@@ -370,17 +386,20 @@ try {
   await dialog().getByText('Releases to write').waitFor()
   await shot('12-void-payment-dialog')
   await dialog().getByRole('button', { name: 'Void payment' }).click()
-  await page.getByText(/Payment PAY-.* voided/).first().waitFor({ timeout: 20_000 })
-  await page.getByText(/Voided/).first().waitFor()
+  await page
+    .getByText(/Payment PAY-.* voided/)
+    .first()
+    .waitFor({ timeout: 20_000 })
+  await page
+    .getByText(/Voided/)
+    .first()
+    .waitFor()
   check('payment voided from its detail screen', true)
 
   await page.goto(`${BASE}/suppliers/invoices/${invoiceId}`)
   await page.waitForLoadState('networkidle')
   await page.getByText('Open').first().waitFor()
-  check(
-    'invoice returns to OPEN after the release',
-    (await page.getByText('Release').count()) >= 1,
-  )
+  check('invoice returns to OPEN after the release', (await page.getByText('Release').count()) >= 1)
   await shot('13-invoice-after-void')
 
   // ---------------------------------------------------------- aging as-of past
@@ -402,7 +421,9 @@ try {
   await page.waitForLoadState('networkidle')
   await page.getByRole('button', { name: 'Archive' }).click()
   await dialog().getByRole('button', { name: 'Archive supplier' }).click()
-  await dialog().getByText(/still owed/).waitFor({ timeout: 15_000 })
+  await dialog()
+    .getByText(/still owed/)
+    .waitFor({ timeout: 15_000 })
   check('archive guard explains the outstanding balance', true)
   await shot('15-archive-guard')
   await dialog().getByRole('button', { name: 'Cancel' }).click()
@@ -415,9 +436,7 @@ try {
     method: 'CASH',
     amountMinor: invoiceDetail.invoice.outstandingMinor,
     paidAt: new Date().toISOString(),
-    allocations: [
-      { invoiceId, amountMinor: invoiceDetail.invoice.outstandingMinor },
-    ],
+    allocations: [{ invoiceId, amountMinor: invoiceDetail.invoice.outstandingMinor }],
   })
   await page.reload()
   await page.getByRole('button', { name: 'Archive' }).click()
