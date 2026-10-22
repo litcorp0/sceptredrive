@@ -187,10 +187,7 @@ try {
     .waitFor({ timeout: 60_000 })
   check(true, 'the SDK reports a completed sync')
 
-  const configRows = await page.evaluate(async () => {
-    const bridge = window.gikautos
-    return bridge ? true : false
-  })
+  const configRows = await page.evaluate(async () => Boolean(window.gikautos))
   check(configRows, 'preload bridge still available after sync')
 
   await page.getByTestId('config-terminal').filter({ hasText: terminalCode }).waitFor({

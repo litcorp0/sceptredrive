@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { usePos } from '../../lib/powersync/provider'
 import { useSyncStatus } from '../../lib/powersync/status'
 
 /**
@@ -41,10 +42,41 @@ export function PosShell({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Enrolment state banner.
+ *
+ * A revoked device (403 `DEVICE_REVOKED` from the API) must be visible and
+ * actionable, not a silent stop: Plan 04 adds the PIN-checked enrolment form,
+ * this makes the state explicit today.
+ */
+function SessionBanner() {
+  const { sessionState } = usePos()
+
+  if (sessionState === 'active') return null
+
+  const message =
+    sessionState === 'revoked'
+      ? 'This device has been revoked. Enter a new enrolment code to continue.'
+      : sessionState === 'missing'
+        ? 'No device is enrolled on this terminal yet.'
+        : 'Connecting to GikAutos…'
+
+  return (
+    <div
+      data-testid="enrol-banner"
+      className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+      data-state={sessionState}
+    >
+      {message}
+    </div>
+  )
+}
+
 /** Placeholder until Plan 06 lands the catalog, cart, and tender screens. */
 export function PosRoute() {
   return (
     <PosShell>
+      <SessionBanner />
       <div className="rounded-lg border border-border p-6">
         <h1 className="text-lg font-semibold">Selling UI arrives in Plan 06</h1>
         <p className="mt-2 text-sm text-muted-foreground">

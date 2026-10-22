@@ -236,7 +236,7 @@ describe.skipIf(!available)('POS device session and PowerSync token', () => {
     const warehouseTerminalId = warehouseTerminal[0]?.id ?? ''
     createdTerminalIds.push(warehouseTerminalId)
 
-    const code = 'WHSE' + randomToken(4)
+    const code = `WHSE${randomToken(4)}`
     const { hashEnrollmentCode } = await import('../org/enrollment.service.ts')
     await db.insert(terminalEnrollment).values({
       terminalId: warehouseTerminalId,
