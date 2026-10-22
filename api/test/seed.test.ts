@@ -114,9 +114,7 @@ describe.skipIf(!available)('database seeds', () => {
       await db
         .delete(supplierPaymentDetail)
         .where(inArray(supplierPaymentDetail.supplierId, demoSupplierIds))
-      await db
-        .delete(supplierProduct)
-        .where(inArray(supplierProduct.supplierId, demoSupplierIds))
+      await db.delete(supplierProduct).where(inArray(supplierProduct.supplierId, demoSupplierIds))
     }
 
     const demoProducts = await db
@@ -392,9 +390,10 @@ describe.skipIf(!available)('database seeds', () => {
 
     const receiptTotals = await db
       .select({
-        total: sql<number>`coalesce(sum(${stockReceiptLine.quantity} * ${stockReceiptLine.unitCostMinor}), 0)`.mapWith(
-          Number,
-        ),
+        total:
+          sql<number>`coalesce(sum(${stockReceiptLine.quantity} * ${stockReceiptLine.unitCostMinor}), 0)`.mapWith(
+            Number,
+          ),
       })
       .from(stockReceiptLine)
       .where(eq(stockReceiptLine.receiptId, receiptInvoice.receiptId))

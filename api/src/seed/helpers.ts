@@ -676,10 +676,7 @@ export async function ensureSupplierInvoice(input: {
     .limit(1)
   if (existing[0]) return { ...existing[0], created: false }
 
-  const linesTotal = input.lines.reduce(
-    (sum, line) => sum + line.quantity * line.unitCostMinor,
-    0,
-  )
+  const linesTotal = input.lines.reduce((sum, line) => sum + line.quantity * line.unitCostMinor, 0)
   let subtotalMinor = linesTotal
   let vatMinor = 0
   let nhilMinor = 0
@@ -761,7 +758,11 @@ async function recomputeInvoicePaid(tx: Tx, invoiceId: string): Promise<void> {
   if (!invoice || invoice.status === 'VOID') return
 
   const status =
-    paid <= 0 ? ('OPEN' as const) : paid >= invoice.totalMinor ? ('PAID' as const) : ('PARTIAL' as const)
+    paid <= 0
+      ? ('OPEN' as const)
+      : paid >= invoice.totalMinor
+        ? ('PAID' as const)
+        : ('PARTIAL' as const)
   await tx
     .update(supplierInvoice)
     .set({ amountPaidMinor: paid, status })

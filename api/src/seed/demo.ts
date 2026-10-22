@@ -469,8 +469,14 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ['SUP-00002', 'GIK-00007', 'GIKIMP-BP-9910', 21, 10_500, false],
   ] as const
 
-  for (const [supplierCode, sku, supplierSku, leadTimeDays, lastCostMinor, isPreferred] of
-    supplierProductMappings) {
+  for (const [
+    supplierCode,
+    sku,
+    supplierSku,
+    leadTimeDays,
+    lastCostMinor,
+    isPreferred,
+  ] of supplierProductMappings) {
     const supplierId = supplierCode === 'SUP-00001' ? accraParts.id : gikAutosImports.id
     if (
       await ensureSupplierProduct({
