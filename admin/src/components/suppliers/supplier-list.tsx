@@ -19,7 +19,8 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
-import type { SupplierListRow } from "#/lib/api-types"
+import type { SupplierBalance, SupplierListRow } from "#/lib/api-types"
+import { formatGhs } from "#/lib/format"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
 
@@ -28,6 +29,7 @@ const PAGE_SIZE = 20
 export function SupplierList({ role }: { role: string }) {
 	const canCreate = hasPermission(role, "supplier.create")
 	const canViewArchived = hasPermission(role, "supplier.archive")
+	const canViewOwed = hasPermission(role, "payable.read")
 
 	const [search, setSearch] = useState("")
 	const [includeArchived, setIncludeArchived] = useState(false)
@@ -50,8 +52,19 @@ export function SupplierList({ role }: { role: string }) {
 		queryFn: () => api.suppliers.list(filters),
 	})
 
+	// Owed column: one aggregated row per supplier, branch-scoped by the API.
+	const balancesQuery = useQuery({
+		queryKey: ["supplier-balances"],
+		queryFn: () => api.payables.balances.list(),
+		enabled: canViewOwed,
+	})
+	const owedBySupplier = new Map(
+		(balancesQuery.data?.balances ?? []).map((balance) => [balance.supplierId, balance]),
+	)
+
 	const suppliers = suppliersQuery.data?.suppliers ?? []
 	const total = suppliersQuery.data?.total ?? 0
+	const columnCount = canViewOwed ? 7 : 6
 
 	return (
 		<section>
@@ -106,18 +119,19 @@ export function SupplierList({ role }: { role: string }) {
 							<TableHead className="w-44">Contact</TableHead>
 							<TableHead className="w-40">Phone</TableHead>
 							<TableHead className="w-24">Terms</TableHead>
+							{canViewOwed ? <TableHead className="w-32 text-right">Owed</TableHead> : null}
 							<TableHead className="w-28">Status</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{suppliersQuery.isLoading ? (
-							<TableMessage colSpan={6}>Loading suppliers…</TableMessage>
+							<TableMessage colSpan={columnCount}>Loading suppliers…</TableMessage>
 						) : suppliersQuery.isError ? (
-							<TableMessage colSpan={6} tone="error">
+							<TableMessage colSpan={columnCount} tone="error">
 								Couldn't load suppliers.
 							</TableMessage>
 						) : suppliers.length === 0 ? (
-							<TableMessage colSpan={6}>
+							<TableMessage colSpan={columnCount}>
 								{trimmedSearch.length >= 2
 									? "No suppliers match this search."
 									: "No suppliers yet. Create the first one."}
@@ -149,6 +163,7 @@ export function SupplierList({ role }: { role: string }) {
 									<TableCell className="tabular-nums text-muted-foreground">
 										{supplier.paymentTermDays} days
 									</TableCell>
+									{canViewOwed ? <OwedCell balance={owedBySupplier.get(supplier.id)} /> : null}
 									<TableCell>{supplierStatus(supplier)}</TableCell>
 								</TableRow>
 							))
@@ -167,4 +182,18 @@ export function SupplierList({ role }: { role: string }) {
 function supplierStatus(supplier: SupplierListRow) {
 	if (supplier.status === "ARCHIVED") return <StatusBadge tone="zinc">Archived</StatusBadge>
 	return <ActiveBadge active />
+}
+
+function OwedCell({ balance }: { balance: SupplierBalance | undefined }) {
+	if (!balance) {
+		return <TableCell className="text-right text-muted-foreground">—</TableCell>
+	}
+	return (
+		<TableCell className="text-right tabular-nums">
+			{formatGhs(balance.owedMinor)}
+			{balance.overdueMinor > 0 ? (
+				<p className="text-xs text-destructive">{formatGhs(balance.overdueMinor)} overdue</p>
+			) : null}
+		</TableCell>
+	)
 }
