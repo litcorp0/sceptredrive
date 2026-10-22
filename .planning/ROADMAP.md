@@ -136,8 +136,8 @@ reconnecting — without blocking a sale.
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
 **Status:** 📝 Planned 2026-10-22 (9 plans) — context, research, and plans in
-`phases/06-pos-offline-core/`; development uses the self-hosted PowerSync Docker service,
-with the staging/production target decided in Phase 9.
+`phases/06-pos-offline-core/`; development/CI use the self-hosted PowerSync Docker service,
+while staging/production use PowerSync Cloud.
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock

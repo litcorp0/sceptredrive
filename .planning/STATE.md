@@ -448,7 +448,7 @@ permissions, demo seed).
 | 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
 | 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
 | 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
-| 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. Cloud is not used in development; the staging/production deployment target (self-hosted VPS vs Cloud) is decided in Phase 9 with the same sync config. |
+| 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
 
 ---
 
@@ -478,8 +478,8 @@ permissions, demo seed).
 - PowerSync: development and CI use the **self-hosted official Docker service**
   (`journeyapps/powersync-service`, pinned stable tag, `start -r unified`) against the
   Docker Postgres with logical replication; no Cloud account is needed for Phase 6.
-  Staging/production may reuse the same config self-hosted on the VPS or via PowerSync
-  Cloud — confirm that target in Phase 9 before changing `.planning/PROJECT.md`.
+  **Staging/production use PowerSync Cloud** (two instances) with the same
+  `sync-config.yaml`; the Cloud project/instances are a Phase 9 setup gate.
 - Phase 6: Forge/Bun packaging and the PowerSync-in-Electron spike must pass before UI
   work; the Windows Squirrel installer job needs a git remote (or a manual
   `windows-latest` run) before it can be proven.

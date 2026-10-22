@@ -157,8 +157,8 @@ screenshots readable.
   record numbers. The 5k/20k scale target must remain usable on a mid-range Windows PC
   (targets: search < 150 ms after sync, sale commit < 100 ms, cold start < 5 s excluding
   first sync).
-- Record accepted limitations (0.0.1 unsigned, the PowerSync service is self-hosted for
-  dev, staging/prod deployment target still open, hardware not present) explicitly.
+- Record accepted limitations (0.0.1 unsigned, PowerSync Cloud staging/prod instances not
+  provisioned yet, hardware not present) explicitly.
 
 **Verify:** installer artifact + hash recorded; security checklist has no open HIGH;
 performance numbers within targets or an explicit operator decision.
@@ -174,8 +174,9 @@ changes)
   concrete evidence (commands, walkthrough sections, SQL, screenshots, race logs);
   requirement trace (`POS-01…09`, `POS-14`, `SYNC-01…08` → implementation → proof);
   deviations with justification; residual risks (hardware, self-hosted PowerSync service
-  operations/upgrades, app:// worker quirks, 20k customer sync cost); human verification
-  checklist (real printer/drawer/scanner, staging/prod PowerSync target, Windows VM).
+  operations/upgrades, Cloud staging/prod instances not yet provisioned, app:// worker
+  quirks, 20k customer sync cost); human verification checklist (real printer/drawer/
+  scanner, Cloud staging instance, Windows VM).
 - `STATE.md`: progress table (Phase 6 ✅ with plan count), a "Phase 6 additions" section
   (schema, modules, sync config, desktop architecture, shared cart engine, PIN/binding,
   outbox, printing, seed story, verification numbers), decisions log entries for D1–D36 as

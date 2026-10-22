@@ -30,7 +30,7 @@ on reconnect, without double-selling or losing a transaction.
 | Database | PostgreSQL 17 on a VPS via Docker; Drizzle migrations |
 | Admin / Manager | TanStack Start, React 19, Tailwind v4, shadcn, TanStack Query |
 | Desktop POS | Electron Forge + Vite, React 19, TypeScript, Tailwind v4, shadcn |
-| Offline sync | PowerSync service, Web SDK in the Electron renderer; self-hosted Docker for development/CI, staging/production target decided in Phase 9 |
+| Offline sync | PowerSync Cloud for staging/production; self-hosted Docker service for development/CI; Web SDK in the Electron renderer |
 | Payments | Paystack Ghana: MoMo, card, bank transfer, refunds, supplier transfers |
 | Currency | GHS; all amounts integer minor units (pesewas) |
 | Tax | VAT 15% + NHIL 2.5% + GETFund 2.5% = 20% on one base; inclusive/exclusive |
@@ -79,8 +79,8 @@ on reconnect, without double-selling or losing a transaction.
 - **Admin:** TanStack Start (Vite + Nitro), TanStack Router/Query/Table, shadcn, Tailwind v4.
 - **Desktop POS:** Electron Forge + Vite plugin, React 19, TanStack Router (hash history),
   Tailwind v4, shadcn, PowerSync Web SDK (wa-sqlite), ESC/POS printing.
-- **Sync:** PowerSync service (self-hosted Docker for dev/CI; staging/production target
-  decided in Phase 9), Sync Streams (edition 3), branch-scoped JWT claims,
+- **Sync:** PowerSync Cloud for staging/production, self-hosted Docker service for
+  development/CI, Sync Streams (edition 3), branch-scoped JWT claims,
   outbox-based upload endpoint with idempotency.
 - **Payments:** Paystack Ghana (charge API, webhooks, verify, refunds, transfers).
 - **Infra:** Ubuntu VPS, Docker Compose, Caddy TLS, GitHub Actions, GHCR, Cloudflare R2 backups.
@@ -132,8 +132,9 @@ for the requirement-to-phase mapping.
 - Loyalty points are earned on the net merchandise amount actually paid, excluding tax,
   and redeemed as a discount before tax.
 - A manager override is available offline using the manager PIN cached on the terminal.
-- The VPS runs Postgres with TLS; PowerSync connectivity is restricted to the chosen
-  service deployment (Cloud static ranges or the self-hosted service) in Phase 9.
+- The VPS runs Postgres with TLS; PowerSync Cloud connects over TLS from its documented
+  static IP ranges (allowlisted). Development uses the self-hosted Docker service and does
+  not require a Cloud account.
 - English-only UI in v1; GHS-only; 80mm thermal receipts; A4/PDF statements.
 
 ## Operator Setup Gates (not blocking development)
@@ -141,8 +142,8 @@ for the requirement-to-phase mapping.
 All development runs with mocks until these exist:
 
 - VPS + domain (Phase 9)
-- PowerSync deployment target for staging + production (self-hosted on the VPS or Cloud);
-  development/CI use the self-hosted Docker service (Phase 6)
+- PowerSync Cloud project + two instances, staging + production (required for Phase 9
+  deploys; Phase 6 development/CI use the self-hosted Docker service)
 - Paystack registered business + keys (Phase 7; `PAYSTACK_MODE=mock` until then)
 - GRA E-VAT onboarding credentials (Phase 8; `EVAT_PROVIDER=mock` until then)
 - Windows code-signing certificate (Phase 9; unsigned builds first)

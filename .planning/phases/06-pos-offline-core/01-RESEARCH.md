@@ -147,10 +147,10 @@ device/enrollment schema, shared tax engine).
   reproducible in CI. `powersync deploy`/Cloud commands are not part of the dev loop.
 - **Health:** enable `healthcheck.probes.use_http: true` and gate the E2E on the health
   endpoint; also confirm replication is healthy before running sync assertions.
-- **Production note:** the same `sync-config.yaml` and `service.yaml` shape apply to a VPS
-  self-hosted deployment or PowerSync Cloud. `.planning/PROJECT.md` records self-hosted
-  Docker as the development default and leaves the staging/production target open for
-  Phase 9 (operator decision).
+- **Production note:** development uses the self-hosted Docker service; **staging and
+  production use PowerSync Cloud** (two instances) with the same `sync-config.yaml` and
+  `service.yaml` shape plus Cloud's TLS/static-IP requirements. Switching environments
+  changes the endpoint/JWT audience and deployment command, not the client contract.
 
 ## 5. Bun workspace packaging
 

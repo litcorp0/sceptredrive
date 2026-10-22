@@ -108,8 +108,9 @@ boot rejects missing key.
 `.env.example`, `.gitignore`
 
 - **Decision:** development and CI run the official **self-hosted PowerSync service**
-  (`journeyapps/powersync-service`), not Cloud. Staging/production reuse the same
-  `sync-config.yaml`/`service.yaml`; the deployment target is decided in Phase 9.
+  (`journeyapps/powersync-service`), not Cloud. **Staging and production use PowerSync
+  Cloud** (two instances) with the same `sync-config.yaml`; only the endpoint, JWT
+  audience, and deploy command change.
 - Add a `powersync` service to `compose.yaml` under `profiles: ["sync"]` so it joins the
   existing `gikautos-dev` network and can reach `postgres:5432`:
   - image pinned to a stable tag (`journeyapps/powersync-service:1.27.1`; re-check the
