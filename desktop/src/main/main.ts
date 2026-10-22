@@ -1,6 +1,10 @@
-import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import started from 'electron-squirrel-startup'
+import { loadRuntimeConfig, originOf, type RuntimeConfig } from './config'
+import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import { registerAppScheme, rendererRootDir, serveRenderer } from './protocol'
+import { hardenSession, installGlobalSecurityHandlers } from './security'
+import { createMainWindow, navigationOrigins, preloadPathFor } from './windows'
 
 // Squirrel (Windows) runs the app with special flags on install/uninstall; a
 // quit here keeps those runs from opening a window.
@@ -8,42 +12,66 @@ if (started) {
   app.quit()
 }
 
-function createWindow(): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 700,
-    show: false,
-    backgroundColor: '#ffffff',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: false,
-    },
-  })
+// Must run before the app is ready so the scheme can be registered as privileged.
+registerAppScheme()
 
-  window.once('ready-to-show', () => {
-    window.show()
-  })
+const devServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined
+const isDev = Boolean(devServerUrl)
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
-  } else {
-    void window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`))
+function failClosed(code: string, message: string): never {
+  console.error(`[startup] ${code}: ${message}`)
+  app.exit(1)
+  throw new Error(message)
+}
+
+function resolveConfig(): RuntimeConfig {
+  try {
+    return loadRuntimeConfig(app.getPath('userData'), isDev)
+  } catch (error) {
+    const code = error instanceof Error && 'code' in error ? String(error.code) : 'CONFIG_INVALID'
+    return failClosed(code, error instanceof Error ? error.message : 'Invalid configuration')
   }
+}
 
-  return window
+function assertOriginsAllowed(config: RuntimeConfig): void {
+  for (const url of [config.apiBaseUrl, config.powersyncUrl]) {
+    if (!isAllowedConnectOrigin(url, { dev: isDev })) {
+      failClosed('CONFIG_ORIGIN_NOT_ALLOWED', `Refusing to connect to ${originOf(url)}`)
+    }
+  }
 }
 
 void app.whenReady().then(() => {
-  createWindow()
+  if (!isDev) {
+    Menu.setApplicationMenu(null)
+  }
+
+  const config = resolveConfig()
+  assertOriginsAllowed(config)
+
+  const windowOptions = {
+    preloadPath: preloadPathFor(__dirname),
+    devServerUrl,
+  }
+  const policy = { allowedOrigins: navigationOrigins(windowOptions) }
+  const csp = buildContentSecurityPolicy({
+    dev: isDev,
+    apiOrigin: originOf(config.apiBaseUrl),
+    powersyncOrigin: originOf(config.powersyncUrl),
+  })
+
+  hardenSession()
+  installGlobalSecurityHandlers(policy)
+
+  if (!isDev) {
+    serveRenderer(rendererRootDir(__dirname, MAIN_WINDOW_VITE_NAME), csp)
+  }
+
+  createMainWindow(windowOptions)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+      createMainWindow(windowOptions)
     }
   })
 })
@@ -53,3 +81,16 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// Defence in depth: never let a second instance attach to the same local database.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0]
+    if (window) {
+      if (window.isMinimized()) window.restore()
+      window.focus()
+    }
+  })
+}

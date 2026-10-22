@@ -28,7 +28,8 @@
     "prestart": "bun run setup && bun run copy-assets",
     "prebuild": "bun run setup && bun run copy-assets",
     "prepackage": "bun run setup && bun run copy-assets",
-    "premake": "bun run setup && bun run copy-assets"
+    "premake": "bun run setup && bun run copy-assets",
+    "test:e2e": "node test/e2e/security-smoke.mjs"
   },
   "dependencies": {},
   "devDependencies": {
@@ -64,6 +65,7 @@
     "typescript": "catalog:",
     "vite": "8.3.5",
     "vitest": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "playwright": "1.64.1"
   }
 }

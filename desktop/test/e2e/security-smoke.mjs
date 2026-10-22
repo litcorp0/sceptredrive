@@ -1,0 +1,246 @@
+#!/usr/bin/env node
+/**
+ * Security smoke test for the POS shell.
+ *
+ * Runs the *production* renderer path (built bundles, `app://gikautos` origin)
+ * inside the unpackaged Electron binary, then repeats the origin checks against
+ * the packaged binary to prove the fuses are applied.
+ *
+ * Usage (from the repository root, after `bun run package:pos`):
+ *   bun run --filter desktop test:e2e
+ */
+import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { chromium, _electron as electron } from 'playwright'
+
+const desktopDir = path.resolve(import.meta.dirname, '..', '..')
+const builtMain = path.join(desktopDir, '.vite', 'build', 'main.cjs')
+const builtRenderer = path.join(desktopDir, '.vite', 'renderer', 'main_window', 'index.html')
+const packagedBinary = path.join(desktopDir, 'out', 'GikAutos POS-linux-x64', 'GikAutos POS')
+
+const failures = []
+let checks = 0
+
+function check(condition, label, detail) {
+  checks += 1
+  if (condition) {
+    console.log(`  ok   ${label}`)
+    return true
+  }
+  failures.push(detail ? `${label} (${detail})` : label)
+  console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ''}`)
+  return false
+}
+
+function electronBinary() {
+  const pathFile = path.join(desktopDir, 'node_modules', 'electron', 'path.txt')
+  const relative = fs.readFileSync(pathFile, 'utf8').trim()
+  return path.join(desktopDir, 'node_modules', 'electron', 'dist', relative)
+}
+
+function assertBuildPresent() {
+  if (!fs.existsSync(builtMain) || !fs.existsSync(builtRenderer)) {
+    console.error('Missing .vite build output. Run `bun run build:pos` first.')
+    process.exit(2)
+  }
+}
+
+async function waitForCdp(port, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
+      if (response.ok) return
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`CDP endpoint on :${port} did not come up within ${timeoutMs}ms`)
+}
+
+async function checkProductionRenderer() {
+  console.log('\nUnpackaged production build (app:// origin)')
+  const app = await electron.launch({
+    executablePath: electronBinary(),
+    args: ['.', '--no-sandbox', '--disable-gpu'],
+    cwd: desktopDir,
+    timeout: 60_000,
+  })
+
+  const cspViolations = []
+  const page = await app.firstWindow()
+  page.on('console', (message) => {
+    if (/content security policy/i.test(message.text())) {
+      cspViolations.push(message.text())
+    }
+  })
+  page.on('pageerror', (error) => cspViolations.push(`pageerror: ${error.message}`))
+
+  await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
+
+  check(page.url().startsWith('app://gikautos/'), 'renderer loads from app://', page.url())
+  check(!page.url().startsWith('file://'), 'renderer never uses file://', page.url())
+
+  const isolation = await page.evaluate(() => ({
+    require: typeof globalThis.require,
+    process: typeof globalThis.process,
+    module: typeof globalThis.module,
+    ipcRenderer: typeof globalThis.ipcRenderer,
+  }))
+  check(isolation.require === 'undefined', 'window.require is undefined')
+  check(isolation.process === 'undefined', 'window.process is undefined')
+  check(isolation.module === 'undefined', 'window.module is undefined')
+  check(isolation.ipcRenderer === 'undefined', 'ipcRenderer is not exposed')
+
+  const headerPolicy = await page.evaluate(async () => {
+    const response = await fetch(window.location.href)
+    return response.headers.get('content-security-policy')
+  })
+  check(Boolean(headerPolicy), 'protocol handler sends a CSP header')
+  check(
+    Boolean(headerPolicy?.includes("'wasm-unsafe-eval'")),
+    'CSP allows WASM compilation for SQLite',
+    headerPolicy ?? 'missing',
+  )
+  check(
+    Boolean(headerPolicy?.includes('worker-src')),
+    'CSP allows worker loading',
+    headerPolicy ?? 'missing',
+  )
+  check(
+    Boolean(headerPolicy?.includes('https://*.powersync.journeyapps.com')),
+    'CSP allows the PowerSync Cloud origin',
+  )
+  check(Boolean(headerPolicy?.includes("object-src 'none'")), 'CSP blocks plugins')
+
+  const metaPolicy = await page.evaluate(
+    () =>
+      document
+        .querySelector('meta[http-equiv="Content-Security-Policy"]')
+        ?.getAttribute('content') ?? null,
+  )
+  check(Boolean(metaPolicy), 'index.html carries a CSP meta fallback')
+  // The browser enforces the intersection of every policy, so the meta fallback
+  // must (at least) cover the same origins the header allows.
+  check(
+    Boolean(metaPolicy?.includes('https://*.gikautos.com')) &&
+      Boolean(metaPolicy?.includes('https://*.powersync.journeyapps.com')),
+    'meta fallback covers every origin the CSP allowlist accepts',
+    metaPolicy ?? 'missing',
+  )
+  if (headerPolicy && metaPolicy) {
+    const headerDirectives = new Set(
+      headerPolicy.split(';').map((part) => part.trim().split(' ')[0]),
+    )
+    const metaDirectives = new Set(metaPolicy.split(';').map((part) => part.trim().split(' ')[0]))
+    check(
+      [...metaDirectives].every((name) => headerDirectives.has(name)),
+      'meta and header declare the same directives',
+    )
+  }
+
+  const popup = await page.evaluate(() => {
+    const opened = window.open('https://example.com/')
+    return { openedIsNull: opened === null }
+  })
+  check(popup.openedIsNull, 'window.open is denied')
+  check(app.windows().length === 1, 'no extra window was created')
+
+  const navigationBlocked = await page
+    .evaluate(async () => {
+      try {
+        window.location.href = 'https://example.com/'
+      } catch {
+        // Navigation is cancelled; the document stays put.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return window.location.href
+    })
+    .catch(() => 'navigation destroyed the page')
+  check(
+    navigationBlocked.startsWith('app://gikautos/'),
+    'navigation to a remote origin is blocked',
+    navigationBlocked,
+  )
+
+  check(cspViolations.length === 0, 'no CSP violations in the console', cspViolations.join(' | '))
+
+  await app.close()
+}
+
+async function checkPackagedBinary() {
+  if (!fs.existsSync(packagedBinary)) {
+    console.log('\nPackaged binary not found — skipping fuse checks (run `bun run package:pos`).')
+    return
+  }
+
+  console.log('\nPackaged binary (fuses applied)')
+
+  // EnableNodeCliInspectArguments is fused off, so the Node inspector must not
+  // come up even when the flag is passed.
+  const inspectOutput = await new Promise((resolve) => {
+    const child = spawn(packagedBinary, ['--no-sandbox', '--disable-gpu', '--inspect=9339'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let output = ''
+    child.stdout.on('data', (chunk) => {
+      output += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      output += chunk
+    })
+    setTimeout(() => {
+      child.kill('SIGTERM')
+      resolve(output)
+    }, 6_000)
+  })
+  check(
+    !/Debugger listening on/.test(inspectOutput),
+    'fuse blocks --inspect (no Node debugger)',
+    inspectOutput.slice(0, 200),
+  )
+
+  // The app itself still runs: drive it over CDP (Playwright's Electron
+  // launcher needs the Node inspector, which the fuses remove on purpose).
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-pos-e2e-'))
+  const child = spawn(
+    packagedBinary,
+    [
+      '--no-sandbox',
+      '--disable-gpu',
+      '--remote-debugging-port=9333',
+      `--user-data-dir=${userDataDir}`,
+    ],
+    { stdio: 'ignore' },
+  )
+
+  try {
+    await waitForCdp(9333, 30_000)
+    const browser = await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30_000 })
+    const context = browser.contexts()[0]
+    const page = context.pages()[0] ?? (await context.waitForEvent('page', { timeout: 20_000 }))
+    await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
+    check(page.url().startsWith('app://gikautos/'), 'packaged app loads from app://', page.url())
+
+    const isolated = await page.evaluate(() => typeof globalThis.require === 'undefined')
+    check(isolated, 'packaged renderer has no Node access')
+    await browser.close()
+  } finally {
+    child.kill('SIGTERM')
+    fs.rmSync(userDataDir, { recursive: true, force: true })
+  }
+}
+
+assertBuildPresent()
+await checkProductionRenderer()
+await checkPackagedBinary()
+
+console.log(`\n${checks - failures.length}/${checks} checks passed`)
+if (failures.length > 0) {
+  console.error('\nFailures:')
+  for (const failure of failures) console.error(` - ${failure}`)
+  process.exit(1)
+}
