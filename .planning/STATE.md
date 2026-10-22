@@ -2,13 +2,14 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-22
-**Status:** Phase 5 complete and verified (7/7 plans) — supplier master with bank/MoMo
-details and supplied products, invoices from goods receipts and standalone, payments with
-explicit allocations and on-account remainders, reasoned voids with RELEASE history,
-balances, aging, `reconcilePayables()`, and the full console AP story. Proven on a fresh
-database: API/SQL walkthrough **102/102**, console walkthrough **25/25**, api **276/276**,
-shared **56/56**; lint, check-types, and build green.
-**Next action:** Plan **Phase 6 (POS Offline Core)**.
+**Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is
+planned**: 9 plans covering schema/shared cart math/settings, the hardened Electron shell
+and PowerSync spike, device auth and sync streams, offline PIN/bindings and shifts, the
+idempotent server sale application, the selling UI, receipts/ESC-POS printing, the durable
+outbox/uploader, and verification. See
+`.planning/phases/06-pos-offline-core/00-CONTEXT.md` and `01-RESEARCH.md`.
+**Next action:** Execute **Phase 6 Plan 01** (schema, shared cart math, settings,
+permissions, demo seed).
 
 ---
 
@@ -22,7 +23,7 @@ shared **56/56**; lint, check-types, and build green.
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | ⬜ Not started |
+| 6 | POS Offline Core | 📝 Planned (9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -84,6 +85,20 @@ shared **56/56**; lint, check-types, and build green.
 | 05 | Console — suppliers section, payment details, supplied products | ✅ Complete |
 | 06 | Console — invoices, payments, aging, and goods-receipt linking | ✅ Complete |
 | 07 | Phase 5 verification and state update | ✅ Complete |
+
+### Phase 6 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | 📝 Planned |
+| 02 | Desktop shell, Electron security, keychain, and PowerSync spike | 📝 Planned |
+| 03 | Device auth, PowerSync sync config, local schema, and connector | 📝 Planned |
+| 04 | Offline PIN, device bindings, shifts, and console PIN reset | 📝 Planned |
+| 05 | Server sale application, upload endpoint, conflicts, and reconciliation | 📝 Planned |
+| 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | 📝 Planned |
+| 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
+| 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
+| 09 | Phase 6 verification and state update | 📝 Planned |
 
 ---
 
@@ -335,6 +350,32 @@ shared **56/56**; lint, check-types, and build green.
 - Tests: suppliers suite 15/15, payables service 19/19, payables HTTP 5/5; the phase adds
   **41** API tests (235 → 276). Phase 5 verification: API/SQL 102/102, console 25/25.
 
+### Phase 6 planning additions (2026-10-22)
+
+- Phase 6 is **planned only** (9 plans, waves 1–6). Artifacts:
+  `phases/06-pos-offline-core/00-CONTEXT.md` (D1–D36), `01-RESEARCH.md`, `01-PLAN.md` …
+  `09-PLAN.md`.
+- Locked mechanics worth carrying into execution: terminal-scoped offline receipt numbers
+  (`${terminal.code}-${YYYYMMDD}-${NNNN}`); local-only tables + our own outbox (PowerSync
+  downloads only, no CRUD `uploadData`); charged amounts are sale facts and price/total
+  drift becomes a conflict, never a repricing; `SALE` stock movements use
+  `postMovements(..., { allowNegative: true })`; credit/loyalty replay uses internal
+  bypass options on `postEntry`; one `pos_sync_transaction` row per client transaction for
+  exactly-once; the shared `priceCart` in `@gikautos/shared` is the only pricing path.
+- Research deltas since the 2026-10-17 notes: Forge is now **8.0.1** (ESM-only, Vite
+  plugin stable on Vite 8, `.cjs` main/preload); Electron is **45** (sync `safeStorage`
+  deprecated, async only); PowerSync Web SDK is **2.5.0** (ESM-only, HTTP streaming,
+  `syncStream`, local-only tables); Bun's self-contained workspace
+  (`installConfig.hoistingLimits: "workspaces"`) is the Forge packaging fix.
+- Desktop architecture: Electron Forge 8 + Vite 8 + React 19 + hash routing +
+  `app://` secure protocol + strict CSP + fuses + async `safeStorage`; `@maxxuxx/node-printer`
+  for Windows spooler RAW/ESC-POS behind a printer port with a fake adapter for CI.
+- Verification gates: Plan 02's PowerSync-in-Electron spike must pass before UI work;
+  Plan 09 needs a fresh DB, a local self-hosted PowerSync instance (Cloud instance still an
+  operator gate), a two-device last-unit race, duplicate-upload drill, Electron E2E with
+  fake printing, and an unsigned Windows installer.
+
+
 
 
 | Date | Decision |
@@ -433,8 +474,15 @@ shared **56/56**; lint, check-types, and build green.
 - Paystack registered business and keys; `PAYSTACK_MODE=mock` until then.
 - VPS provider, domain, and DNS (Phase 9 setup gate).
 - Windows code-signing certificate (Phase 9; unsigned builds first).
-- PowerSync Cloud account + two instances (staging/prod) before Phase 6 human verification.
-- Physical hardware for human verification: ESC/POS printer, keyboard-wedge scanner, cash drawer.
+- PowerSync Cloud account + two instances (staging/prod) before Phase 6 human
+  verification. Phase 6 development uses a **local self-hosted PowerSync instance** with
+  the same `sync-config.yaml`; Cloud is still required for staging/prod and the real
+  instance verification.
+- Phase 6: Forge/Bun packaging and the PowerSync-in-Electron spike must pass before UI
+  work; the Windows Squirrel installer job needs a git remote (or a manual
+  `windows-latest` run) before it can be proven.
+- Physical hardware for human verification: Windows terminal, ESC/POS printer, keyboard-wedge
+  scanner, cash drawer (Phase 6 checklist).
 - Cosmetic: console `favicon.ico` is a 404 (Phase 9 polish).
 
 ---
@@ -563,3 +611,14 @@ shared **56/56**; lint, check-types, and build green.
   `page.emulateMedia({ media: "print" })` and expect the sidebar to be hidden. Full-page
   screenshots include dialogs; card labels can duplicate page descriptions, so use exact
   text locators for them.
+- Phase 6 (planned): load `powersync` before any sync work and re-read
+  `phases/06-pos-offline-core/01-RESEARCH.md` — the SDK/Forge/Electron versions moved since
+  the original 2026-10-17 research. Local-only PowerSync tables are never queued for
+  upload; do not "fix" that by making sale/shift tables synced. The only sale write path is
+  `pos.service.applySale`; the only pricing path is the shared `priceCart`; outbox rows are
+  never deleted before an ack.
+- Phase 6 (planned): the desktop workspace must be a self-contained Bun workspace
+  (`installConfig.hoistingLimits: "workspaces"`) or Forge packaging will follow symlinks and
+  fail. Use `POS_PRINTER_DRIVER=fake` for all automated runs; real hardware is a human
+  checklist item. `app://` (not `file://`) is required for PowerSync workers.
+

@@ -135,6 +135,8 @@ reconnecting — without blocking a sale.
 
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
+**Status:** 📝 Planned 2026-10-22 (9 plans) — context, research, and plans in
+`phases/06-pos-offline-core/`
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock
@@ -153,9 +155,13 @@ device enrollment and tokens; offline PIN; shifts; cart/scan/search; cash and cr
 loyalty; ESC/POS receipts and drawer; outbox + upload endpoint; sync streams; conflicts;
 sync status UI; Windows packaging groundwork.
 
-**Key risk:** Electron Forge's Vite plugin is experimental. Pin versions; the first plan in
-this phase is a PowerSync Web SDK + WASM worker spike. Fallback: Forge Webpack renderer, or
-the PowerSync Node SDK in the main process with IPC.
+**Key risk:** PowerSync's Web SDK (WASM workers) inside a sandboxed Electron 45 renderer
+served from a custom `app://` origin, and Electron Forge 8 packaging of a Bun workspace
+with native printer modules. Both are front-loaded in Plan 02 with an explicit
+pass/escalate gate. Forge 8 promoted its Vite plugin to stable (Vite 8), so the earlier
+experimental-plugin risk is retired. Fallback if the Web SDK worker path fails: PowerSync
+Node SDK in the main process behind IPC, which needs operator approval because it changes
+the architecture.
 
 ---
 
