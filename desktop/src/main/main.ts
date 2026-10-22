@@ -19,6 +19,11 @@ registerAppScheme()
 
 const devServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined
 const isDev = Boolean(devServerUrl)
+/**
+ * Localhost API/PowerSync origins are allowed for the dev server and for an
+ * unpackaged build (E2E, local smoke tests) — never for a packaged app.
+ */
+const allowLocalOrigins = isDev || !app.isPackaged
 
 function failClosed(code: string, message: string): never {
   console.error(`[startup] ${code}: ${message}`)
@@ -28,7 +33,7 @@ function failClosed(code: string, message: string): never {
 
 function resolveConfig(): RuntimeConfig {
   try {
-    return loadRuntimeConfig(app.getPath('userData'), isDev)
+    return loadRuntimeConfig(app.getPath('userData'), allowLocalOrigins)
   } catch (error) {
     const code = error instanceof Error && 'code' in error ? String(error.code) : 'CONFIG_INVALID'
     return failClosed(code, error instanceof Error ? error.message : 'Invalid configuration')
@@ -37,7 +42,7 @@ function resolveConfig(): RuntimeConfig {
 
 function assertOriginsAllowed(config: RuntimeConfig): void {
   for (const url of [config.apiBaseUrl, config.powersyncUrl]) {
-    if (!isAllowedConnectOrigin(url, { dev: isDev })) {
+    if (!isAllowedConnectOrigin(url, { allowLocal: allowLocalOrigins })) {
       failClosed('CONFIG_ORIGIN_NOT_ALLOWED', `Refusing to connect to ${originOf(url)}`)
     }
   }
@@ -58,6 +63,7 @@ void app.whenReady().then(() => {
   const policy = { allowedOrigins: navigationOrigins(windowOptions) }
   const csp = buildContentSecurityPolicy({
     dev: isDev,
+    allowLocalOrigins,
     apiOrigin: originOf(config.apiBaseUrl),
     powersyncOrigin: originOf(config.powersyncUrl),
   })

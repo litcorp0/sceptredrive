@@ -19,8 +19,14 @@ export const PRODUCTION_POWERSYNC_ORIGINS = [
 ] as const
 
 export type CspOptions = {
-  /** Adds the Vite dev server, React refresh, and local API/PowerSync origins. */
+  /** Vite dev server: adds React Refresh's inline script and HMR websockets. */
   dev: boolean
+  /**
+   * Allow localhost API/PowerSync origins. True for the dev server and for an
+   * unpackaged build (E2E, local smoke tests); false for any packaged app, so a
+   * shipped terminal can never be pointed at a local impersonator.
+   */
+  allowLocalOrigins?: boolean
   /** Origin of the configured API base URL (validated by `config.ts`). */
   apiOrigin?: string
   /** Origin of the configured PowerSync URL. */
@@ -31,8 +37,8 @@ function unique(values: readonly (string | undefined)[]): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))]
 }
 
-/** Extra `connect-src` entries needed while running behind the Vite dev server. */
-export const DEV_CONNECT_ORIGINS = [
+/** Extra `connect-src` entries needed to talk to a local API/PowerSync. */
+export const LOCAL_CONNECT_ORIGINS = [
   DEV_API_BASE_URL,
   DEV_POWERSYNC_URL,
   'ws://localhost:*',
@@ -41,8 +47,9 @@ export const DEV_CONNECT_ORIGINS = [
 export function buildContentSecurityPolicy(options: CspOptions): string {
   const connectSrc = unique([
     "'self'",
-    ...(options.dev ? DEV_CONNECT_ORIGINS : PRODUCTION_API_ORIGINS),
-    ...(options.dev ? [] : PRODUCTION_POWERSYNC_ORIGINS),
+    ...PRODUCTION_API_ORIGINS,
+    ...PRODUCTION_POWERSYNC_ORIGINS,
+    ...(options.allowLocalOrigins ? LOCAL_CONNECT_ORIGINS : []),
     options.apiOrigin,
     options.powersyncOrigin,
   ])
@@ -74,10 +81,10 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
  * Used to reject config values that would point the app at an origin the policy
  * forbids: the CSP is built from the config, so an unvalidated config could
  * silently widen the policy. The allowlist is deliberately narrow — our own
- * `*.gikautos.com` hosts, PowerSync Cloud hosts, and (development only) any
- * localhost origin.
+ * `*.gikautos.com` hosts, PowerSync Cloud hosts, and (local only) any localhost
+ * origin.
  */
-export function isAllowedConnectOrigin(url: string, options: { dev: boolean }): boolean {
+export function isAllowedConnectOrigin(url: string, options: { allowLocal: boolean }): boolean {
   let origin: string
   let hostname: string
   let protocol: string
@@ -91,7 +98,7 @@ export function isAllowedConnectOrigin(url: string, options: { dev: boolean }): 
   }
 
   if (
-    options.dev &&
+    options.allowLocal &&
     protocol === 'http:' &&
     (hostname === 'localhost' || hostname === '127.0.0.1')
   ) {

@@ -26,7 +26,8 @@
     "check-types": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "node test/e2e/security-smoke.mjs",
-    "test:spike": "node test/e2e/powersync-spike.mjs"
+    "test:spike": "node test/e2e/powersync-spike.mjs",
+    "test:sync": "node test/e2e/sync-smoke.mjs"
   },
   "dependencies": {},
   "devDependencies": {

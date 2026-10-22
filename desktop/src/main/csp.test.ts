@@ -27,11 +27,12 @@ describe('buildContentSecurityPolicy', () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'")
   })
 
-  it('permits the production API and PowerSync Cloud origins', () => {
+  it('permits the production API, PowerSync Cloud, and our own hosts', () => {
     const connect = directive(buildContentSecurityPolicy({ dev: false }), 'connect-src')
     expect(connect).toContain("'self'")
     expect(connect).toContain('https://api.gikautos.com')
     expect(connect).toContain('https://*.powersync.journeyapps.com')
+    expect(connect).toContain('https://*.gikautos.com')
     expect(connect).not.toContain('localhost')
   })
 
@@ -48,33 +49,48 @@ describe('buildContentSecurityPolicy', () => {
     expect(connect.match(/https:\/\/api\.gikautos\.com/g) ?? []).toHaveLength(1)
   })
 
+  it('allows localhost only when local origins are enabled', () => {
+    const local = directive(
+      buildContentSecurityPolicy({ dev: false, allowLocalOrigins: true }),
+      'connect-src',
+    )
+    expect(local).toContain('http://localhost:4000')
+    expect(local).toContain('http://localhost:8080')
+    expect(local).toContain('ws://localhost:*')
+
+    const packaged = directive(buildContentSecurityPolicy({ dev: false }), 'connect-src')
+    expect(packaged).not.toContain('localhost')
+  })
+
   it('relaxes only what the dev server needs', () => {
-    const policy = buildContentSecurityPolicy({ dev: true })
+    const policy = buildContentSecurityPolicy({ dev: true, allowLocalOrigins: true })
     expect(directive(policy, 'script-src')).toContain("'unsafe-inline'")
-    const connect = directive(policy, 'connect-src')
-    expect(connect).toContain('ws://localhost:*')
-    expect(connect).toContain('http://localhost:4000')
   })
 })
 
 describe('isAllowedConnectOrigin', () => {
   it('accepts the production API and Cloud PowerSync origins', () => {
-    expect(isAllowedConnectOrigin('https://api.gikautos.com', { dev: false })).toBe(true)
-    expect(isAllowedConnectOrigin('https://abc123.powersync.journeyapps.com', { dev: false })).toBe(
+    expect(isAllowedConnectOrigin('https://api.gikautos.com', { allowLocal: false })).toBe(true)
+    expect(
+      isAllowedConnectOrigin('https://abc123.powersync.journeyapps.com', { allowLocal: false }),
+    ).toBe(true)
+    expect(isAllowedConnectOrigin('https://powersync.gikautos.com', { allowLocal: false })).toBe(
       true,
     )
-    expect(isAllowedConnectOrigin('https://powersync.gikautos.com', { dev: false })).toBe(true)
-    expect(isAllowedConnectOrigin('https://api.staging.gikautos.com', { dev: false })).toBe(true)
+    expect(isAllowedConnectOrigin('https://api.staging.gikautos.com', { allowLocal: false })).toBe(
+      true,
+    )
   })
 
   it('rejects anything else in a packaged build', () => {
-    expect(isAllowedConnectOrigin('https://evil.example', { dev: false })).toBe(false)
-    expect(isAllowedConnectOrigin('http://localhost:4000', { dev: false })).toBe(false)
-    expect(isAllowedConnectOrigin('http://10.0.0.5:4000', { dev: false })).toBe(false)
+    expect(isAllowedConnectOrigin('https://evil.example', { allowLocal: false })).toBe(false)
+    expect(isAllowedConnectOrigin('http://localhost:4000', { allowLocal: false })).toBe(false)
+    expect(isAllowedConnectOrigin('http://10.0.0.5:4000', { allowLocal: false })).toBe(false)
   })
 
-  it('accepts local origins only in development', () => {
-    expect(isAllowedConnectOrigin('http://localhost:8080', { dev: true })).toBe(true)
-    expect(isAllowedConnectOrigin('http://evil.example', { dev: true })).toBe(false)
+  it('accepts local origins only when local access is allowed', () => {
+    expect(isAllowedConnectOrigin('http://localhost:4000', { allowLocal: true })).toBe(true)
+    expect(isAllowedConnectOrigin('http://127.0.0.1:8080', { allowLocal: true })).toBe(true)
+    expect(isAllowedConnectOrigin('http://evil.example', { allowLocal: true })).toBe(false)
   })
 })

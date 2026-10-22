@@ -1,6 +1,9 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { PosProvider } from './lib/powersync/provider'
+import { DevSyncRoute } from './routes/_pos/dev-sync'
+import { PosRoute } from './routes/_pos/route'
 import { SpikePanel } from './SpikePanel'
 import './index.css'
 
@@ -10,8 +13,12 @@ if (!container) {
 }
 
 /**
- * Minimal hash routing. The Phase 6 gate lives at `#spike`; Plan 06 replaces this
- * shell with the real POS routes.
+ * Minimal hash routing.
+ *
+ * - `#pos`       POS shell (Plan 06 fills it in)
+ * - `#dev/sync`  sync diagnostics: counts, session, status
+ * - `#spike`     the Phase 6 PowerSync gate (kept for verification)
+ * - otherwise    shell diagnostics (app info + keychain self-test)
  */
 function Root() {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -22,7 +29,13 @@ function Root() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  return hash === '#spike' ? <SpikePanel /> : <App />
+  if (hash === '#spike') return <SpikePanel />
+
+  if (hash === '#pos' || hash === '#dev/sync') {
+    return <PosProvider>{hash === '#dev/sync' ? <DevSyncRoute /> : <PosRoute />}</PosProvider>
+  }
+
+  return <App />
 }
 
 createRoot(container).render(

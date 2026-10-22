@@ -14,7 +14,11 @@ const rendererRoot = path.resolve(import.meta.dirname, 'src/renderer')
  * Both sides use `buildContentSecurityPolicy`, so the two never disagree.
  */
 function cspPlugin(dev: boolean): Plugin {
-  const policy = buildContentSecurityPolicy({ dev })
+  // The meta policy is a *fallback* and must never be narrower than the header
+  // the protocol handler sends: browsers enforce the intersection of both, so a
+  // narrower meta would silently block origins the runtime policy allows (e.g.
+  // a local API in an unpackaged build). The header remains authoritative.
+  const policy = buildContentSecurityPolicy({ dev, allowLocalOrigins: true })
   return {
     name: 'gikautos-csp',
     // The dev server sends the policy as a header (`server.headers`); the meta

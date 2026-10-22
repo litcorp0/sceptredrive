@@ -42,8 +42,8 @@ export function parseRuntimeConfig(input: unknown): RuntimeConfig {
   return runtimeConfigSchema.parse(input)
 }
 
-export function defaultRuntimeConfig(dev: boolean): RuntimeConfig {
-  return dev
+export function defaultRuntimeConfig(local: boolean): RuntimeConfig {
+  return local
     ? { apiBaseUrl: DEV_API_BASE_URL, powersyncUrl: DEV_POWERSYNC_URL }
     : { apiBaseUrl: PRODUCTION_API_BASE_URL, powersyncUrl: PRODUCTION_POWERSYNC_URL }
 }
@@ -68,10 +68,10 @@ export class ConfigError extends Error {
  * Reads `userData/config.json`. A missing file means "not configured yet" and
  * falls back to the environment defaults; a malformed file fails closed.
  */
-export function loadRuntimeConfig(userDataDir: string, dev: boolean): RuntimeConfig {
+export function loadRuntimeConfig(userDataDir: string, local: boolean): RuntimeConfig {
   const filePath = path.join(userDataDir, CONFIG_FILE_NAME)
   if (!fs.existsSync(filePath)) {
-    return defaultRuntimeConfig(dev)
+    return defaultRuntimeConfig(local)
   }
 
   let raw: unknown
