@@ -697,6 +697,7 @@ export async function listInvoices(
   const filters: InvoiceListFilters = {
     supplierId: query.supplierId ?? null,
     branchId,
+    receiptId: query.receiptId ?? null,
     status: query.status ?? null,
     overdue: query.overdue,
     asOfDate: new Date().toISOString().slice(0, 10),

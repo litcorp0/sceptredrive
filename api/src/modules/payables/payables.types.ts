@@ -43,6 +43,7 @@ export type InvoiceLineInput = InvoiceCreateBody['lines'] extends (infer T)[] | 
 export interface InvoiceListFilters {
   supplierId: string | null
   branchId: string | null
+  receiptId: string | null
   status: InvoiceStatus | null
   overdue: boolean
   /** ISO date (YYYY-MM-DD) used as the overdue cut-off. */

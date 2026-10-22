@@ -244,6 +244,7 @@ function invoiceConditions(filters: InvoiceListFilters): SQL | undefined {
   const conditions: SQL[] = []
   if (filters.supplierId) conditions.push(eq(supplierInvoice.supplierId, filters.supplierId))
   if (filters.branchId) conditions.push(eq(supplierInvoice.branchId, filters.branchId))
+  if (filters.receiptId) conditions.push(eq(supplierInvoice.receiptId, filters.receiptId))
   if (filters.status) conditions.push(eq(supplierInvoice.status, filters.status))
   if (filters.overdue) {
     conditions.push(inArray(supplierInvoice.status, ['OPEN', 'PARTIAL']))

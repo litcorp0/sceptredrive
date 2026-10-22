@@ -53,6 +53,7 @@ export const invoiceVoidSchema = z
 export const invoiceListQuerySchema = z.object({
   supplierId: z.uuid().optional(),
   branchId: z.uuid().optional(),
+  receiptId: z.uuid().optional(),
   status: z.enum(['OPEN', 'PARTIAL', 'PAID', 'VOID']).optional(),
   overdue: z
     .enum(['true', 'false'])
