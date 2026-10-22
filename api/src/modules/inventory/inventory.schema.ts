@@ -18,6 +18,7 @@ export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   'TRANSFER_OUT',
   'TRANSFER_IN',
   'COUNT_VARIANCE',
+  'SALE',
 ])
 
 export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
@@ -25,6 +26,7 @@ export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
   'ADJUSTMENT',
   'TRANSFER',
   'COUNT',
+  'SALE',
 ])
 
 export const stockAdjustmentReasonEnum = pgEnum('stock_adjustment_reason', [
