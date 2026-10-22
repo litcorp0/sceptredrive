@@ -22,7 +22,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
-import type { SupplierPaymentDetail } from "#/lib/api-types"
+import type { SupplierPaymentDetailView } from "#/lib/api-types"
 import { toastApiError } from "#/lib/toast"
 
 export function PaymentDetailsPanel({
@@ -31,16 +31,16 @@ export function PaymentDetailsPanel({
 	canEdit,
 }: {
 	supplierId: string
-	paymentDetails: SupplierPaymentDetail[]
+	paymentDetails: SupplierPaymentDetailView[]
 	canEdit: boolean
 }) {
 	const queryClient = useQueryClient()
 	const [dialogOpen, setDialogOpen] = useState(false)
-	const [editing, setEditing] = useState<SupplierPaymentDetail | null>(null)
+	const [editing, setEditing] = useState<SupplierPaymentDetailView | null>(null)
 
 	const updateMutation = useMutation({
 		mutationFn: (input: {
-			detail: SupplierPaymentDetail
+			detail: SupplierPaymentDetailView
 			patch: { isDefault?: boolean; isActive?: boolean }
 		}) => api.suppliers.updatePaymentDetail(supplierId, input.detail.id, input.patch),
 		onSuccess: async () => {
@@ -175,7 +175,7 @@ export function PaymentDetailsPanel({
 	)
 }
 
-function networkLabel(network: SupplierPaymentDetail["momoNetwork"]) {
+function networkLabel(network: SupplierPaymentDetailView["momoNetwork"]) {
 	if (network === "MTN") return "MTN MoMo"
 	if (network === "VOD") return "Telecel Cash"
 	if (network === "ATL") return "AirtelTigo Money"

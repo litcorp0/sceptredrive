@@ -23,7 +23,7 @@ import { ApiError, api } from "#/lib/api"
 import type {
 	PaymentDetailInput,
 	SupplierMomoNetwork,
-	SupplierPaymentDetail,
+	SupplierPaymentDetailView,
 } from "#/lib/api-types"
 import { toastApiError } from "#/lib/toast"
 
@@ -37,7 +37,7 @@ export function PaymentDetailDialog({
 	onOpenChange: (open: boolean) => void
 	supplierId: string
 	/** When set, edits this payment detail instead of adding one. */
-	detail?: SupplierPaymentDetail | null
+	detail?: SupplierPaymentDetailView | null
 }) {
 	const queryClient = useQueryClient()
 	const isEdit = detail !== null

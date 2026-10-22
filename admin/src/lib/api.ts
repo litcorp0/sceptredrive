@@ -39,6 +39,8 @@ import type {
 	Device,
 	Enrollment,
 	InventoryReceipt,
+	InvoiceCreateInput,
+	InvoiceVoidInput,
 	LoyaltyAccountDetail,
 	LoyaltyEntryCreateInput,
 	LoyaltyLiabilityQuery,
@@ -46,8 +48,14 @@ import type {
 	LoyaltyPostingResult,
 	MovementListQuery,
 	MovementRow,
+	PayablesAgingQuery,
+	PayablesAgingResult,
+	PaymentCreateInput,
 	PaymentDetailInput,
 	PaymentDetailUpdateInput,
+	PaymentListQuery,
+	PaymentListResult,
+	PaymentVoidInput,
 	PriceOverride,
 	Product,
 	ProductCreateInput,
@@ -74,11 +82,17 @@ import type {
 	StockThreshold,
 	SuggestCode,
 	Supplier,
+	SupplierBalanceResult,
 	SupplierCreateInput,
 	SupplierDetail,
+	SupplierInvoiceDetail,
+	SupplierInvoiceListQuery,
+	SupplierInvoiceListResult,
+	SupplierInvoiceRow,
 	SupplierListQuery,
 	SupplierListResult,
 	SupplierPaymentDetail,
+	SupplierPaymentDetailView,
 	SupplierProductInput,
 	SupplierProductMapping,
 	SupplierProductUpdateInput,
@@ -492,12 +506,15 @@ export const api = {
 				method: "POST",
 			}),
 		addPaymentDetail: (id: string, input: PaymentDetailInput) =>
-			apiRequest<{ paymentDetail: SupplierPaymentDetail }>(`/api/suppliers/${id}/payment-details`, {
-				method: "POST",
-				body: input,
-			}),
+			apiRequest<{ paymentDetail: SupplierPaymentDetailView }>(
+				`/api/suppliers/${id}/payment-details`,
+				{
+					method: "POST",
+					body: input,
+				},
+			),
 		updatePaymentDetail: (id: string, detailId: string, input: PaymentDetailUpdateInput) =>
-			apiRequest<{ paymentDetail: SupplierPaymentDetail }>(
+			apiRequest<{ paymentDetail: SupplierPaymentDetailView }>(
 				`/api/suppliers/${id}/payment-details/${detailId}`,
 				{ method: "PATCH", body: input },
 			),
@@ -515,6 +532,47 @@ export const api = {
 			apiRequest<{ ok: true }>(`/api/suppliers/${id}/products/${mappingId}`, {
 				method: "DELETE",
 			}),
+	},
+
+	payables: {
+		invoices: {
+			list: (query: SupplierInvoiceListQuery = {}) =>
+				apiRequest<SupplierInvoiceListResult>("/api/payables/invoices", { query }),
+			get: (id: string) => apiRequest<SupplierInvoiceDetail>(`/api/payables/invoices/${id}`),
+			create: (input: InvoiceCreateInput) =>
+				apiRequest<{ invoice: SupplierInvoiceDetail; replayed: boolean }>(
+					"/api/payables/invoices",
+					{ method: "POST", body: input },
+				),
+			void: (id: string, input: InvoiceVoidInput) =>
+				apiRequest<{ invoice: SupplierInvoiceRow }>(`/api/payables/invoices/${id}/void`, {
+					method: "POST",
+					body: input,
+				}),
+		},
+		payments: {
+			list: (query: PaymentListQuery = {}) =>
+				apiRequest<PaymentListResult>("/api/payables/payments", { query }),
+			get: (id: string) => apiRequest<SupplierPaymentDetail>(`/api/payables/payments/${id}`),
+			create: (input: PaymentCreateInput) =>
+				apiRequest<{ payment: SupplierPaymentDetail; replayed: boolean }>(
+					"/api/payables/payments",
+					{ method: "POST", body: input },
+				),
+			void: (id: string, input: PaymentVoidInput) =>
+				apiRequest<{ payment: SupplierPaymentDetail }>(`/api/payables/payments/${id}/void`, {
+					method: "POST",
+					body: input,
+				}),
+		},
+		balances: {
+			list: (query: { branchId?: string } = {}) =>
+				apiRequest<SupplierBalanceResult>("/api/payables/balances", { query }),
+		},
+		aging: {
+			get: (query: PayablesAgingQuery = {}) =>
+				apiRequest<PayablesAgingResult>("/api/payables/aging", { query }),
+		},
 	},
 
 	transfers: {
