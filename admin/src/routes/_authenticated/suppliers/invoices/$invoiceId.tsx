@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from "lucide-react"
 import { useState } from "react"
 import { StatusBadge } from "#/components/common/status-badge"
 import { InvoiceStatusBadge } from "#/components/payables/invoice-status-badge"
+import { PaymentFormDialog } from "#/components/payables/payment-form-dialog"
 import { VoidInvoiceDialog } from "#/components/payables/void-invoice-dialog"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
@@ -29,7 +30,9 @@ function InvoiceDetailPage() {
 	const { session } = Route.useRouteContext()
 	const { branches } = useBranch()
 	const canVoid = hasPermission(session.user.role, "payable.void")
+	const canPay = hasPermission(session.user.role, "payable.payment")
 	const [voidOpen, setVoidOpen] = useState(false)
+	const [paymentOpen, setPaymentOpen] = useState(false)
 
 	const invoiceQuery = useQuery({
 		queryKey: ["supplier-invoice", invoiceId],
@@ -84,6 +87,11 @@ function InvoiceDetailPage() {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">
+					{canPay && invoice.status !== "VOID" && invoice.outstandingMinor > 0 ? (
+						<Button size="sm" onClick={() => setPaymentOpen(true)}>
+							Record payment
+						</Button>
+					) : null}
 					{canVoid && invoice.status !== "VOID" ? (
 						<div className="grid justify-items-end gap-1">
 							<Button
@@ -260,6 +268,19 @@ function InvoiceDetailPage() {
 			</div>
 
 			<VoidInvoiceDialog open={voidOpen} onOpenChange={setVoidOpen} invoice={invoice} />
+			<PaymentFormDialog
+				open={paymentOpen}
+				onOpenChange={setPaymentOpen}
+				invoice={{
+					id: invoice.id,
+					number: invoice.number,
+					supplierInvoiceNumber: invoice.supplierInvoiceNumber,
+					supplierId: detail.supplier.id,
+					supplierName: detail.supplier.name,
+					branchId: invoice.branchId,
+					outstandingMinor: invoice.outstandingMinor,
+				}}
+			/>
 		</div>
 	)
 }

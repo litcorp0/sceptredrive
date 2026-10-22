@@ -1344,6 +1344,10 @@ export interface SupplierPaymentRow {
 
 /** Payment row on list responses, enriched with its allocation totals. */
 export interface SupplierPayment extends SupplierPaymentRow {
+	supplierCode: string
+	supplierName: string
+	branchCode: string
+	branchName: string
 	allocatedMinor: number
 	unallocatedMinor: number
 }
