@@ -26,6 +26,7 @@ import {
   findSupplierByIdForUpdate,
   findSupplierProduct,
   findSupplierProductById,
+  findSupplierProductViewById,
   insertPaymentDetail,
   insertSupplier,
   insertSupplierProduct,
@@ -49,6 +50,7 @@ import type {
   SupplierPaymentDetailView,
   SupplierProductCreateBody,
   SupplierProductUpdateBody,
+  SupplierProductView,
   SupplierRow,
   SupplierSearchFilters,
   SupplierSearchResult,
@@ -510,7 +512,7 @@ export async function addSupplierProduct(
   actor: AuditActor,
   supplierId: string,
   input: SupplierProductCreateBody,
-) {
+): Promise<SupplierProductView> {
   await requireSupplier(supplierId)
 
   const found = await findProductById(input.productId)
@@ -552,7 +554,9 @@ export async function addSupplierProduct(
         },
         tx,
       )
-      return row
+      const view = await findSupplierProductViewById(row.id, tx)
+      if (!view) throw new AppError(500, 'INTERNAL', 'Failed to load the product link')
+      return view
     })
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -567,7 +571,7 @@ export async function updateSupplierProduct(
   supplierId: string,
   mappingId: string,
   input: SupplierProductUpdateBody,
-) {
+): Promise<SupplierProductView> {
   const existing = await findSupplierProductById(mappingId)
   if (!existing || existing.supplierId !== supplierId) {
     throw new NotFoundError('Supplier product link not found')
@@ -606,7 +610,9 @@ export async function updateSupplierProduct(
       },
       tx,
     )
-    return row
+    const view = await findSupplierProductViewById(mappingId, tx)
+    if (!view) throw new AppError(500, 'INTERNAL', 'Failed to load the product link')
+    return view
   })
 }
 

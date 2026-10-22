@@ -29,6 +29,21 @@ const supplierListSelection = {
   updatedAt: supplier.updatedAt,
 }
 
+const supplierProductViewSelection = {
+  id: supplierProduct.id,
+  supplierId: supplierProduct.supplierId,
+  productId: supplierProduct.productId,
+  productSku: product.sku,
+  productName: product.name,
+  supplierSku: supplierProduct.supplierSku,
+  leadTimeDays: supplierProduct.leadTimeDays,
+  lastCostMinor: supplierProduct.lastCostMinor,
+  lastCostAt: supplierProduct.lastCostAt,
+  isPreferred: supplierProduct.isPreferred,
+  createdAt: supplierProduct.createdAt,
+  updatedAt: supplierProduct.updatedAt,
+}
+
 export async function insertSupplier(
   values: typeof supplier.$inferInsert,
   executor: DbExecutor = db,
@@ -240,24 +255,25 @@ export async function listSupplierProductsBySupplier(
   executor: DbExecutor = db,
 ): Promise<SupplierProductView[]> {
   return executor
-    .select({
-      id: supplierProduct.id,
-      supplierId: supplierProduct.supplierId,
-      productId: supplierProduct.productId,
-      productSku: product.sku,
-      productName: product.name,
-      supplierSku: supplierProduct.supplierSku,
-      leadTimeDays: supplierProduct.leadTimeDays,
-      lastCostMinor: supplierProduct.lastCostMinor,
-      lastCostAt: supplierProduct.lastCostAt,
-      isPreferred: supplierProduct.isPreferred,
-      createdAt: supplierProduct.createdAt,
-      updatedAt: supplierProduct.updatedAt,
-    })
+    .select(supplierProductViewSelection)
     .from(supplierProduct)
     .innerJoin(product, eq(product.id, supplierProduct.productId))
     .where(eq(supplierProduct.supplierId, supplierId))
     .orderBy(asc(product.name), asc(supplierProduct.id))
+}
+
+/** Single mapping in the joined view shape returned by create/update/read. */
+export async function findSupplierProductViewById(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierProductView | null> {
+  const rows = await executor
+    .select(supplierProductViewSelection)
+    .from(supplierProduct)
+    .innerJoin(product, eq(product.id, supplierProduct.productId))
+    .where(eq(supplierProduct.id, id))
+    .limit(1)
+  return rows[0] ?? null
 }
 
 export async function updateSupplierProductRow(
