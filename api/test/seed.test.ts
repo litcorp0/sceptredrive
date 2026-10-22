@@ -20,7 +20,7 @@ import {
   loyaltyLotConsumption,
 } from '../src/modules/loyalty/loyalty.schema.ts'
 import { branch } from '../src/modules/org/branches.schema.ts'
-import { terminal } from '../src/modules/org/terminals.schema.ts'
+import { device, terminal } from '../src/modules/org/terminals.schema.ts'
 import {
   supplierInvoice,
   supplierInvoiceLine,
@@ -28,6 +28,7 @@ import {
   supplierPaymentAllocation,
 } from '../src/modules/payables/payables.schema.ts'
 import { setting } from '../src/modules/platform/settings.schema.ts'
+import { sale, saleLine, saleTender, shift, syncConflict } from '../src/modules/pos/pos.schema.ts'
 import { barcode, product, productPrice } from '../src/modules/products/products.schema.ts'
 import {
   supplier,
@@ -66,6 +67,14 @@ const DEMO_SETTING_KEYS = [
   'supplier.codeSequence',
   'payable.invoiceSequence',
   'payable.paymentSequence',
+  'pos.maxCashierDiscountPercent',
+  'pos.maxManagerDiscountPercent',
+  'pos.pinMaxAttempts',
+  'pos.pinLockMinutes',
+  'pos.clockSkewToleranceMinutes',
+  'pos.syncBatchSize',
+  'pos.receiptFooter',
+  'pos.salesRequireOpenShift',
 ]
 const DEMO_PHONES = ['+233241000001', '+233241000002', '+233241000003']
 const DEMO_SKUS = DEMO_PRODUCTS.map((item) => item.sku)
@@ -127,6 +136,24 @@ describe.skipIf(!available)('database seeds', () => {
       .from(branch)
       .where(inArray(branch.code, ['ACC-SPX', 'ACC-WH1']))
     const demoBranchIds = demoBranches.map((row) => row.id)
+
+    const demoSales =
+      demoBranchIds.length > 0
+        ? await db.select({ id: sale.id }).from(sale).where(inArray(sale.branchId, demoBranchIds))
+        : []
+    const demoSaleIds = demoSales.map((row) => row.id)
+    if (demoSaleIds.length > 0) {
+      await db.delete(saleTender).where(inArray(saleTender.saleId, demoSaleIds))
+      await db.delete(saleLine).where(inArray(saleLine.saleId, demoSaleIds))
+      await db.delete(syncConflict).where(inArray(syncConflict.saleId, demoSaleIds))
+      await db.delete(sale).where(inArray(sale.id, demoSaleIds))
+    }
+    if (demoBranchIds.length > 0) {
+      await db.delete(syncConflict).where(inArray(syncConflict.branchId, demoBranchIds))
+      await db.delete(shift).where(inArray(shift.branchId, demoBranchIds))
+    }
+    await db.delete(device).where(eq(device.fingerprint, 'seed-ACC-SPX-T01'))
+
     const demoReceipts =
       demoBranchIds.length > 0
         ? await db
@@ -306,7 +333,7 @@ describe.skipIf(!available)('database seeds', () => {
       .from(creditProfile)
       .where(eq(creditProfile.customerId, credit.id))
     expect(profiles[0]?.limitMinor).toBe(50_000)
-    expect(profiles[0]?.balanceMinor).toBe(6_000)
+    expect(profiles[0]?.balanceMinor).toBe(24_500)
 
     const creditEntries = await db
       .select({
@@ -336,6 +363,74 @@ describe.skipIf(!available)('database seeds', () => {
     expect(lots).toHaveLength(1)
     expect(lots[0]?.points).toBe(250)
     expect(lots[0]?.remainingPoints).toBe(account.balancePoints)
+  })
+
+  it('seeds a closed demo shift with reconciled cash and credit sales', async () => {
+    const shiftRows = await db
+      .select({
+        number: shift.number,
+        status: shift.status,
+        openingFloatMinor: shift.openingFloatMinor,
+        countedCashMinor: shift.countedCashMinor,
+        serverExpectedCashMinor: shift.serverExpectedCashMinor,
+        varianceMinor: shift.varianceMinor,
+      })
+      .from(shift)
+      .where(eq(shift.number, 'ACC-SPX-T01-S-20261020-01'))
+    expect(shiftRows).toHaveLength(1)
+    expect(shiftRows[0]?.status).toBe('CLOSED')
+    expect(shiftRows[0]?.openingFloatMinor).toBe(20_000)
+    expect(shiftRows[0]?.serverExpectedCashMinor).toBe(42_500)
+    expect(shiftRows[0]?.countedCashMinor).toBe(42_500)
+    expect(shiftRows[0]?.varianceMinor).toBe(0)
+
+    const sales = await db
+      .select({
+        id: sale.id,
+        receiptNumber: sale.receiptNumber,
+        totalMinor: sale.totalMinor,
+        tenderTotalMinor: sale.tenderTotalMinor,
+        changeMinor: sale.changeMinor,
+        creditAmountMinor: sale.creditAmountMinor,
+      })
+      .from(sale)
+      .where(
+        inArray(sale.receiptNumber, ['ACC-SPX-T01-20261020-0001', 'ACC-SPX-T01-20261020-0002']),
+      )
+    expect(sales).toHaveLength(2)
+
+    const cashSale = sales.find((row) => row.receiptNumber.endsWith('0001'))
+    const creditSale = sales.find((row) => row.receiptNumber.endsWith('0002'))
+    expect(cashSale?.totalMinor).toBe(22_500)
+    expect(cashSale?.tenderTotalMinor).toBe(30_000)
+    expect(cashSale?.changeMinor).toBe(7_500)
+    expect(cashSale?.creditAmountMinor).toBe(0)
+    expect(creditSale?.totalMinor).toBe(18_500)
+    expect(creditSale?.creditAmountMinor).toBe(18_500)
+
+    if (!cashSale || !creditSale) throw new Error('demo POS sales were not seeded')
+    const saleIds = [cashSale.id, creditSale.id]
+    const lines = await db
+      .select({ id: saleLine.id, totalMinor: saleLine.totalMinor })
+      .from(saleLine)
+      .where(inArray(saleLine.saleId, saleIds))
+    expect(lines).toHaveLength(3)
+    expect(lines.reduce((total, row) => total + row.totalMinor, 0)).toBe(41_000)
+
+    const tenders = await db
+      .select({ method: saleTender.method, amountMinor: saleTender.amountMinor })
+      .from(saleTender)
+      .where(inArray(saleTender.saleId, saleIds))
+    expect(tenders).toHaveLength(2)
+    expect(tenders.find((row) => row.method === 'CASH')?.amountMinor).toBe(30_000)
+    expect(tenders.find((row) => row.method === 'CREDIT')?.amountMinor).toBe(18_500)
+
+    const conflicts = await db
+      .select({ type: syncConflict.type, status: syncConflict.status })
+      .from(syncConflict)
+      .where(inArray(syncConflict.saleId, saleIds))
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0]?.status).toBe('RESOLVED')
   })
 
   it('seeds demo suppliers with a reconciled payables story', async () => {

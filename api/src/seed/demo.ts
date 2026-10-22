@@ -1,11 +1,17 @@
 import { db } from '@gikautos/db'
 import {
+  closeDemoShift,
   createUserWithCredential,
   ensureBranch,
   ensureBrand,
   ensureCategory,
   ensureCreditOpening,
   ensureCustomer,
+  ensureDemoConflict,
+  ensureDemoPin,
+  ensureDemoSale,
+  ensureDemoShift,
+  ensureDevice,
   ensureLoyaltyEarn,
   ensureProduct,
   ensureProductPrice,
@@ -21,6 +27,7 @@ import {
   ensureTerminal,
   ensureUom,
   findStockReceiptId,
+  findTerminalIdByCode,
   findUserByEmail,
   linkReceiptSuppliers,
 } from './helpers.ts'
@@ -278,6 +285,14 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('inventory.receiptPrefix', 'GRN'),
     ensureSetting('inventory.transferPrefix', 'TRF'),
     ensureSetting('inventory.countPrefix', 'CNT'),
+    ensureSetting('pos.maxCashierDiscountPercent', 0),
+    ensureSetting('pos.maxManagerDiscountPercent', 100),
+    ensureSetting('pos.pinMaxAttempts', 5),
+    ensureSetting('pos.pinLockMinutes', 5),
+    ensureSetting('pos.clockSkewToleranceMinutes', 10),
+    ensureSetting('pos.syncBatchSize', 25),
+    ensureSetting('pos.receiptFooter', 'Thank you for your business'),
+    ensureSetting('pos.salesRequireOpenShift', true),
   ])
   if (settingsSeeded.some(Boolean)) created.push('settings defaults')
 
@@ -642,6 +657,135 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     }))
   ) {
     created.push('loyalty points Kwame Boateng')
+  }
+
+  const posTerminalId = await findTerminalIdByCode('ACC-SPX-T01')
+  const demoCashier = await findUserByEmail(DEMO_CASHIER_EMAIL)
+  if (posTerminalId && demoCashier?.staffId) {
+    const demoDevice = await ensureDevice({
+      terminalId: posTerminalId,
+      fingerprint: 'seed-ACC-SPX-T01',
+    })
+    if (demoDevice.created) created.push('device ACC-SPX-T01 (seed)')
+
+    if (await ensureDemoPin(DEMO_CASHIER_EMAIL, '2468')) {
+      created.push('demo cashier PIN (2468)')
+    }
+
+    const shiftNumber = 'ACC-SPX-T01-S-20261020-01'
+    const demoShift = await ensureDemoShift({
+      number: shiftNumber,
+      branchId: retail.id,
+      terminalId: posTerminalId,
+      deviceId: demoDevice.id,
+      cashierUserId: demoCashier.id,
+      cashierStaffId: demoCashier.staffId,
+      openedAt: new Date('2026-10-20T08:00:00.000Z'),
+      openingFloatMinor: 20_000,
+    })
+    if (demoShift.created) created.push(`shift ${shiftNumber}`)
+
+    const productFor = (sku: string) => {
+      const found = DEMO_PRODUCTS.find((item) => item.sku === sku)
+      if (!found) throw new Error(`Demo product ${sku} is missing`)
+      return found
+    }
+
+    const cashOilFilter = productFor('GIK-00001')
+    const cashDensoFilter = productFor('GIK-00002')
+    const cashSale = await ensureDemoSale({
+      receiptNumber: 'ACC-SPX-T01-20261020-0001',
+      shiftId: demoShift.id,
+      branchId: retail.id,
+      terminalId: posTerminalId,
+      deviceId: demoDevice.id,
+      cashierUserId: demoCashier.id,
+      cashierStaffId: demoCashier.staffId,
+      occurredAt: new Date('2026-10-20T10:15:00.000Z'),
+      taxMode: 'INCLUSIVE',
+      lines: [
+        {
+          productId: productIdFor(cashOilFilter.sku),
+          sku: cashOilFilter.sku,
+          name: cashOilFilter.name,
+          quantity: 2,
+          unitPriceMinor: 7_500,
+          lineDiscountMinor: 500,
+          taxCategory: 'STANDARD',
+        },
+        {
+          productId: productIdFor(cashDensoFilter.sku),
+          sku: cashDensoFilter.sku,
+          name: cashDensoFilter.name,
+          quantity: 1,
+          unitPriceMinor: 8_000,
+          taxCategory: 'STANDARD',
+        },
+      ],
+      tender: 'CASH',
+      cashTenderedMinor: 30_000,
+    })
+    if (cashSale.created) created.push('cash sale ACC-SPX-T01-20261020-0001')
+
+    const creditProduct = productFor('GIK-00006')
+    const creditCustomerId = customerIds.get('+233241000001')
+    const creditSale = creditCustomerId
+      ? await ensureDemoSale({
+          receiptNumber: 'ACC-SPX-T01-20261020-0002',
+          shiftId: demoShift.id,
+          branchId: retail.id,
+          terminalId: posTerminalId,
+          deviceId: demoDevice.id,
+          cashierUserId: demoCashier.id,
+          cashierStaffId: demoCashier.staffId,
+          customerId: creditCustomerId,
+          occurredAt: new Date('2026-10-20T11:05:00.000Z'),
+          taxMode: 'INCLUSIVE',
+          lines: [
+            {
+              productId: productIdFor(creditProduct.sku),
+              sku: creditProduct.sku,
+              name: creditProduct.name,
+              quantity: 1,
+              unitPriceMinor: 18_500,
+              taxCategory: 'STANDARD',
+            },
+          ],
+          tender: 'CREDIT',
+          creditLimitMinor: 50_000,
+          priceSource: 'OVERRIDE',
+        })
+      : null
+    if (creditSale?.created) created.push('credit sale ACC-SPX-T01-20261020-0002')
+
+    if (
+      await closeDemoShift({
+        number: shiftNumber,
+        closedAt: new Date('2026-10-20T20:00:00.000Z'),
+        countedCashMinor: 20_000 + cashSale.totalMinor,
+        expectedCashMinor: 20_000 + cashSale.totalMinor,
+      })
+    ) {
+      created.push(`closed shift ${shiftNumber}`)
+    }
+
+    if (
+      await ensureDemoConflict({
+        branchId: retail.id,
+        terminalId: posTerminalId,
+        deviceId: demoDevice.id,
+        saleId: cashSale.saleId,
+        type: 'PRICE_MISMATCH',
+        severity: 'MEDIUM',
+        details: {
+          note: 'Demo resolved price mismatch',
+          chargedUnitPriceMinor: 7_500,
+          expectedUnitPriceMinor: 7_800,
+        },
+      })
+    ) {
+      created.push('sample resolved sync conflict')
+    }
   }
 
   if (await ensureSequenceAtLeast('credit.repaymentSequence', 2)) {

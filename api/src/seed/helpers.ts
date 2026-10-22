@@ -1,6 +1,12 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { db } from '@gikautos/db'
-import { averageCostAfterReceipt, taxBreakdown } from '@gikautos/shared'
+import {
+  averageCostAfterReceipt,
+  type CartLineInput,
+  priceCart,
+  type TaxMode,
+  taxBreakdown,
+} from '@gikautos/shared'
 import { hash, type Options } from '@node-rs/argon2'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
@@ -14,13 +20,14 @@ import {
   stockReceiptLine,
   stockThreshold,
 } from '../modules/inventory/inventory.schema.ts'
+import { postMovements } from '../modules/inventory/inventory.service.ts'
 import {
   loyaltyAccount,
   loyaltyLedgerEntry,
   loyaltyLot,
 } from '../modules/loyalty/loyalty.schema.ts'
 import { branch } from '../modules/org/branches.schema.ts'
-import { terminal } from '../modules/org/terminals.schema.ts'
+import { device, terminal } from '../modules/org/terminals.schema.ts'
 import {
   supplierInvoice,
   supplierInvoiceLine,
@@ -28,6 +35,7 @@ import {
   supplierPaymentAllocation,
 } from '../modules/payables/payables.schema.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
+import { sale, saleLine, saleTender, shift, syncConflict } from '../modules/pos/pos.schema.ts'
 import { barcode, product, productPrice } from '../modules/products/products.schema.ts'
 import {
   supplier,
@@ -56,7 +64,15 @@ export function hashSeedPassword(password: string): Promise<string> {
 
 export async function findUserByEmail(email: string) {
   const rows = await db
-    .select({ id: user.id })
+    .select({
+      id: user.id,
+      staffId: user.staffId,
+      role: user.role,
+      branchId: user.branchId,
+      name: user.name,
+      pinHash: user.pinHash,
+      pinVersion: user.pinVersion,
+    })
     .from(user)
     .where(eq(user.email, email.toLowerCase()))
     .limit(1)
@@ -1085,4 +1101,345 @@ export async function ensureLoyaltyEarn(input: {
 
     return true
   })
+}
+
+/** Looks up the seeded terminal id by its branch-scoped code. */
+export async function findTerminalIdByCode(code: string): Promise<string | null> {
+  const rows = await db
+    .select({ id: terminal.id })
+    .from(terminal)
+    .where(eq(terminal.code, code))
+    .limit(1)
+  return rows[0]?.id ?? null
+}
+
+/** Seeds a device row so demo shifts/sales satisfy their foreign keys. */
+export async function ensureDevice(input: {
+  terminalId: string
+  fingerprint: string
+  enrolledAt?: Date
+}): Promise<{ id: string; created: boolean }> {
+  const existing = await db
+    .select({ id: device.id })
+    .from(device)
+    .where(and(eq(device.terminalId, input.terminalId), eq(device.fingerprint, input.fingerprint)))
+    .limit(1)
+  if (existing[0]) return { id: existing[0].id, created: false }
+
+  const tokenHash = createHash('sha256')
+    .update(`seed-device-token-${input.terminalId}-${input.fingerprint}`)
+    .digest('hex')
+  const rows = await db
+    .insert(device)
+    .values({
+      terminalId: input.terminalId,
+      fingerprint: input.fingerprint,
+      tokenHash,
+      status: 'ACTIVE',
+      enrolledAt: input.enrolledAt ?? new Date('2026-10-01T08:00:00.000Z'),
+    })
+    .onConflictDoNothing()
+    .returning({ id: device.id })
+  if (rows[0]) return { id: rows[0].id, created: true }
+
+  const raced = await db
+    .select({ id: device.id })
+    .from(device)
+    .where(eq(device.tokenHash, tokenHash))
+    .limit(1)
+  if (!raced[0]) throw new Error('Could not create the demo device')
+  return { id: raced[0].id, created: false }
+}
+
+/** Sets a demo PIN once; never overwrites a PIN changed by the operator. */
+export async function ensureDemoPin(email: string, pin: string): Promise<boolean> {
+  const found = await findUserByEmail(email)
+  if (!found || found.pinHash) return false
+
+  const pinHash = await hashSeedPassword(pin)
+  await db
+    .update(user)
+    .set({ pinHash, pinVersion: 1 })
+    .where(and(eq(user.id, found.id), isNull(user.pinHash)))
+  return true
+}
+
+/** Seeds an open demo shift. Idempotent by shift number. */
+export async function ensureDemoShift(input: {
+  number: string
+  branchId: string
+  terminalId: string
+  deviceId: string
+  cashierUserId: string
+  cashierStaffId: string
+  openedAt: Date
+  openingFloatMinor: number
+}): Promise<{ id: string; created: boolean }> {
+  const existing = await db
+    .select({ id: shift.id })
+    .from(shift)
+    .where(eq(shift.number, input.number))
+    .limit(1)
+  if (existing[0]) return { id: existing[0].id, created: false }
+
+  const rows = await db
+    .insert(shift)
+    .values({
+      number: input.number,
+      branchId: input.branchId,
+      terminalId: input.terminalId,
+      deviceId: input.deviceId,
+      cashierUserId: input.cashierUserId,
+      cashierStaffId: input.cashierStaffId,
+      status: 'OPEN',
+      openedAt: input.openedAt,
+      openingFloatMinor: input.openingFloatMinor,
+      openedBy: 'seed',
+    })
+    .onConflictDoNothing()
+    .returning({ id: shift.id })
+  if (rows[0]) return { id: rows[0].id, created: true }
+
+  const raced = await db
+    .select({ id: shift.id })
+    .from(shift)
+    .where(eq(shift.number, input.number))
+    .limit(1)
+  if (!raced[0]) throw new Error('Could not create the demo shift')
+  return { id: raced[0].id, created: false }
+}
+
+/**
+ * Seeds one completed demo sale: priced with the shared cart engine, stock
+ * movements through the single posting service, and (for a credit sale) the
+ * append-only credit charge plus its balance projection. Idempotent by receipt.
+ */
+export async function ensureDemoSale(input: {
+  receiptNumber: string
+  shiftId: string
+  branchId: string
+  terminalId: string
+  deviceId: string
+  cashierUserId: string
+  cashierStaffId: string
+  customerId?: string | null
+  occurredAt: Date
+  taxMode: TaxMode
+  lines: CartLineInput[]
+  saleDiscountMinor?: number
+  tender: 'CASH' | 'CREDIT'
+  cashTenderedMinor?: number
+  creditLimitMinor?: number
+  priceSource?: string
+}): Promise<{ created: boolean; saleId: string; totalMinor: number }> {
+  const priced = priceCart(input.lines, {
+    taxMode: input.taxMode,
+    saleDiscountMinor: input.saleDiscountMinor ?? 0,
+  })
+
+  const existing = await db
+    .select({ id: sale.id })
+    .from(sale)
+    .where(eq(sale.receiptNumber, input.receiptNumber))
+    .limit(1)
+  if (existing[0]) {
+    return { created: false, saleId: existing[0].id, totalMinor: priced.totalMinor }
+  }
+
+  if (input.tender === 'CREDIT' && !input.customerId) {
+    throw new Error('A demo credit sale requires a customer')
+  }
+  const cashTendered = input.tender === 'CASH' ? (input.cashTenderedMinor ?? priced.totalMinor) : 0
+  if (input.tender === 'CASH' && cashTendered < priced.totalMinor) {
+    throw new Error('The demo cash tender is below the sale total')
+  }
+  const changeMinor = input.tender === 'CASH' ? cashTendered - priced.totalMinor : 0
+  const tenderTotal = input.tender === 'CREDIT' ? priced.totalMinor : cashTendered
+  const creditAmountMinor = input.tender === 'CREDIT' ? priced.totalMinor : 0
+  const saleId = randomUUID()
+
+  const quantities = new Map<string, number>()
+  for (const line of input.lines) {
+    quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity)
+  }
+
+  await db.transaction(async (tx) => {
+    const posted = await postMovements(
+      { actorId: 'seed', actorStaffId: null, ip: null, userAgent: null, requestId: null },
+      [...quantities.entries()].map(([productId, quantity]) => ({
+        productId,
+        branchId: input.branchId,
+        type: 'SALE' as const,
+        quantityDelta: -quantity,
+        referenceType: 'SALE' as const,
+        referenceId: saleId,
+        referenceNumber: input.receiptNumber,
+      })),
+      { executor: tx, allowNegative: true },
+    )
+
+    await tx.insert(sale).values({
+      id: saleId,
+      receiptNumber: input.receiptNumber,
+      branchId: input.branchId,
+      terminalId: input.terminalId,
+      deviceId: input.deviceId,
+      shiftId: input.shiftId,
+      clientTransactionId: randomUUID(),
+      cashierUserId: input.cashierUserId,
+      cashierStaffId: input.cashierStaffId,
+      customerId: input.customerId ?? null,
+      occurredAt: input.occurredAt,
+      subtotalMinor: priced.subtotalMinor,
+      lineDiscountMinor: priced.lineDiscountMinor,
+      saleDiscountMinor: priced.saleDiscountMinor,
+      vatMinor: priced.vatMinor,
+      nhilMinor: priced.nhilMinor,
+      getfundMinor: priced.getfundMinor,
+      taxTotalMinor: priced.taxTotalMinor,
+      totalMinor: priced.totalMinor,
+      tenderTotalMinor: tenderTotal,
+      changeMinor,
+      creditAmountMinor,
+      taxMode: input.taxMode,
+      appVersion: 'seed',
+    })
+
+    await tx.insert(saleLine).values(
+      priced.lines.map((line, index) => ({
+        saleId,
+        productId: line.productId,
+        lineNumber: index + 1,
+        sku: line.sku ?? '',
+        name: line.name ?? '',
+        quantity: line.quantity,
+        unitPriceMinor: line.unitPriceMinor,
+        expectedUnitPriceMinor: line.unitPriceMinor,
+        lineDiscountMinor: line.lineDiscountMinor,
+        saleDiscountMinor: line.saleDiscountMinor,
+        loyaltyDiscountMinor: line.loyaltyDiscountMinor,
+        netMinor: line.netMinor,
+        taxableMinor: line.taxableMinor,
+        baseMinor: line.baseMinor,
+        vatMinor: line.vatMinor,
+        nhilMinor: line.nhilMinor,
+        getfundMinor: line.getfundMinor,
+        taxTotalMinor: line.taxTotalMinor,
+        totalMinor: line.totalMinor,
+        taxCategory: line.taxCategory,
+        unitCostMinor: posted.levels.get(line.productId)?.avgCostMinor ?? 0,
+        priceSource: input.priceSource ?? 'BASE',
+      })),
+    )
+
+    await tx.insert(saleTender).values({
+      saleId,
+      method: input.tender,
+      amountMinor: tenderTotal,
+    })
+
+    if (input.tender === 'CREDIT' && input.customerId) {
+      const insertedProfile = await tx
+        .insert(creditProfile)
+        .values({
+          customerId: input.customerId,
+          branchId: input.branchId,
+          limitMinor: input.creditLimitMinor ?? 50_000,
+          createdBy: 'seed',
+        })
+        .onConflictDoNothing()
+        .returning({ id: creditProfile.id })
+      const profile =
+        insertedProfile[0] ??
+        (
+          await tx
+            .select({ id: creditProfile.id })
+            .from(creditProfile)
+            .where(
+              and(
+                eq(creditProfile.customerId, input.customerId),
+                eq(creditProfile.branchId, input.branchId),
+              ),
+            )
+            .limit(1)
+        )[0]
+      if (!profile) throw new Error('Could not resolve the demo credit profile')
+
+      await tx.insert(creditLedgerEntry).values({
+        customerId: input.customerId,
+        branchId: input.branchId,
+        kind: 'CHARGE',
+        amountMinor: creditAmountMinor,
+        reasonCode: 'SALE',
+        referenceType: 'SALE',
+        referenceId: saleId,
+        referenceNumber: input.receiptNumber,
+        idempotencyKey: saleId,
+        occurredAt: input.occurredAt,
+        createdBy: 'seed',
+      })
+      await tx
+        .update(creditProfile)
+        .set({ balanceMinor: sql`${creditProfile.balanceMinor} + ${creditAmountMinor}` })
+        .where(eq(creditProfile.id, profile.id))
+    }
+  })
+
+  return { created: true, saleId, totalMinor: priced.totalMinor }
+}
+
+/** Closes the demo shift with a counted cash figure and its variance. */
+export async function closeDemoShift(input: {
+  number: string
+  closedAt: Date
+  countedCashMinor: number
+  expectedCashMinor: number
+}): Promise<boolean> {
+  const rows = await db
+    .update(shift)
+    .set({
+      status: 'CLOSED',
+      closedAt: input.closedAt,
+      countedCashMinor: input.countedCashMinor,
+      clientExpectedCashMinor: input.expectedCashMinor,
+      serverExpectedCashMinor: input.expectedCashMinor,
+      varianceMinor: input.countedCashMinor - input.expectedCashMinor,
+      closedBy: 'seed',
+    })
+    .where(and(eq(shift.number, input.number), eq(shift.status, 'OPEN')))
+    .returning({ id: shift.id })
+  return rows.length > 0
+}
+
+/** Seeds one resolved conflict so the Phase 8 conflict screens have a sample. */
+export async function ensureDemoConflict(input: {
+  branchId: string
+  terminalId: string
+  deviceId: string
+  saleId: string
+  type: 'PRICE_MISMATCH' | 'DUPLICATE_CUSTOMER'
+  severity: 'LOW' | 'MEDIUM' | 'HIGH'
+  details: Record<string, unknown>
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: syncConflict.id })
+    .from(syncConflict)
+    .where(and(eq(syncConflict.saleId, input.saleId), eq(syncConflict.type, input.type)))
+    .limit(1)
+  if (existing[0]) return false
+
+  await db.insert(syncConflict).values({
+    branchId: input.branchId,
+    terminalId: input.terminalId,
+    deviceId: input.deviceId,
+    saleId: input.saleId,
+    type: input.type,
+    severity: input.severity,
+    status: 'RESOLVED',
+    details: input.details,
+    resolvedBy: 'seed',
+    resolvedAt: new Date('2026-10-21T09:00:00.000Z'),
+    resolutionNote: 'Resolved in the demo seed',
+  })
+  return true
 }

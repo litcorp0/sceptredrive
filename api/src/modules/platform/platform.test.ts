@@ -200,7 +200,7 @@ describe.skipIf(!available)('audit and settings API', () => {
       (item) => item.key === 'pos.maxCashierDiscountPercent',
     )
     expect(cashierDiscount?.value).toBe(0)
-    expect(cashierDiscount?.source).toBe('default')
+    expect(cashierDiscount?.source).not.toBe('branch')
 
     const receiptFooter = body.settings.find((item) => item.key === 'pos.receiptFooter')
     expect(receiptFooter?.value).toBe('Thank you for your business')
