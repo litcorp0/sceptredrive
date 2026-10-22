@@ -1,10 +1,12 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, safeStorage } from 'electron'
 import started from 'electron-squirrel-startup'
 import { loadRuntimeConfig, originOf, type RuntimeConfig } from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import { createKeychain } from './ipc/keychain'
+import { registerIpcHandlers } from './ipc/register'
 import { registerAppScheme, rendererRootDir, serveRenderer } from './protocol'
 import { hardenSession, installGlobalSecurityHandlers } from './security'
-import { createMainWindow, navigationOrigins, preloadPathFor } from './windows'
+import { createMainWindow, getMainWindow, navigationOrigins, preloadPathFor } from './windows'
 
 // Squirrel (Windows) runs the app with special flags on install/uninstall; a
 // quit here keeps those runs from opening a window.
@@ -62,6 +64,20 @@ void app.whenReady().then(() => {
 
   hardenSession()
   installGlobalSecurityHandlers(policy)
+
+  const keychain = createKeychain({
+    userDataDir: app.getPath('userData'),
+    storage: safeStorage,
+    // Key names only; never a value.
+    log: (message) => console.info(`[keychain] ${message}`),
+  })
+
+  registerIpcHandlers({
+    keychain,
+    policy,
+    mainWindow: getMainWindow,
+    log: (message) => console.warn(`[ipc] ${message}`),
+  })
 
   if (!isDev) {
     serveRenderer(rendererRootDir(__dirname, MAIN_WINDOW_VITE_NAME), csp)

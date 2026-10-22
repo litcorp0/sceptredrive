@@ -149,6 +149,12 @@ async function checkProductionRenderer() {
   check(popup.openedIsNull, 'window.open is denied')
   check(app.windows().length === 1, 'no extra window was created')
 
+  check(cspViolations.length === 0, 'no CSP violations in the console', cspViolations.join(' | '))
+
+  await checkDesktopBridge(page)
+
+  // Last: a blocked navigation leaves Chromium waiting on a navigation that
+  // never completes, which would stall later locators.
   const navigationBlocked = await page
     .evaluate(async () => {
       try {
@@ -166,9 +172,81 @@ async function checkProductionRenderer() {
     navigationBlocked,
   )
 
-  check(cspViolations.length === 0, 'no CSP violations in the console', cspViolations.join(' | '))
-
   await app.close()
+}
+
+async function checkDesktopBridge(page) {
+  console.log('\nPreload bridge and keychain')
+
+  const shape = await page.evaluate(() => ({
+    root: Object.keys(globalThis.gikautos ?? {}).sort(),
+    app: Object.keys(globalThis.gikautos?.app ?? {}).sort(),
+    secure: Object.keys(globalThis.gikautos?.secure ?? {}).sort(),
+    hasInvoke: 'invoke' in (globalThis.gikautos ?? {}),
+  }))
+  check(
+    shape.root.join(',') === 'app,secure',
+    'bridge exposes only app and secure',
+    shape.root.join(','),
+  )
+  check(
+    shape.app.join(',') === 'getInfo',
+    'bridge app surface is app.getInfo only',
+    shape.app.join(','),
+  )
+  check(
+    shape.secure.join(',') === 'delete,get,set',
+    'bridge secure surface is get/set/delete only',
+    shape.secure.join(','),
+  )
+  check(!shape.hasInvoke, 'no generic invoke() on the bridge')
+
+  const info = await page.evaluate(async () => {
+    const result = await globalThis.gikautos?.app.getInfo()
+    return result?.ok ? result.data : null
+  })
+  check(Boolean(info), 'app.getInfo() returns typed data')
+  if (!info) return
+
+  check(info.electron.startsWith('45.'), 'app info reports Electron 45', info.electron)
+  check(info.platform === 'linux', 'app info reports the platform', info.platform)
+  check(typeof info.userDataPath === 'string', 'app info exposes the user data path')
+  check(
+    ['os', 'basic', 'unavailable'].includes(info.secureStorage.level),
+    'app info reports the secure storage level',
+    info.secureStorage.level,
+  )
+
+  if (!info.secureStorage.available) {
+    check(
+      await page.evaluate(async () => {
+        const result = await globalThis.gikautos?.secure.set('keychainSelfTest', 'x')
+        return result?.ok === false && result.error.code === 'KEYCHAIN_UNAVAILABLE'
+      }),
+      'unavailable keychain fails closed with KEYCHAIN_UNAVAILABLE',
+    )
+    return
+  }
+
+  await page.getByRole('button', { name: 'Run keychain self-test' }).click()
+  await page.getByTestId('keychain-status').filter({ hasText: 'PASS' }).waitFor({ timeout: 15_000 })
+  check(true, 'keychain round-trip via IPC reports PASS')
+
+  const secretsPath = path.join(info.userDataPath, 'secrets.json')
+  const raw = fs.readFileSync(secretsPath, 'utf8')
+  check(!raw.includes('probe-'), 'secrets.json holds ciphertext, not the plaintext probe')
+  check((fs.statSync(secretsPath).mode & 0o777) === 0o600, 'secrets.json is mode 0600')
+  check(
+    await page.evaluate(() => Boolean(globalThis.gikautos)),
+    'preload bridge survives a keychain write',
+  )
+
+  await page.getByRole('button', { name: 'Clear keychain probe' }).click()
+  await page
+    .getByTestId('keychain-status')
+    .filter({ hasText: 'CLEARED' })
+    .waitFor({ timeout: 15_000 })
+  check(true, 'keychain probe can be removed')
 }
 
 async function checkPackagedBinary() {

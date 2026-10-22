@@ -1,0 +1,63 @@
+import type { AppInfo, DesktopApi, DesktopErrorCode, IpcResult, SecretKey } from '../../shared/ipc'
+
+/**
+ * Renderer-side wrapper around `window.gikautos`.
+ *
+ * - Throws `DesktopUnavailableError` when the preload bridge is missing (web
+ *   preview, plain `vite dev`, unit tests), so callers can degrade instead of
+ *   crashing on `undefined`.
+ * - Unwraps `IpcResult` into values or a typed `DesktopApiError`.
+ */
+
+export class DesktopUnavailableError extends Error {
+  constructor() {
+    super('The desktop bridge is not available in this environment')
+    this.name = 'DesktopUnavailableError'
+  }
+}
+
+export class DesktopApiError extends Error {
+  readonly code: DesktopErrorCode
+
+  constructor(code: DesktopErrorCode, message: string) {
+    super(message)
+    this.name = 'DesktopApiError'
+    this.code = code
+  }
+}
+
+export function getDesktopBridge(): DesktopApi {
+  const bridge = globalThis.window?.gikautos
+  if (!bridge) throw new DesktopUnavailableError()
+  return bridge
+}
+
+export function isDesktopAvailable(): boolean {
+  return Boolean(globalThis.window?.gikautos)
+}
+
+async function unwrap<T>(result: Promise<IpcResult<T>>): Promise<T> {
+  const settled = await result
+  if (!settled.ok) {
+    throw new DesktopApiError(settled.error.code, settled.error.message)
+  }
+  return settled.data
+}
+
+export const desktopApi = {
+  getAppInfo(): Promise<AppInfo> {
+    return unwrap(getDesktopBridge().app.getInfo())
+  },
+
+  async getSecret(key: SecretKey): Promise<string | null> {
+    return unwrap(getDesktopBridge().secure.get(key))
+  },
+
+  async setSecret(key: SecretKey, value: string): Promise<void> {
+    await unwrap(getDesktopBridge().secure.set(key, value))
+  },
+
+  async deleteSecret(key: SecretKey): Promise<void> {
+    await unwrap(getDesktopBridge().secure.delete(key))
+  },
+}

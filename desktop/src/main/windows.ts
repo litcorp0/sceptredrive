@@ -48,7 +48,19 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     window.show()
   })
 
+  // `ready-to-show` depends on the first paint. A hidden window loading from the
+  // custom `app://` scheme does not always produce one, which would leave the app
+  // invisible forever. Show once the document has loaded, or after a short grace
+  // period, whichever comes first.
+  window.webContents.once('did-finish-load', () => {
+    window.show()
+  })
+  const showFallback = setTimeout(() => {
+    if (!window.isDestroyed()) window.show()
+  }, 3_000)
+
   window.on('closed', () => {
+    clearTimeout(showFallback)
     if (mainWindow === window) {
       mainWindow = null
     }
