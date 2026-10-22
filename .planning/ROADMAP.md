@@ -135,10 +135,11 @@ reconnecting — without blocking a sale.
 
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
-**Status:** 🚧 In progress 2026-10-22 (Plan 01/9 complete: schema, shared cart engine,
-settings, permissions, demo seed) — context, research, and plans in
-`phases/06-pos-offline-core/`; development/CI use the self-hosted PowerSync Docker service,
-while staging/production use PowerSync Cloud.
+**Status:** 🚧 In progress 2026-10-22 (Plans 01–02/9 complete: schema, shared cart engine,
+settings, permissions and demo seed; desktop shell, `app://` security baseline, async
+`safeStorage` keychain, and the **PowerSync Web SDK spike passed** — evidence under
+`phases/06-pos-offline-core/evidence/`) — development/CI use the self-hosted PowerSync
+Docker service, while staging/production use PowerSync Cloud.
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock
@@ -157,13 +158,12 @@ device enrollment and tokens; offline PIN; shifts; cart/scan/search; cash and cr
 loyalty; ESC/POS receipts and drawer; outbox + upload endpoint; sync streams; conflicts;
 sync status UI; Windows packaging groundwork.
 
-**Key risk:** PowerSync's Web SDK (WASM workers) inside a sandboxed Electron 45 renderer
-served from a custom `app://` origin, and Electron Forge 8 packaging of a Bun workspace
-with native printer modules. Both are front-loaded in Plan 02 with an explicit
-pass/escalate gate. Forge 8 promoted its Vite plugin to stable (Vite 8), so the earlier
-experimental-plugin risk is retired. Fallback if the Web SDK worker path fails: PowerSync
-Node SDK in the main process behind IPC, which needs operator approval because it changes
-the architecture.
+**Key risk (retired for the Web SDK):** Plan 02 proved the PowerSync Web SDK (WASM workers,
+encrypted SQLite) inside the sandboxed Electron 45 renderer served from `app://gikautos`,
+including restart persistence in a packaged build. Forge 8 + Vite 8 packaging of the Bun
+workspace also works (`bun run package:pos`). Remaining packaging risk: the native printer
+module and the Squirrel installer on Windows (Plans 07/09). The Node-SDK fallback is not
+needed.
 
 ---
 

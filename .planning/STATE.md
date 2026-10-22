@@ -3,12 +3,13 @@
 **Milestone:** v1
 **Updated:** 2026-10-22
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plan 01/9 complete**: POS schema + migration, shared cart pricing engine, POS
-settings and permissions, and the demo shift/sales/conflict seed are implemented and
-tested (API suite 277/277, shared 70/70, lint and type-check green). See
-`.planning/phases/06-pos-offline-core/00-CONTEXT.md` and `01-RESEARCH.md`.
-**Next action:** Execute **Phase 6 Plan 02** (desktop shell, Electron security, keychain,
-PowerSync spike).
+progress — Plans 01–02/9 complete**: POS schema, shared cart pricing engine, settings,
+permissions and demo seed (Plan 01); plus the Electron Forge 8 desktop shell, `app://`
+security baseline, async-keychain preload bridge, and the **PowerSync Web SDK phase gate
+(passed)** (Plan 02). Suites: API 277/277, shared 70/70, desktop 51/51; shell E2E 35/35;
+PowerSync gate 8/8. See `.planning/phases/06-pos-offline-core/`.
+**Next action:** Execute **Phase 6 Plan 03** (device auth, PowerSync sync config, local
+schema, connector).
 
 ---
 
@@ -90,7 +91,7 @@ PowerSync spike).
 | Plan | Title | Status |
 |---|---|---|
 | 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | ✅ Complete |
-| 02 | Desktop shell, Electron security, keychain, and PowerSync spike | 📝 Planned |
+| 02 | Desktop shell, Electron security, keychain, and PowerSync spike | ✅ Complete |
 | 03 | Device auth, PowerSync sync config, local schema, and connector | 📝 Planned |
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | 📝 Planned |
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | 📝 Planned |
@@ -119,6 +120,45 @@ PowerSync spike).
   - Test DB note: the seed suite now cleans POS sales/shift/device/conflict before its
     fixtures; reset `public` **and** `drizzle` schemas (not just `public`) when rebuilding
     `gikautos_test`, or Drizzle will believe the migrations already ran.
+- **Plan 02 complete** (commits `4dec559`, `98d0395`, `23e24a7`, `4231a34`):
+  - `desktop/` is a Bun workspace on Electron Forge 8.0.1 + Vite 8.3.5 + React 19.2;
+    `bun run dev:pos|build:pos|package:pos|make:pos` at the root, and root
+    `lint`/`check-types`/`test`/`build` cover it. `bun run build` now also packages the
+    Linux app; `make:pos` produces a Squirrel installer on Windows and a ZIP elsewhere.
+  - **Linker decision:** the repo now installs with Bun's **hoisted** linker
+    (`bunfig.toml`) because Forge crawls `desktop/node_modules` and does not follow
+    symlinks, and Bun 1.3.14 does not implement `workspaces.selfContained` /
+    `installConfig.hoistingLimits` for the hoisted linker. `desktop/scripts/prepare-desktop.mjs`
+    links `electron` into the workspace and will materialise native runtime modules as
+    real files (Plan 07). API/shared suites and the admin build stay green under it.
+  - **Origin + CSP:** production loads `app://gikautos/index.html` via
+    `protocol.handle` (privileged standard scheme, no `file://`); the CSP
+    (`src/main/csp.ts`) is sent as a header *and* injected into `index.html` as a meta
+    fallback, and is built from config origins that are checked against a fixed
+    allowlist. Verified: no Node in the renderer, `window.open`/remote navigation denied,
+    all permissions refused, fuses block `--inspect`, no CSP violations.
+  - **Keychain:** async `safeStorage` only, `userData/secrets.json` at mode `0600`,
+    ciphertext-only, no plaintext fallback (`KEYCHAIN_UNAVAILABLE` when unavailable),
+    key-rotation re-encrypt, typed preload surface (`app.getInfo`, `secure.get/set/delete`)
+    with Zod-validated inputs and sender checks. This host reports Linux
+    `basic_text` → `secureStorage.level: 'basic'`; Windows DPAPI reports `os`.
+  - **PowerSync gate: PASSED** — encrypted WASM SQLite (ChaCha20) runs in the sandboxed
+    renderer with `wasm-unsafe-eval`/`worker-src` allowance, local-only tables write,
+    `watch()` fires, close/reopen works, and data survives a packaged-app restart
+    (run #1 → #2). Both `IDBBatchAtomicVFS` and `OPFSCoopSyncVFS` work; **OPFS is chosen**
+    with IDB as the fallback. Evidence:
+    `evidence/powersync-spike.md` + `.json` + `.png`.
+  - **Findings to carry into Plan 03:** always pass an explicit `vfs` (the SDK's VFS
+    resolver has no default branch and throws `resolveVfs is not a function`), build the
+    adapter with `WASQLiteOpenFactory`, set `enableMultiTabs: false`, and point
+    `worker` at the SDK's copied `@powersync/worker.js`.
+  - **A hidden-window trap:** a `show: false` window that loads from `app://` never paints,
+    so `ready-to-show` never fires and the app is invisible. `windows.ts` now also shows on
+    `did-finish-load` and after a 3 s fallback.
+  - Verification: fresh `bun install`, `bun run lint`, `bun run check-types` (5/5),
+    `bun run build` (admin + desktop package), API 277/277, shared 70/70,
+    desktop 51/51; `test:e2e` 35/35; `test:spike` 8/8; `.github/workflows/desktop.yml`
+    passes actionlint (Windows installer job is `workflow_dispatch` until a remote exists).
 
 ---
 
@@ -151,7 +191,9 @@ PowerSync spike).
   (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
-  locally. **Remote run pending a git remote.**
+  locally. **Remote run pending a git remote.** `desktop/` builds and packages as part of
+  that job; `.github/workflows/desktop.yml` adds the manual Windows-installer job and the
+  Linux E2E/PowerSync jobs (also pending the remote).
 - `.planning/phases/01-foundation/01-VERIFICATION.md` records all evidence, deviations,
   and the human verification checklist.
 
@@ -468,6 +510,10 @@ PowerSync spike).
 | 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
 | 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
 | 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
+| 2026-10-22 | Root linker switched to Bun **hoisted** (`bunfig.toml`) so Electron Forge can package `desktop/`: Forge does not follow symlinks and Bun 1.3's self-contained workspaces are not available for the hoisted linker. `desktop/scripts/prepare-desktop.mjs` bridges the gap. |
+| 2026-10-22 | Plan 02: the POS renderer is served from `app://gikautos` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
+| 2026-10-22 | Plan 02: the PowerSync Web SDK **passes the phase gate** in the sandboxed `app://` renderer (encrypted WASM SQLite, local-only writes, watch, restart persistence). Production VFS = `OPFSCoopSyncVFS`, fallback `IDBBatchAtomicVFS`; always pass `vfs` explicitly and use `WASQLiteOpenFactory`. |
+| 2026-10-22 | Plan 02: keychain = async `safeStorage` only, `secrets.json` mode 0600, ciphertext only, fail closed with `KEYCHAIN_UNAVAILABLE`. Linux `basic_text` is reported as `secureStorage.level: 'basic'` so Plan 04 enrolment can require `os`. |
 | 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
 
 ---

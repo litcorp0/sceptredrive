@@ -1,0 +1,72 @@
+name: Desktop
+
+# Manual until the repository has a remote (see .planning/STATE.md open items);
+# after that, run on a tag or a `desktop/**` path filter.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer:
+    name: Windows installer (unsigned)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run check-types
+
+      - name: Unit tests
+        run: bun run --filter desktop test
+
+      # Squirrel + Electron packaging needs a Windows host; Wine on Linux is not
+      # supported for this maker. The installer is unsigned until Phase 9.
+      - name: Build Squirrel installer
+        run: bun run make:pos -- --platform win32 --arch x64
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: gikautos-pos-windows-installer
+          path: |
+            desktop/out/make/**/*.exe
+            desktop/out/make/**/*.nupkg
+            desktop/out/make/**/RELEASES
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-package:
+    name: Linux package + shell tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Package (validates the Forge + Bun workspace pipeline)
+        run: bun run package:pos
+
+      # The renderer needs a display even though it never shows a window in CI.
+      - name: Security and keychain checks
+        run: xvfb-run --auto-servernum bun run --filter desktop test:e2e
+
+      - name: PowerSync spike (phase gate)
+        run: xvfb-run --auto-servernum bun run --filter desktop test:spike
