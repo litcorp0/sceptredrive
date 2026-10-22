@@ -207,8 +207,9 @@
 
 - **OPS-01** — VPS Docker Compose staging and production stacks with Caddy TLS, separate
   databases/volumes/env files, and resource limits.
-- **OPS-02** — Postgres TLS and PowerSync Cloud connectivity: static IP allowlist,
-  dedicated replication role, publication, `wal_level=logical`.
+- **OPS-02** — Postgres TLS and PowerSync connectivity for the chosen deployment
+  (self-hosted service on the VPS or Cloud with a static IP allowlist): dedicated
+  replication role, publication, and `wal_level=logical`.
 - **OPS-03** — Encrypted `pg_dump` backups to Cloudflare R2 with retention, a restore
   script, and a documented restore drill.
 - **OPS-04** — Monitoring: health endpoints, external uptime monitor, error tracking,

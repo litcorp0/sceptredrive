@@ -371,9 +371,9 @@ permissions, demo seed).
   `app://` secure protocol + strict CSP + fuses + async `safeStorage`; `@maxxuxx/node-printer`
   for Windows spooler RAW/ESC-POS behind a printer port with a fake adapter for CI.
 - Verification gates: Plan 02's PowerSync-in-Electron spike must pass before UI work;
-  Plan 09 needs a fresh DB, a local self-hosted PowerSync instance (Cloud instance still an
-  operator gate), a two-device last-unit race, duplicate-upload drill, Electron E2E with
-  fake printing, and an unsigned Windows installer.
+  Plan 09 needs a fresh Docker DB, the self-hosted PowerSync Docker service (`bun run
+  sync:init` / `sync:up`), a two-device last-unit race, duplicate-upload drill, Electron
+  E2E with fake printing, and an unsigned Windows installer.
 
 
 
@@ -383,8 +383,8 @@ permissions, demo seed).
 | 2026-10-17 | The earlier prototype and its planning are discarded; fresh git history on `dev`. |
 | 2026-10-17 | v1 scope: POS + back office + inventory + suppliers + credit + loyalty + Paystack. E-commerce, delivery, payroll, GL, AI, fitment, and mobile are out of scope. |
 | 2026-10-17 | API: Hono + Drizzle + Better Auth on Node 24. |
-| 2026-10-17 | Offline sync: PowerSync Cloud (Free → Pro), Web SDK in the Electron renderer. |
-| 2026-10-17 | Database: PostgreSQL 17 on a VPS via Docker; PowerSync Cloud connects over TLS with an IP allowlist. |
+| 2026-10-17 | Offline sync: PowerSync Cloud (Free → Pro), Web SDK in the Electron renderer. **Superseded for development on 2026-10-22: self-hosted Docker service; production target open for Phase 9.** |
+| 2026-10-17 | Database: PostgreSQL 17 on a VPS via Docker; PowerSync Cloud connects over TLS with an IP allowlist. **(Cloud path retained for the Phase 9 production decision; dev/CI self-hosted.)** |
 | 2026-10-17 | Admin/Manager: TanStack Start. Desktop POS: Electron Forge + Vite + React + shadcn + Tailwind. |
 | 2026-10-17 | Ghana GHS; VAT 15% + NHIL 2.5% + GETFund 2.5% = 20%; E-VAT receipt contract now, GRA adapter mock until credentials. |
 | 2026-10-17 | Roles: Admin (global), Manager (branch), Cashier (terminal). One cashier per terminal per shift. |
@@ -448,6 +448,7 @@ permissions, demo seed).
 | 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
 | 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
 | 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
+| 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. Cloud is not used in development; the staging/production deployment target (self-hosted VPS vs Cloud) is decided in Phase 9 with the same sync config. |
 
 ---
 
@@ -474,10 +475,11 @@ permissions, demo seed).
 - Paystack registered business and keys; `PAYSTACK_MODE=mock` until then.
 - VPS provider, domain, and DNS (Phase 9 setup gate).
 - Windows code-signing certificate (Phase 9; unsigned builds first).
-- PowerSync Cloud account + two instances (staging/prod) before Phase 6 human
-  verification. Phase 6 development uses a **local self-hosted PowerSync instance** with
-  the same `sync-config.yaml`; Cloud is still required for staging/prod and the real
-  instance verification.
+- PowerSync: development and CI use the **self-hosted official Docker service**
+  (`journeyapps/powersync-service`, pinned stable tag, `start -r unified`) against the
+  Docker Postgres with logical replication; no Cloud account is needed for Phase 6.
+  Staging/production may reuse the same config self-hosted on the VPS or via PowerSync
+  Cloud — confirm that target in Phase 9 before changing `.planning/PROJECT.md`.
 - Phase 6: Forge/Bun packaging and the PowerSync-in-Electron spike must pass before UI
   work; the Windows Squirrel installer job needs a git remote (or a manual
   `windows-latest` run) before it can be proven.
@@ -613,10 +615,11 @@ permissions, demo seed).
   text locators for them.
 - Phase 6 (planned): load `powersync` before any sync work and re-read
   `phases/06-pos-offline-core/01-RESEARCH.md` — the SDK/Forge/Electron versions moved since
-  the original 2026-10-17 research. Local-only PowerSync tables are never queued for
-  upload; do not "fix" that by making sale/shift tables synced. The only sale write path is
-  `pos.service.applySale`; the only pricing path is the shared `priceCart`; outbox rows are
-  never deleted before an ack.
+  the original 2026-10-17 research. Development runs the **self-hosted PowerSync Docker
+  service** (`sync:init` → `sync:up`), not Cloud. Local-only PowerSync tables are never
+  queued for upload; do not "fix" that by making sale/shift tables synced. The only sale
+  write path is `pos.service.applySale`; the only pricing path is the shared `priceCart`;
+  outbox rows are never deleted before an ack.
 - Phase 6 (planned): the desktop workspace must be a self-contained Bun workspace
   (`installConfig.hoistingLimits: "workspaces"`) or Forge packaging will follow symlinks and
   fail. Use `POS_PRINTER_DRIVER=fake` for all automated runs; real hardware is a human

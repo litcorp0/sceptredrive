@@ -21,14 +21,16 @@ revocation — then record the evidence and update the project state.
 **Files:** none (execution); evidence noted in
 `.planning/phases/06-pos-offline-core/01-VERIFICATION.md`
 
-- Stop the API and PowerSync service; reset the local v1 database schema (the `gikautos`
-  role lacks `CREATEDB`; drop/recreate the schema in `gikautos_test` or the dedicated dev
-  DB as in Phase 5), migrate, `bun run db:seed`, `bun run db:seed --demo` **twice**
-  (second run creates nothing), `bun run db:test:prepare`, then `bun run lint`,
-  `bun run check-types`, `bun run test`, `bun run build`.
-- Start Postgres with `wal_level=logical`, the local PowerSync self-hosted instance
-  (`bun run sync:up`), and the API. Validate `sync-config.yaml` and confirm replication is
-  receiving changes.
+- Stop the API and PowerSync service; reset the **Docker dev database** with
+  `docker compose down -v` → `bun run db:up` (this gives a clean `gikautos` on `:5433` with
+  logical replication), migrate, `bun run db:seed`, `bun run db:seed --demo` **twice**
+  (second run creates nothing), prepare `gikautos_test` for the test suites, then run
+  `bun run lint`, `bun run check-types`, `bun run test`, `bun run build`.
+- Run `bun run sync:init` once (replication role, `gikautos_powersync` storage database,
+  `powersync` publication), start the self-hosted PowerSync service (`bun run sync:up`),
+  and start the API against the same Docker database (`DATABASE_URL=…:5433/gikautos`).
+  Validate the service logs (replication healthy, publication found) and confirm
+  replication is receiving changes.
 - Re-bootstrap the admin TOTP secret (`/tmp/opencode/admin-totp.json`) and enroll two
   simulated devices (two terminal records, two codes, two device tokens) for the race
   scenarios.
@@ -155,8 +157,8 @@ screenshots readable.
   record numbers. The 5k/20k scale target must remain usable on a mid-range Windows PC
   (targets: search < 150 ms after sync, sale commit < 100 ms, cold start < 5 s excluding
   first sync).
-- Record accepted limitations (0.0.1 unsigned, PowerSync Cloud plugin not yet used,
-  hardware not present) explicitly.
+- Record accepted limitations (0.0.1 unsigned, the PowerSync service is self-hosted for
+  dev, staging/prod deployment target still open, hardware not present) explicitly.
 
 **Verify:** installer artifact + hash recorded; security checklist has no open HIGH;
 performance numbers within targets or an explicit operator decision.
@@ -171,19 +173,21 @@ changes)
 - `01-VERIFICATION.md`: goal restated; the seven roadmap success criteria each mapped to
   concrete evidence (commands, walkthrough sections, SQL, screenshots, race logs);
   requirement trace (`POS-01…09`, `POS-14`, `SYNC-01…08` → implementation → proof);
-  deviations with justification; residual risks (hardware, Cloud instance, app:// worker
-  quirks, 20k customer sync cost); human verification checklist (real printer/drawer/
-  scanner, Cloud instance, Windows VM).
+  deviations with justification; residual risks (hardware, self-hosted PowerSync service
+  operations/upgrades, app:// worker quirks, 20k customer sync cost); human verification
+  checklist (real printer/drawer/scanner, staging/prod PowerSync target, Windows VM).
 - `STATE.md`: progress table (Phase 6 ✅ with plan count), a "Phase 6 additions" section
   (schema, modules, sync config, desktop architecture, shared cart engine, PIN/binding,
   outbox, printing, seed story, verification numbers), decisions log entries for D1–D36 as
-  implemented, open items (Cloud instances, hardware, signing, Phase 7/8 hand-offs), and
+  implemented, open items (PowerSync staging/prod deployment target, hardware, signing,
+  Phase 7/8 hand-offs), and
   **Next action: plan Phase 7 (POS Payments, Returns & Shifts)**.
 - `ROADMAP.md`: mark Phase 6 complete with the verification date and the evidence path.
 - Session notes: load `powersync` before sync changes; local-only tables must never be
   converted to synced writes; `applySale` is the only sale write path; `priceCart` is the
   only pricing path; outbox rows are never deleted before ack; the fake printer and how to
-  run the E2E; PowerSync self-hosted vs Cloud commands.
+  run the E2E; the self-hosted PowerSync Docker commands (`sync:init`, `sync:up`,
+  `sync:logs`) and how the same config maps to a Cloud/self-hosted production instance.
 - Commit the phase documents and evidence together (no secrets; receipts/screenshots may
   contain demo data only).
 

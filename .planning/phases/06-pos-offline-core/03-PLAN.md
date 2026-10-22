@@ -101,12 +101,66 @@ boot rejects missing key.
 **Verify:** HTTP tests; `jwt.decode` assertions; `check-types`.
 **Commit:** `feat(api): add pos device session and powersync token endpoints`
 
-## Task 4 — PowerSync sync config and dev instance
+## Task 4 — PowerSync service (self-hosted Docker) and sync config
 
-**Files:** `powersync/sync-config.yaml`, `powersync/service.yaml`,
-`powersync/README.md`, `powersync/cli.yaml.example` (never committed with secrets),
-root `package.json`, `.gitignore`, `.env.example`
+**Files:** `compose.yaml`, `powersync/sync-config.yaml`, `powersync/service.yaml`,
+`powersync/README.md`, `powersync/init/powersync.sql`, root `package.json`,
+`.env.example`, `.gitignore`
 
+- **Decision:** development and CI run the official **self-hosted PowerSync service**
+  (`journeyapps/powersync-service`), not Cloud. Staging/production reuse the same
+  `sync-config.yaml`/`service.yaml`; the deployment target is decided in Phase 9.
+- Add a `powersync` service to `compose.yaml` under `profiles: ["sync"]` so it joins the
+  existing `gikautos-dev` network and can reach `postgres:5432`:
+  - image pinned to a stable tag (`journeyapps/powersync-service:1.27.1`; re-check the
+    current stable line at execution and pin it, never `latest`);
+  - `command: ["start", "-r", "unified"]` (replication + API + storage in one process);
+  - `ports: ["8080:8080"]` (container port is 8080);
+  - `depends_on: postgres: condition: service_healthy`;
+  - `environment`: `POWERSYNC_CONFIG_PATH=/config/service.yaml`,
+    `PS_DATA_SOURCE_URI`, `PS_STORAGE_URI`, `PS_JWKS_URI`, `PS_ADMIN_TOKEN`;
+  - `volumes`: `./powersync/service.yaml:/config/service.yaml:ro`,
+    `./powersync/sync-config.yaml:/config/sync-config.yaml:ro`;
+  - `extra_hosts: ["host.docker.internal:host-gateway"]` (Linux) so the service can fetch
+    the API JWKS from `http://host.docker.internal:4000/.well-known/jwks.json`;
+  - `healthcheck` against the service's HTTP health endpoint.
+- `powersync/service.yaml`:
+  ```yaml
+  replication:
+    connections:
+      - type: postgresql
+        uri: !env PS_DATA_SOURCE_URI
+        sslmode: disable          # local Docker network only
+  storage:
+    type: postgresql
+    uri: !env PS_STORAGE_URI
+    sslmode: disable
+  port: 8080
+  sync_config:
+    path: sync-config.yaml
+  client_auth:
+    jwks_uri: !env PS_JWKS_URI
+    audience: ['http://localhost:8080']
+  api:
+    tokens: [!env PS_ADMIN_TOKEN]
+  healthcheck:
+    probes:
+      use_http: true
+  telemetry:
+    disable_telemetry_sharing: true
+  ```
+- `powersync/init/powersync.sql` (run once against the Docker Postgres; idempotent):
+  - `CREATE ROLE powersync_role WITH REPLICATION BYPASSRLS LOGIN PASSWORD …` and
+    `GRANT SELECT ON ALL TABLES IN SCHEMA public`, plus default privileges;
+  - `CREATE DATABASE gikautos_powersync OWNER powersync_storage` (or create the
+    `powersync_storage` role and grant `CREATE` on the DB), for bucket storage;
+  - a publication named `powersync` scoped to the synced tables:
+    `CREATE PUBLICATION powersync FOR TABLE product, barcode, product_price, stock_level,
+    customer, credit_profile, loyalty_account, loyalty_lot;` — avoids replicating
+    unrelated/ledger/storage tables. Document that adding a synced table later requires
+    `ALTER PUBLICATION powersync ADD TABLE …`.
+  - `wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10` are already set
+    in `compose.yaml`; note the service must be restarted after changing them.
 - `sync-config.yaml`:
   ```yaml
   config:
@@ -139,24 +193,35 @@ root `package.json`, `.gitignore`, `.env.example`
   Products/barcodes/accounts are global by design (20k customers, 5k SKUs); branch-scoped
   rows use the signed claim. No staff, setting, sale, credit ledger, or loyalty ledger
   table is synced.
-- `service.yaml` (dev): replication connection from `PS_DATABASE_URI`, `client_auth` with
-  the JWKS URI (`http://host.docker.internal:4000/.well-known/jwks.json`) or static JWKS,
-  audience = the local instance URL. Use `!env` for secrets.
-- README: `powersync init self-hosted` → `powersync docker configure` → edit
-  `service.yaml` → `powersync validate` → `powersync docker start`; the local Postgres
-  needs `wal_level=logical`, a `REPLICATION` role, and a publication (`compose.yaml`
-  already sets logical + 10 slots). Cloud: `powersync link cloud`, deploy sync-config only,
-  never commit `cli.yaml`/tokens. Note Cloud requires the operator account; dev uses the
-  self-hosted instance.
-- Root scripts: `sync:up`, `sync:down`, `sync:validate`, `sync:deploy` (deploy requires an
-  explicit instance and is documented as mutating — not run automatically).
-- If local self-hosted setup is blocked by Postgres privileges, document the exact
-  `psql` steps as `postgres` and treat it as an operator step; do not weaken the
-  replication requirements.
+- Root scripts: `sync:init` (apply `powersync/init/powersync.sql` via
+  `docker compose exec -T postgres psql`), `sync:up`
+  (`docker compose --profile sync up -d powersync`), `sync:down`, `sync:logs`,
+  `sync:config-check` (validate YAML/service logs; run the PowerSync CLI
+  `powersync validate` where available). `sync:deploy` is **not** part of the dev loop.
+- README: exact order — `bun run db:up`, `bun run sync:init` (first time), migrate/seed,
+  start the API with `DATABASE_URL` pointing at the Docker Postgres (`:5433`), then
+  `bun run sync:up`; check `docker compose logs powersync` for replication/publication
+  errors; the API's JWKS must be reachable from the container; the instance URL is
+  `http://localhost:8080`. Document troubleshooting: `sslmode` must be the separate YAML
+  key; `replication.connections` (not root `connections`); the publication name must be
+  `powersync`; the service listens on 8080.
+- **Dev source of truth:** use the Docker Postgres (`:5433`) for Phase 6 sync development
+  so the service, API, and tests share one logical-replication database. The operator's
+  local `:5432` instance remains the API-test instance (`gikautos_test`) and is not used
+  for sync.
+- `.env.example` additions: `PS_DATA_SOURCE_URI`, `PS_STORAGE_URI`, `PS_JWKS_URI`,
+  `PS_ADMIN_TOKEN`, `POWERSYNC_URL=http://localhost:8080`. No real secrets committed;
+  `powersync/cli.yaml` and any token files are gitignored.
+- Cloud is **not** used in development. The README notes that the same files can be
+  deployed to Cloud later (`powersync link cloud`, deploy `sync-config` only) without
+  changing the client contract.
 
-**Verify:** `powersync validate` passes on `sync-config.yaml`; a dev instance starts and
-`psql` shows the publication; a manual `curl` of the JWKS is reachable from the container.
-**Commit:** `feat(powersync): add branch-scoped pos sync config and dev runbook`
+**Verify:** `docker compose --profile sync up -d` starts the service; `docker compose logs
+powersync` shows a healthy replication connection and no publication/ssl errors;
+`psql` shows the `powersync` publication and the `gikautos_powersync` database; a manual
+`curl` from inside the container reaches the API JWKS; a dev token/PowerSync JWT syncs the
+demo catalog into a scratch client.
+**Commit:** `feat(powersync): add self-hosted docker service and pos sync config`
 
 ## Task 5 — Local schema, connector, provider, and sync status
 

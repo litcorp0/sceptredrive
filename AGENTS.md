@@ -44,7 +44,7 @@ double-selling or losing a transaction.
 | Database | PostgreSQL 17 (Docker on VPS; local via Docker Compose) |
 | Admin / Manager | TanStack Start, React 19, Tailwind v4, shadcn, TanStack Query |
 | Desktop POS | Electron Forge + Vite, React 19, Tailwind v4, shadcn, PowerSync Web SDK |
-| Offline sync | PowerSync Cloud (Free → Pro), branch-scoped Sync Streams |
+| Offline sync | PowerSync service (self-hosted Docker for dev/CI; staging/production target decided in Phase 9), branch-scoped Sync Streams |
 | Payments | Paystack Ghana (MoMo, card, bank transfer, refunds, supplier transfers) |
 | Currency / tax | GHS, VAT 15% + NHIL 2.5% + GETFund 2.5% = 20% on one base |
 | E-VAT | Receipt contract now; mock provider until GRA onboarding |

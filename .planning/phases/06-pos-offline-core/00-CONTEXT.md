@@ -28,7 +28,7 @@ It overrides convenience in any later plan.
 | D6 | Device identity and auth | Enrollment redemption issues a one-time device token (32 random bytes, stored hashed). The POS exchanges it at `POST /api/pos/session` for a **15-minute device access JWT** (`aud=gikautos-pos`, claims `sub=deviceId`, `branch_id`, `terminal_id`, `device_id`). PowerSync gets a separate **15-minute** JWT from `POST /api/pos/powersync/token` with the same branch/terminal claims. Every token and upload re-checks `device.status=ACTIVE`, terminal active, and branch retail. Revocation fails closed immediately on the next request. Staff sessions are never used by the POS | POS-02, SYNC-02/03; device-bound and short-lived |
 | D7 | PowerSync architecture | Web SDK in the renderer. **Downloads only** through Sync Streams; the POS never writes to synced tables and therefore never uses PowerSync's CRUD upload queue. All local mutations go to **local-only tables** plus our own durable outbox and `POST /api/pos/sync/upload`. `uploadData()` is intentionally absent. Reads are watched local queries | Research: local-only tables are not queued; our domain needs one atomic server transaction per sale, not per-row CRUD |
 | D8 | Synced vs local data | **Synced (read-only):** `product`, `product_barcode`, `product_price`, `stock_level`, `customer`, `credit_profile`, `loyalty_account` (+ `loyalty_lot` for expiry hints) — branch-scoped where applicable. **Local-only:** `pos_config`, `pos_session`, `staff_binding`, `sale`, `sale_line`, `sale_tender`, `shift`, `cash_movement`, `customer_draft`, `outbox`, `local_stock_delta`, `local_credit_delta`, `local_loyalty_delta`, `document_sequence`, `sync_conflict`. No staff, PIN hash, setting, sale, or audit table is synced down | SYNC-01; keeps client intent local and server truth authoritative |
-| D9 | Sync Streams | One `powersync/sync-config.yaml` with `config.edition: 3` and branch-scoped streams using `auth.parameter('branch_id')`: products/barcodes/prices (active), stock levels for the branch, customers (active global identity), credit profiles for the branch, loyalty accounts + live lots (global). `auto_subscribe: true` on all of them. No prices for warehouses; terminals only exist in retail branches. PowerSync Cloud for staging/prod, a local self-hosted instance for development/CI (same config, no Cloud account required) | SYNC-01/02; PowerSync docs confirm `auth.parameter()` is signed and tamper-proof |
+| D9 | Sync Streams | One `powersync/sync-config.yaml` with `config.edition: 3` and branch-scoped streams using `auth.parameter('branch_id')`: products/barcodes/prices (active), stock levels for the branch, customers (active global identity), credit profiles for the branch, loyalty accounts + live lots (global). `auto_subscribe: true` on all of them. No prices for warehouses; terminals only exist in retail branches. **Development and CI run the official PowerSync Service Docker image** (`journeyapps/powersync-service`, pinned stable tag, `start -r unified`) against the Docker Postgres (logical replication), with Postgres bucket storage on the same server. Staging/production reuse the identical `sync-config.yaml`; the deployment target (self-hosted on the VPS vs PowerSync Cloud) is an operator decision recorded in Phase 9 | SYNC-01/02; PowerSync docs confirm `auth.parameter()` is signed and tamper-proof; self-hosted Open Edition needs no Cloud account |
 | D10 | Local schema rules | Never declare `id` in a PowerSync table; booleans are `column.integer`; timestamps are ISO `column.text`; only `text`/`integer`/`real`. Client IDs are UUIDv7 generated at capture. One `PowerSyncDatabase` instance per file, created at module scope. No local migrations; additive schema changes only. `disconnectAndClear()` on device reset/logout-to-enroll | PowerSync SDK rules; crash safety and future upgrades |
 | D11 | Outbox contract | A user action and its outbox row commit in **one** `db.writeTransaction`. Transaction types: `SALE`, `SHIFT_OPEN`, `CASH_MOVEMENT`, `SHIFT_CLOSE`. States: `pending` → `in_flight` → `acked` \| `conflict` \| `dead_letter`. Strict FIFO per terminal. Retries use bounded exponential backoff with jitter (1s → 5m, max 10 attempts), pause on 401/403 until a fresh device JWT is obtained, and never drop a sale. The row stores `client_transaction_id`, `type`, `occurred_at`, `payload_version`, payload JSON, attempt count, last error, and server result | SYNC-04/07; research principles 1–6 |
 | D12 | Upload contract | `POST /api/pos/sync/upload` body `{ batchId, deviceId, terminalId, transactions[] }`, max 50 per batch. Authentication is the device JWT; the JWT is the source of truth for branch/terminal/device. Response is **HTTP 200** with per-item `{ clientTransactionId, status: APPLIED \| REPLAYED \| REJECTED, serverId, conflicts[], resolved }`; 401/403 for auth, 5xx only for transient infrastructure. One server DB transaction per client transaction, applied in array order. Each transaction reserves a `pos_sync_transaction` row unique on `(terminal_id, client_transaction_id)`; a replay returns the stored result without re-applying | SYNC-04; PowerSync's 2xx guidance adapted to our own uploader |
@@ -113,6 +113,14 @@ Three mechanics were pinned during planning; intent is unchanged:
 - PowerSync JWT requirements: `aud` = instance URL, `sub` = device id, `iat`/`exp` present
   and ≤ 24 h (60 min recommended), `kid` matching a JWKS key; asymmetric EdDSA/RS256 is
   recommended, HS256 is development-only.
+- PowerSync self-hosted service (official `journeyapps/powersync-service` image): listens
+  on container port **8080**, `command: ["start", "-r", "unified"]` for a single-process dev
+  stack, config via a mounted `service.yaml` (`replication.connections`, `storage`,
+  `sync_config.path`, `client_auth`, `api.tokens`). Local Postgres needs `sslmode: disable`
+  as a **separate YAML key** (the pgwire client ignores `sslmode` in the URI); Postgres 14+
+  can host source and bucket storage on one server; bucket storage uses a `powersync` schema
+  and its own user; replication needs a `REPLICATION BYPASSRLS` role and a publication named
+  `powersync`. Pin a stable tag rather than `latest`.
 - Bun workspaces support `installConfig.hoistingLimits: "workspaces"` (or root
   `workspaces.selfContained`) to materialise a complete real `node_modules` tree for a
   workspace, which is exactly what Forge's naive packaging crawler needs.
@@ -144,8 +152,12 @@ Three mechanics were pinned during planning; intent is unchanged:
 
 ## Open Items (carry into later phases)
 
-- PowerSync Cloud account + staging/prod instances: development uses a local self-hosted
-  instance; Cloud is required for the Phase 6 human verification against the real service.
+- PowerSync service: development and CI use the **official Docker image**
+  (`journeyapps/powersync-service`, pinned stable tag, `start -r unified`) in the repo's
+  Docker network against the logical-replication Postgres; no Cloud account is required.
+  Staging/production reuse the same `sync-config.yaml`; whether they run self-hosted on the
+  VPS or on PowerSync Cloud is decided in Phase 9 (see `.planning/PROJECT.md` —
+  self-hosted Docker is the dev default; the production target is open).
 - Physical Windows terminal, 80 mm ESC/POS printer, keyboard-wedge scanner, and cash
   drawer for the human verification pass. CI uses the fake printer and a simulated scanner.
 - Windows code signing and auto-update are Phase 9; Phase 6 produces an unsigned Squirrel
@@ -154,7 +166,8 @@ Three mechanics were pinned during planning; intent is unchanged:
   reprint-from-server.
 - Phase 8: conflict resolution UI/endpoint, POS oversight screens, sales/shift reports,
   E-VAT QR/serial/signature, sales CSV.
-- Phase 9: signed installer, auto-update, offline drills at scale, production PowerSync
-  Cloud TLS/IP allowlist.
+- Phase 9: signed installer, auto-update, offline drills at scale, and the production
+  PowerSync deployment (self-hosted service on the VPS, or Cloud) with TLS, an IP
+  allowlist where applicable, and the replication-role/publication hardening.
 - Ghana DPA: customer identity now lives on encrypted POS disks; Phase 9 must document
   device wipe/loss procedures and retention.

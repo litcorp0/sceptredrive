@@ -1,5 +1,12 @@
 # Research — PowerSync + Electron
 
+> **Update 2026-10-22 (Phase 6 planning):** development and CI now use the **self-hosted
+> PowerSync Docker service** (`journeyapps/powersync-service`, `start -r unified`) against
+> the Docker Postgres, not Cloud. The Cloud pricing/TLS/IP-allowlist notes below remain
+> relevant only if staging/production chooses Cloud in Phase 9. See
+> `phases/06-pos-offline-core/01-RESEARCH.md` §4 and `03-PLAN.md` Task 4.
+
+
 **Researched:** 2026-10-17
 **Sources:** `docs.powersync.com` (pricing, sync streams, custom auth, source DB setup,
 security and IP filtering, self-hosting), `powersync.com/pricing`, PowerSync SDK references

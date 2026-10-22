@@ -2,11 +2,12 @@
 
 **Researched:** 2026-10-22 **Sources:** PowerSync docs (JavaScript Web SDK, Sync Streams,
 parameters, custom auth, local-only tables, writing data, upload/validation semantics,
-encryption, CLI, supported platforms), PowerSync JS release notes (v2.5.0, 2026-10-19),
-Electron Forge 8.0.1 release notes (2026-09-29), electronforge.io (Vite plugin, CLI
-packaging), Electron 45 security checklist and `safeStorage` docs, TanStack Router history
-docs, Bun workspaces docs, npm registry metadata, `@maxxuxx/node-printer` docs, and the
-verified Phase 1–5 codebase patterns (`postMovements`, `postEntry`, settings sequences,
+encryption, CLI, supported platforms, self-hosted Docker local development, self-hosted
+instance configuration, source database setup), PowerSync JS release notes (v2.5.0,
+2026-10-19), Electron Forge 8.0.1 release notes (2026-09-29), electronforge.io (Vite plugin,
+CLI packaging), Electron 45 security checklist and `safeStorage` docs, TanStack Router
+history docs, Bun workspaces docs, npm registry metadata, `@maxxuxx/node-printer` docs, and
+the verified Phase 1–5 codebase patterns (`postMovements`, `postEntry`, settings sequences,
 device/enrollment schema, shared tax engine).
 
 ## 1. PowerSync Web SDK — current shape (v2.5.0, React 2.1.0)
@@ -112,7 +113,46 @@ device/enrollment schema, shared tax engine).
   leaves Phase 9 room for signing/auto-update. Building on Linux needs Wine/Mono, so the
   installer job runs on `windows-latest`.
 
-## 4. Bun workspace packaging
+## 4. PowerSync service: self-hosted Docker for development
+
+- **Image and mode:** `journeyapps/powersync-service` from Docker Hub. Pin a **stable tag**
+  (currently the `1.27.x` line) rather than `latest`; `latest` tracks Stable but can advance
+  across majors and is development-only. Run the single-process dev stack with
+  `command: ["start", "-r", "unified"]` (replication + API + storage in one container). The
+  service listens on container port **8080** — map `8080:8080`, never `8080:80`.
+- **Config:** mount `service.yaml` and set `POWERSYNC_CONFIG_PATH` (or use
+  `POWERSYNC_CONFIG_B64` / `-c`). Top-level keys: `replication.connections` (not a root
+  `connections`), `storage`, `port`, `sync_config.path`, `client_auth`, `api.tokens`,
+  `healthcheck`, `system.logging`. `!env PS_…` substitution is supported (only `PS_`
+  prefixed variables; `::number`/`::boolean` casts).
+- **Source database (our Docker Postgres):** `wal_level=logical` (the repo `compose.yaml`
+  already sets it with 10 slots), a `powersync_role` with `REPLICATION BYPASSRLS LOGIN` and
+  `SELECT` on replicated tables, and a publication named `powersync`. For local Postgres,
+  `sslmode: disable` must be a **separate YAML key** — the pgwire replication client does
+  not honour `sslmode` in the URI and fails with "postgres does not support ssl".
+- **Bucket storage:** use **Postgres** rather than MongoDB to avoid a second database.
+  Postgres 14+ may host the source and bucket storage on the same server (ours is 17);
+  create a `powersync_storage_user` and let the service create the `powersync` schema (or
+  create it manually and grant usage). `storage: { type: postgresql, uri, sslmode: disable }`.
+  Postgres storage does not support storage version 4; the default is version 2, which is
+  fine for our scale.
+- **Client auth:** point `client_auth.jwks_uri` at the API's `/.well-known/jwks.json`. In
+  Docker, the API runs on the host, so use `http://host.docker.internal:4000/...` and add
+  `extra_hosts: ["host.docker.internal:host-gateway"]` on Linux. `audience` must include the
+  instance URL clients use (`http://localhost:8080` for dev). `api.tokens` holds
+  `PS_ADMIN_TOKEN` for CLI access.
+- **Sync config:** `sync_config.path: sync-config.yaml` with the file mounted next to
+  `service.yaml`. The CLI (`powersync validate`, `powersync docker start`) can scaffold and
+  manage the stack, but a committed compose file is preferable so `bun run sync:up` is
+  reproducible in CI. `powersync deploy`/Cloud commands are not part of the dev loop.
+- **Health:** enable `healthcheck.probes.use_http: true` and gate the E2E on the health
+  endpoint; also confirm replication is healthy before running sync assertions.
+- **Production note:** the same `sync-config.yaml` and `service.yaml` shape apply to a VPS
+  self-hosted deployment or PowerSync Cloud. `.planning/PROJECT.md` records self-hosted
+  Docker as the development default and leaves the staging/production target open for
+  Phase 9 (operator decision).
+
+## 5. Bun workspace packaging
 
 - Bun 1.3.14 is installed. Bun's `installConfig.hoistingLimits: "workspaces"` (the Yarn
   key) or root `workspaces.selfContained: ["desktop"]` makes that workspace a hoisting
@@ -126,7 +166,7 @@ device/enrollment schema, shared tax engine).
   etc.). Native modules (`@maxxuxx/node-printer`) must be in `dependencies` and unpacked
   from asar (`plugin-auto-unpack-natives`).
 
-## 5. Receipt printing and cash drawer
+## 6. Receipt printing and cash drawer
 
 - **Requirement:** 80 mm ESC/POS, silent (no OS dialog), cash drawer kick on cash tender,
   reprint, works offline.
@@ -156,7 +196,7 @@ device/enrollment schema, shared tax engine).
   covers a real Windows terminal, printer, scanner, and drawer; automated verification
   asserts the byte stream/commands through the fake adapter and a transport spy.
 
-## 6. Offline PIN and Electron crypto
+## 7. Offline PIN and Electron crypto
 
 - `@node-rs/argon2` 2.2.2 is an N-API package with prebuilt binaries and runs in the
   Electron main process (no Electron rebuild needed for N-API). The API's existing
@@ -179,7 +219,7 @@ device/enrollment schema, shared tax engine).
   the possession factor. 4–6 digits are acceptable only with device binding + lockout +
   rate limiting, which is exactly the design.
 
-## 7. Shared cart math (client/server parity)
+## 8. Shared cart math (client/server parity)
 
 - The existing `@gikautos/shared` tax engine is integer-only and guarantees
   `base + VAT + NHIL + GETFund = total` per line, with the rounding residual in VAT for
@@ -200,7 +240,7 @@ device/enrollment schema, shared tax engine).
   > 1, and a one-pesewa allocation residual. The invariant is
   `Σ line.total === cart.total` and each line's components sum exactly.
 
-## 8. Local schema and pending deltas
+## 9. Local schema and pending deltas
 
 - Synced tables cannot be written locally without entering PowerSync's CRUD queue, so the
   POS never writes `stock_level`, `credit_profile`, or `loyalty_account`. Instead:
@@ -223,7 +263,7 @@ device/enrollment schema, shared tax engine).
 - `document_sequence` is local-only: `(terminal_id, scope, day, last_value)` for receipt
   and shift numbers; allocate inside the sale transaction with `UPDATE ... RETURNING`.
 
-## 9. Sync/upload design consequences
+## 10. Sync/upload design consequences
 
 - Because the POS uses local-only tables, PowerSync never calls `uploadData`. The connector
   implements only `fetchCredentials`; the PowerSync token endpoint is the single auth
@@ -239,7 +279,7 @@ device/enrollment schema, shared tax engine).
 - The server stores `pos_sync_transaction.result` jsonb so a replay after a lost response
   returns the original ids/conflicts instead of re-running side effects.
 
-## 10. What this means for the plans
+## 11. What this means for the plans
 
 - The riskiest unknowns are (a) PowerSync Web SDK + WASM workers inside an Electron 45
   `app://` renderer, and (b) Forge 8 packaging of a Bun workspace with native printer
