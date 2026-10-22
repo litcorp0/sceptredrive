@@ -109,6 +109,16 @@ describe('permissions', () => {
     expect(can('CASHIER', 'payable.void')).toBe(false)
   })
 
+  it('lets managers reset pins and approve discounts, never cashiers', () => {
+    expect(can('MANAGER', 'staff.pin.reset')).toBe(true)
+    expect(can('MANAGER', 'pos.discount')).toBe(true)
+    expect(can('ADMIN', 'staff.pin.reset')).toBe(true)
+    expect(can('ADMIN', 'pos.discount')).toBe(true)
+
+    expect(can('CASHIER', 'staff.pin.reset')).toBe(false)
+    expect(can('CASHIER', 'pos.discount')).toBe(false)
+  })
+
   it('has no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
