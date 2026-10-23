@@ -43,3 +43,31 @@ export function overLimitMinor(snapshot: CreditSnapshot, amountMinor: number): n
   const overBy = safe(amountMinor) - creditHeadroom(snapshot)
   return overBy > 0 ? overBy : 0
 }
+
+export type CreditDecision = 'OK' | 'OVER_LIMIT' | 'HOLD' | 'NO_PROFILE' | 'NO_CUSTOMER'
+
+/**
+ * What the terminal can do for this cart without asking a manager.
+ *
+ * A missing profile is not "denied": the server bootstraps one on the first
+ * charge, so an over-limit approval is legitimate — the office has simply not
+ * set a limit yet.
+ */
+export function creditDecision(input: {
+  hasCustomer: boolean
+  snapshot: CreditSnapshot
+  amountMinor: number
+}): CreditDecision {
+  if (!input.hasCustomer) return 'NO_CUSTOMER'
+  if (input.snapshot.hold) return 'HOLD'
+  if (!input.snapshot.hasProfile) return 'NO_PROFILE'
+  return safe(input.amountMinor) > creditHeadroom(input.snapshot) ? 'OVER_LIMIT' : 'OK'
+}
+
+export const CREDIT_DECISION_MESSAGES: Record<CreditDecision, string> = {
+  OK: 'Within the credit limit',
+  OVER_LIMIT: 'Over the credit limit',
+  HOLD: 'Account is on hold',
+  NO_PROFILE: 'No credit account at this branch yet',
+  NO_CUSTOMER: 'Choose a customer to sell on credit',
+}

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from '../../components/pos/app-header'
 import { CartLineRow } from '../../components/pos/cart-line'
 import { CartTotalsPanel } from '../../components/pos/cart-totals'
+import { CreditPanel } from '../../components/pos/credit-panel'
 import { CustomerCreateDialog } from '../../components/pos/customer-create-dialog'
 import { CustomerDialog } from '../../components/pos/customer-dialog'
 import { CustomerPanel } from '../../components/pos/customer-panel'
 import { LoyaltyPanel } from '../../components/pos/loyalty-panel'
 import { LoyaltyRedeemDialog } from '../../components/pos/loyalty-redeem-dialog'
+import { ManagerOverrideDialog } from '../../components/pos/manager-override-dialog'
 import { Modal } from '../../components/pos/modal'
 import { ProductSearch } from '../../components/pos/product-search'
 import { ScanListener } from '../../components/pos/scan-listener'
@@ -15,9 +17,11 @@ import { endStaffSession, type StaffSession } from '../../lib/auth/staff-session
 import { useCart } from '../../lib/cart/cart-store'
 import { computeCartTotals } from '../../lib/cart/totals'
 import { lookupScannedProduct } from '../../lib/catalog/resolve'
+import { overLimitMinor } from '../../lib/credit/headroom'
 import { useCustomerContext } from '../../lib/customers/context'
 import type { CustomerHit } from '../../lib/customers/search'
 import { formatGhs } from '../../lib/format'
+import { lockoutPolicyFor } from '../../lib/pos-config'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosDatabase } from '../../lib/powersync/provider'
 import { navigate } from '../../lib/router'
@@ -55,9 +59,11 @@ export function SellScreen({
   const [showCustomer, setShowCustomer] = useState(false)
   const [showCreateCustomer, setShowCreateCustomer] = useState(false)
   const [showLoyalty, setShowLoyalty] = useState(false)
+  const [showCreditOverride, setShowCreditOverride] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const dialogOpen = confirmClear || showCustomer || showCreateCustomer || showLoyalty
+  const dialogOpen =
+    confirmClear || showCustomer || showCreateCustomer || showLoyalty || showCreditOverride
 
   function applyCustomer(hit: CustomerHit) {
     if (!hit.customerId && !hit.draftId) {
@@ -298,9 +304,14 @@ export function SellScreen({
               onRedeem={() => setShowLoyalty(true)}
               onClear={() => dispatch({ type: 'setLoyaltyRedeem', points: 0 })}
             />
-            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-              Credit
-            </div>
+            <CreditPanel
+              customer={state.customer}
+              credit={customerContext.credit}
+              totalMinor={totals.priced.totalMinor}
+              override={state.creditOverride}
+              onRequestApproval={() => setShowCreditOverride(true)}
+              onClearApproval={() => dispatch({ type: 'setCreditOverride', override: null })}
+            />
           </div>
         </aside>
       </main>
@@ -343,6 +354,25 @@ export function SellScreen({
           }}
           onClose={() => setShowLoyalty(false)}
           onConfirm={(points) => dispatch({ type: 'setLoyaltyRedeem', points })}
+        />
+      ) : null}
+
+      {showCreditOverride ? (
+        <ManagerOverrideDialog
+          title="Credit approval"
+          description="A manager approves selling on credit beyond the limit or on a held account."
+          permission="credit.override"
+          amountMinor={totals.priced.totalMinor}
+          overByMinor={overLimitMinor(customerContext.credit, totals.priced.totalMinor)}
+          policy={lockoutPolicyFor(config)}
+          onClose={() => setShowCreditOverride(false)}
+          onApproved={(proof) => dispatch({ type: 'setCreditOverride', override: proof })}
+          onBypass={() => {
+            dispatch({ type: 'setCreditOverride', override: null })
+            setNotice(
+              'Continuing without approval — the server will record the over-limit conflict.',
+            )
+          }}
         />
       ) : null}
 

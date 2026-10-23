@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { creditHeadroom, creditUsed, EMPTY_CREDIT, overLimitMinor } from './headroom'
+import {
+  creditDecision,
+  creditHeadroom,
+  creditUsed,
+  EMPTY_CREDIT,
+  overLimitMinor,
+} from './headroom'
 
 describe('credit headroom', () => {
   it('is limit minus balance minus pending charges', () => {
@@ -78,5 +84,40 @@ describe('credit headroom', () => {
         hold: false,
       }),
     ).toBe(-100)
+  })
+})
+
+describe('creditDecision', () => {
+  const profile = {
+    hasProfile: true,
+    limitMinor: 50_000,
+    balanceMinor: 10_000,
+    pendingMinor: 0,
+    hold: false,
+  }
+
+  it('needs a customer', () => {
+    expect(creditDecision({ hasCustomer: false, snapshot: profile, amountMinor: 100 })).toBe(
+      'NO_CUSTOMER',
+    )
+  })
+
+  it('blocks a held account even when the amount fits', () => {
+    expect(
+      creditDecision({ hasCustomer: true, snapshot: { ...profile, hold: true }, amountMinor: 100 }),
+    ).toBe('HOLD')
+  })
+
+  it('reports a missing profile separately from an over-limit charge', () => {
+    expect(creditDecision({ hasCustomer: true, snapshot: EMPTY_CREDIT, amountMinor: 100 })).toBe(
+      'NO_PROFILE',
+    )
+  })
+
+  it('allows a charge at or under the headroom', () => {
+    expect(creditDecision({ hasCustomer: true, snapshot: profile, amountMinor: 40_000 })).toBe('OK')
+    expect(creditDecision({ hasCustomer: true, snapshot: profile, amountMinor: 40_001 })).toBe(
+      'OVER_LIMIT',
+    )
   })
 })
