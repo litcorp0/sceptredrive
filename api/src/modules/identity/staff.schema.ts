@@ -22,6 +22,8 @@ export const user = pgTable('user', {
   mustChangePassword: boolean('must_change_password').default(false).notNull(),
   pinHash: text('pin_hash'),
   pinVersion: integer('pin_version').default(0).notNull(),
+  /** A manager set a temporary PIN; the cashier must change it at the POS. */
+  pinMustChange: boolean('pin_must_change').default(false).notNull(),
 })
 
 export const session = pgTable(

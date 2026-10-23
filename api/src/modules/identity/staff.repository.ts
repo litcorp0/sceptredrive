@@ -1,10 +1,15 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import type { Role } from '@gikautos/shared'
-import { and, asc, count, eq, or, type SQL, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gt, isNull, or, type SQL, sql } from 'drizzle-orm'
+import { posStaffBinding } from '../pos/pos.schema.ts'
 import { account, user as userTable } from './staff.schema.ts'
-import type { StaffRow } from './staff.types.ts'
+import type { StaffPinState, StaffRow } from './staff.types.ts'
 
-/** Staff profile projection; never selects credential or PIN columns. */
+/**
+ * Staff profile projection. Includes PIN *metadata* (version, must-change) so
+ * the console can render a badge, but never the hash: that column is only read
+ * by the PIN verification path.
+ */
 export const staffColumns = {
   id: userTable.id,
   name: userTable.name,
@@ -16,6 +21,8 @@ export const staffColumns = {
   isActive: userTable.isActive,
   mustChangePassword: userTable.mustChangePassword,
   twoFactorEnabled: userTable.twoFactorEnabled,
+  pinVersion: userTable.pinVersion,
+  pinMustChange: userTable.pinMustChange,
   createdAt: userTable.createdAt,
   updatedAt: userTable.updatedAt,
 }
@@ -154,4 +161,87 @@ export async function updateCredentialPassword(
     .update(account)
     .set({ password: passwordHash })
     .where(and(eq(account.userId, userId), eq(account.providerId, 'credential')))
+}
+
+/**
+ * Stores a manager-set temporary PIN and bumps its version in one statement, so
+ * every terminal holding the previous version fails closed.
+ */
+export async function updateStaffPin(
+  userId: string,
+  pinHash: string,
+  executor: DbExecutor = db,
+): Promise<{ pinVersion: number } | null> {
+  const rows = await executor
+    .update(userTable)
+    .set({
+      pinHash,
+      pinMustChange: true,
+      pinVersion: sql`${userTable.pinVersion} + 1`,
+    })
+    .where(eq(userTable.id, userId))
+    .returning({ pinVersion: userTable.pinVersion })
+  return rows[0] ?? null
+}
+
+/** Invalidates every existing PIN binding without touching the hash. */
+export async function bumpStaffPinVersion(
+  userId: string,
+  executor: DbExecutor = db,
+): Promise<number | null> {
+  const rows = await executor
+    .update(userTable)
+    .set({ pinVersion: sql`${userTable.pinVersion} + 1` })
+    .where(eq(userTable.id, userId))
+    .returning({ pinVersion: userTable.pinVersion })
+  return rows[0]?.pinVersion ?? null
+}
+
+/** Revokes every live terminal binding for a staff member; returns how many. */
+export async function revokeStaffBindings(
+  staffUserId: string,
+  revokedBy: string | null,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .update(posStaffBinding)
+    .set({ revokedAt: new Date(), revokedBy })
+    .where(and(eq(posStaffBinding.staffUserId, staffUserId), isNull(posStaffBinding.revokedAt)))
+    .returning({ id: posStaffBinding.id })
+  return rows.length
+}
+
+export async function selectStaffPinState(
+  userId: string,
+  executor: DbExecutor = db,
+): Promise<StaffPinState | null> {
+  const rows = await executor
+    .select({
+      hasPin: sql<boolean>`${userTable.pinHash} is not null`,
+      pinVersion: userTable.pinVersion,
+      pinMustChange: userTable.pinMustChange,
+    })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .limit(1)
+  const row = rows[0]
+  if (!row) return null
+
+  const bindings = await executor
+    .select({ value: count() })
+    .from(posStaffBinding)
+    .where(
+      and(
+        eq(posStaffBinding.staffUserId, userId),
+        isNull(posStaffBinding.revokedAt),
+        gt(posStaffBinding.expiresAt, new Date()),
+      ),
+    )
+
+  return {
+    hasPin: Boolean(row.hasPin),
+    pinVersion: row.pinVersion,
+    pinMustChange: row.pinMustChange,
+    activeBindings: bindings[0]?.value ?? 0,
+  }
 }

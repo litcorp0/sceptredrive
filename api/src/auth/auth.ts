@@ -102,6 +102,7 @@ export const auth = betterAuth({
         input: false,
         returned: false,
       },
+      pinMustChange: { type: 'boolean', required: false, defaultValue: false, input: false },
     },
   },
   databaseHooks: authDatabaseHooks,

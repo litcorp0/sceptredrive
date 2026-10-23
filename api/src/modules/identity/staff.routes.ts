@@ -4,6 +4,7 @@ import { requireFreshSession, requireSession } from '../../http/session.ts'
 import * as staffController from './staff.controller.ts'
 import {
   validateChangePassword,
+  validateSetStaffPin,
   validateStaffCreate,
   validateStaffIdParam,
   validateStaffListQuery,
@@ -52,6 +53,23 @@ staffRoutes.post(
   requirePermission('staff.reset-password'),
   validateStaffIdParam,
   (c) => staffController.resetStaffPassword(c, c.req.valid('param').id),
+)
+
+staffRoutes.post(
+  '/api/staff/:id/pin',
+  requireSession,
+  requirePermission('staff.pin.reset'),
+  validateStaffIdParam,
+  validateSetStaffPin,
+  (c) => staffController.setStaffPin(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+staffRoutes.get(
+  '/api/staff/:id/pin-status',
+  requireSession,
+  requirePermission('staff.read'),
+  validateStaffIdParam,
+  (c) => staffController.getStaffPinState(c, c.req.valid('param').id),
 )
 
 staffRoutes.post(

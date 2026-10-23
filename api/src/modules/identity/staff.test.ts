@@ -11,8 +11,11 @@ import {
   TEST_PASSWORD,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
+import { verifyPassword } from '../../auth/password.ts'
 import { branch } from '../org/branches.schema.ts'
+import { device, terminal } from '../org/terminals.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
+import { posStaffBinding } from '../pos/pos.schema.ts'
 import { session, user as userTable } from './staff.schema.ts'
 
 const available = await databaseAvailable()
@@ -27,6 +30,8 @@ interface StaffRecord {
   staffId: string | null
   isActive: boolean
   mustChangePassword: boolean
+  pinVersion: number
+  pinMustChange: boolean
 }
 
 interface StaffResponse {
@@ -45,6 +50,8 @@ async function readJson<T>(response: Response): Promise<T> {
 describe.skipIf(!available)('staff management API', () => {
   const createdUserIds: string[] = []
   const createdBranchIds: string[] = []
+  const createdTerminalIds: string[] = []
+  const createdDeviceIds: string[] = []
   let adminCookie = ''
   let managerCookie = ''
   let adminId = ''
@@ -104,6 +111,13 @@ describe.skipIf(!available)('staff management API', () => {
 
   afterAll(async () => {
     for (const id of createdUserIds) await deleteTestUser(id)
+    if (createdDeviceIds.length > 0) {
+      await db.delete(posStaffBinding).where(inArray(posStaffBinding.deviceId, createdDeviceIds))
+      await db.delete(device).where(inArray(device.id, createdDeviceIds))
+    }
+    if (createdTerminalIds.length > 0) {
+      await db.delete(terminal).where(inArray(terminal.id, createdTerminalIds))
+    }
     if (createdBranchIds.length > 0) {
       await db.delete(branch).where(inArray(branch.id, createdBranchIds))
     }
@@ -313,6 +327,233 @@ describe.skipIf(!available)('staff management API', () => {
     expect(after.status).toBe(200)
 
     await deleteTestUser(id)
+  })
+
+  it('lets a manager set a temporary cashier PIN and revokes live bindings', async () => {
+    const cashierRows = await db
+      .select({ staffId: userTable.staffId })
+      .from(userTable)
+      .where(eq(userTable.id, cashierId))
+    const cashierStaffId = cashierRows[0]?.staffId ?? ''
+    expect(cashierStaffId).toMatch(/^GA-\d{4}$/)
+
+    // A real terminal + device so the revocation has something to revoke.
+    const terminalResponse = await app.request('/api/terminals', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, name: 'PIN Counter' }),
+    })
+    expect(terminalResponse.status).toBe(201)
+    const terminalId = (await readJson<{ terminal: { id: string } }>(terminalResponse)).terminal.id
+    createdTerminalIds.push(terminalId)
+
+    const deviceRow = await db
+      .insert(device)
+      .values({
+        terminalId,
+        fingerprint: 'pin-suite',
+        tokenHash: randomToken(32),
+        status: 'ACTIVE',
+        enrolledAt: new Date(),
+      })
+      .returning()
+    const deviceId = deviceRow[0]?.id ?? ''
+    createdDeviceIds.push(deviceId)
+
+    const bindingRow = await db
+      .insert(posStaffBinding)
+      .values({
+        deviceId,
+        staffUserId: cashierId,
+        staffStaffId: cashierStaffId,
+        role: 'CASHIER',
+        branchId: branchAId,
+        pinVersion: 0,
+        bindingTokenHash: randomToken(32),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+      .returning()
+    const bindingId = bindingRow[0]?.id ?? ''
+
+    const response = await app.request(`/api/staff/${cashierId}/pin`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ pin: '2468' }),
+    })
+
+    expect(response.status).toBe(201)
+    const body = await readJson<{ staffId: string; pinVersion: number }>(response)
+    expect(body.staffId).toBe(cashierStaffId)
+    expect(body.pinVersion).toBe(1)
+    expect(JSON.stringify(body)).not.toMatch(/pinHash|pin_hash|2468/)
+
+    const rows = await db
+      .select({
+        pinHash: userTable.pinHash,
+        pinVersion: userTable.pinVersion,
+        pinMustChange: userTable.pinMustChange,
+      })
+      .from(userTable)
+      .where(eq(userTable.id, cashierId))
+    expect(rows[0]?.pinVersion).toBe(1)
+    expect(rows[0]?.pinMustChange).toBe(true)
+    expect(rows[0]?.pinHash).toMatch(/^\$argon2id\$/)
+    expect(await verifyPassword({ hash: rows[0]?.pinHash ?? '', password: '2468' })).toBe(true)
+
+    const bindings = await db
+      .select({ revokedAt: posStaffBinding.revokedAt })
+      .from(posStaffBinding)
+      .where(eq(posStaffBinding.id, bindingId))
+    expect(bindings[0]?.revokedAt).not.toBeNull()
+
+    const auditRows = await db
+      .select({ after: auditLog.after })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.entity, 'user'),
+          eq(auditLog.entityId, cashierId),
+          eq(auditLog.action, 'staff.pin.reset'),
+        ),
+      )
+    expect(auditRows).toHaveLength(1)
+    expect(JSON.stringify(auditRows[0]?.after)).not.toContain('2468')
+  })
+
+  it('enforces PIN reset scope and the PIN policy', async () => {
+    const otherBranch = await createStaffViaApi(adminCookie, {
+      email: `pin-branch-b-${suffix}@gikautos.test`,
+      name: 'Branch B Cashier',
+      role: 'CASHIER',
+      branchId: branchBId,
+    })
+    expect(otherBranch.status).toBe(201)
+    const otherId = otherBranch.body.staff.id
+
+    const crossBranch = await app.request(`/api/staff/${otherId}/pin`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ pin: '2468' }),
+    })
+    expect(crossBranch.status).toBe(403)
+
+    const cashierCookie = await signIn(cashierEmail, 'fresh-password-456')
+    const cashierAttempt = await app.request(`/api/staff/${cashierId}/pin`, {
+      method: 'POST',
+      headers: authedHeaders(cashierCookie),
+      body: JSON.stringify({ pin: '2468' }),
+    })
+    expect(cashierAttempt.status).toBe(403)
+
+    for (const pin of ['123', '1234567', 'abcd', '0000', '1234', '987654']) {
+      const invalid = await app.request(`/api/staff/${cashierId}/pin`, {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ pin }),
+      })
+      expect(invalid.status, `PIN ${pin} should be rejected`).toBe(400)
+    }
+  })
+
+  it('bumps the PIN version and revokes bindings when a role changes', async () => {
+    const created = await createStaffViaApi(adminCookie, {
+      email: `pin-role-${suffix}@gikautos.test`,
+      name: 'PIN Role Change',
+      role: 'CASHIER',
+      branchId: branchAId,
+    })
+    const id = created.body.staff.id
+    const staffId = created.body.staff.staffId ?? ''
+
+    const setPin = await app.request(`/api/staff/${id}/pin`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ pin: '246813' }),
+    })
+    expect(setPin.status).toBe(201)
+
+    const terminalResponse = await app.request('/api/terminals', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, name: 'Role Change Counter' }),
+    })
+    const terminalId = (await readJson<{ terminal: { id: string } }>(terminalResponse)).terminal.id
+    createdTerminalIds.push(terminalId)
+
+    const deviceRow = await db
+      .insert(device)
+      .values({
+        terminalId,
+        fingerprint: 'pin-role-suite',
+        tokenHash: randomToken(32),
+        status: 'ACTIVE',
+        enrolledAt: new Date(),
+      })
+      .returning()
+    const deviceId = deviceRow[0]?.id ?? ''
+    createdDeviceIds.push(deviceId)
+
+    const bindingRow = await db
+      .insert(posStaffBinding)
+      .values({
+        deviceId,
+        staffUserId: id,
+        staffStaffId: staffId,
+        role: 'CASHIER',
+        branchId: branchAId,
+        pinVersion: 1,
+        bindingTokenHash: randomToken(32),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+      .returning()
+
+    const change = await app.request(`/api/staff/${id}`, {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ role: 'MANAGER' }),
+    })
+    expect(change.status).toBe(200)
+
+    const rows = await db
+      .select({ pinVersion: userTable.pinVersion })
+      .from(userTable)
+      .where(eq(userTable.id, id))
+    expect(rows[0]?.pinVersion).toBe(2)
+
+    const bindings = await db
+      .select({ revokedAt: posStaffBinding.revokedAt })
+      .from(posStaffBinding)
+      .where(eq(posStaffBinding.id, bindingRow[0]?.id ?? ''))
+    expect(bindings[0]?.revokedAt).not.toBeNull()
+  })
+
+  it('reports PIN metadata without ever returning the hash', async () => {
+    const response = await app.request(`/api/staff/${cashierId}/pin-status`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(response.status).toBe(200)
+
+    const body = await readJson<{
+      hasPin: boolean
+      pinVersion: number
+      pinMustChange: boolean
+      activeBindings: number
+    }>(response)
+    expect(body).toEqual({
+      hasPin: true,
+      pinVersion: 1,
+      pinMustChange: true,
+      activeBindings: 0,
+    })
+    expect(JSON.stringify(body)).not.toMatch(/pinHash|pin_hash|argon2/i)
+
+    const list = await app.request('/api/staff?role=CASHIER&includeInactive=true', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(list.status).toBe(200)
+    const listBody = await readJson<{ staff: StaffRecord[] }>(list)
+    expect(listBody.staff.every((row) => 'pinVersion' in row && 'pinMustChange' in row)).toBe(true)
+    expect(JSON.stringify(listBody)).not.toMatch(/pinHash|pin_hash|argon2/i)
   })
 
   it('deactivates and reactivates staff, blocking sign-in while inactive', async () => {

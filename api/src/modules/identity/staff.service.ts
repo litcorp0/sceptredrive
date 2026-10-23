@@ -16,6 +16,7 @@ import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { allocateStaffId } from '../platform/settings.service.ts'
 import {
+  bumpStaffPinVersion,
   countOtherActiveAdmins,
   countStaffRows,
   deleteUserRow,
@@ -23,8 +24,11 @@ import {
   findStaffById,
   findUserById,
   findUserIdByEmail,
+  revokeStaffBindings,
   selectStaffPage,
+  selectStaffPinState,
   updateCredentialPassword,
+  updateStaffPin,
   updateUserRow,
 } from './staff.repository.ts'
 import type {
@@ -34,6 +38,8 @@ import type {
   InvitationData,
   ListStaffFilters,
   ResetPasswordResult,
+  SetPinResult,
+  StaffPinState,
   StaffRow,
   UpdateStaffInput,
 } from './staff.types.ts'
@@ -89,6 +95,18 @@ async function assertNotLastAdmin(
   const others = await countOtherActiveAdmins(excludeUserId, executor)
   if (others === 0) {
     throw new ConflictError('The last active admin cannot be removed or demoted')
+  }
+}
+
+/** A manager may only reset PINs for cashiers, mirroring the password rule. */
+function assertCanManagePin(
+  actorUser: SessionUser,
+  target: { branchId: string | null; role: string },
+): void {
+  if (roleOf(actorUser) === 'ADMIN') return
+  assertBranchAccess(actorUser, target.branchId ?? '')
+  if (target.role !== 'CASHIER') {
+    throw new ForbiddenError('Managers can only reset cashier PINs')
   }
 }
 
@@ -246,6 +264,14 @@ export async function updateStaff(
     )
     if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update staff member')
 
+    // A role or branch change alters what a cached terminal binding is allowed
+    // to do, so every binding is revoked and terminals must re-authorize.
+    const identityChanged = nextRole !== target.role || nextBranchId !== target.branchId
+    if (identityChanged) {
+      await bumpStaffPinVersion(id, tx)
+      await revokeStaffBindings(id, actor.actorStaffId ?? actor.actorId, tx)
+    }
+
     await writeAudit(
       {
         ...actor,
@@ -310,6 +336,10 @@ export async function setStaffActive(
 
     if (!isActive) {
       await revokeUserSessions(target.id, {}, tx)
+      // Deactivation keeps the hash (reactivation must not need a new PIN) but
+      // invalidates every terminal binding and every cached PIN version.
+      await bumpStaffPinVersion(target.id, tx)
+      await revokeStaffBindings(target.id, actor.actorStaffId ?? actor.actorId, tx)
     }
 
     await writeAudit(
@@ -373,6 +403,73 @@ export async function resetStaffPassword(
   })
 
   return { temporaryPassword, invitationSent }
+}
+
+/**
+ * Sets a temporary PIN chosen by an admin/manager. The PIN is hashed with the
+ * same Argon2id profile as passwords; the version bump plus binding revocation
+ * forces every terminal that cached the previous PIN to re-authorize online.
+ */
+export async function setStaffPin(
+  actorUser: SessionUser,
+  actor: AuditActor,
+  id: string,
+  pin: string,
+): Promise<SetPinResult> {
+  const pinHash = await hashPassword(pin)
+
+  return db.transaction(async (tx) => {
+    const target = await findUserById(id, tx)
+    if (!target) throw new NotFoundError('Staff member not found')
+
+    assertCanManagePin(actorUser, target)
+
+    if (!target.isActive) {
+      throw new ConflictError('Cannot set a PIN for a deactivated staff member')
+    }
+    if (!target.staffId) {
+      throw new ConflictError('This account has no staff ID and cannot use a POS terminal')
+    }
+
+    const updated = await updateStaffPin(id, pinHash, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to set the staff PIN')
+
+    const revoked = await revokeStaffBindings(target.id, actor.actorStaffId ?? actor.actorId, tx)
+
+    // Never audit the PIN or its hash: only the version and binding count.
+    await writeAudit(
+      {
+        ...actor,
+        action: 'staff.pin.reset',
+        entity: 'user',
+        entityId: target.id,
+        after: {
+          staffId: target.staffId,
+          pinVersion: updated.pinVersion,
+          revokedBindings: revoked,
+          pinMustChange: true,
+        },
+        branchId: target.branchId,
+      },
+      tx,
+    )
+
+    return { staffId: target.staffId, pinVersion: updated.pinVersion }
+  })
+}
+
+/** PIN metadata for the console badge and dialog; never returns the hash. */
+export async function getStaffPinState(actorUser: SessionUser, id: string): Promise<StaffPinState> {
+  const target = await findUserById(id)
+  if (!target) throw new NotFoundError('Staff member not found')
+
+  if (roleOf(actorUser) !== 'ADMIN') {
+    assertBranchAccess(actorUser, target.branchId ?? '')
+  }
+
+  const state = await selectStaffPinState(target.id)
+  if (!state) throw new NotFoundError('Staff member not found')
+  return state
 }
 
 export async function changeOwnPassword(

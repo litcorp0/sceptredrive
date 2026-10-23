@@ -1,4 +1,4 @@
-import { ROLES } from '@gikautos/shared'
+import { PIN_PROBLEM_MESSAGES, pinProblem, ROLES } from '@gikautos/shared'
 import { z } from 'zod'
 import { validateJson, validateParam, validateQuery } from '../../http/validation.ts'
 
@@ -51,8 +51,22 @@ export const changePasswordSchema = z
   })
   .strict()
 
+/** A manager-chosen PIN. Shape and triviality are checked before hashing. */
+export const setStaffPinSchema = z
+  .object({
+    pin: z
+      .string()
+      .max(16)
+      .superRefine((pin, ctx) => {
+        const problem = pinProblem(pin)
+        if (problem) ctx.addIssue({ code: 'custom', message: PIN_PROBLEM_MESSAGES[problem] })
+      }),
+  })
+  .strict()
+
 export const validateStaffCreate = validateJson(createStaffSchema)
 export const validateStaffUpdate = validateJson(updateStaffSchema)
 export const validateStaffListQuery = validateQuery(staffListQuerySchema)
 export const validateStaffIdParam = validateParam(staffIdParamSchema)
 export const validateChangePassword = validateJson(changePasswordSchema)
+export const validateSetStaffPin = validateJson(setStaffPinSchema)

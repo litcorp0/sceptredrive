@@ -4,6 +4,7 @@ import type { user as userTable } from './staff.schema.ts'
 import type {
   changePasswordSchema,
   createStaffSchema,
+  setStaffPinSchema,
   staffIdParamSchema,
   staffListQuerySchema,
   updateStaffSchema,
@@ -11,7 +12,7 @@ import type {
 
 type UserSelect = typeof userTable.$inferSelect
 
-/** Staff profile projection; never includes credential or PIN columns. */
+/** Staff profile projection; never includes credential columns or the PIN hash. */
 export type StaffRow = Pick<
   UserSelect,
   | 'id'
@@ -24,15 +25,26 @@ export type StaffRow = Pick<
   | 'isActive'
   | 'mustChangePassword'
   | 'twoFactorEnabled'
+  | 'pinVersion'
+  | 'pinMustChange'
   | 'createdAt'
   | 'updatedAt'
 >
+
+/** PIN metadata for the console; `activeBindings` counts live terminal bindings. */
+export interface StaffPinState {
+  hasPin: boolean
+  pinVersion: number
+  pinMustChange: boolean
+  activeBindings: number
+}
 
 export type StaffIdParams = z.infer<typeof staffIdParamSchema>
 export type StaffCreateBody = z.infer<typeof createStaffSchema>
 export type StaffUpdateBody = z.infer<typeof updateStaffSchema>
 export type StaffListQuery = z.infer<typeof staffListQuerySchema>
 export type ChangePasswordBody = z.infer<typeof changePasswordSchema>
+export type SetStaffPinBody = z.infer<typeof setStaffPinSchema>
 
 export interface CreateStaffInput {
   email: string
@@ -67,6 +79,12 @@ export interface UpdateStaffInput {
 export interface ResetPasswordResult {
   temporaryPassword: string
   invitationSent: boolean
+}
+
+/** The PIN itself is never echoed: only the version the terminal must adopt. */
+export interface SetPinResult {
+  staffId: string
+  pinVersion: number
 }
 
 export interface ChangeOwnPasswordInput {

@@ -6,6 +6,7 @@ import type { AppEnv } from '../../http/factory.ts'
 import * as staffService from './staff.service.ts'
 import type {
   ChangePasswordBody,
+  SetStaffPinBody,
   StaffCreateBody,
   StaffListQuery,
   StaffUpdateBody,
@@ -49,6 +50,19 @@ export async function resetStaffPassword(c: Context<AppEnv>, id: string) {
   const actor = actorFromContext(c)
   const result = await staffService.resetStaffPassword(user, actor, id)
   return c.json(result)
+}
+
+export async function setStaffPin(c: Context<AppEnv>, id: string, body: SetStaffPinBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await staffService.setStaffPin(user, actor, id, body.pin)
+  return c.json(result, 201)
+}
+
+export async function getStaffPinState(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const state = await staffService.getStaffPinState(user, id)
+  return c.json(state)
 }
 
 export async function deactivateStaff(c: Context<AppEnv>, id: string) {
