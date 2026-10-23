@@ -5,8 +5,8 @@ renderer is served from `app://gikautos` behind a strict CSP with no Node access
 process owns the OS keychain, PIN hashing, and the ESC/POS printer adapter.
 
 > Phase 6 status: shell, security baseline, keychain, PowerSync sync, offline PIN/shift,
-> selling, sale completion, receipts, ESC/POS printing and the cash drawer are in place.
-> The outbox uploader and phase verification are Plans 08–09.
+> selling, sale completion, receipts, ESC/POS printing, the cash drawer, and the durable
+> outbox with sync/conflict status are in place. Phase verification is Plan 09.
 
 ## Commands
 
@@ -22,6 +22,7 @@ Run from the repository root unless noted.
 | `bun run --filter desktop test:spike` | PowerSync gate: both VFS backends + restart persistence |
 | `bun run --filter desktop test:print` | Packaged receipt + drawer through the fake ESC/POS adapter |
 | `bun run --filter desktop test:sync` | Device sync smoke (needs the API + PowerSync service) |
+| `bun .planning/phases/06-pos-offline-core/evidence/verify-outbox.ts` | Outbox recovery simulation (real SQLite, scripted server) |
 
 `make:pos` on Linux needs the `zip` binary (MakerZIP shells out to it); CI images have it,
 minimal distros may not.
@@ -75,6 +76,20 @@ offered as Retry. It never rolls the sale back and never blocks the next sale. T
 drawer kicks only with a cash tender, after the sale has committed. `#dev/print` is the
 hardware-neutral diagnostic used by `test:print`; the Windows human checklist lives in
 `.planning/phases/06-pos-offline-core/evidence/printing.md`.
+
+## Sync and the outbox
+
+PowerSync is **download-only**; every write goes through the durable `outbox` and
+`POST /api/pos/sync/upload`, one server transaction per item. The uploader drains strict
+FIFO, resets `in_flight` rows after a crash (server replay is safe), pauses on 401/403,
+honours `Retry-After`, and backs off exponentially on 5xx/network errors. A rejected
+transaction is dead-lettered without blocking later rows.
+
+The header badge and `#pos/sync` show pending work, the last successful upload, the
+outbox, and conflicts cached locally. `navigator.onLine === false` skips scheduled drains,
+but the manual **Sync now** still tries (Chromium's `false` is a strong offline hint;
+`true` is not proof the API is reachable). Evidence:
+`.planning/phases/06-pos-offline-core/evidence/outbox-recovery.md`.
 
 ## Why `scripts/prepare-desktop.mjs` exists
 

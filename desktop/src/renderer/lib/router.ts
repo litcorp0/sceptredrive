@@ -9,9 +9,14 @@ import { useEffect, useState } from 'react'
  * - `#shift`         open and close the shift
  * - `#pos`           selling (catalog + cart)
  * - `#pos/tender`    payment choice and sale hand-off
- * - `#pos/settings`  terminal settings (manager only)
+ * - `#pos/receipt/:id` receipt preview, print status, reprint
+ * - `#pos/sales`     today's sales and older unprinted receipts
+ * - `#pos/sync`      upload status, outbox, and conflicts
+ * - `#pos/settings`  terminal + printer settings (manager only)
  * - `#dev/sync`      sync diagnostics
+ * - `#dev/print`     printer diagnostics (POS_DIAGNOSTICS=1)
  * - `#spike`         the PowerSync gate panel
+ * - otherwise        shell diagnostics (app info + keychain self-test)
  *
  * Keeping this in one pure function means navigation cannot drift from the
  * switch in `main.tsx`.

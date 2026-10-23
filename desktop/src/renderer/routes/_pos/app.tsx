@@ -8,6 +8,7 @@ import { ReceiptScreen } from './receipt'
 import { SalesScreen } from './sales'
 import { SellScreen } from './sell'
 import { SettingsScreen } from './settings'
+import { SyncScreen } from './sync'
 import { TenderScreen } from './tender'
 
 /**
@@ -55,7 +56,7 @@ function PosBoot() {
 
   // Receipts and today's sales must be reachable after the shift is closed, so
   // a manager can reprint yesterday evening's sale while opening the next one.
-  const shiftOptional = sub === 'sales' || sub === 'receipt'
+  const shiftOptional = sub === 'sales' || sub === 'receipt' || sub === 'sync'
   const needsShift =
     Boolean(runtime.config?.pos.salesRequireOpenShift) && !runtime.shift && !shiftOptional
 
@@ -100,6 +101,10 @@ function PosBoot() {
 
   if (sub === 'sales') {
     return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  if (sub === 'sync') {
+    return <SyncScreen identity={identity} shift={runtime.shift} staff={staff} />
   }
 
   if (sub === 'receipt') {

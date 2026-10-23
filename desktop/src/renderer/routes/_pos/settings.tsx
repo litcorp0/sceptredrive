@@ -160,12 +160,11 @@ export function SettingsScreen({
             </button>
             <button
               type="button"
-              onClick={() => {
-                window.location.hash = '#dev/sync'
-              }}
+              onClick={() => navigate('pos/sync')}
               className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="open-sync"
             >
-              Sync diagnostics
+              Sync status
             </button>
             <button
               type="button"

@@ -2,9 +2,8 @@ import { useQuery } from '@powersync/react'
 import type { StaffSession } from '../../lib/auth/staff-session'
 import { formatGhs } from '../../lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
-import { useSyncStatus } from '../../lib/powersync/status'
 import { navigate } from '../../lib/router'
-import { useOutboxSummary } from '../../lib/sync/outbox-summary'
+import { SyncBadge } from './sync-badge'
 
 /**
  * The POS top bar: where you are, who you are, whether the sale in front of you
@@ -29,8 +28,6 @@ export function AppHeader({
   onSettings?: (() => void) | undefined
   lockNote?: string | null
 }) {
-  const status = useSyncStatus()
-  const outbox = useOutboxSummary()
   const unprinted = useQuery<{ count: number }>(
     `SELECT COUNT(*) AS count FROM sale
       WHERE print_status IN ('PENDING', 'FAILED', 'PRINTING')`,
@@ -59,30 +56,7 @@ export function AppHeader({
 
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-xs" data-testid="sync-cluster">
-          <span
-            data-testid="pos-sync-badge"
-            className={`rounded-full px-2 py-1 font-medium ${
-              status.online ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'
-            }`}
-          >
-            {status.online ? 'Online' : 'Offline'}
-          </span>
-          {outbox.pending > 0 ? (
-            <span
-              data-testid="pending-count"
-              className="rounded-full bg-muted px-2 py-1 font-medium text-muted-foreground"
-            >
-              {outbox.pending} waiting
-            </span>
-          ) : null}
-          {outbox.failed > 0 ? (
-            <span
-              data-testid="failed-count"
-              className="rounded-full bg-red-50 px-2 py-1 font-medium text-red-700"
-            >
-              {outbox.failed} to review
-            </span>
-          ) : null}
+          <SyncBadge />
           {unprintedCount > 0 ? (
             <button
               type="button"
