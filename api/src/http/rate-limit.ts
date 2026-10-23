@@ -1,5 +1,6 @@
+import type { Context } from 'hono'
 import { AppError } from './errors.ts'
-import { factory } from './factory.ts'
+import { type AppEnv, factory } from './factory.ts'
 import { clientIpFromHeaders } from './request-meta.ts'
 
 interface Bucket {
@@ -11,6 +12,11 @@ export interface RateLimitOptions {
   windowMs: number
   max: number
   keyPrefix?: string
+  /**
+   * Bucket key override. Device-authenticated endpoints bucket per device (all
+   * terminals behind one shop NAT share an IP); the default is the client IP.
+   */
+  keyForRequest?: (c: Context<AppEnv>) => string | null
 }
 
 /**
@@ -23,8 +29,9 @@ export function rateLimit(options: RateLimitOptions) {
   const buckets = new Map<string, Bucket>()
 
   return factory.createMiddleware(async (c, next) => {
-    const ip = clientIpFromHeaders(c.req.raw.headers) ?? 'unknown'
-    const key = `${options.keyPrefix ?? c.req.path}:${ip}`
+    const subject =
+      options.keyForRequest?.(c) ?? clientIpFromHeaders(c.req.raw.headers) ?? 'unknown'
+    const key = `${options.keyPrefix ?? c.req.path}:${subject}`
     const now = Date.now()
     const bucket = buckets.get(key)
 

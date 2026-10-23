@@ -2,7 +2,30 @@ import type { Context } from 'hono'
 import { readBearerToken } from '../../http/device-auth.ts'
 import { AppError } from '../../http/errors.ts'
 import type { AppEnv } from '../../http/factory.ts'
+import * as posService from '../pos/pos.service.ts'
 import * as syncService from './sync.service.ts'
+import type { AuthorizeStaffBody, ChangePinBody } from './sync.validation.ts'
+
+/** The binding credential travels in its own header; it is never a URL or body value. */
+export const BINDING_HEADER = 'x-pos-binding'
+const BINDING_PATTERN = /^[A-Za-z0-9_-]{20,128}$/
+
+function deviceAuth(c: Context<AppEnv>) {
+  const auth = c.get('device')
+  if (!auth) {
+    // Unreachable behind `requireDeviceJwt`; fail closed if the wiring changes.
+    throw new AppError(401, 'DEVICE_TOKEN_MISSING', 'Device authentication required')
+  }
+  return auth
+}
+
+function readBindingToken(c: Context<AppEnv>): string {
+  const token = c.req.header(BINDING_HEADER)
+  if (!token || !BINDING_PATTERN.test(token)) {
+    throw new AppError(401, 'BINDING_INVALID', 'A terminal binding is required')
+  }
+  return token
+}
 
 /**
  * `POST /api/pos/session` is authenticated by the **device token** (not a JWT):
@@ -19,12 +42,24 @@ export async function createSession(c: Context<AppEnv>) {
 }
 
 export async function powersyncToken(c: Context<AppEnv>) {
-  const auth = c.get('device')
-  if (!auth) {
-    // Unreachable behind `requireDeviceJwt`; fail closed if the wiring changes.
-    throw new AppError(401, 'DEVICE_TOKEN_INVALID', 'Device authentication required')
-  }
+  const payload = await syncService.issuePowersyncToken(deviceAuth(c))
+  return c.json(payload)
+}
 
-  const payload = await syncService.issuePowersyncToken(auth)
+/** Authorizes a staff PIN on this terminal; returns a binding token exactly once. */
+export async function authorizeStaff(c: Context<AppEnv>, body: AuthorizeStaffBody) {
+  const payload = await posService.authorizeStaff(deviceAuth(c), body)
+  return c.json(payload, 201)
+}
+
+/** Changes the staff PIN and replaces the binding (the current device stays signed in). */
+export async function changeStaffPin(c: Context<AppEnv>, body: ChangePinBody) {
+  const payload = await posService.changeStaffPin(deviceAuth(c), readBindingToken(c), body)
+  return c.json(payload)
+}
+
+/** Boot-time binding check: 200 with `valid: false` for a dead binding. */
+export async function validateStaffBinding(c: Context<AppEnv>) {
+  const payload = await posService.validateStaffBinding(deviceAuth(c), readBindingToken(c))
   return c.json(payload)
 }
