@@ -1,17 +1,19 @@
 # STATE — GikAutos v1
 
 **Milestone:** v1
-**Updated:** 2026-10-22
+**Updated:** 2026-10-23
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–03/9 complete**: POS schema, shared cart pricing engine, settings,
+progress — Plans 01–04/9 complete**: POS schema, shared cart pricing engine, settings,
 permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
 keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
 device session + PowerSync token endpoints, the self-hosted PowerSync service with
-branch-scoped Sync Streams, and the encrypted local schema + download-only connector (03).
-Suites: API 305/305, shared 70/70, desktop 60/60; shell E2E 35/35; PowerSync gate 8/8;
-device/sync walkthrough 24/24; desktop sync E2E 18/18 (all 8 tables match the server).
-**Next action:** Execute **Phase 6 Plan 04** (offline PIN, device bindings, shifts, console
-PIN reset).
+branch-scoped Sync Streams, and the encrypted local schema + download-only connector (03);
+offline PINs with device bindings, lockout and manager unlock, the console PIN reset, and
+the offline shift lifecycle with server application (04).
+Suites: API 325/325, shared 73/73, desktop 74/74; shell E2E 35/35; PowerSync gate 8/8;
+device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5.
+**Next action:** Execute **Phase 6 Plan 05** (server sale application, upload endpoint,
+conflicts, and reconciliation).
 
 ---
 
@@ -25,7 +27,7 @@ PIN reset).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 📝 Planned (9 plans) |
+| 6 | POS Offline Core | 🚧 In progress (4/9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -95,7 +97,7 @@ PIN reset).
 | 01 | Phase 6 schema, shared cart math, settings, permissions, and demo seed | ✅ Complete |
 | 02 | Desktop shell, Electron security, keychain, and PowerSync spike | ✅ Complete |
 | 03 | Device auth, PowerSync sync config, local schema, and connector | ✅ Complete |
-| 04 | Offline PIN, device bindings, shifts, and console PIN reset | 📝 Planned |
+| 04 | Offline PIN, device bindings, shifts, and console PIN reset | ✅ Complete |
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | 📝 Planned |
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | 📝 Planned |
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
@@ -208,6 +210,56 @@ PIN reset).
     `bun run build` (admin + desktop package), API 277/277, shared 70/70,
     desktop 51/51; `test:e2e` 35/35; `test:spike` 8/8; `.github/workflows/desktop.yml`
     passes actionlint (Windows installer job is `workflow_dispatch` until a remote exists).
+- **Plan 04 complete** (commits `4f89d3b`, `83c85fa`, `b4b8097`, `6064ea3` + the state
+  update):
+  - **Shared PIN policy** (`packages/shared/src/pin.ts`): 4–6 digits, rejects repeated
+    digits and straight sequences; used by the API, the console, and the terminal.
+  - **Console PIN reset:** `POST /api/staff/:id/pin` (Argon2id, `pinVersion++`,
+    `pinMustChange=true`, revoke every live binding, audit `staff.pin.reset` without the
+    PIN) and `GET /api/staff/:id/pin-status` (`hasPin`, version, must-change, live
+    bindings). Managers may reset only cashiers in their branch; admins anyone. The staff
+    list carries `pinVersion`/`pinMustChange` so the badge needs no N+1 fetch. Role,
+    branch, and deactivation changes bump the version and revoke bindings. Migration
+    `0008_parallel_marvel_apes.sql` adds `user.pin_must_change`.
+  - **Device bindings** (`pos.repository.ts` / `pos.service.ts`): `POST
+    /api/pos/staff/authorize` (device JWT, 10/min/device) resolves staff by code or email,
+    verifies the PIN, replaces the one active binding, stores only
+    `HMAC-SHA256(bindingToken)` with a 90-day expiry, and returns the token once.
+    `POST /api/pos/staff/change-pin` verifies `x-pos-binding`, sets the new PIN, bumps the
+    version, revokes every binding, issues a fresh one for this terminal, and audits
+    `staff.pin.changed`. `POST /api/pos/staff/binding/validate` answers 200 with
+    `valid:false` for dead bindings (PIN version, role, branch, device, expiry, active
+    staff). Every failure is the same 401 `PIN_INVALID` plus an audit row without the PIN.
+  - **Desktop auth:** async Argon2id in the **main process** (`pin.hash`/`pin.verify`,
+    `@node-rs/argon2` with the device salt as the Argon2 pepper), exposed as two typed IPC
+    methods. `staff_binding` gained `binding_id`, `binding_token`, `expires_at`, and
+    `pin_must_change` (additive local-only columns). `bindings.ts` activates online, stores
+    the verifier, counts failures per binding, locks for `pos.pinLockMinutes`, and unlocks
+    with an independent manager/admin binding. The staff session is **in memory only**.
+    Bundled `#login` route: enrolment code screen when the device has no credential,
+    activation, PIN pad, forced PIN change after a temporary PIN, and manager unlock.
+  - **Shifts:** local `openShift`/`recordCashMovement`/`closeShift` write the fact and its
+    outbox row in one `writeTransaction`; numbering is
+    `${terminal.code}-S-${YYYYMMDD}-${NN}` from `document_sequence`; expected =
+    float + cash tenders − change + cash in − cash out. The server functions
+    (`openShift`, `recordCashMovement`, `closeShift`) lock the terminal/shift, enforce
+    one-open-per-terminal, recompute the server expected cash, store both expected values
+    and the variance, and raise `SHIFT_VARIANCE_MISMATCH` without blocking the close.
+    `#shift` renders the float/expected cards, cash in/out, and a close dialog with a live
+    green/red variance.
+  - **Packaging:** the Forge Vite plugin ignores everything outside `/.vite`, so
+    `forge.config.mts` gained a `packageAfterPrune` hook that copies
+    `desktop/node_modules/@node-rs` (wrapper + host platform package, materialised by
+    `prepare-desktop.mjs`) into the package; `auto-unpack-natives` then extracts both
+    `.node` binaries. Verified in the packaged app.
+  - **Verification:** API 325/325 (new: 5 staff-PIN, 7 device-binding, 8 shift cases),
+    shared 73/73, desktop 74/74 (lockout, PIN crypto, money/shift math, IPC bridge),
+    lint + check-types (5/5) + admin build green, `bun run build:pos` packages, and
+    `evidence/smoke-pin-ui.mjs` **5/5** against the packaged binary (login route renders,
+    Argon2 hash/verify over real IPC, verifier never contains the PIN); screenshot at
+    `evidence/shots/01-login-route.png`. The full enrolled-device E2E (authorize → change
+    → relaunch offline → shift → upload) stays the Plan 09 gate because it needs the API and
+    PowerSync service.
 
 ---
 
@@ -236,7 +288,7 @@ PIN reset).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 70/70, api 305/305, desktop 60/60 against
+- Tests: `bun run test` — shared 73/73, api 325/325, desktop 74/74 against
   `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -571,10 +623,37 @@ PIN reset).
 | 2026-10-22 | Plan 03: the compose Postgres host port is `${POSTGRES_PORT:-5433}` (5433 was already taken on this machine; `.env` uses 5434). |
 | 2026-10-22 | Plan 03: the local PowerSync database uses `OPFSCoopSyncVFS` with an explicit `WASQLiteOpenFactory`, `enableMultiTabs: false`, and the SDK's own worker — the configuration the Plan 02 gate proved. |
 | 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
+| 2026-10-23 | Plan 04: PIN policy lives once in `@gikautos/shared` (4–6 digits, no repeated digits or straight sequences) and is enforced by the API, the console, and the terminal. |
+| 2026-10-23 | Plan 04: managers may reset only **cashier** PINs in their branch (mirroring the password rule); admins may reset anyone. Role, branch, deactivation, and every PIN reset bump `pinVersion` and revoke live bindings so stale terminals fail closed. |
+| 2026-10-23 | Plan 04: a binding token is 32 random bytes returned once and stored as `HMAC-SHA256` keyed with the auth secret; one active binding per (device, staff) enforced by the partial unique index; expiry 90 days; the token travels in `x-pos-binding`, never a URL or body. |
+| 2026-10-23 | Plan 04: offline PIN hashing runs in the Electron **main process** with `@node-rs/argon2` (Argon2id 64 MiB/t=3/p=4). The 16-byte device salt is stored beside the verifier and used as the Argon2 pepper. The staff session is in memory only; quitting requires the PIN again. |
+| 2026-10-23 | Plan 04: `staff_binding` gained `binding_id`, `binding_token`, `expires_at`, and `pin_must_change` as additive local-only columns (no local migrations, per D10). |
+| 2026-10-23 | Plan 04: lockout is per binding (`pos.pinMaxAttempts` / `pos.pinLockMinutes`); a manager/admin binding unlocks a cashier and keeps its own independent failure counters. |
+| 2026-10-23 | Plan 04: shift close stores the client expected cash, the server recomputed expected cash, and the variance; a difference raises `SHIFT_VARIANCE_MISMATCH` (MEDIUM) and never blocks the close. The server value is authoritative for Phase 7 reports. |
+| 2026-10-23 | Plan 04: the Forge Vite plugin's default `ignore` drops `node_modules`, so native runtime modules are copied in a `packageAfterPrune` hook (`desktop/node_modules/@node-rs`) and unpacked by `auto-unpack-natives`. The packaged-app smoke proves real Argon2 IPC. |
+| 2026-10-23 | Plan 04: `#login` also hosts the one-time enrollment-code screen (missing/revoked device), because a terminal cannot authorize a PIN without a device credential; the offline (`unknown`) state still allows PIN login. |
 
 ---
 
 ## Open Items (carry forward)
+
+- Phase 6 Plan 04 carry-forward for Plan 05: the upload dispatcher must call
+  `pos.service.openShift` / `recordCashMovement` / `closeShift` **inside** the per-client-
+  transaction DB transaction and keep `pos_sync_transaction` as the idempotency owner.
+  `requireActiveBinding` is the binding check uploads should use (403 `STALE_CREDENTIALS`).
+  The device stores `bindingId`/`bindingToken`/`pinVersion` locally; an upload for a
+  deactivated staff member or stale version must be rejected, not applied.
+- Phase 6 Plan 04: the full E2E (enrol → authorize → change PIN → relaunch offline → PIN
+  login → open shift → cash movement → close → reconnect) is the Plan 09 gate; it needs a
+  running API + PowerSync service and a managed dev database. The packaged-app smoke
+  (`.planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs`) covers build, routing,
+  and real Argon2 IPC only.
+- Phase 6 Plan 04: shift dialogs live in one `components/shift/shift-dialogs.tsx` module
+  rather than three files as listed in the plan; the responsibilities (open / cash /
+  close) are unchanged.
+- Phase 6 Plan 04: `#pos` remains the Plan 02 shell; Plan 06 must route through
+  `requireStaffSession()` and block selling until `loadShiftState().shift` is open when
+  `pos.salesRequireOpenShift` is true.
 
 - Phase 6 Plan 03 carry-forward for Plan 04: the device token lives in the keychain and
   `/api/pos/session` is the only refresh path; `requireDeviceJwt` re-reads the whole
@@ -759,3 +838,25 @@ PIN reset).
   fail. Use `POS_PRINTER_DRIVER=fake` for all automated runs; real hardware is a human
   checklist item. `app://` (not `file://`) is required for PowerSync workers.
 
+- Phase 6 Plan 04: PIN policy is `pinProblem()` in `@gikautos/shared`; never duplicate the
+  digit/trivial checks. Server PIN hashing reuses `auth/password.ts`; the terminal hashes in
+  the Electron main process (`main/ipc/pin.ts`) with the stored 16-byte salt as the Argon2
+  `secret` (pepper).
+- Phase 6 Plan 04: device-facing staff endpoints are `POST /api/pos/staff/authorize`,
+  `/change-pin`, and `/binding/validate`; the binding credential is the `x-pos-binding`
+  header. All failures collapse into 401 `PIN_INVALID` (or 403 `STALE_CREDENTIALS` for a
+  dead binding) and audit rows never contain the PIN or token.
+- Phase 6 Plan 04: `pos.service.openShift/recordCashMovement/closeShift` take a
+  `DbExecutor`; Plan 05's dispatcher must pass its transaction so the shift fact, the
+  idempotency row, and the audit commit together. `computeExpectedCash` is exported for
+  tests and mirrors the terminal's arithmetic.
+- Phase 6 Plan 04: local-only `staff_binding` now carries `binding_id`, `binding_token`,
+  `expires_at`, and `pin_must_change`; `pin_version` remains the server version. Keep the
+  staff session in memory — do not persist it.
+- Phase 6 Plan 04: packaging native modules requires the `packageAfterPrune` hook in
+  `desktop/forge.config.mts` plus `desktop/node_modules/@node-rs` from
+  `scripts/prepare-desktop.mjs`; the Vite main config marks `@node-rs/argon2` external.
+  `bun run build:pos` then leaves `*.node` in `app.asar.unpacked`.
+- Phase 6 Plan 04: the packaged-app smoke uses CDP (fuses block `--inspect`); run
+  `node .planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs` from `desktop/`
+  after `bun run build:pos`.
