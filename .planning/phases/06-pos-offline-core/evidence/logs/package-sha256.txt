@@ -1,0 +1,2 @@
+cc7fe11c5f394cf12a0c55339fc2e62c44a5791199cc740dec3cd013c689ff27  desktop/out/GikAutos POS-linux-x64/GikAutos POS
+710a2c6d7ce61663954626a965c69f1242c226bde75f478f895cf581dc596ab8  desktop/out/make/zip/linux/x64/GikAutos POS-linux-x64.zip

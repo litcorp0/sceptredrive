@@ -135,14 +135,15 @@ reconnecting — without blocking a sale.
 
 **Dependencies:** Phases 1–5
 **Requirements:** POS-01…09, POS-14, SYNC-01…08
-**Status:** 🚧 In progress 2026-10-22 (Plans 01–03/9 complete: schema, shared cart engine,
-settings, permissions and demo seed; desktop shell, `app://` security baseline, async
-`safeStorage` keychain and the **PowerSync Web SDK gate**; POS JWTs/JWKS, enrollment
-device tokens, device session, the self-hosted PowerSync service with branch-scoped Sync
-Streams, and the **encrypted local schema + download-only connector** — all 8 synced
-tables match the server, evidence under `phases/06-pos-offline-core/evidence/`) —
-development/CI use the self-hosted PowerSync Docker service, while staging/production use
-PowerSync Cloud.
+**Status:** ✅ Complete and verified 2026-10-23 (9/9 plans). A fresh database + real
+Electron build reproduce the whole offline POS story: enrollment → PINs → shift → offline
+cash/credit sale with loyalty and a manager-approved discount → ESC/POS receipt + drawer →
+quit → offline relaunch → exact-once upload → HIGH conflicts → revocation → reconciliation.
+Evidence: `.planning/phases/06-pos-offline-core/01-VERIFICATION.md` and
+`phases/06-pos-offline-core/evidence/` (walkthrough 162/162, race 18/18, duplicate 24/24,
+Electron E2E 51/51, shell 38/38, print 21/21; API 354, shared 73, desktop 339).
+Development/CI use the self-hosted PowerSync Docker service; staging/production use
+PowerSync Cloud (Phase 9 setup gate).
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock

@@ -1,0 +1,23 @@
+    Thank you for shopping at GikAutos
+              Accra Spintex
+          ACC-SPX - ACC-SPX-T23
+------------------------------------------
+    RECEIPT ACC-SPX-T23-20261023-0001
+Date                      2026-10-23 22:13
+Cashier                       Demo Cashier
+------------------------------------------
+Perf Product 5000
+  1 x GHS 50.00                  GHS 50.00
+  Tax (20%)                       GHS 8.33
+------------------------------------------
+Subtotal                         GHS 50.00
+Taxable base                     GHS 41.67
+VAT 15%                           GHS 6.25
+NHIL 2.5%                         GHS 1.04
+GETFund 2.5%                      GHS 1.04
+TOTAL                            GHS 50.00
+------------------------------------------
+Cash                             GHS 50.00
+Change                            GHS 0.00
+------------------------------------------
+Thank you for your business

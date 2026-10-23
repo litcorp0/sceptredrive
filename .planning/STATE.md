@@ -2,24 +2,17 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-23
-**Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–08/9 complete**: POS schema, shared cart pricing engine, settings,
-permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
-keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
-device session + PowerSync token endpoints, the self-hosted PowerSync service with
-branch-scoped Sync Streams, and the encrypted local schema + download-only connector (03);
-offline PINs with device bindings, lockout and manager unlock, the console PIN reset, and
-the offline shift lifecycle with server application (04); idempotent upload, atomic sale
-application with business conflicts, device conflict reads, and sale/shift reconciliation
-(05); the **selling UI** (06); atomic sale completion, receipts, ESC/POS printing and the
-cash drawer (07); **the durable outbox, exactly-once uploader with recovery, sync badge,
-`#pos/sync`, and conflict surfacing (08)**.
-Suites: API 353/353, shared 73/73, desktop 332/332; shell E2E 38/38; PowerSync gate 8/8;
-device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5; console PIN
-smoke 8/8; selling contract 32/32; selling UI smoke 11/11; print smoke 21/21; **outbox
-recovery simulation 41/41**.
-**Next action:** Execute **Phase 6 Plan 09** (phase verification, enrolled-device E2E,
-evidence, and state update).
+**Status:** **Phase 6 (POS Offline Core) complete and verified (9/9 plans).** A fresh
+database plus a real Electron build prove the whole offline story: enrollment, offline
+PINs, shifts, a cash sale with loyalty and a manager-approved discount, ESC/POS printing
+and the drawer, quit and offline relaunch, exactly-once upload, over-limit credit and
+revocation conflicts, and full reconciliation. Evidence:
+`.planning/phases/06-pos-offline-core/01-VERIFICATION.md` + `evidence/`.
+Suites: API 354/354, shared 73/73, desktop 339/339; POS walkthrough 162/162; last-unit
+race 18/18; duplicate upload 24/24; Electron E2E 51/51; packaged shell 38/38; packaged
+print 21/21. Two reconciliation defects and six POS defects were found and fixed during
+verification.
+**Next action:** Plan **Phase 7 (POS Payments, Returns & Shifts)**.
 
 ---
 
@@ -33,7 +26,7 @@ evidence, and state update).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 🚧 In progress (8/9 plans) |
+| 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -108,7 +101,7 @@ evidence, and state update).
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | ✅ Complete |
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | ✅ Complete |
 | 08 | Outbox uploader, retries, sync status, and conflict surfacing | ✅ Complete |
-| 09 | Phase 6 verification and state update | 📝 Planned |
+| 09 | Phase 6 verification and state update | ✅ Complete |
 
 ### Phase 6 execution notes
 
@@ -341,7 +334,7 @@ evidence, and state update).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 353/353, desktop 332/332 against
+- Tests: `bun run test` — shared 73/73, api 354/354, desktop 339/339 against
   `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -732,6 +725,52 @@ evidence, and state update).
   `outbox-recovery.json`. The full enrolled-device E2E (real API + PowerSync) remains Plan
   09.
 
+### Phase 6 verification (Plan 09, 2026-10-23)
+
+- **Phase 6 complete and verified** (commits `9b43ac9`, `3bc9446`, `64764a5`, `6956689`,
+  `b58cfdb`, `8917f44`, `57acdb4`, `73b14e1`, plus the evidence/state commits). Record:
+  `.planning/phases/06-pos-offline-core/01-VERIFICATION.md`.
+- **Fresh cycle:** Docker volume reset → migrate → seed → demo seed ×2 (second is a no-op)
+  → `gikautos_test` migrated → `sync:init` → API on :4000 against :5434 → `sync:up` with the
+  JWKS inlined → all 8 synced tables replicated. Evidence scripts:
+  `walkthrough-pos.mjs` **162/162**, `race-last-unit.mjs` **18/18**,
+  `duplicate-upload.mjs` **24/24**, `e2e-pos.mjs` **51/51**; packaged `test:e2e`
+  **38/38** and `print-smoke` **21/21**. Suites: API **354/354**, shared 73/73, desktop
+  **339/339**; lint + check-types clean.
+- **Bugs found by phase verification and fixed:**
+  - Credit-only tenders were reported as `TENDER_TOTALS` divergences (the check compared
+    cash tenders minus total with change). Fixed to use the sum of all tenders; test added.
+  - Stock-movement reconciliation scanned every branch's movements while the expected side
+    was branch-filtered. Fixed with a branch predicate and a foreign-branch test.
+  - `x-pos-binding` was missing from the CORS allowlist, so browser preflight blocked PIN
+    change and binding validation. Header + preflight test added.
+  - The enrolment screen never persisted the device token (`persistDeviceToken` was dead
+    code), so a restart forced re-enrolment. Now persisted at redemption.
+  - A terminal that booted offline never retried the session, so PowerSync and the uploader
+    never started when the network returned. Resume on `online` and on manual Sync now.
+  - PowerSync local-only `sale_line`, `sale_tender`, and `cart_draft_line` inserts omitted
+    the required `id` (the unit tests used a SQL recorder). Ids generated; the E2E caught it.
+  - The local `customer` table lacked `anonymized_at`, so the customer dialog failed with
+    `no such column`. Column added.
+  - `#pos` could bounce back to `#shift` because readiness ignored the shift query; the
+    shift screen had no "Start selling" action. Both fixed (with a pure readiness test).
+  - Revocation discovered by the PowerSync credential fetch hid the reason and cleared the
+    status; the badge and sync screen now derive it from the session.
+  - "Continue without approval" on an over-limit credit sale reopened the dialog forever;
+    a conscious bypass now lets the sale complete and the server records the conflict.
+- **Performance (5k products / 20k customers, `performance.json`):** cold start 1.66 s;
+  first sync 19.9–24.1 s; search 338/18/369 ms type-to-result (includes 150 ms debounce);
+  sale commit 125 ms cold / 132 ms warm click-to-receipt; print 40 ms; 2-row drain 10 ms;
+  100 transactions through the upload endpoint 4.9 s. Cold start is within target; search
+  and commit exceed their strict targets as UI-perceived numbers. **Operator decision
+  requested** (documented in the verification record): accept for v1 and tune in Phase 7,
+  or block.
+- **Packaging:** Linux package + ZIP hashes in `evidence/logs/package-sha256.txt`; packaged
+  shell 38/38 and print 21/21. The Windows Squirrel installer needs a remote/windows-latest
+  run (still pending). `zip` is absent on this host, so the archive was made with Python.
+- **Deliberate test constraint:** the packaged binary refuses localhost API origins, so the
+  Electron E2E drives the unpackaged production build (same `app://` renderer/CSP/IPC).
+
 ### Phase 6 planning additions (2026-10-22)
 
 - Phase 6 is **planned only** (9 plans, waves 1–6). Artifacts:
@@ -860,6 +899,17 @@ evidence, and state update).
 | 2026-10-23 | Plan 05: stock/credit/loyalty post before the sale row, then the sale/lines/tenders and conflicts are written so `sync_conflict.sale_id` can reference the sale. `UNKNOWN_PRODUCT` rejections write a conflict without a sale reference. |
 | 2026-10-23 | Plan 05: upload results are HTTP 200 with per-item `APPLIED`/`REPLAYED`/`REJECTED`; only auth/scope (401/403), validation (400), throttle (429), and unexpected failures (5xx) are non-200. |
 | 2026-10-23 | Plan 05: device conflict reads and reconciliation are branch/terminal-scoped from the JWT and session scope respectively; reconciliation is read-only and returns divergences only. |
+| 2026-10-23 | Plan 09: tender reconciliation uses the sum of all tenders minus the total (change), not the cash filter alone, so credit-only and zero-total sales reconcile cleanly. |
+| 2026-10-23 | Plan 09: both sides of stock-movement reconciliation are branch-scoped; a deliberate header drift (`TOTAL_MISMATCH`) is expected to surface as a `HEADER_TOTALS` divergence, so the walkthrough asserts the exact set rather than zero. |
+| 2026-10-23 | Plan 09: `x-pos-binding` is an allowed CORS request header; any future custom POS header must be added there or Electron preflight will fail as a network error. |
+| 2026-10-23 | Plan 09: the device token is persisted to the keychain at enrollment; the token, not the JWT, is the restart credential. |
+| 2026-10-23 | Plan 09: a terminal that started offline re-establishes the device session on the browser `online` event and on manual Sync now, then connects PowerSync; the uploader starts with the active session. |
+| 2026-10-23 | Plan 09: every local-only row must supply its own `id` (PowerSync creates the column without a default); writes that only have a SQL-recorder test need a real-SQLite or E2E check. |
+| 2026-10-23 | Plan 09: the local `customer` table includes `anonymized_at` for defensive filtering even though the Sync Stream already excludes anonymized rows. |
+| 2026-10-23 | Plan 09: runtime readiness gates on the shift query as well as the config query; the shift screen offers "Start selling" once a shift is open. |
+| 2026-10-23 | Plan 09: revocation discovered by the sync layer is surfaced from the session state on the badge and sync screen, because the uploader may stop before it can report `REVOKED`. |
+| 2026-10-23 | Plan 09: "Continue without approval" is a tracked conscious bypass; the sale completes and the server records `CREDIT_OVER_LIMIT`/`CREDIT_HOLD` for review. |
+| 2026-10-23 | Plan 09: the Electron E2E runs the unpackaged production build because a packaged app refuses localhost API origins by design; packaged startup, security, and printing are verified separately. |
 
 
 ---
@@ -872,11 +922,11 @@ evidence, and state update).
   `requireActiveBinding` is the binding check uploads should use (403 `STALE_CREDENTIALS`).
   The device stores `bindingId`/`bindingToken`/`pinVersion` locally; an upload for a
   deactivated staff member or stale version must be rejected, not applied.
-- Phase 6 Plan 04: the full E2E (enrol → authorize → change PIN → relaunch offline → PIN
-  login → open shift → cash movement → close → reconnect) is the Plan 09 gate; it needs a
-  running API + PowerSync service and a managed dev database. The packaged-app smoke
-  (`.planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs`) covers build, routing,
-  and real Argon2 IPC only.
+- **Plan 09 completed the enrolled-device E2E** (`evidence/e2e-pos.mjs`, 51/51): enrol →
+  authorize manager + cashier → change PIN → open shift → offline sale with loyalty and an
+  approved discount → print/drawer → quit → offline relaunch → PIN login → reprint →
+  reconnect → exactly-once upload; plus over-limit credit and revocation. Hardware
+  (printer, drawer, scanner, Windows terminal) remains a human checklist item.
 - Phase 6 Plan 04: shift dialogs live in one `components/shift/shift-dialogs.tsx` module
   rather than three files as listed in the plan; the responsibilities (open / cash /
   close) are unchanged.
@@ -922,9 +972,17 @@ evidence, and state update).
   Docker Postgres with logical replication; no Cloud account is needed for Phase 6.
   **Staging/production use PowerSync Cloud** (two instances) with the same
   `sync-config.yaml`; the Cloud project/instances are a Phase 9 setup gate.
-- Phase 6: Forge/Bun packaging and the PowerSync-in-Electron spike must pass before UI
-  work; the Windows Squirrel installer job needs a git remote (or a manual
-  `windows-latest` run) before it can be proven.
+- Phase 6 packaging: the PowerSync spike passed and the Linux package is verified. The
+  **Windows Squirrel installer** still needs a git remote (or a manual `windows-latest`
+  run) and a clean-VM install; v0.1.0 is unsigned (Phase 9 certificate).
+- **Operator decision requested:** search (~190–220 ms query+render) and sale commit
+  (125–132 ms click-to-receipt) exceed the strict Phase 6 targets (150 ms / 100 ms) as
+  UI-perceived numbers. Accept for v1 and tune in Phase 7, or block. Details in
+  `phases/06-pos-offline-core/01-VERIFICATION.md`.
+- **Phase 7 hand-offs:** admin conflict-resolution/reconciliation UI (SYNC-08 second half),
+  returns/refunds, split tender, shift report screens, and the app-boot route (the POS still
+  boots to the shell diagnostics; cashiers reach `#pos` by hash). Phase 7 also owns any
+  search/commit performance tuning.
 - Physical hardware for human verification: Windows terminal, ESC/POS printer, keyboard-wedge
   scanner, cash drawer (Phase 6 checklist).
 - Cosmetic: console `favicon.ico` is a 404 (Phase 9 polish).
@@ -984,6 +1042,16 @@ evidence, and state update).
   `db:seed --demo` twice, start the API with that `DATABASE_URL`, bootstrap TOTP, run the
   API walkthrough, then the browser script from a directory where `playwright` resolves
   (`SHOTS_DIR` pointing at `evidence/`). Tests use `TEST_DATABASE_URL`.
+- Phase 6 verification commands (fresh DB, API + PowerSync up, `DATABASE_URL` = Docker
+  `:5434/gikautos`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
+  (run with `bun`; they import `@gikautos/shared`), then `node e2e-pos.mjs` (Playwright
+  over CDP must run on Node, not Bun) and `node perf-pos.mjs`. The E2E owns :4000: it stops
+  the API to prove the offline relaunch, so stop any other `bun dev` first.
+- The Electron E2E uses the **unpackaged production build** (`.vite` + Electron) because a
+  packaged app refuses localhost origins by design. Rebuild with `bun run build:pos` before
+  running it; do not build while an Electron test instance is running.
+- `zip` is not installed on this host, so Forge's ZIP maker fails; the Linux package is
+  still produced. CI/Windows runners have `zip`.
 - Phase 5 invariants to preserve: invoices and payments have one write path
   (`createInvoice`, `createPayment`); allocations are append-only signed rows; invoice
   `amount_paid_minor`/status are projections recomputed in the same transaction; supplier

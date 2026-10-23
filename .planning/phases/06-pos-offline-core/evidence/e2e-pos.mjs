@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process'
 /**
  * Phase 6 Plan 09 — Electron end-to-end (Task 4).
  *
@@ -22,19 +23,20 @@
  *   DATABASE_URL=postgresql://gikautos:gikautos@localhost:5434/gikautos \
  *     node .planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs
  */
-import { readFileSync } from 'node:fs'
-import { spawn } from 'node:child_process'
-import fs from 'node:fs'
+import fs, { readFileSync } from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { _electron as electron } from 'playwright'
 import { Client } from 'pg'
+import { _electron as electron } from 'playwright'
 
 const repo = path.resolve(import.meta.dirname, '..', '..', '..', '..')
 const desktopDir = path.join(repo, 'desktop')
 const electronPath = (() => {
-  const relative = readFileSync(path.join(desktopDir, 'node_modules', 'electron', 'path.txt'), 'utf8')
+  const relative = readFileSync(
+    path.join(desktopDir, 'node_modules', 'electron', 'path.txt'),
+    'utf8',
+  )
   return path.join(desktopDir, 'node_modules', 'electron', 'dist', relative.trim())
 })()
 const evidence = path.join(repo, '.planning', 'phases', '06-pos-offline-core', 'evidence')
@@ -163,7 +165,9 @@ async function launchApp(userDataDir) {
       return await launchOnce(userDataDir)
     } catch (error) {
       lastError = error
-      console.log(`  (launch attempt ${attempt + 1} failed: ${String(error.message).slice(0, 120)})`)
+      console.log(
+        `  (launch attempt ${attempt + 1} failed: ${String(error.message).slice(0, 120)})`,
+      )
       await new Promise((resolve) => setTimeout(resolve, 2_000))
     }
   }
@@ -381,14 +385,10 @@ try {
 
   const spx = (await db.query(`SELECT id FROM branch WHERE code = 'ACC-SPX'`)).rows[0]
   const cashier = (
-    await db.query(
-      `SELECT id, staff_id, name FROM "user" WHERE email = 'cashier@gikautos.local'`,
-    )
+    await db.query(`SELECT id, staff_id, name FROM "user" WHERE email = 'cashier@gikautos.local'`)
   ).rows[0]
   const manager = (
-    await db.query(
-      `SELECT id, staff_id, name FROM "user" WHERE email = 'manager@gikautos.local'`,
-    )
+    await db.query(`SELECT id, staff_id, name FROM "user" WHERE email = 'manager@gikautos.local'`)
   ).rows[0]
   await api(`/api/staff/${cashier.id}/pin`, {
     method: 'POST',
@@ -504,10 +504,12 @@ try {
   check('the manager approves the discount offline', true)
 
   const netAfter = await page.getByTestId('cart-line-total').first().innerText()
-  check('the approved line discount is applied', grossBefore !== netAfter, `${grossBefore} → ${netAfter}`)
-  const total = Number(
-    (await page.getByTestId('totals-total').innerText()).replace(/[^0-9.]/g, ''),
+  check(
+    'the approved line discount is applied',
+    grossBefore !== netAfter,
+    `${grossBefore} → ${netAfter}`,
   )
+  const total = Number((await page.getByTestId('totals-total').innerText()).replace(/[^0-9.]/g, ''))
   check('the cart total is positive after discounts', total > 0)
 
   await page.getByTestId('pay-button').click()
@@ -517,9 +519,12 @@ try {
   await page.getByTestId('receipt-view').waitFor({ timeout: 30_000 })
   const receiptNumber = (await page.getByTestId('receipt-number').innerText()).trim()
   check('the sale completes and opens the receipt', receiptNumber.length > 0)
-  await page.getByTestId('print-status').filter({ hasText: /Printed/i }).waitFor({
-    timeout: 30_000,
-  })
+  await page
+    .getByTestId('print-status')
+    .filter({ hasText: /Printed/i })
+    .waitFor({
+      timeout: 30_000,
+    })
   check('the receipt prints through the fake ESC/POS adapter', true)
   await shot(page, '06-receipt')
 
@@ -539,9 +544,12 @@ try {
     (await page.getByTestId('outbox-row').filter({ hasText: receiptNumber }).count()) === 1,
     `rows=${pendingRows}`,
   )
-  await page.getByTestId('sync-badge').filter({ hasText: /pending/i }).waitFor({
-    timeout: 15_000,
-  })
+  await page
+    .getByTestId('sync-badge')
+    .filter({ hasText: /pending/i })
+    .waitFor({
+      timeout: 15_000,
+    })
   check('the header shows the pending count', true)
   await shot(page, '07-sync-pending')
 
@@ -599,9 +607,12 @@ try {
     await page2.waitForTimeout(1_000)
   }
   check('the outbox drains to zero after reconnecting', waiting === '0', `waiting=${waiting}`)
-  await page2.getByTestId('sync-badge').filter({ hasText: /Synced/i }).waitFor({
-    timeout: 30_000,
-  })
+  await page2
+    .getByTestId('sync-badge')
+    .filter({ hasText: /Synced/i })
+    .waitFor({
+      timeout: 30_000,
+    })
   check('the header reports a successful sync', true)
   await shot(page2, '08-synced')
 
@@ -617,8 +628,14 @@ try {
       WHERE reference_id = $1 AND type = 'SALE'`,
     [uploaded?.id],
   )
-  check('the server stock movement references the receipt', movement.rows[0]?.reference_number === receiptNumber)
-  check('the server stock moved by the sold quantity', Number(movement.rows[0]?.quantity_delta) === -1)
+  check(
+    'the server stock movement references the receipt',
+    movement.rows[0]?.reference_number === receiptNumber,
+  )
+  check(
+    'the server stock moved by the sold quantity',
+    Number(movement.rows[0]?.quantity_delta) === -1,
+  )
   const conflictsAfterA = await db.query(
     `SELECT count(*)::int AS count FROM sync_conflict WHERE sale_id = $1`,
     [uploaded?.id],
@@ -674,9 +691,7 @@ try {
   )
   check(
     'the server stored a HIGH CREDIT_OVER_LIMIT conflict',
-    creditConflict.rows.some(
-      (row) => row.type === 'CREDIT_OVER_LIMIT' && row.severity === 'HIGH',
-    ),
+    creditConflict.rows.some((row) => row.type === 'CREDIT_OVER_LIMIT' && row.severity === 'HIGH'),
   )
 
   // ==========================================================================
@@ -703,9 +718,12 @@ try {
   ])
   await page2.context().setOffline(false)
   await syncNow(page2)
-  await page2.getByTestId('sync-pause').filter({ hasText: /revoked/i }).waitFor({
-    timeout: 60_000,
-  })
+  await page2
+    .getByTestId('sync-pause')
+    .filter({ hasText: /revoked/i })
+    .waitFor({
+      timeout: 60_000,
+    })
   check('the POS pauses and says the terminal was revoked', true)
   await shot(page2, '10-revoked')
 

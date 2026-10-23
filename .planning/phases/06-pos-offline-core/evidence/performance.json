@@ -1,0 +1,18 @@
+{
+  "coldStartMs": 1655,
+  "seedMs": 3475,
+  "products": 5000,
+  "customers": 20000,
+  "firstSyncMs": 24117,
+  "syncedProducts": 5018,
+  "syncedCustomers": 20006,
+  "searchSamplesMs": [338, 18, 369],
+  "searchMs": 369,
+  "searchIncludesDebounce": true,
+  "saleCommitMs": 125,
+  "printMs": 40,
+  "receiptFile": true,
+  "warmSaleCommitMs": 132,
+  "outboxDrain2Ms": 10,
+  "serverDrain100Ms": 4935
+}
