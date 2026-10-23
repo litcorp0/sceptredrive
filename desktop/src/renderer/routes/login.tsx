@@ -14,7 +14,7 @@ import {
   verifyOfflinePin,
 } from '../lib/auth/bindings'
 import type { LockoutPolicy } from '../lib/auth/pin'
-import { establishSession } from '../lib/auth/session'
+import { establishSession, persistDeviceToken } from '../lib/auth/session'
 import { startStaffSession } from '../lib/auth/staff-session'
 import { desktopApi, isDesktopAvailable } from '../lib/desktop-api'
 import { lockoutPolicyFor, readCachedConfig } from '../lib/pos-config'
@@ -565,6 +565,10 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
     setError(null)
     try {
       const enrolled = await redeemEnrollment(normalized, await deviceFingerprint())
+      // Persist the long-lived credential before the session: without this the
+      // terminal forgets its device token on quit and forces re-enrolment,
+      // breaking the whole offline story after a restart.
+      await persistDeviceToken(enrolled.deviceToken)
       await establishSession(enrolled.deviceToken)
       await onEnrolled()
     } catch (enrollError) {

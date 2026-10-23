@@ -106,6 +106,43 @@ export function PosProvider({ children }: { children: ReactNode }) {
   }, [db, session])
 
   /**
+   * An offline start leaves the session `unknown` and PowerSync disconnected.
+   * When the network returns (or a terminal that booted without the API becomes
+   * reachable), re-establish the device session and connect; the session effect
+   * above then starts the uploader. Without this, a terminal that launched
+   * offline could never upload until the app restarted.
+   */
+  useEffect(() => {
+    if (!db) return
+    const database = db
+    let cancelled = false
+
+    async function resume() {
+      if (getCurrentSession()) return
+      const active = await ensureSession()
+      if (cancelled || !active) return
+      if (!database.currentStatus?.connected) {
+        await database.connect(posConnector).catch((error: unknown) => {
+          updateSyncStatus({
+            error: error instanceof Error ? error.message : 'Could not connect to sync',
+          })
+        })
+      }
+    }
+
+    const onOnline = () => {
+      void resume()
+    }
+    window.addEventListener('online', onOnline)
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) void resume()
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', onOnline)
+    }
+  }, [db])
+
+  /**
    * One uploader per open database. It starts only when a device session is
    * active; a token refresh changes the session object but not this effect, so
    * an in-flight drain is never restarted. Revocation flips `session` to null,
@@ -144,8 +181,17 @@ export function PosProvider({ children }: { children: ReactNode }) {
   }, [db, sessionActive])
 
   const syncNow = useCallback(async () => {
+    // A manual sync must also recover from an offline start: re-establish the
+    // device session first, then drain. The uploader starts its own drain when
+    // the session arrives, so a null ref here is not a lost sale.
+    if (!getCurrentSession()) {
+      const active = await ensureSession()
+      if (active && db && !db.currentStatus?.connected) {
+        await db.connect(posConnector).catch(() => {})
+      }
+    }
     await uploaderRef.current?.syncNow()
-  }, [])
+  }, [db])
 
   return (
     <PosContext.Provider value={{ db, session, sessionState, syncNow }}>
