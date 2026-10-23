@@ -188,6 +188,15 @@ export function ShiftRoute() {
               <div className="flex gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    window.location.hash = '#pos'
+                  }}
+                  className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
+                >
+                  Start selling
+                </button>
+                <button
+                  type="button"
                   onClick={() => setDialog('cash-in')}
                   className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
                 >

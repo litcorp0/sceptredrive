@@ -82,6 +82,21 @@ export interface PosRuntime {
   shift: OpenShiftSummary | null
 }
 
+/**
+ * Runtime readiness. Both local queries must settle before the shell decides
+ * where to send the cashier: a ready config with a still-loading shift query
+ * used to bounce `#pos` back to `#shift` just after opening a shift.
+ */
+export function runtimeStatus(input: {
+  hasConfigRow: boolean
+  configLoading: boolean
+  shiftLoading: boolean
+}): 'loading' | 'ready' {
+  if (input.configLoading && !input.hasConfigRow) return 'loading'
+  if (input.shiftLoading) return 'loading'
+  return 'ready'
+}
+
 export function usePosRuntime(): PosRuntime {
   const local = useQuery<ConfigQueryRow>(
     `SELECT device_id, terminal_id, terminal_code, branch_id, branch_code, branch_name, config_json
@@ -120,7 +135,11 @@ export function usePosRuntime(): PosRuntime {
   }, [shiftRow])
 
   return {
-    status: local.isLoading && !row ? 'loading' : 'ready',
+    status: runtimeStatus({
+      hasConfigRow: Boolean(row),
+      configLoading: Boolean(local.isLoading),
+      shiftLoading: Boolean(shift.isLoading),
+    }),
     config,
     identity,
     shift: shiftSummary,
