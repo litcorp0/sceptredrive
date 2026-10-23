@@ -5,12 +5,15 @@ import { CartTotalsPanel } from '../../components/pos/cart-totals'
 import { CustomerCreateDialog } from '../../components/pos/customer-create-dialog'
 import { CustomerDialog } from '../../components/pos/customer-dialog'
 import { CustomerPanel } from '../../components/pos/customer-panel'
+import { LoyaltyPanel } from '../../components/pos/loyalty-panel'
+import { LoyaltyRedeemDialog } from '../../components/pos/loyalty-redeem-dialog'
 import { Modal } from '../../components/pos/modal'
 import { ProductSearch } from '../../components/pos/product-search'
 import { ScanListener } from '../../components/pos/scan-listener'
 import type { PosConfigSnapshot } from '../../lib/api/types'
 import { endStaffSession, type StaffSession } from '../../lib/auth/staff-session'
 import { useCart } from '../../lib/cart/cart-store'
+import { computeCartTotals } from '../../lib/cart/totals'
 import { lookupScannedProduct } from '../../lib/catalog/resolve'
 import { useCustomerContext } from '../../lib/customers/context'
 import type { CustomerHit } from '../../lib/customers/search'
@@ -35,13 +38,15 @@ export function SellScreen({
   identity,
   shift,
   staff,
+  config,
 }: {
   identity: PosIdentityRow
   shift: OpenShiftSummary | null
   staff: StaffSession
   config: PosConfigSnapshot
 }) {
-  const { state, totals, dispatch, clear, status, error, addProduct, setCustomer } = useCart()
+  const { state, totals, pricing, dispatch, clear, status, error, addProduct, setCustomer } =
+    useCart()
   const db = usePosDatabase()
   const customerContext = useCustomerContext(state.customer, identity.branchId)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
@@ -49,9 +54,10 @@ export function SellScreen({
   const [confirmClear, setConfirmClear] = useState(false)
   const [showCustomer, setShowCustomer] = useState(false)
   const [showCreateCustomer, setShowCreateCustomer] = useState(false)
+  const [showLoyalty, setShowLoyalty] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const dialogOpen = confirmClear || showCustomer || showCreateCustomer
+  const dialogOpen = confirmClear || showCustomer || showCreateCustomer || showLoyalty
 
   function applyCustomer(hit: CustomerHit) {
     if (!hit.customerId && !hit.draftId) {
@@ -124,6 +130,13 @@ export function SellScreen({
       () => ({
         F2: () => searchRef.current?.focus(),
         F4: () => setShowCustomer(true),
+        F6: () => {
+          if (!state.customer) {
+            setNotice('Choose a customer before redeeming points')
+            return
+          }
+          setShowLoyalty(true)
+        },
         F9: goTender,
         ArrowDown: () => {
           const index = state.lines.findIndex((line) => line.id === selectedLineId)
@@ -143,7 +156,7 @@ export function SellScreen({
         },
         Escape: () => setSelectedLineId(null),
       }),
-      [goTender, selectedLine, selectedLineId, setQuantity, state.lines],
+      [goTender, selectedLine, selectedLineId, setQuantity, state.customer, state.lines],
     ),
     !dialogOpen,
   )
@@ -276,9 +289,15 @@ export function SellScreen({
               onFind={() => setShowCustomer(true)}
               onClear={() => setCustomer(null)}
             />
-            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-              Loyalty
-            </div>
+            <LoyaltyPanel
+              customer={state.customer}
+              loyalty={customerContext.loyalty}
+              totals={totals}
+              redeemPoints={state.loyaltyRedeemPoints}
+              config={config.loyalty}
+              onRedeem={() => setShowLoyalty(true)}
+              onClear={() => dispatch({ type: 'setLoyaltyRedeem', points: 0 })}
+            />
             <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
               Credit
             </div>
@@ -305,6 +324,25 @@ export function SellScreen({
             applyCustomer(customer)
             setShowCreateCustomer(false)
           }}
+        />
+      ) : null}
+
+      {showLoyalty ? (
+        <LoyaltyRedeemDialog
+          loyalty={customerContext.loyalty}
+          config={config.loyalty}
+          cartNetMinor={totals.priced.netMinor}
+          cartTotalMinor={totals.priced.totalMinor}
+          currentPoints={state.loyaltyRedeemPoints}
+          preview={(points) => {
+            const projected = computeCartTotals({ ...state, loyaltyRedeemPoints: points }, pricing)
+            return {
+              totalMinor: projected.priced.totalMinor,
+              appliedMinor: projected.loyaltyDiscountMinor,
+            }
+          }}
+          onClose={() => setShowLoyalty(false)}
+          onConfirm={(points) => dispatch({ type: 'setLoyaltyRedeem', points })}
         />
       ) : null}
 
