@@ -837,8 +837,10 @@ describe.skipIf(!available)('POS sale application', () => {
       tender: { method: 'CREDIT' },
       customer: { ...customerRecord, name: 'Approved Credit' },
     })
+    const [existingTender] = payload.tenders
+    if (!existingTender) throw new Error('the sale payload has no tender')
     payload.tenders[0] = {
-      ...payload.tenders[0]!,
+      ...existingTender,
       override: {
         staffId: managerStaffId,
         userId: managerUserId,
@@ -1101,7 +1103,7 @@ describe.skipIf(!available)('POS sale application', () => {
     ).toHaveLength(0)
 
     // Another branch's SALE movement must not leak into this branch's report.
-    const foreignBranch = (
+    const foreignBranchRow = (
       await db
         .insert(branch)
         .values({
@@ -1111,7 +1113,9 @@ describe.skipIf(!available)('POS sale application', () => {
           city: 'Accra',
         })
         .returning()
-    )[0]?.id
+    )[0]
+    if (!foreignBranchRow) throw new Error('the foreign branch was not created')
+    const foreignBranch = foreignBranchRow.id
     await db.insert(stockMovement).values({
       productId: productA,
       branchId: foreignBranch,

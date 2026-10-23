@@ -97,7 +97,6 @@ export function TenderScreen({
 
   // A different customer invalidates both an approval and a bypass.
   const customerKey = state.customer?.customerId ?? state.customer?.draftId ?? ''
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key is the trigger
   useEffect(() => {
     setCreditBypass(false)
   }, [customerKey])
