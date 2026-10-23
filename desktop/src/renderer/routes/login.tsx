@@ -265,6 +265,13 @@ export function LoginRoute() {
               binding={pendingChange.binding}
               currentPin={pendingChange.currentPin}
               onCancel={() => {
+                if (pendingChange.binding.pinMustChange) {
+                  // Offline fallback: the temporary PIN still sells, but the
+                  // badge stays Temporary and the POS asks again next sign-in.
+                  startStaffSession(pendingChange.binding)
+                  goToShift()
+                  return
+                }
                 setPendingChange(null)
                 setPhase('select')
               }}
@@ -505,7 +512,7 @@ function ChangePinForm({
           onClick={onCancel}
           className="h-11 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
         >
-          Not now
+          {binding.pinMustChange ? 'Use temporary PIN' : 'Not now'}
         </button>
         <button
           type="button"
