@@ -4,6 +4,7 @@ import { App } from './App'
 import { PosProvider } from './lib/powersync/provider'
 import { parseHash } from './lib/router'
 import { PosRoutes } from './routes/_pos/app'
+import { DevPrintRoute } from './routes/_pos/dev-print'
 import { DevSyncRoute } from './routes/_pos/dev-sync'
 import { LoginRoute } from './routes/login'
 import { ShiftRoute } from './routes/shift'
@@ -57,6 +58,10 @@ function Root() {
 
   if (route.path === 'pos' || (route.path === 'dev' && route.segments[1] === 'sync')) {
     return <PosProvider>{route.path === 'dev' ? <DevSyncRoute /> : <PosRoutes />}</PosProvider>
+  }
+
+  if (route.path === 'dev' && route.segments[1] === 'print') {
+    return <DevPrintRoute />
   }
 
   return <App />

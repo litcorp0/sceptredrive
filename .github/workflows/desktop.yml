@@ -70,3 +70,6 @@ jobs:
 
       - name: PowerSync spike (phase gate)
         run: xvfb-run --auto-servernum bun run --filter desktop test:spike
+
+      - name: Receipt printing (fake ESC/POS)
+        run: xvfb-run --auto-servernum bun run --filter desktop test:print

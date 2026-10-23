@@ -3,7 +3,7 @@
 **Milestone:** v1
 **Updated:** 2026-10-23
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–06/9 complete**: POS schema, shared cart pricing engine, settings,
+progress — Plans 01–07/9 complete**: POS schema, shared cart pricing engine, settings,
 permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
 keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
 device session + PowerSync token endpoints, the self-hosted PowerSync service with
@@ -13,12 +13,14 @@ the offline shift lifecycle with server application (04); idempotent upload, ato
 application with business conflicts, device conflict reads, and sale/shift reconciliation
 (05); the **selling UI** — guarded shell, crash-safe cart, local search and barcode
 scanning, offline customers, loyalty redemption, credit headroom with manager overrides,
-permissioned discounts, and the tender + sale-draft hand-off (06).
-Suites: API 353/353, shared 73/73, desktop 235/235; shell E2E 35/35; PowerSync gate 8/8;
+permissioned discounts, and the tender + sale-draft hand-off (06); **atomic sale
+completion, the 42-column receipt model, ESC/POS printing through a swappable port, the
+cash drawer kick, print failure recovery, and today's-sales reprints (07)**.
+Suites: API 353/353, shared 73/73, desktop 292/292; shell E2E 38/38; PowerSync gate 8/8;
 device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5; console PIN
-smoke 8/8; **selling contract 32/32; selling UI smoke 8/8**.
-**Next action:** Execute **Phase 6 Plan 07** (sale completion, receipts, ESC/POS printing,
-and the cash drawer).
+smoke 8/8; selling contract 32/32; selling UI smoke 8/8; **print smoke 21/21**.
+**Next action:** Execute **Phase 6 Plan 08** (outbox uploader, retries, sync status, and
+conflict surfacing).
 
 ---
 
@@ -32,7 +34,7 @@ and the cash drawer).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 🚧 In progress (6/9 plans) |
+| 6 | POS Offline Core | 🚧 In progress (7/9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -105,7 +107,7 @@ and the cash drawer).
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | ✅ Complete |
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | ✅ Complete |
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | ✅ Complete |
-| 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
+| 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | ✅ Complete |
 | 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
 | 09 | Phase 6 verification and state update | 📝 Planned |
 
@@ -340,7 +342,7 @@ and the cash drawer).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 350/350, desktop 74/74 against
+- Tests: `bun run test` — shared 73/73, api 353/353, desktop 292/292 against
   `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -622,6 +624,61 @@ and the cash drawer).
   the cash drawer, the outbox uploader, and the enrolled-device E2E. Plan 07 owns the first
   four, Plan 08 the uploader, Plan 09 the E2E gate. Until Plan 07, the tender screen
   reaches "Sale ready" with the final draft but does not record it.
+
+### Phase 6 Plan 07 execution notes (2026-10-23)
+
+- **Plan 07 complete** (the plan file's task list, implemented as one atomic slice). The
+  local schema gained two additive sale columns (`print_error`, `reprint_count`) and one
+  local-only table, `device_setting`. No server or migration change was needed.
+- **Atomic completion** (`lib/sale/complete-sale.ts`, `lib/sale/sale-repository.ts`):
+  `prepareSale` is pure — it re-prices the cart with the shared `priceCart`, validates the
+  tender, and builds the sale, lines, tenders, per-product stock deltas, credit delta,
+  loyalty deltas, and upload payload. `completeSale` opens one `db.writeTransaction`,
+  allocates `${terminal.code}-${YYYYMMDD}-${NNNN}` from `document_sequence` **inside** it,
+  and writes every row plus the outbox row and the cart-draft cleanup. A failed write
+  rolls all of it back and burns no receipt number. Duplicate product lines stay separate
+  `sale_line` rows but aggregate into one negative `local_stock_delta`.
+- **Receipt numbering** moved to `lib/sale/document-sequence.ts` (generic sequence in
+  `lib/document-sequence.ts`, shared with shifts). The tender screen still peeks for
+  display; the sale transaction consumes the number. Scope remains `sale`.
+- **Receipt model** (`lib/receipt/render.ts`): one model from the local sale row drives
+  both the on-screen 80 mm preview and the 42-column ESC/POS text. Money is formatted with
+  integer `formatMinorPlain`/`formatMinorWithSymbol` (`GHS` by default; `GH₵` optional).
+  E-VAT serial/QR/signature are present but empty until Phase 8.
+- **Printer port** (`src/shared/printing.ts`, `src/main/printing/*`, `src/main/ipc/printer.ts`):
+  a bounded, validated job crosses IPC; the main process builds `initialize → rows →
+  feed(3) → optional drawer kick → cut` with `@maxxuxx/node-printer` 1.6.11. Adapters:
+  `winspool` (Windows RAW), `network` (TCP 9100), `fake` (text + `.escpos.bin` + drawer
+  log; the default so no terminal boots into a native error). Native import is dynamic and
+  failures collapse to `PRINTER_*` codes with no raw error text.
+- **Drawer**: cash tenders append `ESC p 0 50 250` (pin 2; pin 5 configurable) to the
+  receipt, sent after the sale commits. A standalone kick is available from the receipt
+  screen when printing failed.
+- **Failure handling** (`lib/printing/print-sale.ts`): `PENDING → PRINTING → PRINTED |
+  FAILED`; a failure stores a short `print_error`, keeps the sale, and the receipt screen
+  offers Retry. Auto-print runs once for a `PENDING` sale; `FAILED` and a stale `PRINTING`
+  wait for the button (a crash mid-print may already have produced paper). Reprints add
+  `*** REPRINT ***` and increment `reprint_count` only after a successful print.
+- **UI**: `#pos/receipt/<saleId>` (preview, status, Retry, Print again, Open drawer, New
+  sale), `#pos/sales` (today plus any older unprinted receipt), an app-header “N to
+  print” badge, and a printer section in `#pos/settings` (driver, queue/host/port, drawer
+  pin, charset, copies, cedi symbol, test print). The tender screen now commits and
+  navigates; the placeholder “Sale ready” dialog is gone.
+- **Crash race closed**: `loadCartDraft` deletes a draft whose id already exists in `sale`,
+  so a debounced cart write that lands after commit can never resurrect a sold cart.
+- **Packaging**: `@maxxuxx/node-printer` is a runtime dependency externalised from the
+  main bundle. `prepare-desktop.mjs` walks its production dependency closure and writes
+  `node_modules/.runtime-packages.json`; Forge copies exactly that list. The first package
+  attempt found the missing `iconv-lite → safer-buffer` edge, which is why the list is
+  generated rather than hand-maintained.
+- **Verification:** desktop **292/292** (57 new: sequence, sale completion/rollback,
+  receipt model/text, ESC/POS bytes, fake adapter, print state machine, settings,
+  formatting), typecheck and biome clean, `bun run build:pos` packages, packaged
+  `test:print` **21/21** (text columns, money, drawer bytes, cut, simulated failure +
+  retry, reprint, no CSP/page errors). Evidence: `evidence/printing.md`,
+  `evidence/receipts/`, `evidence/shots/plan07-print-diagnostics.png`. The
+  enrolled-device sale → print walkthrough stays the Plan 09 gate (needs API + PowerSync);
+  the Windows hardware checklist is in the evidence note.
 
 ### Phase 6 planning additions (2026-10-22)
 
@@ -1026,3 +1083,27 @@ and the cash drawer).
 - Phase 6 Plan 06: search runs one parameterised query for barcode/SKU/name/browse and
   escapes LIKE wildcards; a full scan of 5k rows is acceptable locally, an FTS table is not
   needed at the target scale.
+- Phase 6 Plan 07: the printer is a **port** (`winspool` / `network` / `fake`). The default
+  is `fake` so a fresh terminal never boots into a native-module error; a manager selects
+  real hardware in `#pos/settings`. Fake output is text + `.escpos.bin` + `drawer.log`.
+- Phase 6 Plan 07: receipt, lines, tenders, deltas, outbox, and cart cleanup commit in **one
+  local transaction**; receipt numbering is allocated inside it, so a rolled-back sale burns
+  no number and a committed sale can never reuse one.
+- Phase 6 Plan 07: one receipt model feeds the 80 mm screen preview and the 42-column
+  ESC/POS text; money is integer-formatted (`GHS` by default, `GH₵` optional). E-VAT fields
+  are reserved and unprinted until Phase 8.
+- Phase 6 Plan 07: a cash tender appends the drawer kick to the receipt (`feed → kick →
+  cut`, pin 2 default, pin 5 configurable) only after the sale commits. A standalone kick is
+  offered when printing failed.
+- Phase 6 Plan 07: print state is `PENDING → PRINTING → PRINTED | FAILED`. `FAILED` stores a
+  short code/message and never touches the sale. Retry is manual; a reprint prints
+  `*** REPRINT ***` and increments `reprint_count` only on success.
+- Phase 6 Plan 07: `#pos/sales` lists today plus any older receipt that still needs
+  printing, so a multi-day printer outage cannot hide a sale. Receipts/sales are reachable
+  without an open shift.
+- Phase 6 Plan 07: `prepare-desktop.mjs` writes the exact externalised runtime package list
+  (`node_modules/.runtime-packages.json`) and Forge copies it, rather than a hand-maintained
+  list (the first attempt missed `iconv-lite → safer-buffer`).
+- Phase 6 Plan 07: the enrolled-device “sell → print → restart” E2E remains the Plan 09
+  gate because it needs the API and PowerSync service; Plan 07 verifies the same
+  orchestration with unit tests and a packaged fake-adapter print.

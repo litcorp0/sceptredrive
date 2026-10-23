@@ -1,7 +1,9 @@
+import { useQuery } from '@powersync/react'
 import type { StaffSession } from '../../lib/auth/staff-session'
 import { formatGhs } from '../../lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
 import { useSyncStatus } from '../../lib/powersync/status'
+import { navigate } from '../../lib/router'
 import { useOutboxSummary } from '../../lib/sync/outbox-summary'
 
 /**
@@ -29,6 +31,11 @@ export function AppHeader({
 }) {
   const status = useSyncStatus()
   const outbox = useOutboxSummary()
+  const unprinted = useQuery<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM sale
+      WHERE print_status IN ('PENDING', 'FAILED', 'PRINTING')`,
+  )
+  const unprintedCount = unprinted.data?.[0]?.count ?? 0
 
   return (
     <header className="flex items-center justify-between gap-6 border-b border-border bg-card px-5 py-2.5">
@@ -75,6 +82,17 @@ export function AppHeader({
             >
               {outbox.failed} to review
             </span>
+          ) : null}
+          {unprintedCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => navigate('pos/sales')}
+              data-testid="unprinted-count"
+              className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-900"
+              title="Receipts that still need printing"
+            >
+              {unprintedCount} to print
+            </button>
           ) : null}
         </div>
 

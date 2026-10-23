@@ -19,6 +19,13 @@ function cspPlugin(dev: boolean): Plugin {
   // narrower meta would silently block origins the runtime policy allows (e.g.
   // a local API in an unpackaged build). The header remains authoritative.
   const policy = buildContentSecurityPolicy({ dev, allowLocalOrigins: true })
+  // `frame-ancestors` is valid only as a header; browsers ignore it in a meta
+  // tag and log a console warning. Drop it from the fallback rather than emit a
+  // policy Chrome complains about. The header still enforces it.
+  const metaPolicy = policy
+    .split('; ')
+    .filter((directive) => !directive.startsWith('frame-ancestors'))
+    .join('; ')
   return {
     name: 'gikautos-csp',
     // The dev server sends the policy as a header (`server.headers`); the meta
@@ -28,7 +35,7 @@ function cspPlugin(dev: boolean): Plugin {
     transformIndexHtml(html) {
       return html.replace(
         '<!--%GIKAUTOS_CSP%-->',
-        `<meta http-equiv="Content-Security-Policy" content="${policy}" />`,
+        `<meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`,
       )
     },
   }

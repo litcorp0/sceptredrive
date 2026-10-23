@@ -2,11 +2,11 @@
 
 Electron Forge 8 + Vite 8 + React 19 shell for the offline-first point of sale. The
 renderer is served from `app://gikautos` behind a strict CSP with no Node access; the main
-process owns the OS keychain and (later) printing, PIN hashing, and the PowerSync
-connector.
+process owns the OS keychain, PIN hashing, and the ESC/POS printer adapter.
 
-> Phase 6 status: shell, security baseline, keychain, and the PowerSync Web SDK spike are
-> in place. Selling, shifts, and printing arrive in Plans 04–08.
+> Phase 6 status: shell, security baseline, keychain, PowerSync sync, offline PIN/shift,
+> selling, sale completion, receipts, ESC/POS printing and the cash drawer are in place.
+> The outbox uploader and phase verification are Plans 08–09.
 
 ## Commands
 
@@ -20,6 +20,8 @@ Run from the repository root unless noted.
 | `bun run --filter desktop test` | Unit tests (Vitest, node environment) |
 | `bun run --filter desktop test:e2e` | Playwright: origin, CSP, isolation, keychain (needs a display) |
 | `bun run --filter desktop test:spike` | PowerSync gate: both VFS backends + restart persistence |
+| `bun run --filter desktop test:print` | Packaged receipt + drawer through the fake ESC/POS adapter |
+| `bun run --filter desktop test:sync` | Device sync smoke (needs the API + PowerSync service) |
 
 `make:pos` on Linux needs the `zip` binary (MakerZIP shells out to it); CI images have it,
 minimal distros may not.
@@ -36,23 +38,43 @@ desktop/
 │   ├── security.ts      navigation/permission/webview guards, IPC sender check
 │   ├── windows.ts       hardened BrowserWindow
 │   ├── config.ts        validated runtime config (URLs, not secrets)
-│   └── ipc/             keychain, app info, handler registration
+│   ├── printing/       ESC/POS bytes, real + fake adapters, drawer
+│   └── ipc/             keychain, app info, printer handlers, registration
 ├── src/preload/         the only bridge (contextBridge, whitelisted methods)
 ├── src/renderer/        React UI
 │   ├── lib/desktop-api.ts   typed wrapper + DesktopUnavailableError/DesktopApiError
-│   └── lib/powersync/       spike schema + runner (Plan 03 replaces with the real sync)
-├── src/shared/ipc.ts    IPC contract shared by all three processes
+│   ├── lib/receipt/         one model → screen preview + 42-column ESC/POS text
+│   ├── lib/sale/            atomic sale completion, receipt numbering
+│   ├── lib/printing/        printer settings, transport, print orchestration
+│   └── lib/powersync/       encrypted local database + connector
+├── src/shared/          IPC + printing contracts shared by all three processes
 ├── scripts/             prepare-desktop.mjs (Forge/Bun workspace bridge)
-└── test/e2e/            Playwright smoke + PowerSync gate
+└── test/e2e/            Playwright smoke, PowerSync gate, print smoke
 ```
 
 ## Bundled libraries live in `devDependencies`
 
 Vite bundles the renderer, the preload, and the main process, so React, PowerSync, and
-Tailwind are **dev** dependencies. Only modules that must not be bundled (native printer
-bindings, Plan 07) belong in `dependencies`; those need to be materialised as real files
-in `desktop/node_modules` because Electron Forge does not follow symlinks — see
-`scripts/prepare-desktop.mjs`.
+Tailwind are **dev** dependencies. Only modules that must not be bundled (the native
+`@node-rs/argon2`, and `@maxxuxx/node-printer` for ESC/POS) belong in `dependencies`;
+those need to be materialised as real files in `desktop/node_modules` because Electron
+Forge does not follow symlinks — see `scripts/prepare-desktop.mjs`, which also writes the
+exact runtime package list Forge copies.
+
+## Printing
+
+`ReceiptPrinter` is a port. The renderer builds a receipt model and a 42-column text job;
+the main process turns it into ESC/POS bytes (`initialize → rows → feed(3) → optional
+drawer kick → cut`) and sends it through:
+
+- `winspool` (Windows spooler RAW), `network` (TCP 9100), or `fake` (files, the default
+  and CI path).
+
+A print failure is recorded on the sale (`print_status = FAILED`, short `print_error`) and
+offered as Retry. It never rolls the sale back and never blocks the next sale. The cash
+drawer kicks only with a cash tender, after the sale has committed. `#dev/print` is the
+hardware-neutral diagnostic used by `test:print`; the Windows human checklist lives in
+`.planning/phases/06-pos-offline-core/evidence/printing.md`.
 
 ## Why `scripts/prepare-desktop.mjs` exists
 

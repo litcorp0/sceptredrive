@@ -204,13 +204,15 @@ async function checkDesktopBridge(page) {
     root: Object.keys(globalThis.gikautos ?? {}).sort(),
     app: Object.keys(globalThis.gikautos?.app ?? {}).sort(),
     secure: Object.keys(globalThis.gikautos?.secure ?? {}).sort(),
+    printer: Object.keys(globalThis.gikautos?.printer ?? {}).sort(),
     hasInvoke: 'invoke' in (globalThis.gikautos ?? {}),
   }))
-  // `pin` was added in Plan 04 (main-process Argon2 hash/verify). Everything the
-  // renderer can reach must be an explicit typed method — never a generic invoke.
+  // `pin` was added in Plan 04 (main-process Argon2 hash/verify) and `printer`
+  // in Plan 07 (bounded ESC/POS jobs). Everything the renderer can reach must
+  // be an explicit typed method — never a generic invoke.
   check(
-    shape.root.join(',') === 'app,pin,secure',
-    'bridge exposes only app, pin, and secure',
+    shape.root.join(',') === 'app,pin,printer,secure',
+    'bridge exposes only app, pin, printer, and secure',
     shape.root.join(','),
   )
   check(shape.hasInvoke === false, 'bridge exposes no generic invoke')
@@ -218,6 +220,11 @@ async function checkDesktopBridge(page) {
     shape.app.join(',') === 'getInfo',
     'bridge app surface is app.getInfo only',
     shape.app.join(','),
+  )
+  check(
+    shape.printer.join(',') === 'list,openDrawer,print,test',
+    'bridge printer surface is list/print/openDrawer/test only',
+    shape.printer.join(','),
   )
   check(
     shape.secure.join(',') === 'delete,get,set',
@@ -236,6 +243,7 @@ async function checkDesktopBridge(page) {
   check(info.electron.startsWith('45.'), 'app info reports Electron 45', info.electron)
   check(info.platform === 'linux', 'app info reports the platform', info.platform)
   check(typeof info.userDataPath === 'string', 'app info exposes the user data path')
+  check(info.diagnosticsEnabled === false, 'print diagnostics are off unless POS_DIAGNOSTICS=1')
   check(
     ['os', 'basic', 'unavailable'].includes(info.secureStorage.level),
     'app info reports the secure storage level',

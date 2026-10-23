@@ -4,6 +4,8 @@ import type { PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosRuntime } from '../../lib/pos-runtime'
 import { usePos } from '../../lib/powersync/provider'
 import { useHashRoute, useRedirect } from '../../lib/router'
+import { ReceiptScreen } from './receipt'
+import { SalesScreen } from './sales'
 import { SellScreen } from './sell'
 import { SettingsScreen } from './settings'
 import { TenderScreen } from './tender'
@@ -51,7 +53,11 @@ function PosBoot() {
   const runtime = usePosRuntime()
   const sub = route.segments[1] ?? 'sell'
 
-  const needsShift = Boolean(runtime.config?.pos.salesRequireOpenShift) && !runtime.shift
+  // Receipts and today's sales must be reachable after the shift is closed, so
+  // a manager can reprint yesterday evening's sale while opening the next one.
+  const shiftOptional = sub === 'sales' || sub === 'receipt'
+  const needsShift =
+    Boolean(runtime.config?.pos.salesRequireOpenShift) && !runtime.shift && !shiftOptional
 
   const redirectTo = !staff
     ? 'login'
@@ -90,6 +96,18 @@ function PosBoot() {
         staff={staff}
       />
     )
+  }
+
+  if (sub === 'sales') {
+    return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  if (sub === 'receipt') {
+    const saleId = route.segments[2]
+    if (!saleId) {
+      return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
+    }
+    return <ReceiptScreen identity={identity} shift={runtime.shift} staff={staff} saleId={saleId} />
   }
 
   return (

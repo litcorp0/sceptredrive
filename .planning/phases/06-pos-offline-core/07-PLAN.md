@@ -5,8 +5,9 @@ wave: 5
 title: Sale completion, receipts, ESC/POS printing, and cash drawer
 requirements: [POS-06, POS-14]
 depends_on: [02, 06]
-status: planned
+status: complete
 created: 2026-10-22
+completed: 2026-10-23
 ---
 
 # Plan 07 — Sale Completion, Receipts, Printing, Drawer
