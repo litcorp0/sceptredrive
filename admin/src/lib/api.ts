@@ -69,10 +69,13 @@ import type {
 	RepaymentCreateInput,
 	ResetPasswordResult,
 	ResolvedSetting,
+	SetStaffPinInput,
+	SetStaffPinResult,
 	SettingsUpdateInput,
 	Staff,
 	StaffCreateInput,
 	StaffListQuery,
+	StaffPinStatus,
 	StaffUpdateInput,
 	StatementQuery,
 	StockCount,
@@ -253,6 +256,9 @@ export const api = {
 			apiRequest<{ staff: Staff }>(`/api/staff/${id}`, { method: "PATCH", body: input }),
 		resetPassword: (id: string) =>
 			apiRequest<ResetPasswordResult>(`/api/staff/${id}/reset-password`, { method: "POST" }),
+		pinStatus: (id: string) => apiRequest<StaffPinStatus>(`/api/staff/${id}/pin-status`),
+		setPin: (id: string, input: SetStaffPinInput) =>
+			apiRequest<SetStaffPinResult>(`/api/staff/${id}/pin`, { method: "POST", body: input }),
 		deactivate: (id: string) =>
 			apiRequest<{ staff: Staff }>(`/api/staff/${id}/deactivate`, { method: "POST" }),
 		reactivate: (id: string) =>

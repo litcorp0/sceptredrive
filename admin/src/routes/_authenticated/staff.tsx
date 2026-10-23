@@ -10,6 +10,8 @@ import { PageHeader } from "#/components/common/page-header"
 import { Pagination } from "#/components/common/pagination"
 import { ActiveBadge, RoleBadge } from "#/components/common/status-badge"
 import { TableMessage } from "#/components/common/table-message"
+import { PinDialog } from "#/components/staff/pin-dialog"
+import { PinStatusBadge } from "#/components/staff/pin-status-badge"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
@@ -70,6 +72,7 @@ function StaffPage() {
 	const isAdmin = session.user.role === "ADMIN"
 	const canCreate = hasPermission(session.user.role, "staff.create")
 	const canResetPassword = hasPermission(session.user.role, "staff.reset-password")
+	const canSetPin = hasPermission(session.user.role, "staff.pin.reset")
 	const canUpdate = hasPermission(session.user.role, "staff.update")
 
 	const [roleFilter, setRoleFilter] = useState<string>("ALL")
@@ -93,6 +96,7 @@ function StaffPage() {
 
 	const [createOpen, setCreateOpen] = useState(false)
 	const [editStaff, setEditStaff] = useState<Staff | null>(null)
+	const [pinStaff, setPinStaff] = useState<Staff | null>(null)
 	const [credentials, setCredentials] = useState<Credentials | null>(null)
 	const [confirmAction, setConfirmAction] = useState<{
 		kind: "deactivate" | "reactivate" | "reset"
@@ -125,6 +129,10 @@ function StaffPage() {
 	const total = staffQuery.data?.total ?? 0
 	const branchCode = (branchId: string | null) =>
 		branchId ? (branches.find((branch) => branch.id === branchId)?.code ?? "—") : "Global"
+
+	// Managers may only reset cashier PINs; admins may reset anyone's.
+	const canResetPinFor = (member: Staff) =>
+		canSetPin && member.isActive && (isAdmin || member.role === "CASHIER")
 
 	const resetMutation = useMutation({
 		mutationFn: (staffId: string) => api.staff.resetPassword(staffId),
@@ -212,19 +220,20 @@ function StaffPage() {
 							<TableHead>Email</TableHead>
 							<TableHead className="w-28">Role</TableHead>
 							<TableHead className="w-24">Branch</TableHead>
+							<TableHead className="w-24">PIN</TableHead>
 							<TableHead className="w-32">Status</TableHead>
 							<TableHead className="w-16" />
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{staffQuery.isLoading ? (
-							<TableMessage colSpan={7}>Loading staff…</TableMessage>
+							<TableMessage colSpan={8}>Loading staff…</TableMessage>
 						) : staffQuery.isError ? (
-							<TableMessage colSpan={7} tone="error">
+							<TableMessage colSpan={8} tone="error">
 								Couldn't load staff.
 							</TableMessage>
 						) : staff.length === 0 ? (
-							<TableMessage colSpan={7}>No staff match these filters.</TableMessage>
+							<TableMessage colSpan={8}>No staff match these filters.</TableMessage>
 						) : (
 							staff.map((member) => (
 								<TableRow key={member.id}>
@@ -236,6 +245,12 @@ function StaffPage() {
 									</TableCell>
 									<TableCell className="font-mono text-xs text-muted-foreground">
 										{branchCode(member.branchId)}
+									</TableCell>
+									<TableCell>
+										<PinStatusBadge
+											pinVersion={member.pinVersion}
+											pinMustChange={member.pinMustChange}
+										/>
 									</TableCell>
 									<TableCell>
 										<div className="flex flex-col gap-1">
@@ -271,6 +286,14 @@ function StaffPage() {
 														onSelect={() => setConfirmAction({ kind: "reset", staff: member })}
 													>
 														Reset password
+													</DropdownMenuItem>
+												) : null}
+												{canResetPinFor(member) ? (
+													<DropdownMenuItem
+														className="cursor-pointer"
+														onSelect={() => setPinStaff(member)}
+													>
+														Set PIN
 													</DropdownMenuItem>
 												) : null}
 												{canUpdate && member.id !== session.user.id ? (
@@ -326,6 +349,8 @@ function StaffPage() {
 			{editStaff ? (
 				<EditStaffDialog staff={editStaff} onClose={() => setEditStaff(null)} isAdmin={isAdmin} />
 			) : null}
+
+			{pinStaff ? <PinDialog staff={pinStaff} onClose={() => setPinStaff(null)} /> : null}
 
 			{credentials ? (
 				<CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />

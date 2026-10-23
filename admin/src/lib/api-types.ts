@@ -57,8 +57,23 @@ export interface Staff {
 	isActive: boolean
 	mustChangePassword: boolean
 	twoFactorEnabled: boolean
+	pinVersion: number
+	pinMustChange: boolean
 	createdAt: string
 	updatedAt: string
+}
+
+/** PIN metadata from `/api/staff/:id/pin-status`; never includes the hash. */
+export interface StaffPinStatus {
+	hasPin: boolean
+	pinVersion: number
+	pinMustChange: boolean
+	activeBindings: number
+}
+
+export interface SetStaffPinResult {
+	staffId: string
+	pinVersion: number
 }
 
 export interface AuditEntry {
@@ -167,6 +182,10 @@ export interface StaffUpdateInput {
 	phone?: string
 	role?: Role
 	branchId?: string | null
+}
+
+export interface SetStaffPinInput {
+	pin: string
 }
 
 export interface ChangePasswordInput {
