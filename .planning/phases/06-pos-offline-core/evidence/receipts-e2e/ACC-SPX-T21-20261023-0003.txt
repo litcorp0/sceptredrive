@@ -1,0 +1,23 @@
+    Thank you for shopping at GikAutos
+              Accra Spintex
+          ACC-SPX - ACC-SPX-T21
+------------------------------------------
+    RECEIPT ACC-SPX-T21-20261023-0003
+Date                      2026-10-23 20:57
+Cashier                       Demo Cashier
+------------------------------------------
+Denso Oil Filter
+  1 x GHS 80.00                  GHS 80.00
+  Tax (20%)                      GHS 13.33
+------------------------------------------
+Subtotal                         GHS 80.00
+Taxable base                     GHS 66.67
+VAT 15%                           GHS 9.99
+NHIL 2.5%                         GHS 1.67
+GETFund 2.5%                      GHS 1.67
+TOTAL                            GHS 80.00
+------------------------------------------
+Cash                             GHS 80.00
+Change                            GHS 0.00
+------------------------------------------
+Thank you for your business

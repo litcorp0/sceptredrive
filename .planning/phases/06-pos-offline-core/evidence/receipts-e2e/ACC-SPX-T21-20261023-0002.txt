@@ -1,0 +1,25 @@
+    Thank you for shopping at GikAutos
+              Accra Spintex
+          ACC-SPX - ACC-SPX-T21
+------------------------------------------
+    RECEIPT ACC-SPX-T21-20261023-0002
+Date                      2026-10-23 20:57
+Cashier                       Demo Cashier
+Customer                     Akosua Mensah
+Phone                        +233241000001
+------------------------------------------
+Bosch S4 Battery 70Ah
+  1 x GHS 780.00                GHS 780.00
+  Tax (20%)                     GHS 130.00
+------------------------------------------
+Subtotal                        GHS 780.00
+Taxable base                    GHS 650.00
+VAT 15%                          GHS 97.50
+NHIL 2.5%                        GHS 16.25
+GETFund 2.5%                     GHS 16.25
+TOTAL                           GHS 780.00
+------------------------------------------
+Credit                          GHS 780.00
+Points earned                          650
+------------------------------------------
+Thank you for your business

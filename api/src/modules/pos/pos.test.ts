@@ -1096,15 +1096,20 @@ describe.skipIf(!available)('POS sale application', () => {
       }),
     )
     const creditReconcile = await reconcileSales(branchId)
-    expect(creditReconcile.filter((divergence) => divergence.saleId === creditResult.saleId)).toHaveLength(
-      0,
-    )
+    expect(
+      creditReconcile.filter((divergence) => divergence.saleId === creditResult.saleId),
+    ).toHaveLength(0)
 
     // Another branch's SALE movement must not leak into this branch's report.
     const foreignBranch = (
       await db
         .insert(branch)
-        .values({ code: `FB-${suffix.slice(0, 3)}`, name: `Foreign ${suffix}`, type: 'RETAIL', city: 'Accra' })
+        .values({
+          code: `FB-${suffix.slice(0, 3)}`,
+          name: `Foreign ${suffix}`,
+          type: 'RETAIL',
+          city: 'Accra',
+        })
         .returning()
     )[0]?.id
     await db.insert(stockMovement).values({
