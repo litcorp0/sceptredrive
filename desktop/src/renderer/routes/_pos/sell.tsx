@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from '../../components/pos/app-header'
 import { CartLineRow } from '../../components/pos/cart-line'
 import { CartTotalsPanel } from '../../components/pos/cart-totals'
+import { CustomerCreateDialog } from '../../components/pos/customer-create-dialog'
+import { CustomerDialog } from '../../components/pos/customer-dialog'
+import { CustomerPanel } from '../../components/pos/customer-panel'
 import { Modal } from '../../components/pos/modal'
 import { ProductSearch } from '../../components/pos/product-search'
 import { ScanListener } from '../../components/pos/scan-listener'
@@ -9,6 +12,8 @@ import type { PosConfigSnapshot } from '../../lib/api/types'
 import { endStaffSession, type StaffSession } from '../../lib/auth/staff-session'
 import { useCart } from '../../lib/cart/cart-store'
 import { lookupScannedProduct } from '../../lib/catalog/resolve'
+import { useCustomerContext } from '../../lib/customers/context'
+import type { CustomerHit } from '../../lib/customers/search'
 import { formatGhs } from '../../lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosDatabase } from '../../lib/powersync/provider'
@@ -36,12 +41,31 @@ export function SellScreen({
   staff: StaffSession
   config: PosConfigSnapshot
 }) {
-  const { state, totals, dispatch, clear, status, error, addProduct } = useCart()
+  const { state, totals, dispatch, clear, status, error, addProduct, setCustomer } = useCart()
   const db = usePosDatabase()
+  const customerContext = useCustomerContext(state.customer, identity.branchId)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [showCustomer, setShowCustomer] = useState(false)
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  const dialogOpen = confirmClear || showCustomer || showCreateCustomer
+
+  function applyCustomer(hit: CustomerHit) {
+    if (!hit.customerId && !hit.draftId) {
+      setCustomer(null)
+      return
+    }
+    setCustomer({
+      customerId: hit.customerId,
+      draftId: hit.draftId,
+      name: hit.name,
+      phone: hit.phone,
+      isDraft: hit.isDraft,
+    })
+  }
 
   const canSettings = staff.role === 'MANAGER' || staff.role === 'ADMIN'
   const selectedLine = state.lines.find((line) => line.id === selectedLineId) ?? null
@@ -99,6 +123,7 @@ export function SellScreen({
     useMemo(
       () => ({
         F2: () => searchRef.current?.focus(),
+        F4: () => setShowCustomer(true),
         F9: goTender,
         ArrowDown: () => {
           const index = state.lines.findIndex((line) => line.id === selectedLineId)
@@ -120,7 +145,7 @@ export function SellScreen({
       }),
       [goTender, selectedLine, selectedLineId, setQuantity, state.lines],
     ),
-    !confirmClear,
+    !dialogOpen,
   )
 
   function lock() {
@@ -134,7 +159,7 @@ export function SellScreen({
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <ScanListener onScan={handleScan} enabled={!confirmClear} />
+      <ScanListener onScan={handleScan} enabled={!dialogOpen} />
       <AppHeader
         identity={identity}
         shift={shift}
@@ -245,9 +270,12 @@ export function SellScreen({
           className="hidden min-h-0 overflow-y-auto lg:block"
         >
           <div className="grid gap-3 p-3">
-            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-              Walk-in customer
-            </div>
+            <CustomerPanel
+              customer={state.customer}
+              context={customerContext}
+              onFind={() => setShowCustomer(true)}
+              onClear={() => setCustomer(null)}
+            />
             <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
               Loyalty
             </div>
@@ -257,6 +285,28 @@ export function SellScreen({
           </div>
         </aside>
       </main>
+
+      {showCustomer ? (
+        <CustomerDialog
+          current={state.customer}
+          onClose={() => setShowCustomer(false)}
+          onSelect={applyCustomer}
+          onCreate={() => {
+            setShowCustomer(false)
+            setShowCreateCustomer(true)
+          }}
+        />
+      ) : null}
+
+      {showCreateCustomer ? (
+        <CustomerCreateDialog
+          onClose={() => setShowCreateCustomer(false)}
+          onCreated={(customer) => {
+            applyCustomer(customer)
+            setShowCreateCustomer(false)
+          }}
+        />
+      ) : null}
 
       {confirmClear ? (
         <Modal
