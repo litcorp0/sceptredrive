@@ -49,6 +49,12 @@ export interface PostEntryInput {
   referenceNumber?: string | null
   idempotencyKey?: string | null
   override?: { reasonCode: CreditOverrideReason; note?: string | null } | null
+  /**
+   * POS replay only: record the debt even when the branch hold or the credit
+   * limit would reject the charge. The caller records the conflict; the ledger
+   * must still show what the customer owes. Never accepted from an HTTP body.
+   */
+  bypassPolicy?: boolean
 }
 
 export interface CreditPostingResult {

@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { type DbExecutor, db } from '@gikautos/db'
 import { normalizeGhanaPhone } from '@gikautos/shared'
 import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
@@ -126,6 +126,66 @@ export async function createCustomer(
   return listRow
 }
 
+export interface ResolveDraftCustomerInput {
+  /** Client-generated UUID from the POS draft; used as the server id on create. */
+  id: string
+  name?: string | undefined
+  phone: string
+  branchId: string
+  actor: AuditActor
+}
+
+export type DraftCustomerResolution =
+  | { status: 'EXISTING_ID' | 'EXISTING_PHONE' | 'CREATED'; customer: CustomerRow }
+  | { status: 'INVALID_PHONE' }
+
+/**
+ * Resolves a customer captured offline (Plan 06 draft) inside the sale
+ * transaction: link by client id, link by normalized phone, or insert with the
+ * client id and bootstrap the loyalty account. An invalid phone is not an
+ * error: the sale continues as a walk-in and records `INVALID_CUSTOMER`.
+ */
+export async function resolveDraftCustomer(
+  input: ResolveDraftCustomerInput,
+  executor: DbExecutor = db,
+): Promise<DraftCustomerResolution> {
+  const phone = normalizeGhanaPhone(input.phone)
+  if (!phone) return { status: 'INVALID_PHONE' }
+
+  const byId = await findCustomerById(input.id, executor)
+  if (byId && !byId.anonymizedAt) return { status: 'EXISTING_ID', customer: byId }
+
+  const byPhone = await findCustomerByPhone(phone, executor)
+  if (byPhone) return { status: 'EXISTING_PHONE', customer: byPhone }
+
+  const row = await insertCustomer(
+    {
+      id: input.id,
+      name: input.name?.trim() || phone,
+      phone,
+      createdBranchId: input.branchId,
+      createdBy: actorLabel(input.actor) ?? input.actor.actorId,
+    },
+    executor,
+  )
+  if (!row) throw new AppError(500, 'INTERNAL', 'Failed to create the draft customer')
+
+  await insertLoyaltyAccount(row.id, executor)
+  await writeAudit(
+    {
+      ...input.actor,
+      action: 'customer.created',
+      entity: 'customer',
+      entityId: row.id,
+      branchId: input.branchId,
+      after: { name: row.name, phone: row.phone, source: 'POS_DRAFT' },
+    },
+    executor,
+  )
+
+  return { status: 'CREATED', customer: row }
+}
+
 /** Updates identity fields; phone re-normalization and uniqueness are enforced. */
 export async function updateCustomer(
   actor: AuditActor,
@@ -182,8 +242,8 @@ export async function updateCustomer(
  * Narrow identity lookup for cross-module service calls (credit postings,
  * statements). Unscoped — the caller is responsible for branch permissions.
  */
-export async function requireCustomer(id: string): Promise<CustomerRow> {
-  const row = await findCustomerById(id)
+export async function requireCustomer(id: string, executor: DbExecutor = db): Promise<CustomerRow> {
+  const row = await findCustomerById(id, executor)
   if (!row) throw new NotFoundError('Customer not found')
   return row
 }

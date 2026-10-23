@@ -21,6 +21,7 @@ import { terminalsRoutes } from './modules/org/terminals.routes.ts'
 import { payablesRoutes } from './modules/payables/payables.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
+import { posRoutes } from './modules/pos/pos.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { syncRoutes } from './modules/sync/sync.routes.ts'
@@ -54,6 +55,7 @@ app.route('/', creditRoutes)
 app.route('/', loyaltyRoutes)
 app.route('/', suppliersRoutes)
 app.route('/', payablesRoutes)
+app.route('/', posRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 app.route('/', syncRoutes)

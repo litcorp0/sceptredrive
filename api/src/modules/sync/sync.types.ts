@@ -55,3 +55,65 @@ export interface PowersyncTokenPayload {
   token: string
   expiresAt: string
 }
+
+export type UploadTransactionType = 'SALE' | 'SHIFT_OPEN' | 'CASH_MOVEMENT' | 'SHIFT_CLOSE'
+
+export interface UploadTransaction {
+  clientTransactionId: string
+  type: UploadTransactionType
+  occurredAt: string
+  payloadVersion: 1
+  payload: unknown
+}
+
+export interface PosUploadBody {
+  batchId: string
+  deviceId: string
+  terminalId: string
+  transactions: UploadTransaction[]
+}
+
+export type UploadItemStatus = 'APPLIED' | 'REPLAYED' | 'REJECTED'
+
+export interface UploadItemResult {
+  clientTransactionId: string
+  status: UploadItemStatus
+  serverId: string | null
+  conflicts: Array<{ id: string; type: string; severity: string }>
+  resolved: { customerId?: string; saleId?: string; shiftId?: string }
+  error?: { code: string; message: string }
+}
+
+export interface PosUploadResponse {
+  batchId: string
+  serverTime: string
+  results: UploadItemResult[]
+}
+
+/** Stored in `pos_sync_transaction.result` and replayed verbatim. */
+export interface StoredTransactionResult {
+  status: 'APPLIED' | 'REJECTED'
+  serverId: string | null
+  conflicts: Array<{ id: string; type: string; severity: string }>
+  resolved: { customerId?: string; saleId?: string; shiftId?: string }
+  error?: { code: string; message: string }
+}
+
+export interface DeviceConflictItem {
+  id: string
+  type: string
+  severity: string
+  status: string
+  saleReceiptNumber: string | null
+  shiftNumber: string | null
+  details: Record<string, unknown>
+  createdAt: string
+}
+
+export interface DeviceSyncState {
+  pendingConflicts: number
+  lastSaleAt: string | null
+  serverTime: string
+  /** Latest settings change (ISO) so a terminal can detect a config refresh. */
+  configVersion: string | null
+}

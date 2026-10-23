@@ -1,17 +1,42 @@
+import { type DbExecutor, db } from '@gikautos/db'
+import { and, eq } from 'drizzle-orm'
 import { env } from '../../config/env.ts'
 import { AppError } from '../../http/errors.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import * as settingsService from '../platform/settings.service.ts'
+import { addConflict } from '../pos/pos.conflicts.ts'
+import {
+  countOpenConflicts,
+  selectConflictsForTerminal,
+  selectLastSaleAt,
+  selectSettingsVersion,
+} from '../pos/pos.repository.ts'
+import { posSyncTransaction } from '../pos/pos.schema.ts'
+import { applySale, closeShift, openShift, recordCashMovement } from '../pos/pos.service.ts'
+import type {
+  CashMovementPayload,
+  SalePayload,
+  ShiftClosePayload,
+  ShiftOpenPayload,
+} from '../pos/pos.types.ts'
 import { signDeviceJwt, signPowersyncJwt } from './sync.jwt.ts'
 import type { DeviceSessionRow } from './sync.repository.ts'
 import { findSessionByDeviceId, findSessionByTokenHash } from './sync.repository.ts'
 import type {
   DeviceAuthContext,
+  DeviceConflictItem,
+  DeviceSyncState,
   PosConfigSnapshot,
   PosLoyaltyConfig,
   PosRuntimeConfig,
   PosSessionPayload,
+  PosUploadBody,
+  PosUploadResponse,
   PowersyncTokenPayload,
+  StoredTransactionResult,
+  UploadItemResult,
+  UploadItemStatus,
+  UploadTransaction,
 } from './sync.types.ts'
 
 const SERVER_TIME_ZONE = 'Africa/Accra'
@@ -158,4 +183,300 @@ export async function issuePowersyncToken(auth: DeviceAuthContext): Promise<Powe
   })
 
   return { endpoint: env.POWERSYNC_URL, token, expiresAt: expiresAt.toISOString() }
+}
+
+// --- Upload and device sync reads (Plan 05) ---------------------------------
+
+/**
+ * Applies a batch in array order, one DB transaction per client transaction.
+ * Business conflicts are part of a 200 response; 401/403 are auth/scope only,
+ * and unexpected failures bubble as 5xx so the client retries.
+ */
+export async function applyUpload(
+  auth: DeviceAuthContext,
+  body: PosUploadBody,
+): Promise<PosUploadResponse> {
+  if (body.deviceId !== auth.deviceId || body.terminalId !== auth.terminalId) {
+    throw new AppError(403, 'DEVICE_MISMATCH', 'This batch does not belong to this device')
+  }
+
+  const clockSkewToleranceMinutes = await settingsService.getSettingValue(
+    'pos.clockSkewToleranceMinutes',
+  )
+  const results: UploadItemResult[] = []
+  for (const transaction of body.transactions) {
+    results.push(await applyTransaction(auth, transaction, clockSkewToleranceMinutes))
+  }
+
+  return {
+    batchId: body.batchId,
+    serverTime: new Date().toISOString(),
+    results,
+  }
+}
+
+async function reserveTransaction(
+  tx: DbExecutor,
+  auth: DeviceAuthContext,
+  item: UploadTransaction,
+): Promise<string | null> {
+  const rows = await tx
+    .insert(posSyncTransaction)
+    .values({
+      terminalId: auth.terminalId,
+      deviceId: auth.deviceId,
+      clientTransactionId: item.clientTransactionId,
+      type: item.type,
+      status: 'APPLIED',
+      result: {},
+      conflictCount: 0,
+      occurredAt: new Date(item.occurredAt),
+    })
+    .onConflictDoNothing({
+      target: [posSyncTransaction.terminalId, posSyncTransaction.clientTransactionId],
+    })
+    .returning({ id: posSyncTransaction.id })
+  return rows[0]?.id ?? null
+}
+
+async function readStoredResult(
+  tx: DbExecutor,
+  auth: DeviceAuthContext,
+  item: UploadTransaction,
+): Promise<StoredTransactionResult> {
+  const rows = await tx
+    .select({ result: posSyncTransaction.result })
+    .from(posSyncTransaction)
+    .where(
+      and(
+        eq(posSyncTransaction.terminalId, auth.terminalId),
+        eq(posSyncTransaction.clientTransactionId, item.clientTransactionId),
+      ),
+    )
+    .limit(1)
+  const stored = rows[0]?.result as StoredTransactionResult | undefined
+  if (!stored?.status) {
+    throw new AppError(500, 'INTERNAL', 'A reserved transaction has no stored result')
+  }
+  return stored
+}
+
+async function finishTransaction(
+  tx: DbExecutor,
+  reservationId: string,
+  stored: StoredTransactionResult,
+): Promise<void> {
+  await tx
+    .update(posSyncTransaction)
+    .set({
+      status: stored.status,
+      result: stored,
+      conflictCount: stored.conflicts.length,
+      appliedAt: new Date(),
+    })
+    .where(eq(posSyncTransaction.id, reservationId))
+}
+
+function toItemResult(
+  clientTransactionId: string,
+  status: UploadItemStatus,
+  stored: StoredTransactionResult,
+): UploadItemResult {
+  return {
+    clientTransactionId,
+    status,
+    serverId: stored.serverId,
+    conflicts: stored.conflicts,
+    resolved: stored.resolved,
+    ...(stored.error ? { error: stored.error } : {}),
+  }
+}
+
+async function dispatchTransaction(
+  tx: DbExecutor,
+  auth: DeviceAuthContext,
+  item: UploadTransaction,
+  receivedAt: Date,
+  clockSkewToleranceMinutes: number,
+): Promise<StoredTransactionResult> {
+  switch (item.type) {
+    case 'SALE': {
+      const result = await applySale(
+        {
+          clientTransactionId: item.clientTransactionId,
+          device: auth,
+          receivedAt,
+          clockSkewToleranceMinutes,
+        },
+        item.payload as SalePayload,
+        tx,
+      )
+      return {
+        status: 'APPLIED',
+        serverId: result.saleId,
+        conflicts: result.conflicts,
+        resolved: {
+          saleId: result.saleId,
+          ...(result.resolvedCustomerId ? { customerId: result.resolvedCustomerId } : {}),
+        },
+      }
+    }
+    case 'SHIFT_OPEN': {
+      const result = await openShift(auth, item.payload as ShiftOpenPayload, tx)
+      return {
+        status: 'APPLIED',
+        serverId: result.shiftId,
+        conflicts: [],
+        resolved: { shiftId: result.shiftId },
+      }
+    }
+    case 'CASH_MOVEMENT': {
+      const result = await recordCashMovement(auth, item.payload as CashMovementPayload, tx)
+      return {
+        status: 'APPLIED',
+        serverId: (item.payload as CashMovementPayload).id,
+        conflicts: [],
+        resolved: { shiftId: result.shiftId },
+      }
+    }
+    case 'SHIFT_CLOSE': {
+      const result = await closeShift(auth, item.payload as ShiftClosePayload, tx)
+      return {
+        status: 'APPLIED',
+        serverId: result.shiftId,
+        conflicts: result.conflictId
+          ? [
+              {
+                id: result.conflictId,
+                type: 'SHIFT_VARIANCE_MISMATCH',
+                severity: 'MEDIUM',
+              },
+            ]
+          : [],
+        resolved: { shiftId: result.shiftId },
+      }
+    }
+  }
+}
+
+/**
+ * One client transaction: reserve, apply, and finalise in one transaction. A
+ * rejection rolls the domain work back and records a committed REJECTED
+ * reservation in a second transaction so a retry never re-applies it.
+ */
+async function applyTransaction(
+  auth: DeviceAuthContext,
+  item: UploadTransaction,
+  clockSkewToleranceMinutes: number,
+): Promise<UploadItemResult> {
+  const receivedAt = new Date()
+
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const reservationId = await reserveTransaction(tx, auth, item)
+      if (!reservationId) {
+        return { replayed: true as const, stored: await readStoredResult(tx, auth, item) }
+      }
+      const stored = await dispatchTransaction(
+        tx,
+        auth,
+        item,
+        receivedAt,
+        clockSkewToleranceMinutes,
+      )
+      await finishTransaction(tx, reservationId, stored)
+      return { replayed: false as const, stored }
+    })
+
+    return toItemResult(
+      item.clientTransactionId,
+      outcome.replayed ? 'REPLAYED' : 'APPLIED',
+      outcome.stored,
+    )
+  } catch (error) {
+    if (!(error instanceof AppError) || error.statusCode >= 500) throw error
+
+    const outcome = await db.transaction(async (tx) => {
+      const reservationId = await reserveTransaction(tx, auth, item)
+      if (!reservationId) {
+        return { replayed: true as const, stored: await readStoredResult(tx, auth, item) }
+      }
+
+      const conflicts: StoredTransactionResult['conflicts'] = []
+      if (error.code === 'UNKNOWN_PRODUCT') {
+        // The sale row was rolled back with the rejection, so the conflict
+        // cannot reference it; the client transaction id in details is the link.
+        const conflict = await addConflict(
+          tx,
+          { device: auth, saleId: null },
+          {
+            type: 'UNKNOWN_PRODUCT',
+            severity: 'HIGH',
+            details: {
+              clientTransactionId: item.clientTransactionId,
+              productIds: Array.isArray(error.details?.productIds) ? error.details.productIds : [],
+            },
+          },
+        )
+        conflicts.push(conflict)
+      }
+
+      const stored: StoredTransactionResult = {
+        status: 'REJECTED',
+        serverId: null,
+        conflicts,
+        resolved: {},
+        error: { code: error.code, message: error.message },
+      }
+      await finishTransaction(tx, reservationId, stored)
+      return { replayed: false as const, stored }
+    })
+
+    return toItemResult(
+      item.clientTransactionId,
+      outcome.replayed ? 'REPLAYED' : 'REJECTED',
+      outcome.stored,
+    )
+  }
+}
+
+/** Conflicts for this device's terminal, newest first. */
+export async function listDeviceConflicts(
+  auth: DeviceAuthContext,
+  query: { since?: string | undefined; limit: number },
+): Promise<{ conflicts: DeviceConflictItem[] }> {
+  const since = query.since ? new Date(query.since) : null
+  if (since && Number.isNaN(since.getTime())) {
+    throw new AppError(400, 'INVALID_TIMESTAMP', 'since must be an ISO timestamp')
+  }
+
+  const rows = await selectConflictsForTerminal(auth.terminalId, since, query.limit)
+  return {
+    conflicts: rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      severity: row.severity,
+      status: row.status,
+      saleReceiptNumber: row.saleReceiptNumber,
+      shiftNumber: row.shiftNumber,
+      details: (row.details ?? {}) as Record<string, unknown>,
+      createdAt: row.createdAt.toISOString(),
+    })),
+  }
+}
+
+/** Cheap polling fallback for the POS status panel. */
+export async function getDeviceSyncState(auth: DeviceAuthContext): Promise<DeviceSyncState> {
+  const [pendingConflicts, lastSaleAt, configVersion] = await Promise.all([
+    countOpenConflicts(auth.terminalId),
+    selectLastSaleAt(auth.terminalId),
+    selectSettingsVersion(),
+  ])
+
+  return {
+    pendingConflicts,
+    lastSaleAt: lastSaleAt?.toISOString() ?? null,
+    serverTime: new Date().toISOString(),
+    configVersion,
+  }
 }

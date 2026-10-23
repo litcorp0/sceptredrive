@@ -4,7 +4,12 @@ import { AppError } from '../../http/errors.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as posService from '../pos/pos.service.ts'
 import * as syncService from './sync.service.ts'
-import type { AuthorizeStaffBody, ChangePinBody } from './sync.validation.ts'
+import type {
+  AuthorizeStaffBody,
+  ChangePinBody,
+  ConflictsQuery,
+  UploadBody,
+} from './sync.validation.ts'
 
 /** The binding credential travels in its own header; it is never a URL or body value. */
 export const BINDING_HEADER = 'x-pos-binding'
@@ -61,5 +66,21 @@ export async function changeStaffPin(c: Context<AppEnv>, body: ChangePinBody) {
 /** Boot-time binding check: 200 with `valid: false` for a dead binding. */
 export async function validateStaffBinding(c: Context<AppEnv>) {
   const payload = await posService.validateStaffBinding(deviceAuth(c), readBindingToken(c))
+  return c.json(payload)
+}
+
+/** Ordered batch of offline transactions; business conflicts stay HTTP 200. */
+export async function upload(c: Context<AppEnv>, body: UploadBody) {
+  const payload = await syncService.applyUpload(deviceAuth(c), body)
+  return c.json(payload)
+}
+
+export async function listConflicts(c: Context<AppEnv>, query: ConflictsQuery) {
+  const payload = await syncService.listDeviceConflicts(deviceAuth(c), query)
+  return c.json(payload)
+}
+
+export async function syncState(c: Context<AppEnv>) {
+  const payload = await syncService.getDeviceSyncState(deviceAuth(c))
   return c.json(payload)
 }

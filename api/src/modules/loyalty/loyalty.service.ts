@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { type DbExecutor, db } from '@gikautos/db'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
@@ -83,8 +83,8 @@ export async function earnPointsForSale(netPaidMinor: number): Promise<number> {
 }
 
 /** Redemption value in pesewas for the POS/console to display. */
-export async function quoteRedeem(points: number): Promise<RedeemQuote> {
-  const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {})
+export async function quoteRedeem(points: number, executor: DbExecutor = db): Promise<RedeemQuote> {
+  const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {}, executor)
   return { points, discountMinor: Math.floor((points * 100) / pointsPerCedi) }
 }
 
@@ -178,121 +178,9 @@ export async function postEntry(
   }
 
   try {
-    return await db.transaction(async (tx) => {
-      const customerRow = await requireCustomer(input.customerId)
-      if (customerRow.anonymizedAt) {
-        throw new ConflictError('Anonymized customers cannot receive loyalty activity')
-      }
-
-      const account = await lockOrCreateAccount(tx, input.customerId)
-      let pointsDelta = normalized.pointsDelta
-      let quote: RedeemQuote | null = null
-
-      if (input.kind === 'EARN') {
-        const rate = await getSettingValue('loyalty.earnPointsPerCedi', {}, tx)
-        const earned = Math.floor(((normalized.netPaidMinor ?? 0) * rate) / 100)
-        if (earned < 1) {
-          // Floor per sale, no carry: a sale below one point writes nothing.
-          return { entry: null, account, lot: null, consumption: [], quote: null }
-        }
-        pointsDelta = earned
-      }
-
-      if (input.kind === 'REDEEM') {
-        const requested = Math.abs(pointsDelta)
-        const minimumRedeem = await getSettingValue('loyalty.minimumRedeemPoints', {}, tx)
-        if (requested < minimumRedeem) {
-          throw new ConflictError(`A redemption requires at least ${minimumRedeem} points`)
-        }
-        if (account.balancePoints < requested) {
-          throw new ConflictError('The customer does not have enough points for this redemption')
-        }
-        quote = await quoteRedeem(requested)
-      }
-
-      const entry = await insertEntry(
-        {
-          accountId: account.id,
-          customerId: input.customerId,
-          branchId: input.branchId,
-          kind: input.kind,
-          pointsDelta,
-          reasonCode: normalized.reasonCode,
-          note: input.note ?? null,
-          referenceType: input.referenceType ?? null,
-          referenceId: input.referenceId ?? null,
-          referenceNumber: input.referenceNumber ?? null,
-          idempotencyKey: input.idempotencyKey ?? null,
-          createdBy: actorLabel(actor),
-          occurredAt,
-        },
-        tx,
-      )
-      if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the loyalty entry')
-
-      let lot: LoyaltyLotRow | null = null
-      const consumption: LoyaltyLotConsumptionRow[] = []
-
-      if (pointsDelta > 0) {
-        // Every positive posting creates a lot so expiry stays total (D14).
-        const expiryMonths = await getSettingValue('loyalty.expiryMonths', {}, tx)
-        lot = await insertLot(
-          {
-            accountId: account.id,
-            earnEntryId: entry.id,
-            points: pointsDelta,
-            remainingPoints: pointsDelta,
-            expiresAt: addMonths(occurredAt, expiryMonths),
-          },
-          tx,
-        )
-      } else {
-        let outstanding = Math.abs(pointsDelta)
-        const lots = await lockLotsFefo(tx, account.id)
-        for (const lotRow of lots) {
-          if (outstanding <= 0) break
-          const take = Math.min(lotRow.remainingPoints, outstanding)
-          if (take <= 0) continue
-          const consumed = await appendConsumption(
-            { lotId: lotRow.id, entryId: entry.id, points: take },
-            tx,
-          )
-          if (consumed) consumption.push(consumed)
-          await updateLotRemaining(lotRow.id, lotRow.remainingPoints - take, tx)
-          outstanding -= take
-        }
-        if (input.kind === 'REDEEM' && outstanding > 0) {
-          // The balance guard guarantees full coverage; anything else is drift.
-          throw new AppError(500, 'INTERNAL', 'Redemption exceeded the available lot points')
-        }
-      }
-
-      const nextBalance = account.balancePoints + pointsDelta
-      await updateAccountBalance(account.id, nextBalance, tx)
-
-      await writeAudit(
-        {
-          ...actor,
-          action: AUDIT_ACTIONS[input.kind],
-          entity: 'loyalty_ledger_entry',
-          entityId: entry.id,
-          branchId: input.branchId,
-          after: {
-            kind: entry.kind,
-            pointsDelta,
-            reasonCode: normalized.reasonCode,
-            netPaidMinor: normalized.netPaidMinor,
-            referenceNumber: entry.referenceNumber,
-            balancePoints: nextBalance,
-            lotsConsumed: consumption.length,
-            expiresAt: lot?.expiresAt ?? null,
-          },
-        },
-        tx,
-      )
-
-      return { entry, account: { ...account, balancePoints: nextBalance }, lot, consumption, quote }
-    })
+    return await db.transaction((tx) =>
+      postEntryInTransaction(tx, actor, input, normalized, occurredAt),
+    )
   } catch (error) {
     if (input.idempotencyKey && input.branchId && isUniqueViolation(error)) {
       const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey)
@@ -303,6 +191,147 @@ export async function postEntry(
     }
     throw error
   }
+}
+
+/**
+ * Transaction-scoped loyalty posting, called by the POS sale transaction so the
+ * ledger, lots, sale rows, and audit commit atomically. `bypassBalanceCheck`
+ * posts an offline redemption even when the minimum or the balance would reject
+ * it; the projection may go negative and the caller raises the conflict.
+ */
+export async function postEntryInTransaction(
+  tx: DbExecutor,
+  actor: AuditActor,
+  input: LoyaltyPostEntryInput,
+  normalizedInput?: ReturnType<typeof normalizePosting>,
+  occurredAtInput?: Date,
+): Promise<LoyaltyPostingResult> {
+  const normalized = normalizedInput ?? normalizePosting(input)
+  const occurredAt = occurredAtInput ?? input.occurredAt ?? new Date()
+
+  if (input.idempotencyKey && input.branchId) {
+    const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey, tx)
+    if (existing) {
+      const account = await findAccountByCustomerId(input.customerId, tx)
+      if (account) return replayResult(existing, account)
+    }
+  }
+
+  const customerRow = await requireCustomer(input.customerId, tx)
+  if (customerRow.anonymizedAt) {
+    throw new ConflictError('Anonymized customers cannot receive loyalty activity')
+  }
+
+  const account = await lockOrCreateAccount(tx, input.customerId)
+  let pointsDelta = normalized.pointsDelta
+  let quote: RedeemQuote | null = null
+
+  if (input.kind === 'EARN') {
+    const rate = await getSettingValue('loyalty.earnPointsPerCedi', {}, tx)
+    const earned = Math.floor(((normalized.netPaidMinor ?? 0) * rate) / 100)
+    if (earned < 1) {
+      // Floor per sale, no carry: a sale below one point writes nothing.
+      return { entry: null, account, lot: null, consumption: [], quote: null }
+    }
+    pointsDelta = earned
+  }
+
+  if (input.kind === 'REDEEM') {
+    const requested = Math.abs(pointsDelta)
+    if (!input.bypassBalanceCheck) {
+      const minimumRedeem = await getSettingValue('loyalty.minimumRedeemPoints', {}, tx)
+      if (requested < minimumRedeem) {
+        throw new ConflictError(`A redemption requires at least ${minimumRedeem} points`)
+      }
+      if (account.balancePoints < requested) {
+        throw new ConflictError('The customer does not have enough points for this redemption')
+      }
+    }
+    quote = await quoteRedeem(requested, tx)
+  }
+
+  const entry = await insertEntry(
+    {
+      accountId: account.id,
+      customerId: input.customerId,
+      branchId: input.branchId,
+      kind: input.kind,
+      pointsDelta,
+      reasonCode: normalized.reasonCode,
+      note: input.note ?? null,
+      referenceType: input.referenceType ?? null,
+      referenceId: input.referenceId ?? null,
+      referenceNumber: input.referenceNumber ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
+      createdBy: actorLabel(actor),
+      occurredAt,
+    },
+    tx,
+  )
+  if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the loyalty entry')
+
+  let lot: LoyaltyLotRow | null = null
+  const consumption: LoyaltyLotConsumptionRow[] = []
+
+  if (pointsDelta > 0) {
+    // Every positive posting creates a lot so expiry stays total (D14).
+    const expiryMonths = await getSettingValue('loyalty.expiryMonths', {}, tx)
+    lot = await insertLot(
+      {
+        accountId: account.id,
+        earnEntryId: entry.id,
+        points: pointsDelta,
+        remainingPoints: pointsDelta,
+        expiresAt: addMonths(occurredAt, expiryMonths),
+      },
+      tx,
+    )
+  } else {
+    let outstanding = Math.abs(pointsDelta)
+    const lots = await lockLotsFefo(tx, account.id)
+    for (const lotRow of lots) {
+      if (outstanding <= 0) break
+      const take = Math.min(lotRow.remainingPoints, outstanding)
+      if (take <= 0) continue
+      const consumed = await appendConsumption(
+        { lotId: lotRow.id, entryId: entry.id, points: take },
+        tx,
+      )
+      if (consumed) consumption.push(consumed)
+      await updateLotRemaining(lotRow.id, lotRow.remainingPoints - take, tx)
+      outstanding -= take
+    }
+    if (input.kind === 'REDEEM' && outstanding > 0 && !input.bypassBalanceCheck) {
+      // The balance guard guarantees full coverage; anything else is drift.
+      throw new AppError(500, 'INTERNAL', 'Redemption exceeded the available lot points')
+    }
+  }
+
+  const nextBalance = account.balancePoints + pointsDelta
+  await updateAccountBalance(account.id, nextBalance, tx)
+
+  await writeAudit(
+    {
+      ...actor,
+      action: AUDIT_ACTIONS[input.kind],
+      entity: 'loyalty_ledger_entry',
+      entityId: entry.id,
+      branchId: input.branchId,
+      after: {
+        kind: entry.kind,
+        pointsDelta,
+        reasonCode: normalized.reasonCode,
+        netPaidMinor: normalized.netPaidMinor,
+        referenceNumber: entry.referenceNumber,
+        balancePoints: nextBalance,
+        lotsConsumed: consumption.length,
+        expiresAt: lot?.expiresAt ?? null,
+      },
+    },
+    tx,
+  )
+
+  return { entry, account: { ...account, balancePoints: nextBalance }, lot, consumption, quote }
 }
 
 /**

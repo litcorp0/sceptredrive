@@ -35,6 +35,12 @@ export interface LoyaltyPostEntryInput {
   referenceNumber?: string | null | undefined
   idempotencyKey?: string | null | undefined
   occurredAt?: Date | undefined
+  /**
+   * POS replay only: post the redemption even when the balance or minimum
+   * would reject it, so the sale is never dropped. The caller raises the
+   * loyalty conflict. Never accepted from an HTTP body.
+   */
+  bypassBalanceCheck?: boolean | undefined
 }
 
 export interface RedeemQuote {

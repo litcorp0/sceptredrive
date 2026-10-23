@@ -1,38 +1,66 @@
 import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@gikautos/db'
+import { can, priceCart, type TaxMode } from '@gikautos/shared'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
+import { postEntryInTransaction as postCreditEntry } from '../credit/credit.service.ts'
+import type { CreditOverrideReason } from '../credit/credit.types.ts'
+import { resolveDraftCustomer } from '../customers/customers.service.ts'
+import { postMovements } from '../inventory/inventory.service.ts'
+import {
+  postEntryInTransaction as postLoyaltyEntry,
+  quoteRedeem,
+} from '../loyalty/loyalty.service.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
+import { getSettingValue } from '../platform/settings.service.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
+import { addConflict } from './pos.conflicts.ts'
+import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
   findActiveBinding,
+  findBindingById,
   findBindingByTokenHash,
+  findCreditProfileRow,
   findOpenShiftByTerminal,
+  findSaleByReceiptNumber,
   findShiftByIdForUpdate,
+  findStaffById,
   findStaffForAuthorization,
   insertBinding,
   insertCashMovement,
   insertConflict,
+  insertSale,
+  insertSaleLines,
+  insertSaleTenders,
   insertShift,
   lockTerminal,
   revokeBinding,
   revokeStaffBindings,
   selectShiftCashTotals,
   touchBinding,
+  updateSaleConflictCount,
   updateShiftClose,
   updateStaffPinHash,
 } from './pos.repository.ts'
 import type {
+  AppliedConflict,
   BindingStaff,
   BindingValidationResult,
   CashMovementPayload,
   DeviceStaffRecord,
+  OverrideProof,
+  SaleApplyResult,
+  SaleContext,
+  SalePayload,
   ShiftApplyResult,
   ShiftCashTotals,
   ShiftClosePayload,
   ShiftOpenPayload,
   StaffBindingResult,
+  SyncConflictSeverity,
+  SyncConflictType,
 } from './pos.types.ts'
 
 /** Bindings live for a quarter; a PIN reset or role change invalidates them sooner. */
@@ -616,4 +644,710 @@ export async function closeShift(
     varianceMinor: variance,
     ...(conflictId ? { conflictId } : {}),
   }
+}
+
+// --- Offline sale application ------------------------------------------------
+
+type CashierRole = 'ADMIN' | 'MANAGER' | 'CASHIER'
+
+const CREDIT_OVERRIDE_REASONS: Record<string, CreditOverrideReason> = {
+  CUSTOMER_REQUEST: 'TEMPORARY_APPROVAL',
+  APPROVED: 'TRUSTED_CUSTOMER',
+  URGENT_NEED: 'URGENT_NEED',
+  OTHER: 'OTHER',
+  TEMPORARY_APPROVAL: 'TEMPORARY_APPROVAL',
+  TRUSTED_CUSTOMER: 'TRUSTED_CUSTOMER',
+}
+
+interface PendingConflict {
+  type: SyncConflictType
+  severity: SyncConflictSeverity
+  details: Record<string, unknown>
+}
+
+interface OverrideValidation {
+  valid: boolean
+  actor: AuditActor | null
+  reasonCode: CreditOverrideReason | null
+}
+
+function auditActorFor(staff: { userId: string; staffId: string }): AuditActor {
+  return {
+    actorId: staff.userId,
+    actorStaffId: staff.staffId,
+    ip: null,
+    userAgent: null,
+    requestId: null,
+  }
+}
+
+function saleRejected(code: string, message: string, details?: Record<string, unknown>): AppError {
+  return new AppError(400, code, message, details)
+}
+
+/**
+ * Revalidates a manager approval captured offline (D22): the binding must be
+ * live on this device, the staff active with the permission, and the manager
+ * branch-scoped. A stale or forged proof never blocks the sale; the caller
+ * records OVERRIDE_INVALID and applies it anyway.
+ */
+async function validateOverrideProof(
+  tx: DbExecutor,
+  device: DeviceAuthContext,
+  proof: OverrideProof | null | undefined,
+  permission: 'pos.discount' | 'credit.override',
+): Promise<OverrideValidation> {
+  const invalid: OverrideValidation = { valid: false, actor: null, reasonCode: null }
+  if (!proof) return invalid
+
+  const binding = await findBindingById(proof.bindingId, tx)
+  if (!binding) return invalid
+
+  const staff = await findStaffById(binding.staffUserId, tx)
+  if (!staff || !staff.isActive) return invalid
+
+  const live =
+    binding.deviceId === device.deviceId &&
+    binding.revokedAt === null &&
+    binding.expiresAt.getTime() > Date.now() &&
+    binding.staffUserId === proof.userId &&
+    binding.staffStaffId === proof.staffId &&
+    binding.role === staff.role &&
+    binding.pinVersion === proof.pinVersion &&
+    (staff.role === 'ADMIN' || staff.branchId === device.branchId) &&
+    can(staff.role, permission)
+
+  if (!live) return invalid
+
+  return {
+    valid: true,
+    actor: auditActorFor(staff),
+    reasonCode:
+      permission === 'credit.override' ? (CREDIT_OVERRIDE_REASONS[proof.reasonCode] ?? null) : null,
+  }
+}
+
+/** Shape rules the route schema also enforces; keeps direct service calls safe. */
+function assertSaleShape(payload: SalePayload): void {
+  if (!Array.isArray(payload.lines) || payload.lines.length === 0) {
+    throw saleRejected('SALE_INVALID', 'A sale needs at least one line')
+  }
+  if (!payload.receiptNumber?.trim() || payload.receiptNumber.length > 64) {
+    throw saleRejected('SALE_INVALID', 'A sale needs a valid receipt number')
+  }
+  for (const line of payload.lines) {
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) {
+      throw saleRejected('SALE_INVALID', 'Line quantities must be positive whole numbers')
+    }
+    if (!Number.isSafeInteger(line.unitPriceMinor) || line.unitPriceMinor < 0) {
+      throw saleRejected('SALE_INVALID', 'Unit prices must be non-negative whole pesewas')
+    }
+    if (!Number.isSafeInteger(line.lineDiscountMinor) || line.lineDiscountMinor < 0) {
+      throw saleRejected('SALE_INVALID', 'Line discounts must be non-negative whole pesewas')
+    }
+    if (line.lineDiscountMinor > line.unitPriceMinor * line.quantity) {
+      throw saleRejected('SALE_INVALID', 'A line discount cannot exceed the line gross')
+    }
+  }
+}
+
+/**
+ * Applies one offline sale in the caller's transaction.
+ *
+ * Business conflicts (price drift, oversell, credit, loyalty, stale binding,
+ * clock skew) are recorded and the sale still applies. Only integrity failures
+ * (unknown product, impossible shift, internally inconsistent totals/tenders)
+ * throw, which the upload dispatcher turns into a REJECTED reservation.
+ */
+export async function applySale(
+  context: SaleContext,
+  payload: SalePayload,
+  executor: DbExecutor = db,
+): Promise<SaleApplyResult> {
+  assertSaleShape(payload)
+  const device = context.device
+  const saleId = context.clientTransactionId
+  const receiptNumber = payload.receiptNumber.trim()
+  const occurredAt = parseOccurredAt(payload.occurredAt)
+  const pending: PendingConflict[] = []
+  const applied: AppliedConflict[] = []
+  const overrides: Array<{
+    kind: 'DISCOUNT' | 'CREDIT'
+    validation: OverrideValidation
+    percent?: number
+  }> = []
+
+  // 1. Shift: the sale belongs to an open shift on this terminal.
+  const shiftRow = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!shiftRow) {
+    throw saleRejected('SHIFT_MISSING', 'The sale references a shift that does not exist')
+  }
+  if (shiftRow.branchId !== device.branchId || shiftRow.deviceId !== device.deviceId) {
+    throw saleRejected('SHIFT_DEVICE_MISMATCH', 'The shift does not belong to this device')
+  }
+  if (shiftRow.terminalId !== device.terminalId) {
+    throw saleRejected('SHIFT_DEVICE_MISMATCH', 'The shift does not belong to this terminal')
+  }
+  if (shiftRow.status !== 'OPEN') {
+    throw saleRejected('SHIFT_CLOSED', 'The sale references a closed shift')
+  }
+
+  const existingSale = await findSaleByReceiptNumber(receiptNumber, executor)
+  if (existingSale && existingSale.id !== saleId) {
+    throw saleRejected('RECEIPT_CONFLICT', 'This receipt number is already used by another sale')
+  }
+
+  // 2. Staff credentials. A dead binding does not block the sale; it strips
+  //    override authority and raises STALE_CREDENTIALS.
+  let cashierUserId = payload.cashier.userId
+  let cashierStaffId = payload.cashier.staffId
+  let cashierRole: CashierRole = 'CASHIER'
+  let bindingValid = false
+
+  const resolvedBinding = await findBindingByTokenHash(
+    hashDeviceToken(payload.cashier.bindingToken),
+    executor,
+  )
+  if (
+    resolvedBinding &&
+    resolvedBinding.binding.id === payload.cashier.bindingId &&
+    resolvedBinding.staff.userId === payload.cashier.userId &&
+    resolvedBinding.staff.pinVersion === payload.cashier.pinVersion &&
+    bindingIsLive(device, resolvedBinding.binding, resolvedBinding.staff)
+  ) {
+    bindingValid = true
+    cashierUserId = resolvedBinding.staff.userId
+    cashierStaffId = resolvedBinding.staff.staffId
+    cashierRole = resolvedBinding.staff.role
+  } else {
+    pending.push({
+      type: 'STALE_CREDENTIALS',
+      severity: 'HIGH',
+      details: {
+        staffId: payload.cashier.staffId,
+        bindingId: payload.cashier.bindingId,
+        pinVersion: payload.cashier.pinVersion,
+      },
+    })
+  }
+  const actor = auditActorFor({ userId: cashierUserId, staffId: cashierStaffId })
+
+  // 3. Catalogue and charged-price drift. The server never reprices.
+  const catalog = await loadSaleCatalog(executor, device.branchId, payload.lines)
+  if (catalog.missingProductIds.length > 0) {
+    throw saleRejected('UNKNOWN_PRODUCT', 'One or more products no longer exist', {
+      productIds: catalog.missingProductIds,
+    })
+  }
+
+  for (const line of payload.lines) {
+    const item = catalog.byProductId.get(line.productId)
+    if (!item) throw saleRejected('UNKNOWN_PRODUCT', 'A product no longer exists')
+    if (line.unitPriceMinor !== item.expectedUnitPriceMinor) {
+      pending.push({
+        type: 'PRICE_MISMATCH',
+        severity: 'HIGH',
+        details: {
+          productId: line.productId,
+          chargedUnitPriceMinor: line.unitPriceMinor,
+          expectedUnitPriceMinor: item.expectedUnitPriceMinor,
+          priceSource: item.priceSource,
+        },
+      })
+    }
+  }
+
+  // 4. Customer draft (created offline) or walk-in.
+  let resolvedCustomerId: string | null = null
+  if (payload.customer) {
+    const resolution = await resolveDraftCustomer(
+      {
+        id: payload.customer.id,
+        name: payload.customer.name,
+        phone: payload.customer.phone,
+        branchId: device.branchId,
+        actor,
+      },
+      executor,
+    )
+    if (resolution.status === 'INVALID_PHONE') {
+      pending.push({
+        type: 'INVALID_CUSTOMER',
+        severity: 'LOW',
+        details: { customerId: payload.customer.id },
+      })
+    } else {
+      resolvedCustomerId = resolution.customer.id
+      if (resolution.status === 'EXISTING_PHONE') {
+        pending.push({
+          type: 'DUPLICATE_CUSTOMER',
+          severity: 'LOW',
+          details: {
+            draftCustomerId: payload.customer.id,
+            existingCustomerId: resolution.customer.id,
+          },
+        })
+      }
+    }
+  }
+
+  // 5. Pricing with the charged money, server tax mode, and charged loyalty
+  //    discount (the printed discount is part of the money).
+  const taxMode = (await getSettingValue('pricing.taxMode', {}, executor)) as TaxMode
+  const saleDiscountMinor = payload.saleDiscount?.amountMinor ?? 0
+  const redeemPoints = payload.loyalty?.redeemPoints ?? 0
+  const loyaltyDiscountMinor = redeemPoints > 0 ? payload.totals.loyaltyDiscountMinor : 0
+
+  const priced = priceCart(
+    payload.lines.map((line) => {
+      const item = catalog.byProductId.get(line.productId)
+      return {
+        productId: line.productId,
+        name: item?.name,
+        sku: item?.sku,
+        quantity: line.quantity,
+        unitPriceMinor: line.unitPriceMinor,
+        lineDiscountMinor: line.lineDiscountMinor,
+        taxCategory: item?.taxCategory ?? line.taxCategory,
+      }
+    }),
+    { taxMode, saleDiscountMinor, loyaltyDiscountMinor },
+  )
+
+  const computedTotals = {
+    subtotalMinor: priced.subtotalMinor,
+    lineDiscountMinor: priced.lineDiscountMinor,
+    saleDiscountMinor: priced.saleDiscountMinor,
+    loyaltyDiscountMinor: priced.loyaltyDiscountMinor,
+    vatMinor: priced.vatMinor,
+    nhilMinor: priced.nhilMinor,
+    getfundMinor: priced.getfundMinor,
+    taxTotalMinor: priced.taxTotalMinor,
+    totalMinor: priced.totalMinor,
+    changeMinor: 0,
+  }
+
+  // The charged change depends on the tender; compare the rest first.
+  const assessment = assessSaleTotals(
+    taxMode,
+    { ...payload.totals, changeMinor: 0 },
+    computedTotals,
+  )
+  if (!assessment.ok) {
+    throw saleRejected('INVALID_TOTALS', assessment.reason, assessment.details)
+  }
+  if (!assessment.matched) {
+    pending.push({
+      type: 'TOTAL_MISMATCH',
+      severity: 'HIGH',
+      details: { charged: payload.totals, computed: computedTotals },
+    })
+  }
+  const header = assessment.matched ? computedTotals : { ...payload.totals, changeMinor: 0 }
+
+  // 6. Tender integrity (Phase 6 is single tender; zero due needs no tender).
+  if (payload.tenders.length > 1) {
+    throw saleRejected('INVALID_TENDER', 'Split tender is not supported in this phase')
+  }
+  const cashTender = payload.tenders.find((tender) => tender.method === 'CASH')
+  const creditTender = payload.tenders.find((tender) => tender.method === 'CREDIT')
+  const cashTendered = cashTender?.amountMinor ?? 0
+  const creditAmount = creditTender?.amountMinor ?? 0
+  const totalMinor = header.totalMinor
+
+  if (totalMinor > 0 && payload.tenders.length !== 1) {
+    throw saleRejected('INVALID_TENDER', 'A sale with a balance due needs one tender')
+  }
+  for (const tender of payload.tenders) {
+    if (!Number.isSafeInteger(tender.amountMinor) || tender.amountMinor < 0) {
+      throw saleRejected('INVALID_TENDER', 'Tender amounts must be non-negative whole pesewas')
+    }
+  }
+  if (creditAmount > 0 && creditAmount !== totalMinor) {
+    throw saleRejected('INVALID_TENDER', 'A credit tender must equal the sale total')
+  }
+  if (cashTendered > 0 && cashTendered < totalMinor) {
+    throw saleRejected('INVALID_TENDER', 'The cash tendered is below the sale total')
+  }
+  if (creditAmount > 0 && !resolvedCustomerId) {
+    throw saleRejected('CREDIT_REQUIRES_CUSTOMER', 'A credit sale needs a customer')
+  }
+  const changeMinor = cashTendered > totalMinor ? cashTendered - totalMinor : 0
+  if (changeMinor !== payload.totals.changeMinor) {
+    throw saleRejected('INVALID_TENDER', 'The change does not match the cash tendered')
+  }
+
+  // 7. Stock: append SALE movements, allowing oversell (conflict, never block).
+  const quantities = new Map<string, number>()
+  for (const line of payload.lines) {
+    quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity)
+  }
+  const posted = await postMovements(
+    actor,
+    [...quantities.entries()].map(([productId, quantity]) => ({
+      productId,
+      branchId: device.branchId,
+      type: 'SALE' as const,
+      quantityDelta: -quantity,
+      referenceType: 'SALE' as const,
+      referenceId: saleId,
+      referenceNumber: receiptNumber,
+    })),
+    { executor, allowNegative: true },
+  )
+  for (const [productId, level] of posted.levels) {
+    if (level.quantityOnHand < 0) {
+      pending.push({
+        type: 'STOCK_OVERSELL',
+        severity: 'HIGH',
+        details: {
+          productId,
+          onHand: level.quantityOnHand,
+          quantity: quantities.get(productId) ?? 0,
+        },
+      })
+    }
+  }
+
+  // 8. Credit charge: always recorded, even when the offline policy was broken.
+  if (creditAmount > 0 && resolvedCustomerId) {
+    const profile = await findCreditProfileRow(resolvedCustomerId, device.branchId, executor)
+    const held = profile?.hold ?? false
+    const overLimit = profile
+      ? profile.balanceMinor + creditAmount > profile.limitMinor
+      : creditAmount > 0
+
+    const proof = creditTender?.override
+    const approval = await validateOverrideProof(executor, device, proof, 'credit.override')
+    const creditReason = approval.valid ? approval.reasonCode : null
+
+    if (held) {
+      pending.push({
+        type: 'CREDIT_HOLD',
+        severity: 'HIGH',
+        details: {
+          customerId: resolvedCustomerId,
+          amountMinor: creditAmount,
+          balanceMinor: profile?.balanceMinor ?? 0,
+          limitMinor: profile?.limitMinor ?? 0,
+        },
+      })
+    }
+    if (overLimit && !held && !(approval.valid && creditReason)) {
+      pending.push({
+        type: 'CREDIT_OVER_LIMIT',
+        severity: 'HIGH',
+        details: {
+          customerId: resolvedCustomerId,
+          amountMinor: creditAmount,
+          balanceMinor: profile?.balanceMinor ?? 0,
+          limitMinor: profile?.limitMinor ?? 0,
+        },
+      })
+    }
+    if (proof && (!approval.valid || !creditReason)) {
+      pending.push({
+        type: 'OVERRIDE_INVALID',
+        severity: 'HIGH',
+        details: {
+          kind: 'CREDIT',
+          staffId: proof.staffId,
+          bindingId: proof.bindingId,
+          reasonCode: proof.reasonCode,
+        },
+      })
+    }
+    if (approval.valid) overrides.push({ kind: 'CREDIT', validation: approval })
+
+    await postCreditEntry(
+      executor,
+      actor,
+      null,
+      {
+        customerId: resolvedCustomerId,
+        branchId: device.branchId,
+        kind: 'CHARGE',
+        amountMinor: creditAmount,
+        reasonCode: 'SALE',
+        referenceType: 'SALE',
+        referenceId: saleId,
+        referenceNumber: receiptNumber,
+        occurredAt,
+        idempotencyKey: `${context.clientTransactionId}:credit`,
+        bypassPolicy: true,
+        override:
+          approval.valid && creditReason
+            ? { reasonCode: creditReason, note: proof?.note ?? null }
+            : null,
+      },
+      undefined,
+      approval.valid && approval.actor ? { overrideActor: approval.actor } : {},
+    )
+  }
+
+  // 9. Loyalty: the charged redemption is debited; earn is server-computed.
+  let loyaltyEarnedPoints = 0
+  if (resolvedCustomerId && redeemPoints > 0) {
+    const currentQuote = await quoteRedeem(redeemPoints, executor)
+    if (currentQuote.discountMinor !== loyaltyDiscountMinor) {
+      pending.push({
+        type: 'LOYALTY_RATE_CHANGED',
+        severity: 'LOW',
+        details: {
+          kind: 'REDEEM',
+          points: redeemPoints,
+          chargedDiscountMinor: loyaltyDiscountMinor,
+          currentDiscountMinor: currentQuote.discountMinor,
+        },
+      })
+    }
+    const redeemed = await postLoyaltyEntry(executor, actor, {
+      customerId: resolvedCustomerId,
+      branchId: device.branchId,
+      kind: 'REDEEM',
+      pointsDelta: -redeemPoints,
+      referenceType: 'SALE',
+      referenceId: saleId,
+      referenceNumber: receiptNumber,
+      occurredAt,
+      idempotencyKey: `${context.clientTransactionId}:loyalty-redeem`,
+      bypassBalanceCheck: true,
+    })
+    if (redeemed.account.balancePoints < 0) {
+      pending.push({
+        type: 'LOYALTY_NEGATIVE',
+        severity: 'HIGH',
+        details: {
+          customerId: resolvedCustomerId,
+          balancePoints: redeemed.account.balancePoints,
+          redeemedPoints: redeemPoints,
+        },
+      })
+    }
+  }
+
+  if (resolvedCustomerId && priced.baseMinor > 0) {
+    const earned = await postLoyaltyEntry(executor, actor, {
+      customerId: resolvedCustomerId,
+      branchId: device.branchId,
+      kind: 'EARN',
+      netPaidMinor: priced.baseMinor,
+      referenceType: 'SALE',
+      referenceId: saleId,
+      referenceNumber: receiptNumber,
+      occurredAt,
+      idempotencyKey: `${context.clientTransactionId}:loyalty-earn`,
+      bypassBalanceCheck: true,
+    })
+    loyaltyEarnedPoints = earned.entry?.pointsDelta ?? 0
+    if (payload.loyalty && loyaltyEarnedPoints !== payload.loyalty.earnPreviewPoints) {
+      pending.push({
+        type: 'LOYALTY_RATE_CHANGED',
+        severity: 'LOW',
+        details: {
+          kind: 'EARN',
+          previewPoints: payload.loyalty.earnPreviewPoints,
+          earnedPoints: loyaltyEarnedPoints,
+        },
+      })
+    }
+  }
+
+  // 10. Discount cap (D22/D23). Within the cap is silent; above it needs a
+  //     valid manager approval. The sale still applies either way.
+  if (saleDiscountMinor > 0) {
+    const netBeforeSale = priced.subtotalMinor - priced.lineDiscountMinor
+    const percent = netBeforeSale > 0 ? Math.floor((saleDiscountMinor * 100) / netBeforeSale) : 100
+    const [cashierCap, managerCap] = await Promise.all([
+      getSettingValue('pos.maxCashierDiscountPercent', {}, executor),
+      getSettingValue('pos.maxManagerDiscountPercent', {}, executor),
+    ])
+    const capPercent =
+      cashierRole === 'ADMIN' || cashierRole === 'MANAGER' ? managerCap : cashierCap
+
+    if (percent > capPercent) {
+      const proof = payload.saleDiscount?.override
+      const approval = await validateOverrideProof(executor, device, proof, 'pos.discount')
+      if (approval.valid) {
+        overrides.push({ kind: 'DISCOUNT', validation: approval, percent })
+      } else {
+        pending.push({
+          type: 'OVERRIDE_INVALID',
+          severity: 'HIGH',
+          details: {
+            kind: 'DISCOUNT',
+            percent,
+            capPercent,
+            staffId: proof?.staffId ?? null,
+            bindingId: proof?.bindingId ?? null,
+            reasonCode: payload.saleDiscount?.reasonCode ?? null,
+          },
+        })
+      }
+    }
+  }
+
+  // 11. Clock skew: keep both facts, flag the difference.
+  const skewMs = Math.abs(context.receivedAt.getTime() - occurredAt.getTime())
+  if (skewMs > context.clockSkewToleranceMinutes * 60_000) {
+    pending.push({
+      type: 'CLOCK_SKEW',
+      severity: 'LOW',
+      details: {
+        occurredAt: occurredAt.toISOString(),
+        receivedAt: context.receivedAt.toISOString(),
+        skewMinutes: Math.floor(skewMs / 60_000),
+      },
+    })
+  }
+
+  // 12. Sale rows with the charged money and computed split.
+  await insertSale(
+    {
+      id: saleId,
+      receiptNumber,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      deviceId: device.deviceId,
+      shiftId: payload.shiftId,
+      clientTransactionId: context.clientTransactionId,
+      cashierUserId,
+      cashierStaffId,
+      customerId: resolvedCustomerId,
+      occurredAt,
+      receivedAt: context.receivedAt,
+      subtotalMinor: header.subtotalMinor,
+      lineDiscountMinor: header.lineDiscountMinor,
+      saleDiscountMinor: header.saleDiscountMinor,
+      loyaltyRedeemPoints: redeemPoints,
+      loyaltyDiscountMinor: header.loyaltyDiscountMinor,
+      vatMinor: header.vatMinor,
+      nhilMinor: header.nhilMinor,
+      getfundMinor: header.getfundMinor,
+      taxTotalMinor: header.taxTotalMinor,
+      totalMinor: header.totalMinor,
+      tenderTotalMinor: cashTendered + creditAmount,
+      changeMinor,
+      loyaltyEarnedPoints,
+      creditAmountMinor: creditAmount,
+      taxMode,
+      conflictCount: pending.length,
+      appVersion: payload.appVersion ?? null,
+    },
+    executor,
+  )
+
+  await insertSaleLines(
+    priced.lines.map((line, index) => {
+      const item = catalog.byProductId.get(line.productId)
+      return {
+        saleId,
+        productId: line.productId,
+        lineNumber: index + 1,
+        sku: item?.sku ?? '',
+        name: item?.name ?? '',
+        barcode: null,
+        quantity: line.quantity,
+        unitPriceMinor: line.unitPriceMinor,
+        expectedUnitPriceMinor: item?.expectedUnitPriceMinor ?? line.unitPriceMinor,
+        lineDiscountMinor: line.lineDiscountMinor,
+        saleDiscountMinor: line.saleDiscountMinor,
+        loyaltyDiscountMinor: line.loyaltyDiscountMinor,
+        netMinor: line.netMinor,
+        taxableMinor: line.taxableMinor,
+        baseMinor: line.baseMinor,
+        vatMinor: line.vatMinor,
+        nhilMinor: line.nhilMinor,
+        getfundMinor: line.getfundMinor,
+        taxTotalMinor: line.taxTotalMinor,
+        totalMinor: line.totalMinor,
+        taxCategory: line.taxCategory,
+        unitCostMinor: posted.levels.get(line.productId)?.avgCostMinor ?? 0,
+        priceSource: item?.priceSource === 'BRANCH_OVERRIDE' ? 'OVERRIDE' : 'BASE',
+      }
+    }),
+    executor,
+  )
+
+  await insertSaleTenders(
+    payload.tenders.map((tender) => ({
+      saleId,
+      method: tender.method,
+      amountMinor: tender.amountMinor,
+      reference: null,
+    })),
+    executor,
+  )
+
+  // 13. Conflicts, then the audit trail.
+  for (const conflict of pending) {
+    const created = await addConflict(executor, { device, saleId }, conflict)
+    applied.push(created)
+    await writeAudit(
+      {
+        ...actor,
+        action: 'pos.sale.conflict',
+        entity: 'sync_conflict',
+        entityId: created.id,
+        after: {
+          type: created.type,
+          severity: created.severity,
+          saleId,
+          receiptNumber,
+        },
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+      },
+      executor,
+    )
+  }
+  await updateSaleConflictCount(saleId, applied.length, executor)
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'pos.sale.applied',
+      entity: 'sale',
+      entityId: saleId,
+      after: {
+        receiptNumber,
+        shiftId: payload.shiftId,
+        customerId: resolvedCustomerId,
+        totals: header,
+        tenders: payload.tenders.map((tender) => ({
+          method: tender.method,
+          amountMinor: tender.amountMinor,
+        })),
+        loyalty: { redeemPoints, earnedPoints: loyaltyEarnedPoints },
+        bindingValid,
+        conflictTypes: applied.map((conflict) => conflict.type),
+      },
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+    },
+    executor,
+  )
+
+  for (const override of overrides) {
+    if (!override.validation.actor) continue
+    await writeAudit(
+      {
+        ...override.validation.actor,
+        action: 'pos.sale.override',
+        entity: 'sale',
+        entityId: saleId,
+        after: {
+          kind: override.kind,
+          reasonCode: override.validation.reasonCode,
+          percent: override.percent ?? null,
+          receiptNumber,
+        },
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+      },
+      executor,
+    )
+  }
+
+  return { saleId, conflicts: applied, resolvedCustomerId }
 }

@@ -3,7 +3,12 @@ import { requireDeviceJwt } from '../../http/device-auth.ts'
 import { type AppEnv, factory } from '../../http/factory.ts'
 import { rateLimit } from '../../http/rate-limit.ts'
 import * as syncController from './sync.controller.ts'
-import { validateAuthorizeStaff, validateChangePin } from './sync.validation.ts'
+import {
+  validateAuthorizeStaff,
+  validateChangePin,
+  validateConflictsQuery,
+  validateUpload,
+} from './sync.validation.ts'
 
 /**
  * Device-facing POS endpoints.
@@ -71,4 +76,35 @@ syncRoutes.post(
     keyForRequest: perDevice,
   }),
   (c) => syncController.validateStaffBinding(c),
+)
+
+// Upload is authenticated by the device JWT and rate limited per terminal:
+// 60 transactions per minute is far above a busy till's sale rate but stops a
+// runaway retry loop. Business conflicts are 200s, so the uploader never stalls.
+syncRoutes.post(
+  '/api/pos/sync/upload',
+  requireDeviceJwt,
+  rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'pos:sync:upload', keyForRequest: perDevice }),
+  validateUpload,
+  (c) => syncController.upload(c, c.req.valid('json')),
+)
+
+syncRoutes.get(
+  '/api/pos/sync/conflicts',
+  requireDeviceJwt,
+  rateLimit({
+    windowMs: 60_000,
+    max: 60,
+    keyPrefix: 'pos:sync:conflicts',
+    keyForRequest: perDevice,
+  }),
+  validateConflictsQuery,
+  (c) => syncController.listConflicts(c, c.req.valid('query')),
+)
+
+syncRoutes.get(
+  '/api/pos/sync/state',
+  requireDeviceJwt,
+  rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'pos:sync:state', keyForRequest: perDevice }),
+  (c) => syncController.syncState(c),
 )

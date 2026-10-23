@@ -1,9 +1,20 @@
 import { type DbExecutor, db } from '@gikautos/db'
 import { isRole } from '@gikautos/shared'
-import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { creditProfile } from '../credit/credit.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { terminal } from '../org/terminals.schema.ts'
-import { cashMovement, posStaffBinding, shift, syncConflict } from './pos.schema.ts'
+import { setting } from '../platform/settings.schema.ts'
+import { product, productPrice } from '../products/products.schema.ts'
+import {
+  cashMovement,
+  posStaffBinding,
+  sale,
+  saleLine,
+  saleTender,
+  shift,
+  syncConflict,
+} from './pos.schema.ts'
 import type { DeviceStaffRecord, ShiftCashTotals } from './pos.types.ts'
 
 /** Signs in a staff member by staff code, email, or both (whichever was supplied). */
@@ -299,4 +310,168 @@ export async function insertConflict(
   const row = rows[0]
   if (!row) throw new Error('Failed to insert the sync conflict')
   return row
+}
+
+// --- Sales -----------------------------------------------------------------
+
+/** Products and their branch price override in one query. */
+export async function selectProductsForSale(
+  productIds: readonly string[],
+  branchId: string,
+  executor: DbExecutor = db,
+): Promise<Array<{ product: typeof product.$inferSelect; overrideMinor: number | null }>> {
+  if (productIds.length === 0) return []
+  return executor
+    .select({ product, overrideMinor: productPrice.priceMinor })
+    .from(product)
+    .leftJoin(
+      productPrice,
+      and(eq(productPrice.productId, product.id), eq(productPrice.branchId, branchId)),
+    )
+    .where(inArray(product.id, [...productIds]))
+}
+
+export async function insertSale(
+  values: typeof sale.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<typeof sale.$inferSelect> {
+  const rows = await executor.insert(sale).values(values).returning()
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert the sale')
+  return row
+}
+
+export async function insertSaleLines(
+  values: Array<typeof saleLine.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (values.length === 0) return
+  await executor.insert(saleLine).values(values)
+}
+
+export async function insertSaleTenders(
+  values: Array<typeof saleTender.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (values.length === 0) return
+  await executor.insert(saleTender).values(values)
+}
+
+export async function updateSaleConflictCount(
+  saleId: string,
+  conflictCount: number,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor.update(sale).set({ conflictCount }).where(eq(sale.id, saleId))
+}
+
+export async function findCreditProfileRow(
+  customerId: string,
+  branchId: string,
+  executor: DbExecutor = db,
+): Promise<typeof creditProfile.$inferSelect | null> {
+  const rows = await executor
+    .select()
+    .from(creditProfile)
+    .where(and(eq(creditProfile.customerId, customerId), eq(creditProfile.branchId, branchId)))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** A binding by id, for revalidating an offline manager approval (D22). */
+export async function findBindingById(
+  bindingId: string,
+  executor: DbExecutor = db,
+): Promise<typeof posStaffBinding.$inferSelect | null> {
+  const rows = await executor
+    .select()
+    .from(posStaffBinding)
+    .where(eq(posStaffBinding.id, bindingId))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export interface ConflictReadRow {
+  id: string
+  type: string
+  severity: string
+  status: string
+  details: unknown
+  createdAt: Date
+  saleReceiptNumber: string | null
+  shiftNumber: string | null
+}
+
+/** Newest-first conflicts for one terminal, optionally after a timestamp. */
+export async function selectConflictsForTerminal(
+  terminalId: string,
+  since: Date | null,
+  limit: number,
+  executor: DbExecutor = db,
+): Promise<ConflictReadRow[]> {
+  const rows = await executor
+    .select({
+      id: syncConflict.id,
+      type: syncConflict.type,
+      severity: syncConflict.severity,
+      status: syncConflict.status,
+      details: syncConflict.details,
+      createdAt: syncConflict.createdAt,
+      saleReceiptNumber: sale.receiptNumber,
+      shiftNumber: shift.number,
+    })
+    .from(syncConflict)
+    .leftJoin(sale, eq(sale.id, syncConflict.saleId))
+    .leftJoin(shift, eq(shift.id, syncConflict.shiftId))
+    .where(
+      since
+        ? and(eq(syncConflict.terminalId, terminalId), gt(syncConflict.createdAt, since))
+        : eq(syncConflict.terminalId, terminalId),
+    )
+    .orderBy(desc(syncConflict.createdAt))
+    .limit(limit)
+  return rows
+}
+
+export async function countOpenConflicts(
+  terminalId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor
+    .select({ value: sql<number>`count(*)::int` })
+    .from(syncConflict)
+    .where(and(eq(syncConflict.terminalId, terminalId), eq(syncConflict.status, 'OPEN')))
+  return rows[0]?.value ?? 0
+}
+
+export async function selectSettingsVersion(executor: DbExecutor = db): Promise<string | null> {
+  const rows = await executor
+    .select({ value: sql<string | null>`max(${setting.updatedAt})::text` })
+    .from(setting)
+  return rows[0]?.value ?? null
+}
+
+export async function selectLastSaleAt(
+  terminalId: string,
+  executor: DbExecutor = db,
+): Promise<Date | null> {
+  const rows = await executor
+    .select({ occurredAt: sale.occurredAt })
+    .from(sale)
+    .where(eq(sale.terminalId, terminalId))
+    .orderBy(desc(sale.occurredAt))
+    .limit(1)
+  return rows[0]?.occurredAt ?? null
+}
+
+export async function findSaleByReceiptNumber(
+  receiptNumber: string,
+  executor: DbExecutor = db,
+): Promise<{ id: string } | null> {
+  const rows = await executor
+    .select({ id: sale.id })
+    .from(sale)
+    .where(eq(sale.receiptNumber, receiptNumber))
+    .limit(1)
+  return rows[0] ?? null
 }

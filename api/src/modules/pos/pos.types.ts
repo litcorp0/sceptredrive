@@ -1,4 +1,5 @@
 import type { Role } from '@gikautos/shared'
+import type { DeviceAuthContext } from '../sync/sync.types.ts'
 
 /** The staff identity a terminal may bind to, with the columns needed to verify a PIN. */
 export interface DeviceStaffRecord {
@@ -83,4 +84,127 @@ export interface ShiftCashTotals {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
+}
+
+// --- Offline sale payload (Plan 06/07 produce this; the uploader ships it) ----
+
+/** A manager approval captured on the terminal (D22). Never contains a PIN. */
+export interface OverrideProof {
+  staffId: string
+  userId: string
+  bindingId: string
+  pinVersion: number
+  /** Plan 06 labels or the credit enum values; normalized server-side. */
+  reasonCode: string
+  note?: string | null
+  occurredAt: string
+}
+
+export interface SaleCashier {
+  userId: string
+  staffId: string
+  bindingId: string
+  /** Returned once at authorization; hashed before lookup, never logged. */
+  bindingToken: string
+  pinVersion: number
+}
+
+export interface SaleCustomerPayload {
+  id: string
+  phone: string
+  name?: string | undefined
+}
+
+export interface SaleLinePayload {
+  productId: string
+  quantity: number
+  unitPriceMinor: number
+  lineDiscountMinor: number
+  taxCategory: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT'
+}
+
+export interface SaleDiscountPayload {
+  amountMinor: number
+  reasonCode: 'STAFF' | 'DAMAGE' | 'PROMO' | 'OTHER'
+  note?: string | null
+  override?: OverrideProof | null
+}
+
+export interface SaleLoyaltyPayload {
+  redeemPoints: number
+  /** The terminal's earn preview; a difference is a rate-change conflict. */
+  earnPreviewPoints: number
+}
+
+export interface SaleTenderPayload {
+  method: 'CASH' | 'CREDIT'
+  /** Cash: the amount handed over (change included). Credit: the sale total. */
+  amountMinor: number
+  override?: OverrideProof | null
+}
+
+export interface SaleTotalsPayload {
+  subtotalMinor: number
+  lineDiscountMinor: number
+  saleDiscountMinor: number
+  loyaltyDiscountMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  totalMinor: number
+  changeMinor: number
+}
+
+export interface SalePayload {
+  receiptNumber: string
+  shiftId: string
+  cashier: SaleCashier
+  customer?: SaleCustomerPayload | null
+  lines: SaleLinePayload[]
+  saleDiscount?: SaleDiscountPayload | null
+  loyalty?: SaleLoyaltyPayload | null
+  tenders: SaleTenderPayload[]
+  totals: SaleTotalsPayload
+  occurredAt: string
+  appVersion?: string | null
+}
+
+export type SyncConflictType =
+  | 'STOCK_OVERSELL'
+  | 'CREDIT_OVER_LIMIT'
+  | 'CREDIT_HOLD'
+  | 'LOYALTY_NEGATIVE'
+  | 'LOYALTY_RATE_CHANGED'
+  | 'PRICE_MISMATCH'
+  | 'TOTAL_MISMATCH'
+  | 'SHIFT_VARIANCE_MISMATCH'
+  | 'STALE_CREDENTIALS'
+  | 'OVERRIDE_INVALID'
+  | 'DUPLICATE_CUSTOMER'
+  | 'CLOCK_SKEW'
+  | 'INVALID_CUSTOMER'
+  | 'UNKNOWN_PRODUCT'
+
+export type SyncConflictSeverity = 'LOW' | 'MEDIUM' | 'HIGH'
+
+export interface AppliedConflict {
+  id: string
+  type: SyncConflictType
+  severity: SyncConflictSeverity
+}
+
+export interface SaleApplyResult {
+  saleId: string
+  conflicts: AppliedConflict[]
+  resolvedCustomerId: string | null
+}
+
+/** Context the upload dispatcher owns (one client transaction, one sale). */
+export interface SaleContext {
+  clientTransactionId: string
+  device: DeviceAuthContext
+  /** Server clock at receipt; written beside the device's `occurredAt`. */
+  receivedAt: Date
+  clockSkewToleranceMinutes: number
 }

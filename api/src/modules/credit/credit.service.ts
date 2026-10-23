@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { type DbExecutor, db } from '@gikautos/db'
 import { hasPermission, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import {
@@ -199,110 +199,8 @@ export async function postEntry(
 
   await getBranch(user, input.branchId)
 
-  const occurredAt = input.occurredAt ?? new Date()
-
   try {
-    return await db.transaction(async (tx): Promise<CreditPostingResult> => {
-      const profile = await lockOrCreateProfile(tx, input.customerId, input.branchId)
-
-      let overrideReason: CreditOverrideReason | null = null
-      if (input.kind === 'CHARGE') {
-        if (profile.hold) {
-          throw new ConflictError('Credit is on hold at this branch')
-        }
-        if (profile.balanceMinor + input.amountMinor > profile.limitMinor) {
-          if (!normalized.override) {
-            throw new ConflictError(
-              `This charge exceeds the credit limit (balance ${formatMinor(profile.balanceMinor)}, limit ${formatMinor(profile.limitMinor)})`,
-            )
-          }
-          if (!hasPermission(user, 'credit.override')) {
-            throw new ForbiddenError('You do not have permission to override the credit limit')
-          }
-          overrideReason = normalized.override.reasonCode
-        }
-      }
-
-      const dueDate =
-        input.kind === 'CHARGE'
-          ? (normalized.dueDateOverride ?? isoDate(occurredAt, profile.paymentTermDays))
-          : null
-
-      let referenceNumber = input.referenceNumber ?? null
-      if (input.kind === 'REPAYMENT') {
-        referenceNumber = await allocateFromSequence('credit.repaymentSequence', tx)
-      }
-
-      const recordedBy = actorLabel(actor) ?? actor.actorId
-      const entry = await insertEntry(
-        {
-          customerId: input.customerId,
-          branchId: input.branchId,
-          kind: input.kind,
-          amountMinor: input.amountMinor,
-          reasonCode: normalized.reasonCode,
-          method: normalized.method,
-          note: input.note ?? null,
-          dueDate,
-          referenceType: input.referenceType ?? null,
-          referenceId: input.referenceId ?? null,
-          referenceNumber,
-          overrideReason,
-          overriddenBy: overrideReason ? recordedBy : null,
-          receivedBy: input.kind === 'REPAYMENT' || input.kind === 'REFUND' ? recordedBy : null,
-          idempotencyKey: input.idempotencyKey ?? null,
-          createdBy: recordedBy,
-          occurredAt,
-        },
-        tx,
-      )
-      if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the credit entry')
-
-      const nextBalance = profile.balanceMinor + input.amountMinor
-      await updateProfileBalance(profile.id, nextBalance, tx)
-
-      await writeAudit(
-        {
-          ...actor,
-          action: AUDIT_ACTIONS[input.kind],
-          entity: 'credit_ledger_entry',
-          entityId: entry.id,
-          branchId: input.branchId,
-          after: {
-            kind: entry.kind,
-            amountMinor: entry.amountMinor,
-            reasonCode: entry.reasonCode,
-            method: entry.method,
-            referenceNumber: entry.referenceNumber,
-            dueDate: entry.dueDate,
-            balanceMinor: nextBalance,
-          },
-        },
-        tx,
-      )
-
-      if (overrideReason && normalized.override) {
-        await writeAudit(
-          {
-            ...actor,
-            action: 'credit.override',
-            entity: 'credit_ledger_entry',
-            entityId: entry.id,
-            branchId: input.branchId,
-            after: {
-              reasonCode: overrideReason,
-              note: normalized.override.note ?? null,
-              amountMinor: entry.amountMinor,
-              limitMinor: profile.limitMinor,
-              balanceBeforeMinor: profile.balanceMinor,
-            },
-          },
-          tx,
-        )
-      }
-
-      return { entry, profile: { ...profile, balanceMinor: nextBalance } }
-    })
+    return await db.transaction((tx) => postEntryInTransaction(tx, actor, user, input, normalized))
   } catch (error) {
     if (input.idempotencyKey && isUniqueViolation(error)) {
       const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey)
@@ -313,6 +211,167 @@ export async function postEntry(
     }
     throw error
   }
+}
+
+/**
+ * Transaction-scoped credit posting.
+ *
+ * The POS sale transaction calls this so the credit ledger, sale rows, stock
+ * movements, and audit commit atomically. `user` is null only on that path:
+ * device authentication already authorized the branch, and `bypassPolicy`
+ * makes the hold/limit checks (which need a role) irrelevant. Policy is bypassed
+ * so an offline over-limit debt is still recorded; the caller raises the
+ * conflict and any approval audit.
+ */
+export interface CreditTxContext {
+  /**
+   * The already-validated approver when a POS override is recorded. The POS
+   * validates the manager binding itself (D22) and passes the approver here so
+   * the ledger and the `credit.override` audit name the approver, not the till.
+   */
+  overrideActor?: AuditActor
+}
+
+export async function postEntryInTransaction(
+  tx: DbExecutor,
+  actor: AuditActor,
+  user: SessionUser | null,
+  input: PostEntryInput,
+  normalizedInput?: ReturnType<typeof normalizeEntryInput>,
+  context: CreditTxContext = {},
+): Promise<CreditPostingResult> {
+  const normalized = normalizedInput ?? normalizeEntryInput(input)
+  const occurredAt = input.occurredAt ?? new Date()
+
+  // The upload reservation normally stops a replay; this is the second guard
+  // for the same client transaction.
+  if (input.idempotencyKey) {
+    const existing = await findEntryByIdempotencyKey(input.branchId, input.idempotencyKey, tx)
+    if (existing) {
+      const profile = await findProfile(input.customerId, input.branchId, tx)
+      if (profile) return { entry: existing, profile }
+    }
+  }
+
+  const customerRow = await requireCustomer(input.customerId, tx)
+  if (customerRow.anonymizedAt) {
+    throw new ConflictError('Anonymized customers cannot receive credit entries')
+  }
+  if (input.kind === 'CHARGE' && customerRow.status !== 'ACTIVE') {
+    throw new ConflictError('Archived customers cannot be charged new credit')
+  }
+
+  const profile = await lockOrCreateProfile(tx, input.customerId, input.branchId)
+
+  let overrideReason: CreditOverrideReason | null = null
+  if (input.kind === 'CHARGE') {
+    if (!input.bypassPolicy) {
+      if (!user) {
+        throw new ForbiddenError('Credit policy enforcement requires an authenticated user')
+      }
+      if (profile.hold) {
+        throw new ConflictError('Credit is on hold at this branch')
+      }
+      if (profile.balanceMinor + input.amountMinor > profile.limitMinor) {
+        if (!normalized.override) {
+          throw new ConflictError(
+            `This charge exceeds the credit limit (balance ${formatMinor(profile.balanceMinor)}, limit ${formatMinor(profile.limitMinor)})`,
+          )
+        }
+        if (!hasPermission(user, 'credit.override')) {
+          throw new ForbiddenError('You do not have permission to override the credit limit')
+        }
+        overrideReason = normalized.override.reasonCode
+      }
+    }
+    // The POS path bypasses enforcement but may still carry a validated
+    // approval, which must be recorded on the ledger entry and in the audit.
+    if (normalized.override && (overrideReason !== null || input.bypassPolicy)) {
+      overrideReason = normalized.override.reasonCode
+    }
+  }
+
+  const dueDate =
+    input.kind === 'CHARGE'
+      ? (normalized.dueDateOverride ?? isoDate(occurredAt, profile.paymentTermDays))
+      : null
+
+  let referenceNumber = input.referenceNumber ?? null
+  if (input.kind === 'REPAYMENT') {
+    referenceNumber = await allocateFromSequence('credit.repaymentSequence', tx)
+  }
+
+  const recordedBy = actorLabel(actor) ?? actor.actorId
+  const overrideBy = context.overrideActor ?? actor
+  const overrideRecordedBy = actorLabel(overrideBy) ?? overrideBy.actorId
+  const entry = await insertEntry(
+    {
+      customerId: input.customerId,
+      branchId: input.branchId,
+      kind: input.kind,
+      amountMinor: input.amountMinor,
+      reasonCode: normalized.reasonCode,
+      method: normalized.method,
+      note: input.note ?? null,
+      dueDate,
+      referenceType: input.referenceType ?? null,
+      referenceId: input.referenceId ?? null,
+      referenceNumber,
+      overrideReason,
+      overriddenBy: overrideReason ? overrideRecordedBy : null,
+      receivedBy: input.kind === 'REPAYMENT' || input.kind === 'REFUND' ? recordedBy : null,
+      idempotencyKey: input.idempotencyKey ?? null,
+      createdBy: recordedBy,
+      occurredAt,
+    },
+    tx,
+  )
+  if (!entry) throw new AppError(500, 'INTERNAL', 'Failed to write the credit entry')
+
+  const nextBalance = profile.balanceMinor + input.amountMinor
+  await updateProfileBalance(profile.id, nextBalance, tx)
+
+  await writeAudit(
+    {
+      ...actor,
+      action: AUDIT_ACTIONS[input.kind],
+      entity: 'credit_ledger_entry',
+      entityId: entry.id,
+      branchId: input.branchId,
+      after: {
+        kind: entry.kind,
+        amountMinor: entry.amountMinor,
+        reasonCode: entry.reasonCode,
+        method: entry.method,
+        referenceNumber: entry.referenceNumber,
+        dueDate: entry.dueDate,
+        balanceMinor: nextBalance,
+      },
+    },
+    tx,
+  )
+
+  if (overrideReason && normalized.override) {
+    await writeAudit(
+      {
+        ...overrideBy,
+        action: 'credit.override',
+        entity: 'credit_ledger_entry',
+        entityId: entry.id,
+        branchId: input.branchId,
+        after: {
+          reasonCode: overrideReason,
+          note: normalized.override.note ?? null,
+          amountMinor: entry.amountMinor,
+          limitMinor: profile.limitMinor,
+          balanceBeforeMinor: profile.balanceMinor,
+        },
+      },
+      tx,
+    )
+  }
+
+  return { entry, profile: { ...profile, balanceMinor: nextBalance } }
 }
 
 function compareSettleable(a: SettleableEntry, b: SettleableEntry): number {
