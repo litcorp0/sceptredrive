@@ -3,7 +3,7 @@
 **Milestone:** v1
 **Updated:** 2026-10-23
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–05/9 complete**: POS schema, shared cart pricing engine, settings,
+progress — Plans 01–06/9 complete**: POS schema, shared cart pricing engine, settings,
 permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
 keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
 device session + PowerSync token endpoints, the self-hosted PowerSync service with
@@ -11,12 +11,14 @@ branch-scoped Sync Streams, and the encrypted local schema + download-only conne
 offline PINs with device bindings, lockout and manager unlock, the console PIN reset, and
 the offline shift lifecycle with server application (04); idempotent upload, atomic sale
 application with business conflicts, device conflict reads, and sale/shift reconciliation
-(05).
-Suites: API 350/350, shared 73/73, desktop 74/74; shell E2E 35/35; PowerSync gate 8/8;
+(05); the **selling UI** — guarded shell, crash-safe cart, local search and barcode
+scanning, offline customers, loyalty redemption, credit headroom with manager overrides,
+permissioned discounts, and the tender + sale-draft hand-off (06).
+Suites: API 353/353, shared 73/73, desktop 235/235; shell E2E 35/35; PowerSync gate 8/8;
 device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5; console PIN
-smoke 8/8.
-**Next action:** Execute **Phase 6 Plan 06** (POS selling UI — catalog, cart, customers,
-credit, loyalty, discounts).
+smoke 8/8; **selling contract 32/32; selling UI smoke 8/8**.
+**Next action:** Execute **Phase 6 Plan 07** (sale completion, receipts, ESC/POS printing,
+and the cash drawer).
 
 ---
 
@@ -30,7 +32,7 @@ credit, loyalty, discounts).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 🚧 In progress (5/9 plans) |
+| 6 | POS Offline Core | 🚧 In progress (6/9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -102,7 +104,7 @@ credit, loyalty, discounts).
 | 03 | Device auth, PowerSync sync config, local schema, and connector | ✅ Complete |
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | ✅ Complete |
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | ✅ Complete |
-| 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | 📝 Planned |
+| 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | ✅ Complete |
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
 | 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
 | 09 | Phase 6 verification and state update | 📝 Planned |
@@ -563,6 +565,64 @@ credit, loyalty, discounts).
 - Tests: suppliers suite 15/15, payables service 19/19, payables HTTP 5/5; the phase adds
   **41** API tests (235 → 276). Phase 5 verification: API/SQL 102/102, console 25/25.
 
+### Phase 6 Plan 06 execution notes (2026-10-23)
+
+- **Plan 06 complete** (commits `59dbcd0`, `bd466dd`, `3696cd8`, `d4b8d19`, `acdbb57`,
+  `f95c6a4`, `5ca4867`): the POS selling UI. Verification record:
+  `phases/06-pos-offline-core/06-VERIFICATION.md`.
+- **Shell and guards** (`routes/_pos/app.tsx`): no database → starting screen; no staff
+  session → `#login`; no cached terminal config → `#login`; no open shift while
+  `pos.salesRequireOpenShift` → `#shift`; `#pos/settings` requires MANAGER/ADMIN. The old
+  placeholder `routes/_pos/route.tsx` was deleted (the shell it sketched is `app.tsx`).
+  `lib/router.ts` adds `parseHash`/`navigate`/`useHashRoute`/`useRedirect`; `main.tsx`
+  routes `#pos`, `#pos/tender`, `#pos/settings` through one `PosProvider` so the cart
+  survives navigation.
+- **Crash-safe cart**: `cart_draft` + `cart_draft_line` (local-only) hold the in-progress
+  sale; the draft **id is the future sale id / client transaction id**, so Plan 07 writes
+  the receipt and outbox row with the id already chosen. Persisted 150 ms after each change
+  in one transaction (`saveCartDraft`), restored only when `shift_id` matches the open
+  shift, sanitised on read (a corrupt or old draft can never reach `priceCart` in a shape it
+  rejects). The reducer clamps quantity (1–10 000), line discounts to the line gross, the
+  sale discount to the net after line discounts, and clears loyalty/credit approvals when
+  the customer changes.
+- **Local catalogue**: `product.tax_category` was added to the local schema (additive; the
+  terminal cannot price tax without it; PowerSync adds the column to existing devices).
+  Search binds every parameter, escapes `%`/`_`/`\`, and covers barcode → SKU → name,
+  with a browse mode for an empty term (5 000-row cap) rendered in a virtualised 2-column
+  grid (`@tanstack/react-virtual` 3.14.22, `useFlushSync: false` for React 19). Prices use
+  the shared `resolveEffectivePrice`; stock shows synced + unacked deltas and never blocks.
+- **Selling flow**: offline customers (`customer_draft`, uuidv7, normalized phone, duplicate
+  phone selects the existing person), loyalty earn preview from the tax-exclusive base and
+  redemption capped at the cart net, credit headroom including pending charges with
+  `OK`/`OVER_LIMIT`/`HOLD`/`NO_PROFILE`/`NO_CUSTOMER`, manager overrides proven by a
+  MANAGER/ADMIN binding + PIN (a cashier binding is refused before the PIN is checked),
+  permissioned line and sale discounts, and a tender screen that builds the Plan 07 draft
+  (cash keypad, exact/notes/change, credit with approval or explicit bypass, zero-total
+  "no payment due").
+- **Server change (operator-approved):** `applySale`'s discount cap now measures **all**
+  discounts (line + sale) over gross **in pesewas** — `totalDiscountMinor >
+  floor(subtotal × capPercent / 100)` — instead of the sale discount over net. This closes
+  a bypass where a cashier with a 0% cap could discount a whole line with no approval, and
+  the pesewa comparison closes a second one where a discount under 1% of a large cart
+  floored to "0%". `OVERRIDE_INVALID` details now carry `totalDiscountMinor`,
+  `grossMinor`, and `allowedDiscountMinor`. The approval proof is read from
+  `saleDiscount.override`; for a line discount the client sends a zero-amount sale discount
+  carrying the proof (`buildSaleDraft`).
+- **Sale draft** (`lib/sale/sale-draft.ts`): pure, key-for-key conformant to the upload
+  schema (a unit test asserts the exact key sets because the server schema is `.strict()`);
+  cash change = tendered − total; credit requires a customer and equals the total; a
+  zero-total sale sends no tenders. Receipt numbers are *peeked* from `document_sequence`
+  for display only; the sequence is consumed at commit (Plan 07).
+- **Verification:** desktop **235/235**, API **353/353**, shared 73/73, lint/check-types
+  green, `bun run build:pos` packages, `evidence/verify-selling.ts` **32/32** (the real
+  modules → the API's own Zod upload schema → server re-pricing agreement), and
+  `evidence/smoke-selling-ui.mjs` **8/8** against the packaged binary. The contract script
+  found the percent-floor loophole described above before it shipped.
+- **Deliberately not in this plan:** the sale write, receipt rendering, ESC/POS printing,
+  the cash drawer, the outbox uploader, and the enrolled-device E2E. Plan 07 owns the first
+  four, Plan 08 the uploader, Plan 09 the E2E gate. Until Plan 07, the tender screen
+  reaches "Sale ready" with the final draft but does not record it.
+
 ### Phase 6 planning additions (2026-10-22)
 
 - Phase 6 is **planned only** (9 plans, waves 1–6). Artifacts:
@@ -950,3 +1010,19 @@ credit, loyalty, discounts).
 - Phase 6 Plan 05: `sync.upload.test.ts` covers the endpoint (replay, concurrency,
   per-item rejection, 50-item cap, device mismatch, conflict/state reads); `pos.test.ts`
   covers sale arithmetic/conflicts and reconciliation. Both run serially.
+
+- Phase 6 Plan 06: the discount cap is measured on **total** discounts over gross, in
+  pesewas (`totalDiscountMinor > floor(gross × capPercent / 100)`), on both the client and
+  the server. A floored percentage alone let sub-1% discounts on large carts pass a 0% cap.
+- Phase 6 Plan 06: the upload contract has one override slot (`saleDiscount.override`).
+  A line-discount approval is promoted onto a zero-amount sale discount
+  (`reasonCode: 'OTHER'`) so the server can still validate it; line discount reasons live on
+  the local line only (the payload carries no per-line reason).
+- Phase 6 Plan 06: the cart draft id **is** the sale id / client transaction id; Plan 07 must
+  reuse it for the local sale, the receipt number, and the outbox row.
+- Phase 6 Plan 06: `best`-effort UI state is never authoritative — every displayed amount is
+  a field of `priceCart`. The loyalty redemption is capped at the cart net so points are not
+  burnt for no discount; the printed/charged discount is what the server keeps.
+- Phase 6 Plan 06: search runs one parameterised query for barcode/SKU/name/browse and
+  escapes LIKE wildcards; a full scan of 5k rows is acceptable locally, an FTS table is not
+  needed at the target scale.

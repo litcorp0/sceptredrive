@@ -294,3 +294,30 @@ device/enrollment schema, shared tax engine).
   and loyalty with `occurredAt` + idempotency keys, `allocateFromSequence` (not used for
   POS receipts, but for staff/PIN flows if needed), `writeAudit`, `resolveBranchFilter`,
   `requirePermission`, and the shared tax engine.
+
+## 12. Plan 06 execution research (2026-10-23)
+
+Checked against current official sources before writing the selling UI:
+
+- **`@powersync/react` (2.1.0) `useQuery`**: `useQuery<RowType>(sql, parameters, options)`
+  watches every dependent table and re-runs on change; `isLoading` only reflects the query
+  itself when no `streams` option is passed (`useAllSyncStreamsHaveSynced` returns `true`
+  without streams), so an offline start is not stuck loading. Parameters are compared by
+  their JSON encoding, so a new array per render does not re-run the query. Differential
+  queries (`rowComparator`) exist for large lists; the grid here is small (≤ 60 rows) except
+  in browse mode, where virtualisation matters more than row-level diffing.
+- **`@tanstack/react-virtual` 3.14.22** (2026-10-13) is current and React 19 compatible; the
+  docs call out `useFlushSync: false` to avoid the React 19 "flushSync was called from
+  inside a lifecycle method" warning during scroll. Used for the 2-column product grid.
+- **SQLite `LIKE`** is case-insensitive for ASCII by default (sufficient for the catalogue),
+  `%`/`_` must be escaped with `ESCAPE`, and a leading-wildcard search cannot use an index —
+  a full scan of ~5k rows is still sub-millisecond locally, so no FTS table is warranted at
+  the target scale. Exact barcode/SKU lookups do use the declared indexes.
+- **Discount authority**: the server cap is a percentage of gross. Comparing floored
+  percentages lets a discount below 1% of a large cart read as "0%" and pass a 0% cap, so
+  both sides now compare pesewas (`total > floor(gross × cap / 100)`), with the percentage
+  kept for display and audit.
+- **Upload contract limits**: `salePayloadSchema` is `.strict()` at every level and has a
+  single override slot (`saleDiscount.override`); the tenant proof shape is
+  `{staffId, userId, bindingId, pinVersion, reasonCode, note, occurredAt}` with no role and
+  no binding token. A unit test asserts the draft's key sets so an added field fails fast.
