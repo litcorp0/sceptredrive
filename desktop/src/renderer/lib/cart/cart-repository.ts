@@ -262,11 +262,12 @@ async function writeDraft(tx: Transaction, state: CartState): Promise<void> {
   for (const line of lines) {
     await tx.execute(
       `INSERT INTO cart_draft_line
-         (draft_id, line_number, line_id, product_id, sku, name, barcode, quantity,
+         (id, draft_id, line_number, line_id, product_id, sku, name, barcode, quantity,
           unit_price_minor, tax_category, line_discount_minor, line_discount_reason,
           line_discount_note, line_discount_override)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        crypto.randomUUID(),
         line.draft_id,
         line.line_number,
         line.line_id,

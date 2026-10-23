@@ -306,9 +306,10 @@ export async function insertSale(tx: Transaction, sale: SaleRow): Promise<void> 
 export async function insertSaleLines(tx: Transaction, lines: SaleLineRow[]): Promise<void> {
   for (const line of lines) {
     await tx.execute(
-      `INSERT INTO sale_line (${SALE_LINE_COLUMNS})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sale_line (id, ${SALE_LINE_COLUMNS})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        crypto.randomUUID(),
         line.saleId,
         line.lineNumber,
         line.productId,
@@ -337,7 +338,8 @@ export async function insertSaleLines(tx: Transaction, lines: SaleLineRow[]): Pr
 
 export async function insertSaleTenders(tx: Transaction, tenders: SaleTenderRow[]): Promise<void> {
   for (const tender of tenders) {
-    await tx.execute(`INSERT INTO sale_tender (${TENDER_COLUMNS}) VALUES (?, ?, ?, ?, ?)`, [
+    await tx.execute(`INSERT INTO sale_tender (id, ${TENDER_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)`, [
+      crypto.randomUUID(),
       tender.saleId,
       tender.method,
       tender.amountMinor,
