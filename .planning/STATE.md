@@ -254,11 +254,14 @@ conflicts, and reconciliation).
     `.node` binaries. Verified in the packaged app.
   - **Verification:** API 325/325 (new: 5 staff-PIN, 7 device-binding, 8 shift cases),
     shared 73/73, desktop 74/74 (lockout, PIN crypto, money/shift math, IPC bridge),
-    lint + check-types (5/5) + admin build green, `bun run build:pos` packages, and
+    lint + check-types (5/5) + admin build green, `bun run build:pos` packages,
     `evidence/smoke-pin-ui.mjs` **5/5** against the packaged binary (login route renders,
-    Argon2 hash/verify over real IPC, verifier never contains the PIN); screenshot at
-    `evidence/shots/01-login-route.png`. The full enrolled-device E2E (authorize → change
-    → relaunch offline → shift → upload) stays the Plan 09 gate because it needs the API and
+    Argon2 hash/verify over real IPC, verifier never contains the PIN), and
+    `evidence/smoke-console-pin.mjs` **8/8** against the real console (forced TOTP
+    bootstrap, trivial PIN rejected inline, temporary PIN set, badge flips to
+    `Temporary`, no hash in any staff payload, pin-status agrees). Screenshots under
+    `evidence/shots/`. The full enrolled-device E2E (authorize → change → relaunch
+    offline → shift → upload) stays the Plan 09 gate because it needs the API and
     PowerSync service.
 
 ---
@@ -860,3 +863,11 @@ conflicts, and reconciliation).
 - Phase 6 Plan 04: the packaged-app smoke uses CDP (fuses block `--inspect`); run
   `node .planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs` from `desktop/`
   after `bun run build:pos`.
+- Phase 6 Plan 04: the running dev API on :4000 points at the **Docker** Postgres
+  (`localhost:5434/gikautos`), not the local :5432 instance. After adding a migration, run
+  `DATABASE_URL=postgresql://gikautos:gikautos@localhost:5434/gikautos bun run --filter api db:migrate`
+  or Better Auth answers 500 (schema validation) on every request.
+- Phase 6 Plan 04: console smoke `evidence/smoke-console-pin.mjs` bootstraps forced TOTP
+  and saves the secret to `/tmp/opencode/admin-totp.json`; it needs the API (:4000) and
+  admin dev server (:3000) running. The admin dev server must be restarted after dependency
+  changes (a stale Nitro process can 500 with a missing `youch` asset).
