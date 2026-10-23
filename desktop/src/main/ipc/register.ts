@@ -8,10 +8,12 @@ import {
   MAX_SECRET_LENGTH,
   SECRET_KEYS,
 } from '../../shared/ipc'
+import type { PrinterRuntime } from '../printing/printer'
 import { isTrustedIpcSender, type NavigationPolicy } from '../security'
 import { getAppInfo } from './app-info'
 import { type Keychain, KeychainError } from './keychain'
 import { hashPin, PinCryptoError, verifyPin } from './pin'
+import { registerPrinterHandlers } from './printer'
 
 const secretKeySchema = z.enum(SECRET_KEYS)
 const secretValueSchema = z.string().min(1).max(MAX_SECRET_LENGTH)
@@ -45,6 +47,7 @@ export type IpcRegistrationOptions = {
   policy: NavigationPolicy
   /** Returns the trusted main window, if it is still open. */
   mainWindow: () => BrowserWindow | null
+  printing: PrinterRuntime
   log?: (message: string) => void
 }
 
@@ -114,6 +117,8 @@ export function registerIpcHandlers(options: IpcRegistrationOptions): void {
       return verifyPin(verifier, pin, salt)
     },
   )
+
+  registerPrinterHandlers(handle, options.printing)
 }
 
 /** Test seam: removes every handler registered above. */

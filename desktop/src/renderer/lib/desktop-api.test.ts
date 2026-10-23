@@ -33,6 +33,12 @@ function fakeBridge(overrides: Partial<DesktopApi['secure']> = {}): DesktopApi {
       hash: async () => ({ ok: true, data: 'argon2-verifier' }),
       verify: async () => ({ ok: true, data: true }),
     },
+    printer: {
+      list: async () => ({ ok: true, data: [] }),
+      print: async () => ({ ok: true, data: { ok: true, bytes: 0 } }),
+      openDrawer: async () => ({ ok: true, data: { ok: true, bytes: 0 } }),
+      test: async () => ({ ok: true, data: { ok: true, bytes: 0 } }),
+    },
   }
 }
 

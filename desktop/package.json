@@ -27,9 +27,11 @@
     "test": "vitest run --passWithNoTests",
     "test:e2e": "node test/e2e/security-smoke.mjs",
     "test:spike": "node test/e2e/powersync-spike.mjs",
-    "test:sync": "node test/e2e/sync-smoke.mjs"
+    "test:sync": "node test/e2e/sync-smoke.mjs",
+    "test:print": "node test/e2e/print-smoke.mjs"
   },
   "dependencies": {
+    "@maxxuxx/node-printer": "1.6.11",
     "@node-rs/argon2": "catalog:"
   },
   "devDependencies": {

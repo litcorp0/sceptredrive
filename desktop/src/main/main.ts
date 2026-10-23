@@ -4,6 +4,7 @@ import { loadRuntimeConfig, originOf, type RuntimeConfig } from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
 import { createKeychain } from './ipc/keychain'
 import { registerIpcHandlers } from './ipc/register'
+import { createPrinterRuntime } from './printing/printer'
 import { registerAppScheme, rendererRootDir, serveRenderer } from './protocol'
 import { hardenSession, installGlobalSecurityHandlers } from './security'
 import { createMainWindow, getMainWindow, navigationOrigins, preloadPathFor } from './windows'
@@ -82,6 +83,12 @@ void app.whenReady().then(() => {
     keychain,
     policy,
     mainWindow: getMainWindow,
+    printing: createPrinterRuntime({
+      userDataDir: app.getPath('userData'),
+      isPackaged: app.isPackaged,
+      // Only the error code is logged; never a receipt line or a customer name.
+      log: (message) => console.warn(`[printing] ${message}`),
+    }),
     log: (message) => console.warn(`[ipc] ${message}`),
   })
 

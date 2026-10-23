@@ -10,6 +10,28 @@
  *   compromised renderer cannot read arbitrary files.
  */
 
+import type {
+  DrawerPin,
+  DrawerRequest,
+  PrintEncoding,
+  PrinterInfo,
+  PrinterTarget,
+  PrintJob,
+  PrintOutcome,
+  PrintRequest,
+} from './printing'
+
+export type {
+  DrawerPin,
+  DrawerRequest,
+  PrintEncoding,
+  PrintJob,
+  PrinterInfo,
+  PrintOutcome,
+  PrintRequest,
+  PrinterTarget,
+}
+
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
   secureGet: 'secure:get',
@@ -17,6 +39,10 @@ export const IPC_CHANNELS = {
   secureDelete: 'secure:delete',
   pinHash: 'pin:hash',
   pinVerify: 'pin:verify',
+  printerList: 'printer:list',
+  printerPrint: 'printer:print',
+  printerOpenDrawer: 'printer:open-drawer',
+  printerTest: 'printer:test',
 } as const
 
 /** Keys stored encrypted with the OS keychain (async `safeStorage`). */
@@ -68,6 +94,12 @@ export type AppInfo = {
   isPackaged: boolean
   userDataPath: string
   secureStorage: SecureStorageStatus
+  /**
+   * Only true when the operator started the app with `POS_DIAGNOSTICS=1`.
+   * Hardware/print diagnostics can open the drawer, so they are not a normal
+   * cashier-reachable screen in production.
+   */
+  diagnosticsEnabled: boolean
 }
 
 export type DesktopApi = {
@@ -87,6 +119,20 @@ export type DesktopApi = {
     /** `salt` is base64 of 16 random bytes; it is used as the Argon2 pepper. */
     hash(pin: string, salt: string): Promise<IpcResult<string>>
     verify(verifier: string, pin: string, salt: string): Promise<IpcResult<boolean>>
+  }
+  /**
+   * ESC/POS printing. The renderer sends a bounded, pre-formatted job; the
+   * main process owns the native adapter. Printer trouble is returned as a
+   * `PrintOutcome` (never thrown) so a sale is never blocked (D28).
+   */
+  printer: {
+    list(): Promise<IpcResult<PrinterInfo[]>>
+    print(request: PrintRequest): Promise<IpcResult<PrintOutcome>>
+    openDrawer(request: DrawerRequest): Promise<IpcResult<PrintOutcome>>
+    test(request: {
+      target: PrinterTarget
+      encoding: PrintEncoding
+    }): Promise<IpcResult<PrintOutcome>>
   }
 }
 

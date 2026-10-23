@@ -1,4 +1,4 @@
-import { cpSync, existsSync } from 'node:fs'
+import { cpSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { FuseV1Options, FuseVersion } from '@electron/fuses'
 import { MakerSquirrel } from '@electron-forge/maker-squirrel'
@@ -22,16 +22,27 @@ const config: ForgeConfig = {
      * the build host). AutoUnpackNatives then unpacks the `.node` binary.
      */
     packageAfterPrune: async (_forgeConfig, buildPath) => {
-      const source = path.join(import.meta.dirname, 'node_modules', '@node-rs')
-      if (!existsSync(source)) {
-        throw new Error(
-          'Missing @node-rs/argon2 for packaging. Run `bun run setup` in desktop/ first.',
-        )
+      /**
+       * Runtime packages were materialised by `scripts/prepare-desktop.mjs`,
+       * which writes the exact list (including transitive dependencies such as
+       * `iconv-lite` → `safer-buffer`) to `node_modules/.runtime-packages.json`.
+       * Reading it means Forge cannot silently miss a dependency.
+       */
+      const listPath = path.join(import.meta.dirname, 'node_modules', '.runtime-packages.json')
+      if (!existsSync(listPath)) {
+        throw new Error('Missing runtime dependency list. Run `bun run setup` in desktop/ first.')
       }
-      cpSync(source, path.join(buildPath, 'node_modules', '@node-rs'), {
-        recursive: true,
-        dereference: true,
-      })
+      const { packages } = JSON.parse(readFileSync(listPath, 'utf8'))
+      for (const name of packages) {
+        const source = path.join(import.meta.dirname, 'node_modules', name)
+        if (!existsSync(source)) {
+          throw new Error(`Missing ${name} for packaging. Run \`bun run setup\` in desktop/ first.`)
+        }
+        cpSync(source, path.join(buildPath, 'node_modules', name), {
+          recursive: true,
+          dereference: true,
+        })
+      }
     },
   },
   rebuildConfig: {},

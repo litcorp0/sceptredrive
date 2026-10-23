@@ -1,4 +1,10 @@
 import type { AppInfo, DesktopApi, DesktopErrorCode, IpcResult, SecretKey } from '../../shared/ipc'
+import type {
+  DrawerRequest,
+  PrintEncoding,
+  PrinterTarget,
+  PrintRequest,
+} from '../../shared/printing'
 
 /**
  * Renderer-side wrapper around `window.gikautos`.
@@ -67,5 +73,21 @@ export const desktopApi = {
 
   async verifyPin(verifier: string, pin: string, salt: string): Promise<boolean> {
     return unwrap(getDesktopBridge().pin.verify(verifier, pin, salt))
+  },
+
+  async listPrinters() {
+    return unwrap(getDesktopBridge().printer.list())
+  },
+
+  async printReceipt(request: PrintRequest) {
+    return unwrap(getDesktopBridge().printer.print(request))
+  },
+
+  async openDrawer(request: DrawerRequest) {
+    return unwrap(getDesktopBridge().printer.openDrawer(request))
+  },
+
+  async testPrint(request: { target: PrinterTarget; encoding: PrintEncoding }) {
+    return unwrap(getDesktopBridge().printer.test(request))
   },
 }

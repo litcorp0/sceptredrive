@@ -15,5 +15,6 @@ export async function getAppInfo(keychain: Keychain): Promise<AppInfo> {
     isPackaged: app.isPackaged,
     userDataPath: app.getPath('userData'),
     secureStorage,
+    diagnosticsEnabled: process.env.POS_DIAGNOSTICS === '1',
   }
 }

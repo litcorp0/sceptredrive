@@ -7,7 +7,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ['@node-rs/argon2', /^@node-rs\/argon2-/],
+      external: ['@node-rs/argon2', /^@node-rs\/argon2-/, '@maxxuxx/node-printer'],
     },
   },
 })
