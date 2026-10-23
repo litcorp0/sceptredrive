@@ -365,8 +365,12 @@ export const outbox = new Table(
     status: column.text,
     attempts: minor,
     next_attempt_at: isoText,
+    /** Legacy free-text error; Plan 08 writes the structured pair below. */
     last_error: column.text,
+    last_error_code: column.text,
+    last_error_message: column.text,
     server_result: column.text,
+    acked_at: isoText,
     created_at: isoText,
     updated_at: isoText,
   },
@@ -375,6 +379,7 @@ export const outbox = new Table(
     indexes: {
       outbox_status_created: ['status', 'created_at'],
       outbox_transaction: ['client_transaction_id'],
+      outbox_next_attempt: ['next_attempt_at'],
     },
   },
 )
@@ -464,6 +469,9 @@ export const syncConflictLocal = new Table(
     severity: column.text,
     status: column.text,
     details: column.text,
+    /** Joined display values; kept even when the receipt is not local. */
+    sale_receipt_number: column.text,
+    shift_number: column.text,
     created_at: isoText,
     resolved_at: isoText,
   },
@@ -472,6 +480,7 @@ export const syncConflictLocal = new Table(
     indexes: {
       sync_conflict_local_status: ['status'],
       sync_conflict_local_sale: ['sale_id'],
+      sync_conflict_local_severity: ['severity'],
     },
   },
 )

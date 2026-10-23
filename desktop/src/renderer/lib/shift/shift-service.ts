@@ -1,6 +1,7 @@
 import type { PowerSyncDatabase } from '@powersync/web'
 import { getStaffSession, requireStaffSession, type StaffSession } from '../auth/staff-session'
 import { nextDocumentValue } from '../document-sequence'
+import { notifyOutboxChanged } from '../outbox/outbox-events'
 import { type PosIdentity, readPosIdentity } from '../pos-config'
 import { accraDay } from '../time'
 import {
@@ -161,6 +162,7 @@ export async function openShift(db: PowerSyncDatabase, input: OpenShiftInput): P
       },
     })
   })
+  notifyOutboxChanged()
 
   const created = await findShiftById(db, shiftId)
   if (!created) throw new ShiftError('NO_OPEN_SHIFT', 'Shift could not be read back')
@@ -219,6 +221,7 @@ export async function recordCashMovement(
       },
     })
   })
+  notifyOutboxChanged()
 
   return movement
 }
@@ -282,6 +285,7 @@ export async function closeShift(
       },
     })
   })
+  notifyOutboxChanged()
 
   const closed = await findShiftById(db, shift.id)
   if (!closed) throw new ShiftError('NO_OPEN_SHIFT', 'Shift could not be read back')

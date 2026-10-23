@@ -4,6 +4,7 @@ import { requireStaffSession } from '../auth/staff-session'
 import { type CartPricingContext, type CartTotals, computeCartTotals } from '../cart/totals'
 import type { CartState } from '../cart/types'
 import { isUuid } from '../id'
+import { notifyOutboxChanged } from '../outbox/outbox-events'
 import type { PosIdentity } from '../pos-config'
 import { findOpenShift, insertOutbox, type LocalShift } from '../shift/shift-repository'
 import { allocateReceiptNumber } from './document-sequence'
@@ -410,6 +411,7 @@ export async function completeSale(
     await writePreparedSale(tx, ready)
     return ready
   })
+  notifyOutboxChanged()
 
   return {
     saleId: prepared.sale.id,
