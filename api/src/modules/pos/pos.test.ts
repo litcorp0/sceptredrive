@@ -1100,6 +1100,35 @@ describe.skipIf(!available)('POS sale application', () => {
       0,
     )
 
+    // Another branch's SALE movement must not leak into this branch's report.
+    const foreignBranch = (
+      await db
+        .insert(branch)
+        .values({ code: `FB-${suffix.slice(0, 3)}`, name: `Foreign ${suffix}`, type: 'RETAIL', city: 'Accra' })
+        .returning()
+    )[0]?.id
+    await db.insert(stockMovement).values({
+      productId: productA,
+      branchId: foreignBranch,
+      type: 'SALE',
+      quantityDelta: -1,
+      unitCostMinor: 6_000,
+      referenceType: 'SALE',
+      referenceId: crypto.randomUUID(),
+      referenceNumber: `FOREIGN-${suffix}`,
+      createdBy: 'test',
+    })
+    const scopedSales = await reconcileSales(branchId)
+    expect(
+      scopedSales.some(
+        (divergence) => divergence.details.movementReceiptNumber === `FOREIGN-${suffix}`,
+      ),
+    ).toBe(false)
+    const foreignSales = await reconcileSales(foreignBranch)
+    expect(foreignSales.some((divergence) => divergence.check === 'STOCK_MOVEMENTS')).toBe(true)
+    await db.delete(stockMovement).where(eq(stockMovement.branchId, foreignBranch))
+    await db.delete(branch).where(eq(branch.id, foreignBranch))
+
     // Test-only corruption: the header no longer equals the lines/tenders.
     await db
       .update(sale)

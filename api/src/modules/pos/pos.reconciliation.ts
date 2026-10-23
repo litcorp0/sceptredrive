@@ -165,11 +165,12 @@ export async function reconcileSales(
           WHERE ${branch}
           GROUP BY sl.sale_id, sl.product_id, s.branch_id
         ), actual AS (
-          SELECT reference_id AS sale_id, product_id, SUM(-quantity_delta)::int AS quantity,
-                 MAX(reference_number) AS reference_number
-          FROM stock_movement
-          WHERE type = 'SALE' AND reference_type = 'SALE'
-          GROUP BY reference_id, product_id
+          SELECT sm.reference_id AS sale_id, sm.product_id, SUM(-sm.quantity_delta)::int AS quantity,
+                 MAX(sm.reference_number) AS reference_number
+          FROM stock_movement sm
+          WHERE sm.type = 'SALE' AND sm.reference_type = 'SALE'
+            AND ${branchClause(sql`sm.branch_id`, branchId)}
+          GROUP BY sm.reference_id, sm.product_id
         )
         SELECT e.sale_id, e.receipt_number, e.branch_id,
           jsonb_build_object(
