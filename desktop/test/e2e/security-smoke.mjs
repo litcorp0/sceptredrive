@@ -206,11 +206,14 @@ async function checkDesktopBridge(page) {
     secure: Object.keys(globalThis.gikautos?.secure ?? {}).sort(),
     hasInvoke: 'invoke' in (globalThis.gikautos ?? {}),
   }))
+  // `pin` was added in Plan 04 (main-process Argon2 hash/verify). Everything the
+  // renderer can reach must be an explicit typed method — never a generic invoke.
   check(
-    shape.root.join(',') === 'app,secure',
-    'bridge exposes only app and secure',
+    shape.root.join(',') === 'app,pin,secure',
+    'bridge exposes only app, pin, and secure',
     shape.root.join(','),
   )
+  check(shape.hasInvoke === false, 'bridge exposes no generic invoke')
   check(
     shape.app.join(',') === 'getInfo',
     'bridge app surface is app.getInfo only',
