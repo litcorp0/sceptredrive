@@ -1,4 +1,5 @@
 import { useQuery } from '@powersync/react'
+import { usePos } from '../../lib/powersync/provider'
 import { useSyncStatus } from '../../lib/powersync/status'
 import { navigate } from '../../lib/router'
 import { useOutboxSummary } from '../../lib/sync/outbox-summary'
@@ -30,6 +31,7 @@ function shortTime(iso: string | null): string {
 }
 
 export function SyncBadge() {
+  const { sessionState } = usePos()
   const upload = useUploadStatus()
   const download = useSyncStatus()
   const outbox = useOutboxSummary()
@@ -49,7 +51,12 @@ export function SyncBadge() {
 
   let state: BadgeState
   let label: string
-  if (needsAction) {
+  if (sessionState === 'revoked') {
+    // Revocation can be discovered by the sync credential fetch before (or
+    // instead of) an upload, so the badge owns this state too.
+    state = 'action'
+    label = 'Enrol again'
+  } else if (needsAction) {
     state = 'action'
     label = highOpen > 0 ? `${highOpen} conflict${highOpen === 1 ? '' : 's'}` : 'Action needed'
   } else if (revoked) {

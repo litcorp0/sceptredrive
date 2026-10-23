@@ -38,11 +38,23 @@ const PAUSE_TEXT: Record<string, string> = {
   NO_SESSION: 'No device session — enrol this terminal',
 }
 
-function Card({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function Card({
+  label,
+  value,
+  detail,
+  testId,
+}: {
+  label: string
+  value: string
+  detail?: string
+  testId?: string
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold">{value}</p>
+      <p className="mt-1 font-mono text-lg font-semibold" data-testid={testId}>
+        {value}
+      </p>
       {detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
     </div>
   )
@@ -57,7 +69,7 @@ export function SyncScreen({
   shift: OpenShiftSummary | null
   staff: StaffSession
 }) {
-  const { db, session, syncNow } = usePos()
+  const { db, session, syncNow, sessionState } = usePos()
   const upload = useUploadStatus()
   const download = useSyncStatus()
   const outbox = useOutboxSummary()
@@ -149,12 +161,12 @@ export function SyncScreen({
           </div>
         </div>
 
-        {upload.pauseReason ? (
+        {upload.pauseReason || sessionState === 'revoked' ? (
           <p
             className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
             data-testid="sync-pause"
           >
-            {PAUSE_TEXT[upload.pauseReason] ?? upload.pauseReason}
+            {PAUSE_TEXT[upload.pauseReason ?? 'REVOKED'] ?? upload.pauseReason}
             {upload.lastError ? ` — ${upload.lastError}` : ''}
           </p>
         ) : null}
@@ -196,6 +208,7 @@ export function SyncScreen({
           <Card
             label="Waiting"
             value={String(outbox.pending)}
+            testId="sync-waiting-count"
             detail={`Batch size ${session?.config.pos.syncBatchSize ?? '—'} · oldest first`}
           />
           <Card
