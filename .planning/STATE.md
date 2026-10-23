@@ -3,17 +3,20 @@
 **Milestone:** v1
 **Updated:** 2026-10-23
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–04/9 complete**: POS schema, shared cart pricing engine, settings,
+progress — Plans 01–05/9 complete**: POS schema, shared cart pricing engine, settings,
 permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
 keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
 device session + PowerSync token endpoints, the self-hosted PowerSync service with
 branch-scoped Sync Streams, and the encrypted local schema + download-only connector (03);
 offline PINs with device bindings, lockout and manager unlock, the console PIN reset, and
-the offline shift lifecycle with server application (04).
-Suites: API 325/325, shared 73/73, desktop 74/74; shell E2E 35/35; PowerSync gate 8/8;
-device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5.
-**Next action:** Execute **Phase 6 Plan 05** (server sale application, upload endpoint,
-conflicts, and reconciliation).
+the offline shift lifecycle with server application (04); idempotent upload, atomic sale
+application with business conflicts, device conflict reads, and sale/shift reconciliation
+(05).
+Suites: API 350/350, shared 73/73, desktop 74/74; shell E2E 35/35; PowerSync gate 8/8;
+device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5; console PIN
+smoke 8/8.
+**Next action:** Execute **Phase 6 Plan 06** (POS selling UI — catalog, cart, customers,
+credit, loyalty, discounts).
 
 ---
 
@@ -27,7 +30,7 @@ conflicts, and reconciliation).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 🚧 In progress (4/9 plans) |
+| 6 | POS Offline Core | 🚧 In progress (5/9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -98,7 +101,7 @@ conflicts, and reconciliation).
 | 02 | Desktop shell, Electron security, keychain, and PowerSync spike | ✅ Complete |
 | 03 | Device auth, PowerSync sync config, local schema, and connector | ✅ Complete |
 | 04 | Offline PIN, device bindings, shifts, and console PIN reset | ✅ Complete |
-| 05 | Server sale application, upload endpoint, conflicts, and reconciliation | 📝 Planned |
+| 05 | Server sale application, upload endpoint, conflicts, and reconciliation | ✅ Complete |
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | 📝 Planned |
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | 📝 Planned |
 | 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
@@ -263,6 +266,50 @@ conflicts, and reconciliation).
     `evidence/shots/`. The full enrolled-device E2E (authorize → change → relaunch
     offline → shift → upload) stays the Plan 09 gate because it needs the API and
     PowerSync service.
+- **Plan 05 complete** (commit `f439dba` + the state update):
+  - **Idempotent upload:** `POST /api/pos/sync/upload` (device JWT, 60/min/device,
+    1–50 transactions) validates a discriminated union per type and verifies the body's
+    `deviceId`/`terminalId` against the JWT (403). Each transaction opens one DB
+    transaction, reserves `pos_sync_transaction` with
+    `INSERT … ON CONFLICT (terminal_id, client_transaction_id) DO NOTHING RETURNING`,
+    replays a stored result as `REPLAYED` (no side effects), and finalises `APPLIED` with
+    the result JSON. A 4xx `AppError` rolls the domain work back and writes a committed
+    `REJECTED` reservation in a second transaction (with an `UNKNOWN_PRODUCT` conflict
+    that cannot reference the rolled-back sale, so the client transaction id is in
+    details). Unexpected errors stay 5xx with no reservation. Responses are always 200
+    for business outcomes.
+  - **Atomic sale application** (`applySale`): validates the binding (stale →
+    `STALE_CREDENTIALS`, sale applies), the open shift on this device, the catalogue in
+    one query, the charged price vs `resolveEffectivePrice` (`PRICE_MISMATCH`, charged
+    price kept), resolves the offline customer draft (link by id/phone, insert with the
+    client UUID + loyalty bootstrap, `DUPLICATE_CUSTOMER`/`INVALID_CUSTOMER`), prices with
+    the shared `priceCart` at the server tax mode, compares the header
+    (`TOTAL_MISMATCH` when internally consistent, `INVALID_TOTALS` rejection otherwise),
+    validates single tender/change arithmetic, posts `SALE` stock movements with
+    `allowNegative` + `STOCK_OVERSELL`, posts the credit charge (`CREDIT_OVER_LIMIT` /
+    `CREDIT_HOLD`, ledger always records the debt), posts redemption/earn (`LOYALTY_NEGATIVE`,
+    `LOYALTY_RATE_CHANGED`), checks the discount cap (`OVERRIDE_INVALID`),
+    flags `CLOCK_SKEW`, then writes the sale/lines/tenders, conflicts, and audits.
+  - **Ledger transaction seams:** `credit.service.postEntryInTransaction` and
+    `loyalty.service.postEntryInTransaction` run inside the caller's tx (the public
+    `postEntry` wraps them). `PostEntryInput.bypassPolicy` and
+    `LoyaltyPostEntryInput.bypassBalanceCheck` are internal-only; `CreditTxContext.overrideActor`
+    records the validated approver on the entry and the `credit.override` audit. Customer
+    draft resolution lives in `customers.service.resolveDraftCustomer`.
+  - **Conflict reads:** `GET /api/pos/sync/conflicts?since&limit` (own terminal only,
+    receipt/shift numbers joined, ids/amounts only) and `GET /api/pos/sync/state`
+    (`pendingConflicts`, `lastSaleAt`, `serverTime`, `configVersion` = latest settings
+    update).
+  - **Reconciliation:** `reconcileSales(branchId?)` proves header = lines (subtotal,
+    discounts, VAT/NHIL/GETFund/tax, total), tenders = total + change, credit = one
+    CHARGE entry with the receipt reference, loyalty = one REDEEM entry, and one `SALE`
+    movement per product with the receipt number. `reconcileShifts(branchId?)` proves
+    expected cash/variance and OPEN/CLOSED field consistency plus one open shift per
+    terminal. `GET /api/pos/reconciliation` (`inventory.read`, admin all / manager own
+    branch) is read-only and never repairs.
+  - **Verification:** API **350/350** (new: 16 sale, 8 upload, 2 reconciliation, plus the
+    shift suite), lint/check-types green. No migration was needed.
+
 
 ---
 
@@ -291,7 +338,7 @@ conflicts, and reconciliation).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 325/325, desktop 74/74 against
+- Tests: `bun run test` — shared 73/73, api 350/350, desktop 74/74 against
   `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -635,6 +682,16 @@ conflicts, and reconciliation).
 | 2026-10-23 | Plan 04: shift close stores the client expected cash, the server recomputed expected cash, and the variance; a difference raises `SHIFT_VARIANCE_MISMATCH` (MEDIUM) and never blocks the close. The server value is authoritative for Phase 7 reports. |
 | 2026-10-23 | Plan 04: the Forge Vite plugin's default `ignore` drops `node_modules`, so native runtime modules are copied in a `packageAfterPrune` hook (`desktop/node_modules/@node-rs`) and unpacked by `auto-unpack-natives`. The packaged-app smoke proves real Argon2 IPC. |
 | 2026-10-23 | Plan 04: `#login` also hosts the one-time enrollment-code screen (missing/revoked device), because a terminal cannot authorize a PIN without a device credential; the offline (`unknown`) state still allows PIN login. |
+| 2026-10-23 | Plan 05: credit and loyalty expose `postEntryInTransaction(tx, …)`; the public `postEntry` wraps it. The POS sale calls the transaction seam so sale, ledgers, stock, conflicts, and audit commit atomically. |
+| 2026-10-23 | Plan 05: `bypassPolicy` (credit) and `bypassBalanceCheck` (loyalty) are internal-only flags. The POS always records the debt/redemption and raises `CREDIT_OVER_LIMIT`/`CREDIT_HOLD`/`LOYALTY_NEGATIVE` instead of rejecting. |
+| 2026-10-23 | Plan 05: a validated manager approval is passed as `CreditTxContext.overrideActor` so the credit entry's `overridden_by`/`override_reason` and the `credit.override` audit name the approver, not the till. POS also writes `pos.sale.override` for discount/credit approvals. |
+| 2026-10-23 | Plan 05: the sale id **is** the upload's `clientTransactionId`; the receipt number is the human key. A receipt already used by another sale is a `RECEIPT_CONFLICT` rejection. |
+| 2026-10-23 | Plan 05: Phase 6 accepts exactly one tender (cash or credit) and allows zero tenders only when the total is zero (fully redeemed). Cash tenders include the amount handed over; `change = cash − total`; credit equals the total. |
+| 2026-10-23 | Plan 05: an internally consistent but different header is stored as charged and flagged `TOTAL_MISMATCH`; reconciliation will report it as a divergence by design. An internally inconsistent header is a rejection. |
+| 2026-10-23 | Plan 05: stock/credit/loyalty post before the sale row, then the sale/lines/tenders and conflicts are written so `sync_conflict.sale_id` can reference the sale. `UNKNOWN_PRODUCT` rejections write a conflict without a sale reference. |
+| 2026-10-23 | Plan 05: upload results are HTTP 200 with per-item `APPLIED`/`REPLAYED`/`REJECTED`; only auth/scope (401/403), validation (400), throttle (429), and unexpected failures (5xx) are non-200. |
+| 2026-10-23 | Plan 05: device conflict reads and reconciliation are branch/terminal-scoped from the JWT and session scope respectively; reconciliation is read-only and returns divergences only. |
+
 
 ---
 
@@ -871,3 +928,25 @@ conflicts, and reconciliation).
   and saves the secret to `/tmp/opencode/admin-totp.json`; it needs the API (:4000) and
   admin dev server (:3000) running. The admin dev server must be restarted after dependency
   changes (a stale Nitro process can 500 with a missing `youch` asset).
+- Phase 6 Plan 05: the only server sale write path is `pos.service.applySale`; the only
+  upload entry point is `sync.service.applyUpload`. Both take the caller's transaction
+  (`applySale`) or open one per client transaction (upload). Do not add a second path.
+- Phase 6 Plan 05: credit/loyalty writes from the POS must call
+  `postEntryInTransaction(tx, …)`. `bypassPolicy`/`bypassBalanceCheck` are server-internal;
+  the HTTP Zod schemas are `.strict()`, so a client cannot inject them.
+- Phase 6 Plan 05: the sale payload contract lives in `sync.validation.ts` and
+  `pos.types.ts`. The sale id = `clientTransactionId`; the tender override shape is
+  `{ staffId, userId, bindingId, pinVersion, reasonCode, note, occurredAt }`; the cashier
+  binding token is a secret — hash it, never log or audit it.
+- Phase 6 Plan 05: `TOTAL_MISMATCH` sales intentionally store the charged header with the
+  computed lines, so `reconcileSales` reports a divergence for them. Clean sales must
+  reconcile to zero; Plan 09's walkthrough should assert both.
+- Phase 6 Plan 05: reconciliation uses raw SQL; `max(uuid)`/`min(uuid)` do not exist in
+  Postgres, so branch ids are grouped rather than aggregated. Keep the branch filter
+  parameterised.
+- Phase 6 Plan 05: the last-active-admin assertion in `staff.test.ts` is global to
+  `gikautos_test`. An aborted suite can leave an active `test-*@gikautos.test` admin and
+  break it; clean those rows (or reset the DB) before a verification run.
+- Phase 6 Plan 05: `sync.upload.test.ts` covers the endpoint (replay, concurrency,
+  per-item rejection, 50-item cap, device mismatch, conflict/state reads); `pos.test.ts`
+  covers sale arithmetic/conflicts and reconciliation. Both run serially.
