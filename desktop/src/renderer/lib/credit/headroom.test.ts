@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   creditDecision,
   creditHeadroom,
+  creditNeedsApproval,
   creditUsed,
   EMPTY_CREDIT,
   overLimitMinor,
@@ -119,5 +120,33 @@ describe('creditDecision', () => {
     expect(creditDecision({ hasCustomer: true, snapshot: profile, amountMinor: 40_001 })).toBe(
       'OVER_LIMIT',
     )
+  })
+})
+
+describe('creditNeedsApproval', () => {
+  const base = {
+    method: 'CREDIT' as const,
+    decision: 'OVER_LIMIT' as const,
+    hasOverride: false,
+    bypassed: false,
+  }
+
+  it('never asks for cash sales', () => {
+    expect(creditNeedsApproval({ ...base, method: 'CASH' })).toBe(false)
+  })
+
+  it('asks when the credit decision is not OK', () => {
+    expect(creditNeedsApproval(base)).toBe(true)
+    expect(creditNeedsApproval({ ...base, decision: 'HOLD' })).toBe(true)
+    expect(creditNeedsApproval({ ...base, decision: 'NO_PROFILE' })).toBe(true)
+  })
+
+  it('does not ask when the charge fits', () => {
+    expect(creditNeedsApproval({ ...base, decision: 'OK' })).toBe(false)
+  })
+
+  it('accepts a manager proof or a conscious bypass', () => {
+    expect(creditNeedsApproval({ ...base, hasOverride: true })).toBe(false)
+    expect(creditNeedsApproval({ ...base, bypassed: true })).toBe(false)
   })
 })

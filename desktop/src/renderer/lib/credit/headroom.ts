@@ -47,6 +47,24 @@ export function overLimitMinor(snapshot: CreditSnapshot, amountMinor: number): n
 export type CreditDecision = 'OK' | 'OVER_LIMIT' | 'HOLD' | 'NO_PROFILE' | 'NO_CUSTOMER'
 
 /**
+ * Whether completing the sale must open the manager-approval dialog first.
+ *
+ * A bypass (`bypassed`) is a conscious "continue without approval": the sale
+ * completes and the server records the conflict for manager review. Without
+ * this branch the dialog reopens forever, because a bypass stores no proof.
+ */
+export function creditNeedsApproval(input: {
+  method: 'CASH' | 'CREDIT'
+  decision: CreditDecision
+  hasOverride: boolean
+  bypassed: boolean
+}): boolean {
+  if (input.method !== 'CREDIT') return false
+  if (input.decision === 'OK') return false
+  return !input.hasOverride && !input.bypassed
+}
+
+/**
  * What the terminal can do for this cart without asking a manager.
  *
  * A missing profile is not "denied": the server bootstraps one on the first

@@ -12,6 +12,7 @@ import {
   CREDIT_DECISION_MESSAGES,
   creditDecision,
   creditHeadroom,
+  creditNeedsApproval,
   overLimitMinor,
 } from '../../lib/credit/headroom'
 import { useCustomerContext } from '../../lib/customers/context'
@@ -57,6 +58,11 @@ export function TenderScreen({
 
   const [method, setMethod] = useState<TenderMethod>('CASH')
   const [tendered, setTendered] = useState(0)
+  // A cashier who chooses "Continue without approval" proceeds with the sale;
+  // the server records CREDIT_OVER_LIMIT/CREDIT_HOLD for manager review (D17:
+  // the till never blocks). Without this flag the override dialog would reopen
+  // forever because a bypass stores `creditOverride: null`.
+  const [creditBypass, setCreditBypass] = useState(false)
   const [binding, setBinding] = useState<LocalStaffBinding | null>(null)
   const [receiptNumber, setReceiptNumber] = useState('')
   const [showOverride, setShowOverride] = useState(false)
@@ -86,7 +92,15 @@ export function TenderScreen({
   useEffect(() => {
     setTendered(0)
     setError(null)
+    setCreditBypass(false)
   }, [method])
+
+  // A different customer invalidates both an approval and a bypass.
+  const customerKey = state.customer?.customerId ?? state.customer?.draftId ?? ''
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key is the trigger
+  useEffect(() => {
+    setCreditBypass(false)
+  }, [customerKey])
 
   const decision = creditDecision({
     hasCustomer: Boolean(state.customer),
@@ -107,7 +121,14 @@ export function TenderScreen({
       setError('This terminal has no staff binding; sign in again')
       return
     }
-    if (method === 'CREDIT' && decision !== 'OK' && !state.creditOverride) {
+    if (
+      creditNeedsApproval({
+        method,
+        decision,
+        hasOverride: Boolean(state.creditOverride),
+        bypassed: creditBypass,
+      })
+    ) {
       setShowOverride(true)
       return
     }
@@ -355,6 +376,7 @@ export function TenderScreen({
           }}
           onBypass={() => {
             dispatch({ type: 'setCreditOverride', override: null })
+            setCreditBypass(true)
             setError(
               'Continuing without approval — the server will record the over-limit conflict.',
             )
