@@ -73,3 +73,6 @@ jobs:
 
       - name: Receipt printing (fake ESC/POS)
         run: xvfb-run --auto-servernum bun run --filter desktop test:print
+
+      - name: Outbox recovery simulation (real SQLite + scripted server)
+        run: bun .planning/phases/06-pos-offline-core/evidence/verify-outbox.ts

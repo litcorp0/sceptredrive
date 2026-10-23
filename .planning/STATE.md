@@ -3,7 +3,7 @@
 **Milestone:** v1
 **Updated:** 2026-10-23
 **Status:** Phase 5 complete and verified (7/7 plans). **Phase 6 (POS Offline Core) is in
-progress — Plans 01–07/9 complete**: POS schema, shared cart pricing engine, settings,
+progress — Plans 01–08/9 complete**: POS schema, shared cart pricing engine, settings,
 permissions and demo seed (01); Electron Forge 8 shell, `app://` security baseline, async
 keychain and the **PowerSync Web SDK gate** (02); POS JWT/JWKS, enrollment device tokens,
 device session + PowerSync token endpoints, the self-hosted PowerSync service with
@@ -11,16 +11,15 @@ branch-scoped Sync Streams, and the encrypted local schema + download-only conne
 offline PINs with device bindings, lockout and manager unlock, the console PIN reset, and
 the offline shift lifecycle with server application (04); idempotent upload, atomic sale
 application with business conflicts, device conflict reads, and sale/shift reconciliation
-(05); the **selling UI** — guarded shell, crash-safe cart, local search and barcode
-scanning, offline customers, loyalty redemption, credit headroom with manager overrides,
-permissioned discounts, and the tender + sale-draft hand-off (06); **atomic sale
-completion, the 42-column receipt model, ESC/POS printing through a swappable port, the
-cash drawer kick, print failure recovery, and today's-sales reprints (07)**.
-Suites: API 353/353, shared 73/73, desktop 292/292; shell E2E 38/38; PowerSync gate 8/8;
+(05); the **selling UI** (06); atomic sale completion, receipts, ESC/POS printing and the
+cash drawer (07); **the durable outbox, exactly-once uploader with recovery, sync badge,
+`#pos/sync`, and conflict surfacing (08)**.
+Suites: API 353/353, shared 73/73, desktop 332/332; shell E2E 38/38; PowerSync gate 8/8;
 device/sync walkthrough 24/24; desktop sync E2E 18/18; packaged PIN smoke 5/5; console PIN
-smoke 8/8; selling contract 32/32; selling UI smoke 8/8; **print smoke 21/21**.
-**Next action:** Execute **Phase 6 Plan 08** (outbox uploader, retries, sync status, and
-conflict surfacing).
+smoke 8/8; selling contract 32/32; selling UI smoke 11/11; print smoke 21/21; **outbox
+recovery simulation 41/41**.
+**Next action:** Execute **Phase 6 Plan 09** (phase verification, enrolled-device E2E,
+evidence, and state update).
 
 ---
 
@@ -34,7 +33,7 @@ conflict surfacing).
 | 3 | Inventory & Transfers | ✅ Complete (8/8 plans, verified) |
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
-| 6 | POS Offline Core | 🚧 In progress (7/9 plans) |
+| 6 | POS Offline Core | 🚧 In progress (8/9 plans) |
 | 7 | POS Payments, Returns & Shifts | ⬜ Not started |
 | 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
 | 9 | Production Hardening & Launch | ⬜ Not started |
@@ -108,7 +107,7 @@ conflict surfacing).
 | 05 | Server sale application, upload endpoint, conflicts, and reconciliation | ✅ Complete |
 | 06 | POS selling UI — catalog, cart, customers, credit, loyalty, discounts | ✅ Complete |
 | 07 | Sale completion, receipts, ESC/POS printing, and cash drawer | ✅ Complete |
-| 08 | Outbox uploader, retries, sync status, and conflict surfacing | 📝 Planned |
+| 08 | Outbox uploader, retries, sync status, and conflict surfacing | ✅ Complete |
 | 09 | Phase 6 verification and state update | 📝 Planned |
 
 ### Phase 6 execution notes
@@ -342,7 +341,7 @@ conflict surfacing).
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 353/353, desktop 292/292 against
+- Tests: `bun run test` — shared 73/73, api 353/353, desktop 332/332 against
   `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
@@ -679,6 +678,59 @@ conflict surfacing).
   `evidence/receipts/`, `evidence/shots/plan07-print-diagnostics.png`. The
   enrolled-device sale → print walkthrough stays the Plan 09 gate (needs API + PowerSync);
   the Windows hardware checklist is in the evidence note.
+
+### Phase 6 Plan 08 execution notes (2026-10-23)
+
+- **Plan 08 complete.** No server, migration, or permission change was needed; the upload
+  endpoint and conflict reads from Plan 05 are the contract. The local schema gained two
+  additive outbox columns (`last_error_code`, `last_error_message`, `acked_at`), an
+  `outbox_next_attempt` index, plus `sync_conflict_local.sale_receipt_number`,
+  `shift_number`, and a severity index.
+- **State machine** (`lib/outbox/outbox-types.ts`): `pending → in_flight → acked |
+  dead_letter` (with `conflict` reserved), `attempts` as a failure count, exponential
+  backoff `min(1s × 2^attempts, 5min)` ±20% jitter, and RFC 9110 `Retry-After` parsing
+  (seconds or HTTP-date, capped at 1h). There is **no max-attempts dead letter**: a long
+  outage must never drop a sale. Only a server `REJECTED`/4xx or a corrupt local payload
+  dead-letters.
+- **Repository** (`outbox-repository.ts`): `nextBatch` claims the oldest due rows inside
+  one write transaction; `in_flight` rows reset at every drain start (crash/ambiguity
+  safe); APPLIED/REPLAYED ack the row, all three local delta tables for the sale, and link
+  a server-resolved customer draft onto the sale and pending deltas; REJECTED dead-letters
+  without acking deltas; retry resets a dead letter; acked rows prune after 30 days; the
+  last successful upload timestamp persists in `device_setting`.
+- **Uploader** (`lib/outbox/uploader.ts`): one drain at a time, strict FIFO, batch size
+  from the session config (clamped 1–50), loop while a full batch is consumed. Triggers:
+  outbox-insert event (debounced 200 ms), 15 s heartbeat while pending, `online` event, a
+  successful PowerSync download, and manual Sync now. 401 pauses 60 s (the API client
+  already used its one refresh); 403 calls `markDeviceRevoked` and pauses permanently until
+  re-enrolment; 429 honours `Retry-After`; 5xx/network back off; 400 dead-letters the
+  batch; an incomplete response leaves rows claimed and retries after 2 s (server replay is
+  safe); corrupt payloads dead-letter per row and do not block the queue.
+- **Offline hint nuance:** scheduled drains skip when `navigator.onLine === false`, but
+  **manual Sync now attempts anyway**. Electron/Chromium docs say `false` is a strong
+  offline signal while `true` proves nothing; Windows NCSI behind a firewall can report
+  offline while the API is reachable, and stranding sales is worse than one failed attempt.
+- **API client:** `ApiError` now carries `retryAfterSeconds` from the response header; the
+  shared client still performs the single 401 refresh before the uploader sees a 401.
+- **UI**: `SyncBadge` in the POS header (green synced time, amber pending/pulsing, red
+  offline/action) links to `#pos/sync`; `#pos/sync` shows connection/download/upload/pending
+  cards, manual sync, the outbox table, dead-letter Retry (manager/admin only), and the
+  locally cached conflict list with expandable details. Receipts/sales/sync are reachable
+  without an open shift. No payload, token, receipt line, or customer PII is rendered or
+  persisted in error fields.
+- **Provider**: one uploader per open database, started only with an active device session
+  and stopped/reset on unmount; session token refreshes do not restart an in-flight drain;
+  the PowerSync status listener nudges the uploader after a successful download. StrictMode
+  and unmount races are guarded with stopped checks after every async start step.
+- **Verification:** desktop **332/332** (40 new: state machine/backoff, repository SQL
+  transitions, uploader scenarios, conflict upsert, Retry-After), typecheck and Biome clean,
+  `bun run build:pos` packages, shell E2E **38/38**, packaged print smoke **21/21**, selling
+  UI smoke **11/11** (adds sales/sync/receipt redirects), and the runnable
+  `evidence/verify-outbox.ts` **41/41** against real SQLite with a scripted server
+  (offline drain, lost response → REPLAYED, 503 backoff, 401 pause, 403 revoke, batch 1/25,
+  rejected isolation, pruning, crash reset). Evidence: `evidence/outbox-recovery.md` +
+  `outbox-recovery.json`. The full enrolled-device E2E (real API + PowerSync) remains Plan
+  09.
 
 ### Phase 6 planning additions (2026-10-22)
 
@@ -1107,3 +1159,21 @@ conflict surfacing).
 - Phase 6 Plan 07: the enrolled-device “sell → print → restart” E2E remains the Plan 09
   gate because it needs the API and PowerSync service; Plan 07 verifies the same
   orchestration with unit tests and a packaged fake-adapter print.
+- Phase 6 Plan 08: the outbox is the only write path (`SALE`, `SHIFT_OPEN`,
+  `CASH_MOVEMENT`, `SHIFT_CLOSE`); PowerSync stays download-only. One server transaction
+  per item, idempotent by `(terminal_id, client_transaction_id)`, `REPLAYED` is success.
+- Phase 6 Plan 08: no max-attempts dead letter. Transient failures retry forever with a
+  5-minute backoff cap; only a server rejection, a 4xx, or a corrupt payload dead-letters.
+  A dead letter is retried by a manager after review, never silently dropped.
+- Phase 6 Plan 08: 401 pauses 60 s (the API client already refreshed once), 403 revokes the
+  device and pauses until re-enrolment, 429 honours `Retry-After`, 5xx/network back off.
+  Ambiguous responses leave rows claimed and replay on the next drain.
+- Phase 6 Plan 08: scheduled drains honour `navigator.onLine === false`; manual **Sync now**
+  still attempts, because Chromium's `false` is a strong offline hint while `true` is not
+  proof of reachability and a false offline must not strand sales.
+- Phase 6 Plan 08: conflict cache is refreshed without `since` after each drain so status
+  changes are not missed; upserts are keyed by the server id. The local receipt/shift
+  number is stored for display and linked to the local row by a subquery.
+- Phase 6 Plan 08: the uploader is created once per open database and only while a device
+  session is active; token refreshes do not restart an in-flight drain. Acked rows are
+  retained 30 days, then pruned; sale rows remain.

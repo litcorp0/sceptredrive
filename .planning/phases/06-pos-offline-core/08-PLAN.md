@@ -5,8 +5,9 @@ wave: 5
 title: Outbox uploader, retries, sync status, and conflict surfacing
 requirements: [POS-14, SYNC-04, SYNC-07, SYNC-08]
 depends_on: [05, 06]
-status: planned
+status: complete
 created: 2026-10-22
+completed: 2026-10-23
 ---
 
 # Plan 08 — Outbox Uploader, Retries, Sync Status, Conflicts

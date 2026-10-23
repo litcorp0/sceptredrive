@@ -106,6 +106,9 @@ try {
     ['#pos', 'selling'],
     ['#pos/tender', 'tender'],
     ['#pos/settings', 'settings'],
+    ['#pos/sales', 'sales'],
+    ['#pos/sync', 'sync'],
+    ['#pos/receipt/55555555-5555-7555-8555-555555555555', 'receipt'],
   ]) {
     await page.evaluate((hash) => {
       window.location.hash = hash

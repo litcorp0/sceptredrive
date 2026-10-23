@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-10-23T17:15:26.919Z",
+  "node": "v24.3.0",
+  "checks": 41,
+  "failures": 0,
+  "results": [
+    {
+      "scenario": "1. Five offline sales drain exactly once",
+      "checks": 7,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "2. Lost response replays without a duplicate",
+      "checks": 7,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "3. Two 503s back off, then ack",
+      "checks": 5,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "4. 401 pauses, manual retry succeeds",
+      "checks": 3,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "5. Revoked device pauses with rows intact",
+      "checks": 3,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "6. Batch size 1 and 25 both drain",
+      "checks": 6,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "7. Rejected item dead-letters without blocking later rows",
+      "checks": 4,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "8. Acknowledged rows are pruned after the retention window",
+      "checks": 3,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scenario": "9. In-flight rows from a crash are reset and replayed",
+      "checks": 3,
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "outboxStates": [
+    "1. Five offline sales drain exactly once",
+    "2. Lost response replays without a duplicate",
+    "3. Two 503s back off, then ack",
+    "4. 401 pauses, manual retry succeeds",
+    "5. Revoked device pauses with rows intact",
+    "6. Batch size 1 and 25 both drain",
+    "7. Rejected item dead-letters without blocking later rows",
+    "8. Acknowledged rows are pruned after the retention window",
+    "9. In-flight rows from a crash are reset and replayed"
+  ]
+}
