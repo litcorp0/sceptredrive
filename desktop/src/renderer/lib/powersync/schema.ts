@@ -230,6 +230,10 @@ export const sale = new Table(
     /** `pending` until the printer confirms; a print failure never voids a sale. */
     print_status: column.text,
     printed_at: isoText,
+    /** Short code/message from the last failed print attempt (never PII). */
+    print_error: column.text,
+    /** How many times this receipt was reprinted (the marker is printed too). */
+    reprint_count: minor,
     created_at: isoText,
   },
   { localOnly: true, indexes: { sale_shift: ['shift_id'], sale_occurred: ['occurred_at'] } },
@@ -434,6 +438,22 @@ export const documentSequence = new Table(
   },
 )
 
+/**
+ * Per-device settings that live only on the terminal (Plan 07): the printer
+ * target, drawer pin, charset, copies, and the cedi glyph preference.
+ *
+ * Server policy stays in `pos_config`; these are hardware facts the back office
+ * cannot know. `id` is the setting key, so read/write is a simple upsert.
+ */
+export const deviceSetting = new Table(
+  {
+    key: column.text,
+    value: column.text,
+    updated_at: isoText,
+  },
+  { localOnly: true, indexes: { device_setting_key: ['key'] } },
+)
+
 /** Device copy of server-raised sync conflicts, for the POS status panel. */
 export const syncConflictLocal = new Table(
   {
@@ -481,6 +501,7 @@ export const PosSchema = new Schema({
   local_credit_delta: localCreditDelta,
   local_loyalty_delta: localLoyaltyDelta,
   document_sequence: documentSequence,
+  device_setting: deviceSetting,
   sync_conflict_local: syncConflictLocal,
 })
 

@@ -1,6 +1,8 @@
 import type { PowerSyncDatabase } from '@powersync/web'
 import { getStaffSession, requireStaffSession, type StaffSession } from '../auth/staff-session'
+import { nextDocumentValue } from '../document-sequence'
 import { type PosIdentity, readPosIdentity } from '../pos-config'
+import { accraDay } from '../time'
 import {
   findOpenShift,
   findShiftById,
@@ -10,10 +12,12 @@ import {
   type LocalCashMovement,
   type LocalShift,
   listCashMovements,
-  nextDocumentValue,
   type ShiftCashTotals,
   selectShiftCashTotals,
 } from './shift-repository'
+
+/** Re-exported for the shift screen and the existing formatting tests. */
+export { accraDay } from '../time'
 
 /**
  * Offline shift lifecycle (POS-04).
@@ -40,11 +44,6 @@ export class ShiftError extends Error {
     this.name = 'ShiftError'
     this.code = code
   }
-}
-
-/** Ghana has no DST: Africa/Accra is UTC year-round, so the UTC date is the local date. */
-export function accraDay(now = new Date()): string {
-  return now.toISOString().slice(0, 10).replaceAll('-', '')
 }
 
 export function formatShiftNumber(terminalCode: string, day: string, sequence: number): string {

@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/pos/app-header'
 import { CartTotalsPanel } from '../../components/pos/cart-totals'
 import { ManagerOverrideDialog } from '../../components/pos/manager-override-dialog'
-import { Modal } from '../../components/pos/modal'
 import { CashKeypad, NoPaymentDue } from '../../components/pos/tender-panel'
 import type { PosConfigSnapshot } from '../../lib/api/types'
 import { getBinding, type LocalStaffBinding } from '../../lib/auth/bindings'
 import type { StaffSession } from '../../lib/auth/staff-session'
-import { useCart } from '../../lib/cart/cart-store'
+import { cartPricingContext, useCart } from '../../lib/cart/cart-store'
+import { posRuntimeConfig } from '../../lib/config'
 import {
   CREDIT_DECISION_MESSAGES,
   creditDecision,
@@ -20,13 +20,9 @@ import { lockoutPolicyFor } from '../../lib/pos-config'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosDatabase } from '../../lib/powersync/provider'
 import { navigate } from '../../lib/router'
-import { peekReceiptNumber } from '../../lib/sale/receipt-number'
-import {
-  buildSaleDraft,
-  type SaleDraft,
-  SaleDraftError,
-  type TenderMethod,
-} from '../../lib/sale/sale-draft'
+import { completeSale, SaleCompletionError } from '../../lib/sale/complete-sale'
+import { peekReceiptNumber } from '../../lib/sale/document-sequence'
+import type { TenderMethod } from '../../lib/sale/sale-draft'
 import { usePosShortcuts } from '../../lib/shortcuts'
 
 /**
@@ -64,7 +60,7 @@ export function TenderScreen({
   const [binding, setBinding] = useState<LocalStaffBinding | null>(null)
   const [receiptNumber, setReceiptNumber] = useState('')
   const [showOverride, setShowOverride] = useState(false)
-  const [draft, setDraft] = useState<SaleDraft | null>(null)
+  const [completing, setCompleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -102,6 +98,7 @@ export function TenderScreen({
   const ready = Boolean(binding) && Boolean(shift) && Boolean(receiptNumber) && !cashShort
 
   function complete() {
+    if (completing) return
     if (!shift) {
       setError('Open a shift before completing a sale')
       return
@@ -115,37 +112,42 @@ export function TenderScreen({
       return
     }
 
-    try {
-      const saleDraft = buildSaleDraft({
-        cart: state,
-        totals,
-        cashier: {
-          userId: binding.userId,
-          staffId: binding.staffId,
-          bindingId: binding.bindingId,
-          bindingToken: binding.bindingToken,
-          pinVersion: binding.pinVersion,
-        },
-        shiftId: shift.id,
-        receiptNumber,
-        tender: {
-          method,
-          amountMinor: zeroTotal ? 0 : method === 'CASH' ? tendered : totalMinor,
-          override: method === 'CREDIT' ? state.creditOverride : null,
-        },
-        occurredAt: new Date().toISOString(),
+    setCompleting(true)
+    setError(null)
+
+    void completeSale(db, {
+      cart: state,
+      tender: {
+        method,
+        amountMinor: zeroTotal ? 0 : method === 'CASH' ? tendered : totalMinor,
+      },
+      cashier: {
+        userId: binding.userId,
+        staffId: binding.staffId,
+        bindingId: binding.bindingId,
+        bindingToken: binding.bindingToken,
+        pinVersion: binding.pinVersion,
+      },
+      identity,
+      pricing: cartPricingContext(config),
+      appVersion: posRuntimeConfig.appVersion,
+    })
+      .then((result) => {
+        // The local transaction already cleared the stored draft. Clearing the
+        // in-memory cart means returning to #pos starts a fresh sale.
+        dispatch({ type: 'clear' })
+        navigate(`pos/receipt/${result.saleId}`)
       })
-      setDraft(saleDraft)
-      setError(null)
-    } catch (buildError) {
-      setError(
-        buildError instanceof SaleDraftError
-          ? buildError.message
-          : buildError instanceof Error
-            ? buildError.message
-            : 'The sale is not ready',
-      )
-    }
+      .catch((completionError: unknown) => {
+        setCompleting(false)
+        setError(
+          completionError instanceof SaleCompletionError
+            ? completionError.message
+            : completionError instanceof Error
+              ? completionError.message
+              : 'The sale could not be completed',
+        )
+      })
   }
 
   usePosShortcuts(
@@ -153,7 +155,7 @@ export function TenderScreen({
       F9: complete,
       Escape: () => navigate('pos'),
     },
-    !showOverride && !draft,
+    !showOverride && !completing,
   )
 
   return (
@@ -322,11 +324,12 @@ export function TenderScreen({
             <button
               type="button"
               onClick={complete}
-              disabled={!ready}
+              disabled={!ready || completing}
               className="h-14 rounded-lg bg-primary text-base font-semibold text-primary-foreground disabled:opacity-40"
               data-testid="complete-sale"
             >
-              Complete sale <span className="ml-1 text-xs font-normal opacity-70">F9</span>
+              {completing ? 'Recording sale…' : 'Complete sale'}{' '}
+              <span className="ml-1 text-xs font-normal opacity-70">F9</span>
             </button>
             {cashShort ? (
               <p className="text-center text-xs text-amber-700">
@@ -358,92 +361,6 @@ export function TenderScreen({
           }}
         />
       ) : null}
-
-      {draft ? (
-        <SaleReadyDialog
-          draft={draft}
-          onBackToCart={() => navigate('pos')}
-          onClose={() => setDraft(null)}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-/**
- * The hand-off. Plan 07 replaces the body copy with the commit + print flow;
- * the draft shown here is exactly what will be written.
- */
-function SaleReadyDialog({
-  draft,
-  onClose,
-  onBackToCart,
-}: {
-  draft: SaleDraft
-  onClose: () => void
-  onBackToCart: () => void
-}) {
-  const tender = draft.payload.tenders[0]
-  return (
-    <Modal
-      title="Sale ready"
-      description="The till has everything it needs to record this sale."
-      onClose={onClose}
-      testId="sale-draft-ready"
-      footer={
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-          >
-            Keep editing
-          </button>
-          <button
-            type="button"
-            onClick={onBackToCart}
-            className="h-10 flex-1 rounded-md bg-primary text-sm font-semibold text-primary-foreground"
-          >
-            Back to cart
-          </button>
-        </div>
-      }
-    >
-      <div className="grid gap-1.5 text-sm">
-        <Row label="Receipt" value={draft.payload.receiptNumber} />
-        <Row
-          label="Tender"
-          value={
-            draft.payload.tenders.length === 0
-              ? 'No payment due'
-              : `${tender?.method} ${formatGhs(tender?.amountMinor ?? 0)}`
-          }
-        />
-        <Row label="Change" value={formatGhs(draft.payload.totals.changeMinor)} />
-        <Row label="Total" value={formatGhs(draft.payload.totals.totalMinor)} />
-        <Row
-          label="Customer"
-          value={
-            draft.payload.customer
-              ? (draft.payload.customer.name ?? 'Existing customer')
-              : 'Walk-in'
-          }
-        />
-        <Row label="Lines" value={String(draft.payload.lines.length)} />
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Recording the sale, printing the receipt, and opening the drawer are the next phase of this
-        plan; the draft (including its idempotency key) is final.
-      </p>
-    </Modal>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border py-1.5 last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono text-xs">{value}</span>
     </div>
   )
 }

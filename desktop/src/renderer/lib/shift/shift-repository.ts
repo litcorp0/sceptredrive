@@ -264,26 +264,6 @@ export async function selectShiftCashTotals(
   }
 }
 
-/** Terminal/day sequence, allocated inside the caller's transaction. */
-export async function nextDocumentValue(
-  tx: Transaction,
-  terminalId: string,
-  scope: string,
-  day: string,
-): Promise<number> {
-  const row = await tx.getOptional<{ last_value: number }>(
-    `SELECT last_value FROM document_sequence WHERE terminal_id = ? AND scope = ? AND day = ?`,
-    [terminalId, scope, day],
-  )
-  const next = (row?.last_value ?? 0) + 1
-  await tx.execute(
-    `INSERT OR REPLACE INTO document_sequence (id, terminal_id, scope, day, last_value)
-     VALUES (?, ?, ?, ?, ?)`,
-    [`${terminalId}:${scope}:${day}`, terminalId, scope, day, next],
-  )
-  return next
-}
-
 export interface OutboxRow {
   id: string
   clientTransactionId: string

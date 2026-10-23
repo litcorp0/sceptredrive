@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatGhs, parseGhsToMinor } from './format'
+import { formatGhs, formatMinorPlain, formatMinorWithSymbol, parseGhsToMinor } from './format'
 import {
   accraDay,
   computeExpectedCash,
@@ -24,6 +24,16 @@ describe('money formatting', () => {
     expect(parseGhsToMinor('-1')).toBeNull()
     expect(parseGhsToMinor('abc')).toBeNull()
     expect(parseGhsToMinor('')).toBeNull()
+  })
+
+  it('formats receipt money without a float round-trip', () => {
+    expect(formatMinorPlain(0)).toBe('0.00')
+    expect(formatMinorPlain(5)).toBe('0.05')
+    expect(formatMinorPlain(1234)).toBe('12.34')
+    expect(formatMinorPlain(1_000_000)).toBe('10000.00')
+    expect(formatMinorPlain(-500)).toBe('-5.00')
+    expect(formatMinorWithSymbol(26_500, 'GHS')).toBe('GHS 265.00')
+    expect(formatMinorWithSymbol(26_500, 'GH₵')).toBe('GH₵ 265.00')
   })
 })
 

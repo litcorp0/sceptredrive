@@ -193,6 +193,10 @@ export function fromDraftRows(draft: CartDraftRow, lines: CartDraftLineRow[]): C
  * The draft for this shift, if one was left behind by a crash. Drafts from a
  * previous (closed) shift are discarded: a cart belongs to the shift it was
  * built in.
+ *
+ * A draft whose id already exists as a committed sale is also discarded. The
+ * cart store writes on a 150 ms debounce, so a completed sale can race one last
+ * write; the sale is the truth and the draft must never resurrect it.
  */
 export async function loadCartDraft(
   db: PowerSyncDatabase,
@@ -204,6 +208,8 @@ export async function loadCartDraft(
   }
 
   await db.execute('DELETE FROM cart_draft WHERE shift_id IS NULL OR shift_id <> ?', [shiftId])
+  await db.execute('DELETE FROM cart_draft WHERE id IN (SELECT id FROM sale)')
+  await db.execute('DELETE FROM cart_draft_line WHERE draft_id NOT IN (SELECT id FROM cart_draft)')
 
   const draft = await db.getOptional<CartDraftRow>(
     'SELECT * FROM cart_draft WHERE shift_id = ? ORDER BY updated_at DESC LIMIT 1',

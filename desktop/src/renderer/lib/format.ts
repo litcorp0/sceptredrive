@@ -12,6 +12,26 @@ export function formatGhs(minor: number): string {
 }
 
 /**
+ * Integer-only pesewa formatting for receipt columns (`1234.50`).
+ *
+ * The POS printer cannot render `GH₵` on every charset, and recalculating
+ * through a float to format paper money is exactly the drift the integer rule
+ * exists to prevent. This splits the minor units with `Math.trunc`/modulo.
+ */
+export function formatMinorPlain(minor: number): string {
+  const sign = minor < 0 ? '-' : ''
+  const absolute = Math.abs(minor)
+  const whole = Math.trunc(absolute / 100)
+  const fraction = String(absolute % 100).padStart(2, '0')
+  return `${sign}${whole}.${fraction}`
+}
+
+/** `GHS 1234.50` or `GH₵ 1234.50` — the printer charset decides which. */
+export function formatMinorWithSymbol(minor: number, symbol: string): string {
+  return `${symbol} ${formatMinorPlain(minor)}`
+}
+
+/**
  * Parses a typed cedi amount into integer pesewas. Accepts `12`, `12.5`, and
  * `12.50`; rejects negative, non-numeric, or more than two decimal places.
  */
