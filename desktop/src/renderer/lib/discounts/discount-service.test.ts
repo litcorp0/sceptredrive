@@ -26,8 +26,11 @@ describe('discountAuthority', () => {
       caps: CAPS,
       hasApproval: false,
     })
-    expect(authority.percent).toBe(0) // floor(0.01%) = 0
-    expect(authority.requiresApproval).toBe(false)
+    // The floored percentage is 0, but one pesewa is still more than the
+    // allowance of zero — the pesewa comparison is what decides.
+    expect(authority.percent).toBe(0)
+    expect(authority.requiresApproval).toBe(true)
+    expect(authority.overByMinor).toBe(1)
   })
 
   it('measures total discounts over gross, including line discounts', () => {
@@ -58,10 +61,9 @@ describe('discountAuthority', () => {
     expect(authority.approved).toBe(true)
   })
 
-  it('requires approval one pesewa over the cap boundary when it crosses a percent', () => {
-    // At 10% cap of 10,000 = 1,000 allowed. Floor(1001/10000*100) = 10, so the
-    // percentage is still at the cap; the allowance in pesewas is what matters
-    // for the "over by" figure the dialog shows.
+  it('requires approval one pesewa over the cap boundary', () => {
+    // At a 10% cap of 10,000 the allowance is 1,000 pesewas. One pesewa over is
+    // over the cap even though the floored percentage still reads 10%.
     const authority = discountAuthority({
       role: 'CASHIER',
       totalDiscountMinor: 1_001,
@@ -70,7 +72,7 @@ describe('discountAuthority', () => {
       hasApproval: false,
     })
     expect(authority.percent).toBe(10)
-    expect(authority.requiresApproval).toBe(false)
+    expect(authority.requiresApproval).toBe(true)
     expect(authority.overByMinor).toBe(1)
   })
 

@@ -1171,8 +1171,11 @@ export async function applySale(
     ])
     const capPercent =
       cashierRole === 'ADMIN' || cashierRole === 'MANAGER' ? managerCap : cashierCap
+    // Compare in pesewas: at a 0% cap any discount is over, even one small
+    // enough to floor to 0% of a large cart.
+    const allowedDiscountMinor = Math.floor((priced.subtotalMinor * capPercent) / 100)
 
-    if (percent > capPercent) {
+    if (totalDiscountMinor > allowedDiscountMinor) {
       const proof = payload.saleDiscount?.override
       const approval = await validateOverrideProof(executor, device, proof, 'pos.discount')
       if (approval.valid) {
@@ -1185,6 +1188,7 @@ export async function applySale(
             kind: 'DISCOUNT',
             percent,
             capPercent,
+            allowedDiscountMinor,
             totalDiscountMinor,
             grossMinor: priced.subtotalMinor,
             staffId: proof?.staffId ?? null,

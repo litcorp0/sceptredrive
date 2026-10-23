@@ -112,13 +112,12 @@ export function DiscountDialog({
       }
     >
       <div className="grid gap-4">
-        <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Discount entry mode">
+        <div className="grid grid-cols-2 gap-2">
           {(['AMOUNT', 'PERCENT'] as const).map((option) => (
             <button
               key={option}
               type="button"
-              role="tab"
-              aria-selected={mode === option}
+              aria-pressed={mode === option}
               onClick={() => {
                 if (option !== mode) {
                   setRaw('')

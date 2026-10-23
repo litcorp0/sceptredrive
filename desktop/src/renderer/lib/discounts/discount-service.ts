@@ -64,8 +64,10 @@ export function discountAuthority(input: DiscountAuthorityInput): DiscountAuthor
   const total = safe(input.totalDiscountMinor)
   const capPercent = capPercentFor(input.role, input.caps)
   const percent = gross > 0 ? Math.floor((total * BASIS_POINTS) / gross) : 0
-  const requiresApproval = total > 0 && percent > capPercent
   const allowed = allowedDiscountMinor(gross, capPercent)
+  // Compare pesewas, not just the floored percentage: at a 0% cap a discount
+  // smaller than 1% of a large cart would otherwise floor to "0%" and slip past.
+  const requiresApproval = total > 0 && total > allowed
 
   return {
     percent,
