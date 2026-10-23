@@ -139,7 +139,10 @@ export async function reconcileSales(
         HAVING
           COALESCE(SUM(t.amount_minor), 0) <> s.tender_total_minor
           OR (COUNT(t.id) = 0 AND s.total_minor > 0)
-          OR COALESCE(SUM(t.amount_minor) FILTER (WHERE t.method = 'CASH'), 0) - s.total_minor <> s.change_minor
+          -- Every tender (cash or credit) less the sale total is the change.
+          -- A credit-only sale has no cash leg, so the invariant is the sum of
+          -- all tenders, not the cash filter alone.
+          OR COALESCE(SUM(t.amount_minor), 0) - s.total_minor <> s.change_minor
           OR COALESCE(SUM(t.amount_minor) FILTER (WHERE t.method = 'CREDIT'), 0) <> s.credit_amount_minor
           OR COALESCE(SUM(t.amount_minor) FILTER (WHERE t.method = 'CASH'), 0)
              - s.change_minor

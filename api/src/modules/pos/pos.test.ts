@@ -1084,6 +1084,22 @@ describe.skipIf(!available)('POS sale application', () => {
     const cleanShifts = await reconcileShifts(branchId)
     expect(cleanShifts).toHaveLength(0)
 
+    // A credit-only sale has no cash leg; the tender invariant must still hold.
+    const buyer = await createCustomer(50_000)
+    const creditResult = await apply(
+      context(),
+      salePayload({
+        receiptNumber: `${suffix}-R-0017`,
+        lines: [{ productId: productA, quantity: 1, unitPriceMinor: 10_000 }],
+        tender: { method: 'CREDIT' },
+        customer: { ...buyer, name: 'Credit Reconcile' },
+      }),
+    )
+    const creditReconcile = await reconcileSales(branchId)
+    expect(creditReconcile.filter((divergence) => divergence.saleId === creditResult.saleId)).toHaveLength(
+      0,
+    )
+
     // Test-only corruption: the header no longer equals the lines/tenders.
     await db
       .update(sale)
