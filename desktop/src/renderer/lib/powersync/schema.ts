@@ -33,6 +33,8 @@ export const product = new Table(
     uom_id: column.text,
     cost_price_minor: minor,
     base_price_minor: minor,
+    /** Needed to price the line's tax offline (added in Plan 06). */
+    tax_category: column.text,
     is_active: flag,
     updated_at: isoText,
   },
@@ -287,6 +289,55 @@ export const cashMovement = new Table(
   { localOnly: true, indexes: { cash_movement_shift: ['shift_id'] } },
 )
 
+/**
+ * The in-progress sale (Plan 06).
+ *
+ * One row per terminal: the `id` is the **future sale id / client transaction
+ * id**, so the receipt and the upload row can be written the instant the sale
+ * completes. Written after every cart mutation, in one transaction with its
+ * lines, and restored on launch while the shift still matches.
+ */
+export const cartDraft = new Table(
+  {
+    shift_id: column.text,
+    customer_id: column.text,
+    customer_draft_id: column.text,
+    customer_name: column.text,
+    customer_phone: column.text,
+    loyalty_redeem_points: minor,
+    sale_discount_minor: minor,
+    sale_discount_reason: column.text,
+    sale_discount_note: column.text,
+    /** JSON `OverrideProof` for the sale discount (manager PIN), or null. */
+    sale_discount_override: column.text,
+    /** JSON `OverrideProof` for the credit tender (manager PIN), or null. */
+    credit_override: column.text,
+    updated_at: isoText,
+  },
+  { localOnly: true, indexes: { cart_draft_updated: ['updated_at'] } },
+)
+
+export const cartDraftLine = new Table(
+  {
+    draft_id: column.text,
+    line_number: minor,
+    line_id: column.text,
+    product_id: column.text,
+    sku: column.text,
+    name: column.text,
+    barcode: column.text,
+    quantity: minor,
+    unit_price_minor: minor,
+    tax_category: column.text,
+    line_discount_minor: minor,
+    line_discount_reason: column.text,
+    line_discount_note: column.text,
+    /** JSON `OverrideProof` when the line discount needed manager approval. */
+    line_discount_override: column.text,
+  },
+  { localOnly: true, indexes: { cart_draft_line_draft: ['draft_id'] } },
+)
+
 /** Offline-created customer. `acked_at` is set once the server resolves the id. */
 export const customerDraft = new Table(
   {
@@ -422,6 +473,8 @@ export const PosSchema = new Schema({
   sale_line: saleLine,
   sale_tender: saleTender,
   cash_movement: cashMovement,
+  cart_draft: cartDraft,
+  cart_draft_line: cartDraftLine,
   customer_draft: customerDraft,
   outbox,
   local_stock_delta: localStockDelta,
