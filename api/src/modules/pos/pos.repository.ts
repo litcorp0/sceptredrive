@@ -2,8 +2,9 @@ import { type DbExecutor, db } from '@gikautos/db'
 import { isRole } from '@gikautos/shared'
 import { and, eq, gt, isNull, sql } from 'drizzle-orm'
 import { user as userTable } from '../identity/staff.schema.ts'
-import { posStaffBinding } from './pos.schema.ts'
-import type { DeviceStaffRecord } from './pos.types.ts'
+import { terminal } from '../org/terminals.schema.ts'
+import { cashMovement, posStaffBinding, shift, syncConflict } from './pos.schema.ts'
+import type { DeviceStaffRecord, ShiftCashTotals } from './pos.types.ts'
 
 /** Signs in a staff member by staff code, email, or both (whichever was supplied). */
 export async function findStaffForAuthorization(
@@ -183,4 +184,119 @@ export async function findStaffById(
   const row = rows[0]
   if (!row || !row.staffId || !isRole(row.role)) return null
   return { ...row, staffId: row.staffId, role: row.role }
+}
+
+// --- Shifts -----------------------------------------------------------------
+
+/** Locks the terminal row so two devices cannot open shifts concurrently. */
+export async function lockTerminal(
+  terminalId: string,
+  executor: DbExecutor = db,
+): Promise<{ id: string; branchId: string; isActive: boolean } | null> {
+  const rows = await executor
+    .select({ id: terminal.id, branchId: terminal.branchId, isActive: terminal.isActive })
+    .from(terminal)
+    .where(eq(terminal.id, terminalId))
+    .for('update')
+  return rows[0] ?? null
+}
+
+export async function findOpenShiftByTerminal(
+  terminalId: string,
+  executor: DbExecutor = db,
+): Promise<typeof shift.$inferSelect | null> {
+  const rows = await executor
+    .select()
+    .from(shift)
+    .where(and(eq(shift.terminalId, terminalId), eq(shift.status, 'OPEN')))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function findShiftByIdForUpdate(
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<typeof shift.$inferSelect | null> {
+  const rows = await executor.select().from(shift).where(eq(shift.id, shiftId)).for('update')
+  return rows[0] ?? null
+}
+
+export async function insertShift(
+  values: typeof shift.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<typeof shift.$inferSelect> {
+  const rows = await executor.insert(shift).values(values).returning()
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert the shift')
+  return row
+}
+
+export async function insertCashMovement(
+  values: typeof cashMovement.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<typeof cashMovement.$inferSelect> {
+  const rows = await executor.insert(cashMovement).values(values).returning()
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert the cash movement')
+  return row
+}
+
+/**
+ * Recomputes a shift's expected cash from the applied facts: cash tenders,
+ * change, and cash in/out. Sales not yet uploaded simply do not exist here.
+ */
+export async function selectShiftCashTotals(
+  shiftId: string,
+  openingFloatMinor: number,
+  executor: DbExecutor = db,
+): Promise<ShiftCashTotals> {
+  const rows = await executor.execute<{
+    cash_tenders: string
+    change_total: string
+    cash_in: string
+    cash_out: string
+  }>(sql`
+    SELECT
+      COALESCE((
+        SELECT SUM(st.amount_minor)
+        FROM sale_tender st
+        JOIN sale s ON s.id = st.sale_id
+        WHERE s.shift_id = ${shiftId} AND st.method = 'CASH'
+      ), 0)::text AS cash_tenders,
+      COALESCE((SELECT SUM(s.change_minor) FROM sale s WHERE s.shift_id = ${shiftId}), 0)::text AS change_total,
+      COALESCE((
+        SELECT SUM(cm.amount_minor) FROM cash_movement cm
+        WHERE cm.shift_id = ${shiftId} AND cm.type = 'CASH_IN'
+      ), 0)::text AS cash_in,
+      COALESCE((
+        SELECT SUM(cm.amount_minor) FROM cash_movement cm
+        WHERE cm.shift_id = ${shiftId} AND cm.type = 'CASH_OUT'
+      ), 0)::text AS cash_out
+  `)
+  const row = rows.rows[0]
+  return {
+    openingFloatMinor,
+    cashTendersMinor: Number(row?.cash_tenders ?? 0),
+    changeMinor: Number(row?.change_total ?? 0),
+    cashInMinor: Number(row?.cash_in ?? 0),
+    cashOutMinor: Number(row?.cash_out ?? 0),
+  }
+}
+
+export async function updateShiftClose(
+  shiftId: string,
+  patch: Partial<typeof shift.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor.update(shift).set(patch).where(eq(shift.id, shiftId))
+}
+
+export async function insertConflict(
+  values: typeof syncConflict.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<typeof syncConflict.$inferSelect> {
+  const rows = await executor.insert(syncConflict).values(values).returning()
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert the sync conflict')
+  return row
 }

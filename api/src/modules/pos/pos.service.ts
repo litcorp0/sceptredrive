@@ -1,24 +1,37 @@
 import { randomBytes } from 'node:crypto'
-import { db } from '@gikautos/db'
+import { type DbExecutor, db } from '@gikautos/db'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
-import { AppError } from '../../http/errors.ts'
+import { AppError, ConflictError } from '../../http/errors.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import {
   findActiveBinding,
   findBindingByTokenHash,
+  findOpenShiftByTerminal,
+  findShiftByIdForUpdate,
   findStaffForAuthorization,
   insertBinding,
+  insertCashMovement,
+  insertConflict,
+  insertShift,
+  lockTerminal,
   revokeBinding,
   revokeStaffBindings,
+  selectShiftCashTotals,
   touchBinding,
+  updateShiftClose,
   updateStaffPinHash,
 } from './pos.repository.ts'
 import type {
   BindingStaff,
   BindingValidationResult,
+  CashMovementPayload,
   DeviceStaffRecord,
+  ShiftApplyResult,
+  ShiftCashTotals,
+  ShiftClosePayload,
+  ShiftOpenPayload,
   StaffBindingResult,
 } from './pos.types.ts'
 
@@ -327,5 +340,280 @@ export async function validateStaffBinding(
     pinVersion: resolved.staff.pinVersion,
     mustChangePin: resolved.staff.pinMustChange,
     bindingId: resolved.binding.id,
+  }
+}
+
+// --- Shift application (called by the Plan 05 upload dispatcher) -------------
+
+/** Expected cash = float + cash tenders − change + cash in − cash out. */
+export function computeExpectedCash(totals: ShiftCashTotals): number {
+  return (
+    totals.openingFloatMinor +
+    totals.cashTendersMinor -
+    totals.changeMinor +
+    totals.cashInMinor -
+    totals.cashOutMinor
+  )
+}
+
+function parseOccurredAt(value: string): Date {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    throw new AppError(400, 'INVALID_TIMESTAMP', 'occurredAt must be an ISO timestamp')
+  }
+  return date
+}
+
+function assertNonNegativeInteger(value: number, field: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new AppError(400, 'INVALID_AMOUNT', `${field} must be a non-negative integer`)
+  }
+}
+
+function assertShiftMatchesDevice(
+  row: typeof import('./pos.schema.ts').shift.$inferSelect,
+  device: DeviceAuthContext,
+): void {
+  if (
+    row.terminalId !== device.terminalId ||
+    row.branchId !== device.branchId ||
+    row.deviceId !== device.deviceId
+  ) {
+    // A shift belongs to the terminal that opened it; another device syncing it
+    // is an integrity failure, not a normal replay.
+    throw new AppError(409, 'SHIFT_DEVICE_MISMATCH', 'This shift does not belong to this device')
+  }
+}
+
+/**
+ * Applies a shift open. The caller owns the transaction and idempotency; this
+ * function validates the terminal chain and the one-open-shift invariant.
+ */
+export async function openShift(
+  device: DeviceAuthContext,
+  payload: ShiftOpenPayload,
+  executor: DbExecutor = db,
+): Promise<ShiftApplyResult> {
+  const terminal = await lockTerminal(device.terminalId, executor)
+  if (!terminal) {
+    throw new AppError(404, 'TERMINAL_NOT_FOUND', 'Terminal not found')
+  }
+  if (!terminal.isActive) {
+    throw new AppError(409, 'TERMINAL_INACTIVE', 'Terminal is not active')
+  }
+  if (terminal.branchId !== device.branchId) {
+    throw new AppError(409, 'TERMINAL_BRANCH_MISMATCH', 'Terminal is not in this branch')
+  }
+
+  assertNonNegativeInteger(payload.openingFloatMinor, 'openingFloatMinor')
+  const occurredAt = parseOccurredAt(payload.occurredAt)
+
+  const existing = await findOpenShiftByTerminal(device.terminalId, executor)
+  if (existing) {
+    // The dispatcher replays before calling in; a same-id open is harmless, a
+    // different id means another cashier is already selling on this till.
+    if (existing.id === payload.shiftId) return { shiftId: existing.id }
+    throw new ConflictError('A shift is already open on this terminal', {
+      openShiftId: existing.id,
+      openShiftNumber: existing.number,
+    })
+  }
+
+  await insertShift(
+    {
+      id: payload.shiftId,
+      number: payload.number,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      deviceId: device.deviceId,
+      cashierUserId: payload.cashierUserId,
+      cashierStaffId: payload.cashierStaffId,
+      status: 'OPEN',
+      openedAt: occurredAt,
+      openingFloatMinor: payload.openingFloatMinor,
+      openedBy: payload.cashierStaffId,
+    },
+    executor,
+  )
+
+  await writeAudit(
+    {
+      action: 'pos.shift.opened',
+      entity: 'shift',
+      entityId: payload.shiftId,
+      actorId: payload.cashierUserId,
+      actorStaffId: payload.cashierStaffId,
+      after: {
+        number: payload.number,
+        openingFloatMinor: payload.openingFloatMinor,
+        terminalId: device.terminalId,
+        deviceId: device.deviceId,
+        occurredAt: occurredAt.toISOString(),
+      },
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+    },
+    executor,
+  )
+
+  return { shiftId: payload.shiftId }
+}
+
+/** Applies one cash movement to an open shift on this device. */
+export async function recordCashMovement(
+  device: DeviceAuthContext,
+  payload: CashMovementPayload,
+  executor: DbExecutor = db,
+): Promise<ShiftApplyResult> {
+  const row = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!row) throw new AppError(404, 'SHIFT_NOT_FOUND', 'Shift not found')
+  assertShiftMatchesDevice(row, device)
+  if (row.status !== 'OPEN') {
+    throw new ConflictError('The shift is already closed')
+  }
+
+  assertNonNegativeInteger(payload.amountMinor, 'amountMinor')
+  if (payload.amountMinor === 0) {
+    throw new AppError(400, 'INVALID_AMOUNT', 'A cash movement must be greater than zero')
+  }
+  if (payload.type !== 'CASH_IN' && payload.type !== 'CASH_OUT') {
+    throw new AppError(400, 'INVALID_CASH_MOVEMENT', 'Unknown cash movement type')
+  }
+  if (!payload.reason.trim()) {
+    throw new AppError(400, 'INVALID_CASH_MOVEMENT', 'A cash movement needs a reason')
+  }
+
+  await insertCashMovement(
+    {
+      id: payload.id,
+      shiftId: payload.shiftId,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      deviceId: device.deviceId,
+      type: payload.type,
+      amountMinor: payload.amountMinor,
+      reason: payload.reason,
+      occurredAt: parseOccurredAt(payload.occurredAt),
+      staffUserId: payload.staffUserId,
+      staffStaffId: payload.staffStaffId,
+    },
+    executor,
+  )
+
+  await writeAudit(
+    {
+      action: 'pos.cash.movement',
+      entity: 'cash_movement',
+      entityId: payload.id,
+      actorId: payload.staffUserId,
+      actorStaffId: payload.staffStaffId,
+      after: {
+        shiftId: payload.shiftId,
+        type: payload.type,
+        amountMinor: payload.amountMinor,
+        reason: payload.reason,
+      },
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+    },
+    executor,
+  )
+
+  return { shiftId: payload.shiftId }
+}
+
+/**
+ * Closes a shift with the server's own expected cash. The client's expected
+ * value is stored beside it; a difference raises a reconciliation conflict but
+ * never blocks the close.
+ */
+export async function closeShift(
+  device: DeviceAuthContext,
+  payload: ShiftClosePayload,
+  executor: DbExecutor = db,
+): Promise<ShiftApplyResult> {
+  const row = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!row) throw new AppError(404, 'SHIFT_NOT_FOUND', 'Shift not found')
+  assertShiftMatchesDevice(row, device)
+  if (row.status !== 'OPEN') {
+    throw new ConflictError('The shift is already closed')
+  }
+
+  assertNonNegativeInteger(payload.countedCashMinor, 'countedCashMinor')
+  assertNonNegativeInteger(payload.clientExpectedCashMinor, 'clientExpectedCashMinor')
+
+  const totals = await selectShiftCashTotals(payload.shiftId, row.openingFloatMinor, executor)
+  const serverExpected = computeExpectedCash(totals)
+  const variance = payload.countedCashMinor - serverExpected
+  const closedAt = parseOccurredAt(payload.occurredAt)
+
+  let conflictId: string | undefined
+  if (payload.clientExpectedCashMinor !== serverExpected) {
+    const conflict = await insertConflict(
+      {
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+        deviceId: device.deviceId,
+        shiftId: payload.shiftId,
+        type: 'SHIFT_VARIANCE_MISMATCH',
+        severity: 'MEDIUM',
+        status: 'OPEN',
+        details: {
+          clientExpectedCashMinor: payload.clientExpectedCashMinor,
+          serverExpectedCashMinor: serverExpected,
+          countedCashMinor: payload.countedCashMinor,
+          varianceMinor: variance,
+          cashTendersMinor: totals.cashTendersMinor,
+          changeMinor: totals.changeMinor,
+          cashInMinor: totals.cashInMinor,
+          cashOutMinor: totals.cashOutMinor,
+        },
+      },
+      executor,
+    )
+    conflictId = conflict.id
+  }
+
+  await updateShiftClose(
+    payload.shiftId,
+    {
+      status: 'CLOSED',
+      closedAt,
+      countedCashMinor: payload.countedCashMinor,
+      clientExpectedCashMinor: payload.clientExpectedCashMinor,
+      serverExpectedCashMinor: serverExpected,
+      varianceMinor: variance,
+      closeNote: payload.closeNote ?? null,
+      closedBy: row.cashierStaffId,
+    },
+    executor,
+  )
+
+  await writeAudit(
+    {
+      action: 'pos.shift.closed',
+      entity: 'shift',
+      entityId: payload.shiftId,
+      actorId: row.cashierUserId,
+      actorStaffId: row.cashierStaffId,
+      after: {
+        countedCashMinor: payload.countedCashMinor,
+        clientExpectedCashMinor: payload.clientExpectedCashMinor,
+        serverExpectedCashMinor: serverExpected,
+        varianceMinor: variance,
+        conflictId: conflictId ?? null,
+        occurredAt: closedAt.toISOString(),
+      },
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+    },
+    executor,
+  )
+
+  return {
+    shiftId: payload.shiftId,
+    serverExpectedCashMinor: serverExpected,
+    varianceMinor: variance,
+    ...(conflictId ? { conflictId } : {}),
   }
 }

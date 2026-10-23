@@ -48,6 +48,29 @@ export interface PowersyncTokenPayload {
   expiresAt: string
 }
 
+/** `POST /api/pos/staff/authorize` and `/change-pin`; the token is returned once. */
+export interface PosStaffBindingPayload {
+  bindingId: string
+  bindingToken: string
+  expiresAt: string
+  staff: { userId: string; staffId: string; name: string; role: 'ADMIN' | 'MANAGER' | 'CASHIER' }
+  pinVersion: number
+  mustChangePin: boolean
+}
+
+export interface PosBindingValidationPayload {
+  valid: boolean
+  staff: {
+    userId: string
+    staffId: string
+    name: string
+    role: 'ADMIN' | 'MANAGER' | 'CASHIER'
+  } | null
+  pinVersion: number | null
+  mustChangePin: boolean
+  bindingId: string | null
+}
+
 /** Enrollment redemption response (returned once). */
 export interface EnrolledDevice {
   deviceId: string

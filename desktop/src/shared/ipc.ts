@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
   secureGet: 'secure:get',
   secureSet: 'secure:set',
   secureDelete: 'secure:delete',
+  pinHash: 'pin:hash',
+  pinVerify: 'pin:verify',
 } as const
 
 /** Keys stored encrypted with the OS keychain (async `safeStorage`). */
@@ -76,6 +78,15 @@ export type DesktopApi = {
     get(key: SecretKey): Promise<IpcResult<string | null>>
     set(key: SecretKey, value: string): Promise<IpcResult<null>>
     delete(key: SecretKey): Promise<IpcResult<null>>
+  }
+  /**
+   * Argon2id PIN hashing runs in the main process. The renderer only sees the
+   * verifier, never a key or a hash of the server credential.
+   */
+  pin: {
+    /** `salt` is base64 of 16 random bytes; it is used as the Argon2 pepper. */
+    hash(pin: string, salt: string): Promise<IpcResult<string>>
+    verify(verifier: string, pin: string, salt: string): Promise<IpcResult<boolean>>
   }
 }
 

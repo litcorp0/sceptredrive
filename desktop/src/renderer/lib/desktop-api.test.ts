@@ -29,6 +29,10 @@ function fakeBridge(overrides: Partial<DesktopApi['secure']> = {}): DesktopApi {
       delete: async () => ({ ok: true, data: null }),
       ...overrides,
     },
+    pin: {
+      hash: async () => ({ ok: true, data: 'argon2-verifier' }),
+      verify: async () => ({ ok: true, data: true }),
+    },
   }
 }
 
@@ -66,5 +70,11 @@ describe('desktopApi', () => {
     await expect(desktopApi.setSecret('deviceToken', 'x')).rejects.toMatchObject({
       code: 'KEYCHAIN_UNAVAILABLE',
     })
+  })
+
+  it('passes PIN hashing and verification through the bridge', async () => {
+    installBridge(fakeBridge())
+    await expect(desktopApi.hashPin('2468', 'c2FsdA==')).resolves.toBe('argon2-verifier')
+    await expect(desktopApi.verifyPin('argon2-verifier', '2468', 'c2FsdA==')).resolves.toBe(true)
   })
 })

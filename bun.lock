@@ -82,6 +82,9 @@
     "desktop": {
       "name": "desktop",
       "version": "0.1.0",
+      "dependencies": {
+        "@node-rs/argon2": "catalog:",
+      },
       "devDependencies": {
         "@biomejs/biome": "catalog:",
         "@electron-forge/cli": "8.0.1",

@@ -17,6 +17,11 @@ const api: DesktopApi = {
     set: (key: SecretKey, value: string) => ipcRenderer.invoke(IPC_CHANNELS.secureSet, key, value),
     delete: (key: SecretKey) => ipcRenderer.invoke(IPC_CHANNELS.secureDelete, key),
   },
+  pin: {
+    hash: (pin: string, salt: string) => ipcRenderer.invoke(IPC_CHANNELS.pinHash, pin, salt),
+    verify: (verifier: string, pin: string, salt: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pinVerify, verifier, pin, salt),
+  },
 }
 
 contextBridge.exposeInMainWorld('gikautos', api)

@@ -1,3 +1,5 @@
+import { cpSync, existsSync } from 'node:fs'
+import path from 'node:path'
 import { FuseV1Options, FuseVersion } from '@electron/fuses'
 import { MakerSquirrel } from '@electron-forge/maker-squirrel'
 import { MakerZIP } from '@electron-forge/maker-zip'
@@ -10,6 +12,27 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     name: 'GikAutos POS',
+  },
+  hooks: {
+    /**
+     * The Vite plugin ignores everything except `/.vite`, so native runtime
+     * modules have to be copied into the package after the copy/prune steps.
+     * `desktop/node_modules/@node-rs` is materialised by
+     * `scripts/prepare-desktop.mjs` (the wrapper plus the platform package for
+     * the build host). AutoUnpackNatives then unpacks the `.node` binary.
+     */
+    packageAfterPrune: async (_forgeConfig, buildPath) => {
+      const source = path.join(import.meta.dirname, 'node_modules', '@node-rs')
+      if (!existsSync(source)) {
+        throw new Error(
+          'Missing @node-rs/argon2 for packaging. Run `bun run setup` in desktop/ first.',
+        )
+      }
+      cpSync(source, path.join(buildPath, 'node_modules', '@node-rs'), {
+        recursive: true,
+        dereference: true,
+      })
+    },
   },
   rebuildConfig: {},
   makers: [

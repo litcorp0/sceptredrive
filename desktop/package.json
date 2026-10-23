@@ -29,7 +29,9 @@
     "test:spike": "node test/e2e/powersync-spike.mjs",
     "test:sync": "node test/e2e/sync-smoke.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@node-rs/argon2": "catalog:"
+  },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "@electron-forge/cli": "8.0.1",

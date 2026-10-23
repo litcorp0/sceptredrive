@@ -60,4 +60,12 @@ export const desktopApi = {
   async deleteSecret(key: SecretKey): Promise<void> {
     await unwrap(getDesktopBridge().secure.delete(key))
   },
+
+  async hashPin(pin: string, salt: string): Promise<string> {
+    return unwrap(getDesktopBridge().pin.hash(pin, salt))
+  },
+
+  async verifyPin(verifier: string, pin: string, salt: string): Promise<boolean> {
+    return unwrap(getDesktopBridge().pin.verify(verifier, pin, salt))
+  },
 }

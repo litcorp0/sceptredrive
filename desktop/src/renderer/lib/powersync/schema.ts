@@ -157,9 +157,16 @@ export const staffBinding = new Table(
     staff_id: column.text,
     name: column.text,
     role: column.text,
+    /** Server `pos_staff_binding.id`, used to revalidate online. */
+    binding_id: column.text,
+    /** Server-issued binding token; encrypted at rest with the database. */
+    binding_token: column.text,
+    /** Server binding expiry (ISO); a stale binding needs re-authorization. */
+    expires_at: isoText,
     pin_salt: column.text,
     pin_verifier: column.text,
     pin_version: minor,
+    pin_must_change: flag,
     failed_attempts: minor,
     locked_until: isoText,
     is_active: flag,

@@ -11,9 +11,17 @@ import {
 import { isTrustedIpcSender, type NavigationPolicy } from '../security'
 import { getAppInfo } from './app-info'
 import { type Keychain, KeychainError } from './keychain'
+import { hashPin, PinCryptoError, verifyPin } from './pin'
 
 const secretKeySchema = z.enum(SECRET_KEYS)
 const secretValueSchema = z.string().min(1).max(MAX_SECRET_LENGTH)
+const pinSchema = z.string().regex(/^\d{4,6}$/, 'A PIN is 4–6 digits')
+const pinSaltSchema = z
+  .string()
+  .min(16)
+  .max(64)
+  .refine((salt) => Buffer.from(salt, 'base64').length === 16, 'Invalid PIN salt')
+const pinVerifierSchema = z.string().min(20).max(512)
 
 function failure(code: DesktopErrorCode, message: string): IpcResult<never> {
   return { ok: false, error: { code, message } }
@@ -25,6 +33,9 @@ function toFailure(error: unknown): IpcResult<never> {
   }
   if (error instanceof KeychainError) {
     return failure(error.code, error.message)
+  }
+  if (error instanceof PinCryptoError) {
+    return failure('INVALID_INPUT', error.message)
   }
   return failure('INTERNAL', 'Unexpected failure in the main process')
 }
@@ -87,6 +98,22 @@ export function registerIpcHandlers(options: IpcRegistrationOptions): void {
     await options.keychain.delete(key)
     return null
   })
+
+  handle(IPC_CHANNELS.pinHash, async (rawPin: unknown, rawSalt: unknown) => {
+    const pin = pinSchema.parse(rawPin)
+    const salt = pinSaltSchema.parse(rawSalt)
+    return hashPin(pin, salt)
+  })
+
+  handle(
+    IPC_CHANNELS.pinVerify,
+    async (rawVerifier: unknown, rawPin: unknown, rawSalt: unknown) => {
+      const verifier = pinVerifierSchema.parse(rawVerifier)
+      const pin = pinSchema.parse(rawPin)
+      const salt = pinSaltSchema.parse(rawSalt)
+      return verifyPin(verifier, pin, salt)
+    },
+  )
 }
 
 /** Test seam: removes every handler registered above. */

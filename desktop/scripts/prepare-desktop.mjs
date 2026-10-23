@@ -36,7 +36,7 @@ const require = createRequire(path.join(desktopDir, 'package.json'))
 const manifest = JSON.parse(readFileSync(path.join(desktopDir, 'package.json'), 'utf8'))
 
 /** Native/runtime modules that Vite must not bundle and Forge must copy. */
-const NATIVE_RUNTIME_DEPENDENCIES = new Set([])
+const NATIVE_RUNTIME_DEPENDENCIES = new Set(['@node-rs/argon2'])
 
 function resolvePackageDir(name) {
   return path.dirname(require.resolve(`${name}/package.json`, { paths: [desktopDir] }))
@@ -68,8 +68,31 @@ function ensureCopied(name) {
 mkdirSync(desktopNodeModules, { recursive: true })
 ensureLinked('electron')
 
+/**
+ * Copies a native dependency and its installed platform package (e.g.
+ * `@node-rs/argon2-linux-x64-gnu`). The platform package is an optional
+ * dependency resolved from the repository store, so it is not a direct
+ * dependency of the workspace and would otherwise be missing from the package.
+ */
+function copyNativeClosure(name) {
+  const packageDir = resolvePackageDir(name)
+  const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'))
+  const platformPackages = Object.keys(manifest.optionalDependencies ?? {}).filter((dependency) => {
+    try {
+      resolvePackageDir(dependency)
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  for (const dependency of [name, ...platformPackages]) {
+    ensureCopied(dependency)
+  }
+}
+
 for (const name of Object.keys(manifest.dependencies ?? {})) {
   if (NATIVE_RUNTIME_DEPENDENCIES.has(name)) {
-    ensureCopied(name)
+    copyNativeClosure(name)
   }
 }

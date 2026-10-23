@@ -98,6 +98,8 @@ async function requestOnce(
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT'
   body?: unknown
+  /** Extra request headers (e.g. the POS staff binding token). Never logged. */
+  headers?: Record<string, string>
   /** Bearer token override (used by the session call, which sends the device token). */
   bearer?: string
   /** Send no Authorization header at all (enrolment bootstrap). */
@@ -113,6 +115,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   const init: RequestInit = {
     method: options.method ?? 'GET',
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    ...(options.headers === undefined ? {} : { headers: options.headers }),
   }
 
   const response = await requestOnce(path, init, bearer, timeoutMs)
