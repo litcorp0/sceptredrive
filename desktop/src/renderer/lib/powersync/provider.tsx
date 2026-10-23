@@ -1,8 +1,28 @@
 import { PowerSyncContext } from '@powersync/react'
 import type { PowerSyncDatabase } from '@powersync/web'
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { httpSyncClient } from '../api/sync-client'
 import type { PosSessionPayload } from '../api/types'
-import { ensureSession, initSession, type SessionState, subscribeSession } from '../auth/session'
+import {
+  ensureSession,
+  getCurrentSession,
+  initSession,
+  markDeviceRevoked,
+  type SessionState,
+  subscribeSession,
+} from '../auth/session'
+import { createOutboxStore } from '../outbox/outbox-repository'
+import { createUploader, type Uploader } from '../outbox/uploader'
+import { refreshConflicts } from '../sync/conflicts'
+import { resetUploadStatus, setUploadStatus } from '../sync/sync-status-store'
 import { posConnector } from './connector'
 import { getDatabase } from './database'
 import { applyPowerSyncStatus, resetSyncStatus, updateSyncStatus } from './status'
@@ -11,12 +31,15 @@ interface PosContextValue {
   db: PowerSyncDatabase | null
   session: PosSessionPayload | null
   sessionState: SessionState
+  /** Manual "Sync now": bypasses the online hint and drains immediately. */
+  syncNow: () => Promise<void>
 }
 
 const PosContext = createContext<PosContextValue>({
   db: null,
   session: null,
   sessionState: 'unknown',
+  syncNow: async () => {},
 })
 
 /**
@@ -28,6 +51,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<PowerSyncDatabase | null>(null)
   const [session, setSession] = useState<PosSessionPayload | null>(null)
   const [sessionState, setSessionState] = useState<SessionState>('unknown')
+  const uploaderRef = useRef<Uploader | null>(null)
 
   useEffect(() => {
     initSession()
@@ -44,7 +68,12 @@ export function PosProvider({ children }: { children: ReactNode }) {
       if (cancelled) return
 
       unregisterListener = database.registerListener({
-        statusChanged: (status) => applyPowerSyncStatus(status),
+        statusChanged: (status) => {
+          applyPowerSyncStatus(status)
+          // A successful download means the network is back; give the uploader
+          // an extra nudge beyond its own timer.
+          if (status.connected && status.lastSyncedAt) uploaderRef.current?.schedule()
+        },
       })
       setDb(database)
 
@@ -76,8 +105,50 @@ export function PosProvider({ children }: { children: ReactNode }) {
     })
   }, [db, session])
 
+  /**
+   * One uploader per open database. It starts only when a device session is
+   * active; a token refresh changes the session object but not this effect, so
+   * an in-flight drain is never restarted. Revocation flips `session` to null,
+   * which stops the loop (the uploader itself pauses first).
+   */
+  const sessionActive = Boolean(session)
+  useEffect(() => {
+    if (!db || !sessionActive || uploaderRef.current) return
+
+    const uploader = createUploader({
+      store: createOutboxStore(db),
+      client: httpSyncClient,
+      device: () => {
+        const current = getCurrentSession()
+        return current ? { deviceId: current.deviceId, terminalId: current.terminal.id } : null
+      },
+      batchSize: () => getCurrentSession()?.config.pos.syncBatchSize ?? 25,
+      online: () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false),
+      onStatus: setUploadStatus,
+      onRevoked: markDeviceRevoked,
+      afterAck: async () => {
+        await refreshConflicts(db, httpSyncClient)
+      },
+      // Counts and codes only: never a payload, receipt line, or customer name.
+      log: (message) => console.warn(`[outbox] ${message}`),
+    })
+
+    uploaderRef.current = uploader
+    uploader.start()
+
+    return () => {
+      uploader.stop()
+      uploaderRef.current = null
+      resetUploadStatus()
+    }
+  }, [db, sessionActive])
+
+  const syncNow = useCallback(async () => {
+    await uploaderRef.current?.syncNow()
+  }, [])
+
   return (
-    <PosContext.Provider value={{ db, session, sessionState }}>
+    <PosContext.Provider value={{ db, session, sessionState, syncNow }}>
       {db ? <PowerSyncContext.Provider value={db}>{children}</PowerSyncContext.Provider> : children}
     </PosContext.Provider>
   )

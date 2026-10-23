@@ -92,8 +92,8 @@ export interface ApiErrorBody {
 }
 
 /**
- * Plan 08 upload envelope — one client transaction per item. Defined here so the
- * outbox writer and the uploader share a single shape.
+ * Plan 08 upload and conflict payloads — mirrors `sync.validation.ts` and
+ * `sync.types.ts` on the server. One client transaction per array item.
  */
 export interface PosUploadTransaction {
   clientTransactionId: string
@@ -104,18 +104,49 @@ export interface PosUploadTransaction {
 }
 
 export interface PosUploadRequest {
+  batchId: string
   deviceId: string
+  terminalId: string
   transactions: PosUploadTransaction[]
 }
 
-export type PosUploadItemResult =
-  | { clientTransactionId: string; status: 'APPLIED' | 'REPLAYED'; result: unknown }
-  | {
-      clientTransactionId: string
-      status: 'REJECTED'
-      error: { code: string; message: string }
-    }
+export type UploadItemStatus = 'APPLIED' | 'REPLAYED' | 'REJECTED'
+
+export interface UploadConflictRef {
+  id: string
+  type: string
+  severity: string
+}
+
+export interface UploadItemResult {
+  clientTransactionId: string
+  status: UploadItemStatus
+  serverId: string | null
+  conflicts: UploadConflictRef[]
+  resolved: { customerId?: string; saleId?: string; shiftId?: string }
+  error?: { code: string; message: string }
+}
 
 export interface PosUploadResponse {
-  results: PosUploadItemResult[]
+  batchId: string
+  serverTime: string
+  results: UploadItemResult[]
+}
+
+export interface DeviceConflictItem {
+  id: string
+  type: string
+  severity: string
+  status: string
+  saleReceiptNumber: string | null
+  shiftNumber: string | null
+  details: Record<string, unknown>
+  createdAt: string
+}
+
+export interface DeviceSyncState {
+  pendingConflicts: number
+  lastSaleAt: string | null
+  serverTime: string
+  configVersion: string | null
 }

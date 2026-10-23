@@ -125,6 +125,22 @@ describe('apiRequest', () => {
     await expect(apiRequest('/api/pos/anything', { method: 'POST' })).resolves.toBeUndefined()
   })
 
+  it('exposes Retry-After on a 429 so the uploader can honour it', async () => {
+    setTokenRefresher(null)
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }), {
+        status: 429,
+        headers: { 'content-type': 'application/json', 'retry-after': '42' },
+      }),
+    )
+
+    await expect(apiRequest('/api/pos/sync/upload', { method: 'POST' })).rejects.toMatchObject({
+      status: 429,
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: 42,
+    })
+  })
+
   it('sends the device token (not the JWT) for the session call and never refreshes it', async () => {
     setAccessToken('jwt-1')
     fetchMock.mockResolvedValue(jsonResponse({ deviceId: 'd' }))

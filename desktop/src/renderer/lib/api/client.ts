@@ -15,13 +15,22 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly details: Record<string, unknown> | undefined
+  /** `Retry-After` in seconds, when the server sent one (429/503). */
+  readonly retryAfterSeconds: number | null
 
-  constructor(status: number, code: string, message: string, details?: Record<string, unknown>) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.details = details
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -63,7 +72,20 @@ async function parseError(response: Response): Promise<ApiError> {
   const message = body?.error?.message ?? `Request failed with status ${response.status}`
   const ErrorType =
     response.status === 403 && code === 'DEVICE_REVOKED' ? DeviceRevokedError : ApiError
-  return new ErrorType(response.status, code, message, body?.error?.details)
+  return new ErrorType(
+    response.status,
+    code,
+    message,
+    body?.error?.details,
+    parseRetryAfterSeconds(response.headers.get('retry-after')),
+  )
+}
+
+/** RFC 9110 delta-seconds (the form our API uses). Invalid values are ignored. */
+function parseRetryAfterSeconds(header: string | null): number | null {
+  if (!header) return null
+  const seconds = Number(header.trim())
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
 }
 
 async function requestOnce(
