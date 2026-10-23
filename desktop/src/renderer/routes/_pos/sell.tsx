@@ -3,11 +3,15 @@ import { AppHeader } from '../../components/pos/app-header'
 import { CartLineRow } from '../../components/pos/cart-line'
 import { CartTotalsPanel } from '../../components/pos/cart-totals'
 import { Modal } from '../../components/pos/modal'
+import { ProductSearch } from '../../components/pos/product-search'
+import { ScanListener } from '../../components/pos/scan-listener'
 import type { PosConfigSnapshot } from '../../lib/api/types'
 import { endStaffSession, type StaffSession } from '../../lib/auth/staff-session'
 import { useCart } from '../../lib/cart/cart-store'
+import { lookupScannedProduct } from '../../lib/catalog/resolve'
 import { formatGhs } from '../../lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
+import { usePosDatabase } from '../../lib/powersync/provider'
 import { navigate } from '../../lib/router'
 import { usePosShortcuts } from '../../lib/shortcuts'
 
@@ -32,7 +36,8 @@ export function SellScreen({
   staff: StaffSession
   config: PosConfigSnapshot
 }) {
-  const { state, totals, dispatch, clear, status, error } = useCart()
+  const { state, totals, dispatch, clear, status, error, addProduct } = useCart()
+  const db = usePosDatabase()
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -58,6 +63,24 @@ export function SellScreen({
       dispatch({ type: 'setQuantity', lineId, quantity })
     },
     [dispatch],
+  )
+
+  const handleScan = useCallback(
+    (code: string) => {
+      void lookupScannedProduct(db, code, identity.branchId).then((result) => {
+        if (result.status === 'found') {
+          addProduct(result.product)
+          setNotice(null)
+          return
+        }
+        if (result.status === 'unknown') {
+          setNotice(`No product for “${code}”. Search for it, then ask the office to add it.`)
+          return
+        }
+        setNotice(`“${result.row.name}” cannot be sold: its price or tax category is missing.`)
+      })
+    },
+    [addProduct, db, identity.branchId],
   )
 
   const goTender = useCallback(() => {
@@ -111,6 +134,7 @@ export function SellScreen({
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
+      <ScanListener onScan={handleScan} enabled={!confirmClear} />
       <AppHeader
         identity={identity}
         shift={shift}
@@ -143,13 +167,13 @@ export function SellScreen({
       ) : null}
 
       <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)_280px]">
-        <section aria-label="Catalog" className="min-h-0 border-r border-border p-4">
-          <div
-            data-testid="catalog-slot"
-            className="flex h-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"
-          >
-            Product search
-          </div>
+        <section aria-label="Catalog" className="flex min-h-0 flex-col border-r border-border p-4">
+          <ProductSearch
+            branchId={identity.branchId}
+            focusRef={searchRef}
+            onAdd={addProduct}
+            onUnknown={(code) => setNotice(`No product for “${code}”.`)}
+          />
         </section>
 
         <section aria-label="Cart" className="flex min-h-0 flex-col border-r border-border">
