@@ -966,6 +966,82 @@ describe.skipIf(!available)('POS sale application', () => {
     expect(sales).toHaveLength(0)
   })
 
+  it('flags a cashier line discount above the 0% cap and still applies the sale', async () => {
+    const ctx = context()
+    const payload = salePayload({
+      receiptNumber: `${suffix}-R-0021`,
+      lines: [
+        { productId: productA, quantity: 1, unitPriceMinor: 10_000, lineDiscountMinor: 1_000 },
+      ],
+      tender: { method: 'CASH' },
+    })
+
+    const result = await apply(ctx, payload)
+    expect(result.conflicts.map((conflict) => conflict.type)).toContain('OVERRIDE_INVALID')
+
+    const conflict = await db
+      .select()
+      .from(syncConflict)
+      .where(and(eq(syncConflict.saleId, result.saleId), eq(syncConflict.type, 'OVERRIDE_INVALID')))
+    // The cap counts line discounts, not just the sale-level discount.
+    expect(conflict[0]?.details).toMatchObject({
+      kind: 'DISCOUNT',
+      percent: 10,
+      capPercent: 0,
+      totalDiscountMinor: 1_000,
+      grossMinor: 10_000,
+    })
+
+    const sales = await db.select().from(sale).where(eq(sale.id, result.saleId))
+    expect(sales[0]?.lineDiscountMinor).toBe(1_000)
+  })
+
+  it('accepts a manager approval attached to a line discount', async () => {
+    const ctx = context()
+    const payload = salePayload({
+      receiptNumber: `${suffix}-R-0022`,
+      lines: [
+        { productId: productA, quantity: 1, unitPriceMinor: 10_000, lineDiscountMinor: 1_000 },
+      ],
+      tender: { method: 'CASH' },
+    })
+    // The client carries the proof on the sale-discount object even when the
+    // approval was for a line: it is the only override slot in the contract.
+    payload.saleDiscount = {
+      amountMinor: 0,
+      reasonCode: 'OTHER',
+      note: 'Line discount approved',
+      override: {
+        staffId: managerStaffId,
+        userId: managerUserId,
+        bindingId: managerBindingId,
+        pinVersion: 1,
+        reasonCode: 'STAFF',
+        note: 'Approved line discount',
+        occurredAt: new Date().toISOString(),
+      },
+    }
+
+    const result = await apply(ctx, payload)
+    expect(result.conflicts.map((conflict) => conflict.type)).not.toContain('OVERRIDE_INVALID')
+
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entityId, result.saleId))
+    expect(audits.some((row) => row.action === 'pos.sale.override')).toBe(true)
+  })
+
+  it('applies a sale discount above the cashier cap without approval and flags it', async () => {
+    const ctx = context()
+    const payload = salePayload({
+      receiptNumber: `${suffix}-R-0023`,
+      lines: [{ productId: productA, quantity: 1, unitPriceMinor: 10_000 }],
+      saleDiscountMinor: 2_000,
+      tender: { method: 'CASH' },
+    })
+
+    const result = await apply(ctx, payload)
+    expect(result.conflicts.map((conflict) => conflict.type)).toContain('OVERRIDE_INVALID')
+  })
+
   it('applies a sale with a stale binding and records STALE_CREDENTIALS', async () => {
     const ctx = context()
     const payload = salePayload({

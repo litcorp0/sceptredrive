@@ -6,6 +6,7 @@ import { CreditPanel } from '../../components/pos/credit-panel'
 import { CustomerCreateDialog } from '../../components/pos/customer-create-dialog'
 import { CustomerDialog } from '../../components/pos/customer-dialog'
 import { CustomerPanel } from '../../components/pos/customer-panel'
+import { DiscountDialog } from '../../components/pos/discount-dialog'
 import { LoyaltyPanel } from '../../components/pos/loyalty-panel'
 import { LoyaltyRedeemDialog } from '../../components/pos/loyalty-redeem-dialog'
 import { ManagerOverrideDialog } from '../../components/pos/manager-override-dialog'
@@ -15,11 +16,14 @@ import { ScanListener } from '../../components/pos/scan-listener'
 import type { PosConfigSnapshot } from '../../lib/api/types'
 import { endStaffSession, type StaffSession } from '../../lib/auth/staff-session'
 import { useCart } from '../../lib/cart/cart-store'
+import { cartReducer } from '../../lib/cart/reducer'
 import { computeCartTotals } from '../../lib/cart/totals'
+import type { CartDiscount } from '../../lib/cart/types'
 import { lookupScannedProduct } from '../../lib/catalog/resolve'
 import { overLimitMinor } from '../../lib/credit/headroom'
 import { useCustomerContext } from '../../lib/customers/context'
 import type { CustomerHit } from '../../lib/customers/search'
+import { discountAuthority } from '../../lib/discounts/discount-service'
 import { formatGhs } from '../../lib/format'
 import { lockoutPolicyFor } from '../../lib/pos-config'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
@@ -60,10 +64,19 @@ export function SellScreen({
   const [showCreateCustomer, setShowCreateCustomer] = useState(false)
   const [showLoyalty, setShowLoyalty] = useState(false)
   const [showCreditOverride, setShowCreditOverride] = useState(false)
+  const [discountTarget, setDiscountTarget] = useState<DiscountTarget | null>(null)
+  const [pendingDiscount, setPendingDiscount] = useState<PendingDiscount | null>(null)
+  const [showDiscountOverride, setShowDiscountOverride] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const dialogOpen =
-    confirmClear || showCustomer || showCreateCustomer || showLoyalty || showCreditOverride
+    confirmClear ||
+    showCustomer ||
+    showCreateCustomer ||
+    showLoyalty ||
+    showCreditOverride ||
+    Boolean(discountTarget) ||
+    showDiscountOverride
 
   function applyCustomer(hit: CustomerHit) {
     if (!hit.customerId && !hit.draftId) {
@@ -131,6 +144,71 @@ export function SellScreen({
     navigate('pos/tender')
   }, [state.lines.length, shift])
 
+  type DiscountTarget = { kind: 'sale' } | { kind: 'line'; lineId: string }
+  interface PendingDiscount {
+    target: DiscountTarget
+    discount: CartDiscount
+    overByMinor: number
+  }
+
+  const discountLine =
+    discountTarget?.kind === 'line'
+      ? (state.lines.find((line) => line.id === discountTarget.lineId) ?? null)
+      : null
+  const lineDiscountBase = discountLine ? discountLine.unitPriceMinor * discountLine.quantity : 0
+  const saleDiscountBase = totals.priced.subtotalMinor - totals.priced.lineDiscountMinor
+  const lineDiscount: CartDiscount | null =
+    discountLine && discountLine.lineDiscountMinor > 0 && discountLine.discountReasonCode
+      ? {
+          amountMinor: discountLine.lineDiscountMinor,
+          reasonCode: discountLine.discountReasonCode,
+          note: discountLine.discountNote,
+          override: discountLine.discountOverride,
+        }
+      : null
+
+  function applyDiscount(target: DiscountTarget, discount: CartDiscount | null) {
+    if (target.kind === 'sale') {
+      dispatch({ type: 'setSaleDiscount', discount })
+      return
+    }
+    dispatch({ type: 'setLineDiscount', lineId: target.lineId, discount })
+  }
+
+  /**
+   * Applies a discount, or routes it through a manager first when the resulting
+   * total discount is above this person's cap. The check runs on the *result*, so
+   * adding a line discount can push a sale-level discount over the line.
+   */
+  function submitDiscount(discount: CartDiscount | null) {
+    if (!discountTarget) return
+    const target = discountTarget
+
+    const candidate =
+      target.kind === 'sale'
+        ? cartReducer(state, { type: 'setSaleDiscount', discount })
+        : cartReducer(state, { type: 'setLineDiscount', lineId: target.lineId, discount })
+    const projected = computeCartTotals(candidate, pricing)
+
+    const authority = discountAuthority({
+      role: staff.role,
+      totalDiscountMinor: projected.totalDiscountMinor,
+      grossMinor: projected.grossMinor,
+      caps: config.pos,
+      hasApproval: Boolean(discount?.override),
+    })
+
+    setDiscountTarget(null)
+
+    if (!discount || authority.approved) {
+      applyDiscount(target, discount)
+      return
+    }
+
+    setPendingDiscount({ target, discount, overByMinor: authority.overByMinor })
+    setShowDiscountOverride(true)
+  }
+
   usePosShortcuts(
     useMemo(
       () => ({
@@ -142,6 +220,13 @@ export function SellScreen({
             return
           }
           setShowLoyalty(true)
+        },
+        F8: () => {
+          if (state.lines.length === 0) {
+            setNotice('Add an item before discounting the sale')
+            return
+          }
+          setDiscountTarget({ kind: 'sale' })
         },
         F9: goTender,
         ArrowDown: () => {
@@ -261,7 +346,7 @@ export function SellScreen({
                       onSelect={() => setSelectedLineId(line.id)}
                       onQuantity={(quantity) => setQuantity(line.id, quantity)}
                       onRemove={() => dispatch({ type: 'removeLine', lineId: line.id })}
-                      onDiscount={() => setNotice('Line discounts arrive with the discount panel')}
+                      onDiscount={() => setDiscountTarget({ kind: 'line', lineId: line.id })}
                     />
                   )
                 })}
@@ -354,6 +439,45 @@ export function SellScreen({
           }}
           onClose={() => setShowLoyalty(false)}
           onConfirm={(points) => dispatch({ type: 'setLoyaltyRedeem', points })}
+        />
+      ) : null}
+
+      {discountTarget ? (
+        <DiscountDialog
+          title={discountTarget.kind === 'sale' ? 'Sale discount' : 'Line discount'}
+          description={
+            discountTarget.kind === 'sale'
+              ? 'Applied across every line, pro-rata, before tax.'
+              : 'Applies to this line only, before tax.'
+          }
+          baseMinor={discountTarget.kind === 'sale' ? saleDiscountBase : lineDiscountBase}
+          existing={discountTarget.kind === 'sale' ? state.saleDiscount : lineDiscount}
+          role={staff.role}
+          caps={config.pos}
+          onClose={() => setDiscountTarget(null)}
+          onSubmit={submitDiscount}
+        />
+      ) : null}
+
+      {showDiscountOverride ? (
+        <ManagerOverrideDialog
+          title="Discount approval"
+          description="This discount is above the cap for a cashier."
+          permission="pos.discount"
+          overByMinor={pendingDiscount?.overByMinor ?? 0}
+          policy={lockoutPolicyFor(config)}
+          onClose={() => {
+            setShowDiscountOverride(false)
+            setPendingDiscount(null)
+          }}
+          onApproved={(proof) => {
+            if (!pendingDiscount) return
+            applyDiscount(pendingDiscount.target, {
+              ...pendingDiscount.discount,
+              override: proof,
+            })
+            setPendingDiscount(null)
+          }}
         />
       ) : null}
 

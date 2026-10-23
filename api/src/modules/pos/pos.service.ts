@@ -1157,11 +1157,14 @@ export async function applySale(
     }
   }
 
-  // 10. Discount cap (D22/D23). Within the cap is silent; above it needs a
-  //     valid manager approval. The sale still applies either way.
-  if (saleDiscountMinor > 0) {
-    const netBeforeSale = priced.subtotalMinor - priced.lineDiscountMinor
-    const percent = netBeforeSale > 0 ? Math.floor((saleDiscountMinor * 100) / netBeforeSale) : 100
+  // 10. Discount cap (D22/D23). The cap measures **all** discounts over gross —
+  //     line discounts and the sale discount together — so a cashier cannot
+  //     bypass it with a line-level discount. Within the cap is silent; above it
+  //     needs a valid manager approval. The sale still applies either way.
+  const totalDiscountMinor = priced.lineDiscountMinor + saleDiscountMinor
+  if (totalDiscountMinor > 0) {
+    const percent =
+      priced.subtotalMinor > 0 ? Math.floor((totalDiscountMinor * 100) / priced.subtotalMinor) : 100
     const [cashierCap, managerCap] = await Promise.all([
       getSettingValue('pos.maxCashierDiscountPercent', {}, executor),
       getSettingValue('pos.maxManagerDiscountPercent', {}, executor),
@@ -1182,6 +1185,8 @@ export async function applySale(
             kind: 'DISCOUNT',
             percent,
             capPercent,
+            totalDiscountMinor,
+            grossMinor: priced.subtotalMinor,
             staffId: proof?.staffId ?? null,
             bindingId: proof?.bindingId ?? null,
             reasonCode: payload.saleDiscount?.reasonCode ?? null,
