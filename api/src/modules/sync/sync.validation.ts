@@ -41,7 +41,8 @@ export type ChangePinBody = z.infer<typeof changePinSchema>
 
 // --- Upload (Plan 05) -------------------------------------------------------
 
-const minorUnits = z.number().int().min(0)
+// GHS 10,000,000 per amount: bounded so integer arithmetic cannot overflow.
+const minorUnits = z.number().int().min(0).max(1_000_000_000)
 const overrideProofSchema = z
   .object({
     staffId: z.string().trim().min(1).max(64),
@@ -57,7 +58,7 @@ const overrideProofSchema = z
 const saleLineSchema = z
   .object({
     productId: z.uuid(),
-    quantity: z.number().int().min(1).max(1_000_000),
+    quantity: z.number().int().min(1).max(10_000),
     unitPriceMinor: minorUnits,
     lineDiscountMinor: minorUnits,
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']),

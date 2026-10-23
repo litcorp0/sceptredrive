@@ -736,11 +736,15 @@ function assertSaleShape(payload: SalePayload): void {
     throw saleRejected('SALE_INVALID', 'A sale needs a valid receipt number')
   }
   for (const line of payload.lines) {
-    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) {
-      throw saleRejected('SALE_INVALID', 'Line quantities must be positive whole numbers')
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 10_000) {
+      throw saleRejected('SALE_INVALID', 'Line quantities must be between 1 and 10,000')
     }
-    if (!Number.isSafeInteger(line.unitPriceMinor) || line.unitPriceMinor < 0) {
-      throw saleRejected('SALE_INVALID', 'Unit prices must be non-negative whole pesewas')
+    if (
+      !Number.isSafeInteger(line.unitPriceMinor) ||
+      line.unitPriceMinor < 0 ||
+      line.unitPriceMinor > 1_000_000_000
+    ) {
+      throw saleRejected('SALE_INVALID', 'Unit prices must be whole pesewas within range')
     }
     if (!Number.isSafeInteger(line.lineDiscountMinor) || line.lineDiscountMinor < 0) {
       throw saleRejected('SALE_INVALID', 'Line discounts must be non-negative whole pesewas')
@@ -1057,7 +1061,7 @@ export async function applySale(
         },
       })
     }
-    if (approval.valid) overrides.push({ kind: 'CREDIT', validation: approval })
+    if (approval.valid && !held) overrides.push({ kind: 'CREDIT', validation: approval })
 
     await postCreditEntry(
       executor,
@@ -1076,12 +1080,12 @@ export async function applySale(
         idempotencyKey: `${context.clientTransactionId}:credit`,
         bypassPolicy: true,
         override:
-          approval.valid && creditReason
+          approval.valid && creditReason && !held
             ? { reasonCode: creditReason, note: proof?.note ?? null }
             : null,
       },
       undefined,
-      approval.valid && approval.actor ? { overrideActor: approval.actor } : {},
+      approval.valid && approval.actor && !held ? { overrideActor: approval.actor } : {},
     )
   }
 
