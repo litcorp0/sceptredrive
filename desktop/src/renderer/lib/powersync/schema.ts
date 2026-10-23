@@ -78,6 +78,9 @@ export const customer = new Table(
     address: column.text,
     created_branch_id: column.text,
     status: column.text,
+    // The sync stream already excludes anonymized rows; keeping the column
+    // locally lets the terminal filter defensively while a change is in flight.
+    anonymized_at: column.text,
     created_at: isoText,
     updated_at: isoText,
   },
