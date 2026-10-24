@@ -162,7 +162,7 @@ export function LoginRoute() {
       <aside className="hidden w-1/3 flex-col justify-between bg-zinc-900 p-8 text-zinc-50 lg:flex">
         <div>
           <p className="text-xs font-medium tracking-widest text-zinc-400 uppercase">
-            GikAutos POS
+            Sceptre Drive POS
           </p>
           <h1 className="mt-3 text-2xl font-semibold">Terminal sign-in</h1>
           <p className="mt-2 text-sm text-zinc-400">
@@ -401,7 +401,7 @@ function ActivateForm({
         onChange={(event) => setIdentity(event.target.value)}
         autoComplete="username"
         className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
-        placeholder="GA-0004 or you@gikautos.com"
+        placeholder="GA-0004 or you@sceptre.local"
       />
 
       <p className="mt-4 mb-2 text-sm font-medium">PIN</p>
@@ -586,7 +586,7 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md">
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          GikAutos POS
+          Sceptre Drive POS
         </p>
         <h1 className="mt-2 text-2xl font-semibold">Enrol this terminal</h1>
         <p className="mt-2 text-sm text-muted-foreground">

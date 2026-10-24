@@ -2,7 +2,7 @@
 /**
  * Security smoke test for the POS shell.
  *
- * Runs the *production* renderer path (built bundles, `app://gikautos` origin)
+ * Runs the *production* renderer path (built bundles, `app://sceptre-drive` origin)
  * inside the unpackaged Electron binary, then repeats the origin checks against
  * the packaged binary to prove the fuses are applied.
  *
@@ -17,9 +17,18 @@ import path from 'node:path'
 import { chromium, _electron as electron } from 'playwright'
 
 const desktopDir = path.resolve(import.meta.dirname, '..', '..')
+/** Production apex domain; the single constant in src/main/config.ts is the source of truth. */
+const SCEPTRE_DOMAIN = fs
+  .readFileSync(path.join(desktopDir, 'src/main/config.ts'), 'utf8')
+  .match(/SCEPTRE_DOMAIN = '([^']+)'/)?.[1]
 const builtMain = path.join(desktopDir, '.vite', 'build', 'main.cjs')
 const builtRenderer = path.join(desktopDir, '.vite', 'renderer', 'main_window', 'index.html')
-const packagedBinary = path.join(desktopDir, 'out', 'GikAutos POS-linux-x64', 'GikAutos POS')
+const packagedBinary = path.join(
+  desktopDir,
+  'out',
+  'Sceptre Drive POS-linux-x64',
+  'Sceptre Drive POS',
+)
 
 const failures = []
 let checks = 0
@@ -84,7 +93,7 @@ async function checkProductionRenderer() {
   console.log('\nUnpackaged production build (app:// origin)')
   // A unique profile per launch keeps the single-instance lock and the keychain
   // probe away from the developer's real terminal profile.
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-pos-smoke-'))
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-pos-smoke-'))
   const app = await electron.launch({
     executablePath: electronBinary(),
     args: ['.', '--no-sandbox', '--disable-gpu', `--user-data-dir=${userDataDir}`],
@@ -103,7 +112,7 @@ async function checkProductionRenderer() {
 
   await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
 
-  check(page.url().startsWith('app://gikautos/'), 'renderer loads from app://', page.url())
+  check(page.url().startsWith('app://sceptre-drive/'), 'renderer loads from app://', page.url())
   check(!page.url().startsWith('file://'), 'renderer never uses file://', page.url())
 
   const isolation = await page.evaluate(() => ({
@@ -148,7 +157,7 @@ async function checkProductionRenderer() {
   // The browser enforces the intersection of every policy, so the meta fallback
   // must (at least) cover the same origins the header allows.
   check(
-    Boolean(metaPolicy?.includes('https://*.gikautos.com')) &&
+    Boolean(metaPolicy?.includes(`https://*.${SCEPTRE_DOMAIN}`)) &&
       Boolean(metaPolicy?.includes('https://*.powersync.journeyapps.com')),
     'meta fallback covers every origin the CSP allowlist accepts',
     metaPolicy ?? 'missing',
@@ -189,7 +198,7 @@ async function checkProductionRenderer() {
     })
     .catch(() => 'navigation destroyed the page')
   check(
-    navigationBlocked.startsWith('app://gikautos/'),
+    navigationBlocked.startsWith('app://sceptre-drive/'),
     'navigation to a remote origin is blocked',
     navigationBlocked,
   )
@@ -201,11 +210,11 @@ async function checkDesktopBridge(page) {
   console.log('\nPreload bridge and keychain')
 
   const shape = await page.evaluate(() => ({
-    root: Object.keys(globalThis.gikautos ?? {}).sort(),
-    app: Object.keys(globalThis.gikautos?.app ?? {}).sort(),
-    secure: Object.keys(globalThis.gikautos?.secure ?? {}).sort(),
-    printer: Object.keys(globalThis.gikautos?.printer ?? {}).sort(),
-    hasInvoke: 'invoke' in (globalThis.gikautos ?? {}),
+    root: Object.keys(globalThis.sceptreDrive ?? {}).sort(),
+    app: Object.keys(globalThis.sceptreDrive?.app ?? {}).sort(),
+    secure: Object.keys(globalThis.sceptreDrive?.secure ?? {}).sort(),
+    printer: Object.keys(globalThis.sceptreDrive?.printer ?? {}).sort(),
+    hasInvoke: 'invoke' in (globalThis.sceptreDrive ?? {}),
   }))
   // `pin` was added in Plan 04 (main-process Argon2 hash/verify) and `printer`
   // in Plan 07 (bounded ESC/POS jobs). Everything the renderer can reach must
@@ -234,7 +243,7 @@ async function checkDesktopBridge(page) {
   check(!shape.hasInvoke, 'no generic invoke() on the bridge')
 
   const info = await page.evaluate(async () => {
-    const result = await globalThis.gikautos?.app.getInfo()
+    const result = await globalThis.sceptreDrive?.app.getInfo()
     return result?.ok ? result.data : null
   })
   check(Boolean(info), 'app.getInfo() returns typed data')
@@ -253,7 +262,7 @@ async function checkDesktopBridge(page) {
   if (!info.secureStorage.available) {
     check(
       await page.evaluate(async () => {
-        const result = await globalThis.gikautos?.secure.set('keychainSelfTest', 'x')
+        const result = await globalThis.sceptreDrive?.secure.set('keychainSelfTest', 'x')
         return result?.ok === false && result.error.code === 'KEYCHAIN_UNAVAILABLE'
       }),
       'unavailable keychain fails closed with KEYCHAIN_UNAVAILABLE',
@@ -270,7 +279,7 @@ async function checkDesktopBridge(page) {
   check(!raw.includes('probe-'), 'secrets.json holds ciphertext, not the plaintext probe')
   check((fs.statSync(secretsPath).mode & 0o777) === 0o600, 'secrets.json is mode 0600')
   check(
-    await page.evaluate(() => Boolean(globalThis.gikautos)),
+    await page.evaluate(() => Boolean(globalThis.sceptreDrive)),
     'preload bridge survives a keychain write',
   )
 
@@ -316,7 +325,7 @@ async function checkPackagedBinary() {
 
   // The app itself still runs: drive it over CDP (Playwright's Electron
   // launcher needs the Node inspector, which the fuses remove on purpose).
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-pos-e2e-'))
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-pos-e2e-'))
   const port = await freePort()
   const child = spawn(
     packagedBinary,
@@ -335,7 +344,11 @@ async function checkPackagedBinary() {
     const context = browser.contexts()[0]
     const page = context.pages()[0] ?? (await context.waitForEvent('page', { timeout: 20_000 }))
     await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
-    check(page.url().startsWith('app://gikautos/'), 'packaged app loads from app://', page.url())
+    check(
+      page.url().startsWith('app://sceptre-drive/'),
+      'packaged app loads from app://',
+      page.url(),
+    )
 
     const isolated = await page.evaluate(() => typeof globalThis.require === 'undefined')
     check(isolated, 'packaged renderer has no Node access')

@@ -101,7 +101,7 @@ const { runPowerSyncSpike, resolveDatabaseKey, SPIKE_DB_FILES } = await import('
 function installKeychain(values: Record<string, string> = {}) {
   Object.defineProperty(globalThis, 'window', {
     value: {
-      gikautos: {
+      sceptreDrive: {
         app: { getInfo: async () => ({ ok: true, data: {} }) },
         secure: {
           get: async (key: string) =>

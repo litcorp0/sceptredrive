@@ -39,7 +39,7 @@ export function AppHeader({
       <div className="flex min-w-0 items-baseline gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            {identity?.branchName ?? 'GikAutos'} · {identity?.branchCode ?? '—'}
+            {identity?.branchName ?? 'Sceptre Drive'} · {identity?.branchCode ?? '—'}
           </p>
           <p className="truncate text-sm font-semibold" data-testid="pos-terminal">
             {identity?.terminalCode ?? 'Terminal not configured'}

@@ -7,7 +7,7 @@ import type {
 } from '../../shared/printing'
 
 /**
- * Renderer-side wrapper around `window.gikautos`.
+ * Renderer-side wrapper around `window.sceptreDrive`.
  *
  * - Throws `DesktopUnavailableError` when the preload bridge is missing (web
  *   preview, plain `vite dev`, unit tests), so callers can degrade instead of
@@ -33,13 +33,13 @@ export class DesktopApiError extends Error {
 }
 
 export function getDesktopBridge(): DesktopApi {
-  const bridge = globalThis.window?.gikautos
+  const bridge = globalThis.window?.sceptreDrive
   if (!bridge) throw new DesktopUnavailableError()
   return bridge
 }
 
 export function isDesktopAvailable(): boolean {
-  return Boolean(globalThis.window?.gikautos)
+  return Boolean(globalThis.window?.sceptreDrive)
 }
 
 async function unwrap<T>(result: Promise<IpcResult<T>>): Promise<T> {

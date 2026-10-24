@@ -16,7 +16,7 @@ import { PosSchema } from './schema'
  * open two databases on the same file.
  */
 
-export const POS_DB_FILENAME = 'gikautos-pos.db'
+export const POS_DB_FILENAME = 'sceptre-drive-pos.db'
 
 /** SDK pre-built worker, copied to `public/@powersync` by `copy-assets`. */
 const WORKER_URL = '/@powersync/worker.js'

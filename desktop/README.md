@@ -27,6 +27,24 @@ Run from the repository root unless noted.
 `make:pos` on Linux needs the `zip` binary (MakerZIP shells out to it); CI images have it,
 minimal distros may not.
 
+## Renamed to Sceptre Drive (2026-10-24)
+
+The application was renamed on 2026-10-24. Three consequences are accepted rather than
+migrated, because v1 had not launched:
+
+- **Electron's `userData` directory moved.** It derives from `productName`, so the old
+  directory is no longer read. A development terminal loses its enrolled device, PIN
+  bindings, cached staff, shift, and any unsynced sales. Delete the old directory, re-enrol
+  the terminal with a fresh enrolment code, then open a shift.
+- **The local POS database file was renamed** (`sceptre-drive-pos.db`). Old local data is
+  orphaned. Upload anything pending before deleting the old file; nothing in production is
+  affected.
+- **The protocol origin changed** to `app://sceptre-drive`. Existing device JWTs carry the
+  old audience and are rejected, which is why re-enrolment is required.
+
+No migration code is written for either. `productName`, the Squirrel name, and the origin
+live in `package.json`, `forge.config.mts`, and `src/main/paths.ts`.
+
 ## Layout
 
 ```
@@ -117,9 +135,11 @@ triggers on the first `start`/`package` — no postinstall hook is involved, so
   `index.html` as a meta fallback):
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'
   'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'
-  https://api.gikautos.com https://*.powersync.journeyapps.com https://*.gikautos.com;
-  worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none';
-  frame-ancestors 'none'`.
+  https://api.<SCEPTRE_DOMAIN> https://*.powersync.journeyapps.com
+  https://*.<SCEPTRE_DOMAIN>; worker-src 'self' blob:; object-src 'none';
+  base-uri 'self'; form-action 'none'; frame-ancestors 'none'`.
+  Both `<SCEPTRE_DOMAIN>` entries derive from the single `SCEPTRE_DOMAIN` constant in
+  `src/main/config.ts`.
   `wasm-unsafe-eval` is required by wa-sqlite; `unsafe-eval` is never granted.
 - Fuses: `RunAsNode`, `EnableNodeOptionsEnvironmentVariable`,
   `EnableNodeCliInspectArguments` off; cookie encryption, embedded asar integrity, and

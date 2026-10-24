@@ -32,7 +32,7 @@ function Centered({ title, detail }: { title: string; detail?: string }) {
     <main className="flex min-h-screen items-center justify-center bg-background p-8">
       <div className="max-w-sm text-center">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          GikAutos POS
+          Sceptre Drive POS
         </p>
         <h1 className="mt-2 text-lg font-semibold">{title}</h1>
         {detail ? <p className="mt-1 text-sm text-muted-foreground">{detail}</p> : null}

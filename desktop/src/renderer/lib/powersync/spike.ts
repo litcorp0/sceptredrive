@@ -11,7 +11,7 @@ import { SpikeSchema } from './spike-schema'
 /**
  * PowerSync Web SDK spike — the Phase 6 gate.
  *
- * Proves, inside the sandboxed renderer served from `app://gikautos`:
+ * Proves, inside the sandboxed renderer served from `app://sceptre-drive`:
  *   1. the WASM SQLite database opens (worker + `wasm-unsafe-eval`),
  *   2. it is encrypted with a key held in the OS keychain,
  *   3. local-only writes insert, read, update, and notify watchers,
@@ -35,8 +35,8 @@ export type SpikeReport = {
 }
 
 export const SPIKE_DB_FILES: Record<SpikeVfs, string> = {
-  default: 'gikautos-spike-default.db',
-  opfscopysync: 'gikautos-spike-opfs.db',
+  default: 'sceptre-drive-spike-default.db',
+  opfscopysync: 'sceptre-drive-spike-opfs.db',
 }
 
 const STEP_TIMEOUT_MS = 20_000

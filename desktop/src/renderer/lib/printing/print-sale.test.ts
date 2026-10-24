@@ -83,7 +83,7 @@ const CONTEXT: ReceiptContext = {
   branchName: 'Accra - Spintex',
   branchCode: 'ACC-SPX',
   terminalCode: 'ACC-SPX-T01',
-  receiptHeader: 'GikAutos',
+  receiptHeader: 'Sceptre Drive',
   receiptFooter: 'Thank you',
 }
 

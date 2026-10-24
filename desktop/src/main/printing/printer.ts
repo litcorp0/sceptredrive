@@ -112,7 +112,7 @@ export function testJob(encoding: PrintEncoding): PrintJob {
     openDrawer: false,
     drawerPin: 2,
     lines: [
-      { text: center('GikAutos POS', 42), bold: true },
+      { text: center('Sceptre Drive POS', 42), bold: true },
       { text: center('Printer test', 42) },
       { text: line },
       { text: 'This is a test print from the terminal.' },

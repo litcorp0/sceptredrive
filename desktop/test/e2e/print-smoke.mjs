@@ -26,7 +26,7 @@ import { chromium } from 'playwright'
 
 const desktopDir = path.resolve(import.meta.dirname, '..', '..')
 const repo = path.resolve(desktopDir, '..')
-const binary = path.join(desktopDir, 'out', 'GikAutos POS-linux-x64', 'GikAutos POS')
+const binary = path.join(desktopDir, 'out', 'Sceptre Drive POS-linux-x64', 'Sceptre Drive POS')
 const receiptsDir = path.join(
   repo,
   '.planning',
@@ -91,7 +91,7 @@ fs.mkdirSync(receiptsDir, { recursive: true })
 fs.mkdirSync(shotsDir, { recursive: true })
 
 const port = await freePort()
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-print-smoke-'))
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-print-smoke-'))
 const child = spawn(
   binary,
   [
@@ -168,7 +168,7 @@ try {
   check('GETFund is printed', text.includes('GETFund 2.5%'))
   check('cash and change are printed', text.includes('Change') && text.includes('GHS 55.00'))
   check('the long product name wrapped inside 42 columns', text.includes('Brake Pad Set'))
-  check('the footer is printed', text.includes('Thank you for choosing GikAutos'))
+  check('the footer is printed', text.includes('Thank you for choosing Sceptre Drive'))
 
   const binaryBytes = fs.readFileSync(path.join(receiptsDir, `${receiptNumber}.escpos.bin`))
   check('the ESC/POS stream starts with ESC @', binaryBytes[0] === 0x1b && binaryBytes[1] === 0x40)

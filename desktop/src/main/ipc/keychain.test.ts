@@ -24,7 +24,7 @@ describe('createKeychain', () => {
   let dir: string
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-keychain-'))
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-keychain-'))
   })
 
   afterEach(() => {

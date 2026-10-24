@@ -106,7 +106,7 @@ export function buildReceiptModel(input: BuildReceiptInput): ReceiptModel {
 
   return {
     header: {
-      seller: context.receiptHeader?.trim() || 'GikAutos',
+      seller: context.receiptHeader?.trim() || 'Sceptre Drive',
       branch: context.branchName,
       branchCode: context.branchCode,
       terminal: context.terminalCode,

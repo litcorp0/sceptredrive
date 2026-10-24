@@ -3,7 +3,7 @@
  * PowerSync Web SDK spike — the Phase 6 gate.
  *
  * Proves the SDK runs inside the sandboxed Electron renderer served from
- * `app://gikautos`, twice:
+ * `app://sceptre-drive`, twice:
  *
  *   1. unpackaged production build: both candidate VFS backends, driven through
  *      the real `#spike` UI;
@@ -22,7 +22,12 @@ import path from 'node:path'
 import { chromium, _electron as electron } from 'playwright'
 
 const desktopDir = path.resolve(import.meta.dirname, '..', '..')
-const packagedBinary = path.join(desktopDir, 'out', 'GikAutos POS-linux-x64', 'GikAutos POS')
+const packagedBinary = path.join(
+  desktopDir,
+  'out',
+  'Sceptre Drive POS-linux-x64',
+  'Sceptre Drive POS',
+)
 
 const reports = { default: null, opfscopysync: null, packagedRun1: null, packagedRun2: null }
 let userDataDir = null
@@ -109,7 +114,7 @@ async function checkUnpackaged() {
   console.log('\nUnpackaged production build (app:// origin)')
   // A unique profile per launch keeps the single-instance lock (and the local
   // database) away from the developer's real terminal profile.
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-spike-'))
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-spike-'))
   const app = await electron.launch({
     executablePath: electronBinary(),
     args: ['.', '--no-sandbox', `--user-data-dir=${userDataDir}`],
@@ -262,7 +267,7 @@ async function checkPackagedRestart() {
   }
 
   console.log('\nPackaged binary, fixed profile (restart persistence)')
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-spike-e2e-'))
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-spike-e2e-'))
 
   try {
     const first = await launchPackaged(userDataDir, await freePort())

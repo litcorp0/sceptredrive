@@ -104,7 +104,7 @@ export function ShiftRoute() {
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            GikAutos POS
+            Sceptre Drive POS
           </p>
           <p className="text-sm font-semibold">
             {session?.branch.code ?? '—'} · {session?.terminal.code ?? '—'}

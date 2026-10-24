@@ -14,7 +14,7 @@ import {
 const JOB = {
   receiptNumber: 'ACC-SPX-T01-20261023-0007',
   lines: [
-    { text: 'GikAutos', bold: true },
+    { text: 'Sceptre Drive', bold: true },
     { text: 'RECEIPT ACC-SPX-T01-20261023-0007' },
     { text: 'TOTAL                           GHS 265.00', bold: true },
   ],
@@ -27,7 +27,7 @@ const JOB = {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), 'gikautos-print-'))
+  dir = mkdtempSync(path.join(tmpdir(), 'sceptre-drive-print-'))
 })
 
 afterEach(() => {
