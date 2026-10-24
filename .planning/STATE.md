@@ -11,7 +11,7 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 03** (`packages/brand`: tokens, fonts, chart ramp).
+**Next action:** Execute **Phase 7, Plan 04** (shadcn primitives and the chart layer in both clients). Plan 04 must first resolve the `--line` non-text-contrast finding recorded in the Phase 7 notes.
 
 ---
 
@@ -26,7 +26,7 @@ became Phases 13/14/15.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (2/7 plans) |
+| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (3/7 plans) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -42,7 +42,7 @@ became Phases 13/14/15.
 |---|---|---|
 | 01 | Workspace and package-scope rename | ✅ Complete |
 | 02 | Desktop identity, protocol host, CSP, and copy | ✅ Complete |
-| 03 | `packages/brand`: tokens, fonts, chart ramp | ⬜ Not started |
+| 03 | `packages/brand`: tokens, fonts, chart ramp | ✅ Complete |
 | 04 | shadcn primitives and chart layer in both clients | ⬜ Not started |
 | 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
 | 06 | Shell chrome on the new design system | ⬜ Not started |
@@ -118,6 +118,34 @@ became Phases 13/14/15.
   `bun run brand:check` OK over 597 tracked files, `bun run package:pos` produces
   `out/Sceptre Drive POS-linux-x64`, packaged/unpackaged shell E2E **38/38**. Re-enrolment
   consequences documented in `desktop/README.md` ("Renamed to Sceptre Drive").
+- **Plan 03 complete** (commits `19115b7`, `602217a`, `ea84203`). `packages/brand` owns
+  `src/tokens.css` (palette, shadcn surface map, chart ramp, radius/shadows, layout tokens)
+  and `src/fonts.css` (`@fontsource-variable/{inter,space-grotesk,jetbrains-mono}@5.3.0`,
+  `wght.css` entries confirmed to exist; families are "Inter Variable", "Space Grotesk
+  Variable", "JetBrains Mono Variable"). Both apps now import the package and their 120-line
+  duplicate token blocks are gone. Admin build emits one token source and 15 bundled woff2
+  files; desktop packages the same. `grep` for the two brand hexes outside `packages/brand`
+  finds nothing.
+- **Deviations, all deliberate:** three commits instead of four (the workspace, tokens, and
+  fonts land together because the package `exports` would otherwise point at files that do
+  not exist yet); `packages/brand` also gets a `tsconfig.json`, a `src/css.d.ts`, and
+  `lint`/`check-types` scripts so the root filters cover it; `biome.json` gained
+  `css.parser.tailwindDirectives` (Biome 2 rejects `@theme`/`@custom-variant` otherwise);
+  the auth-shell monogram was changed alongside `SidebarBrand` (the plan named only the
+  sidebar and header, but the login card carried the same `GA` mark).
+- **Evidence:** `evidence/verify-brand-runtime.mjs` starts a real Chromium against the admin
+  dev server and asserts computed typography, the `--brand`/`--canvas`/`--topbar` values,
+  light and dark token flips, and that **no request leaves localhost** — **12/12**. Screens:
+  `evidence/shots/plan03-admin-login-{light,dark}.png`.
+- **Open accessibility finding (needs an operator decision before Plan 04):** `--line
+  #E4E3DF` on white measures **1.28:1** (1.19:1 on canvas) and `--line #333A41` on the dark
+  surface **1.31:1**. That is fine for decorative rules but fails WCAG 2.2 **1.4.11
+  non-text contrast (3:1)** if it is used as the boundary of an input or button, which is
+  exactly what shadcn's `--input: var(--line)` will do in Plan 04. D7 locks the palette, so
+  this is recorded rather than changed. Suggested additive fix (no new hue, no palette
+  change): a `--line-strong` for interactive boundaries — `#7C8794` light (3.65:1 on white,
+  3.38:1 on canvas) and `#6B7280` dark (3.11:1 on `#22272C`) — wired to `--input` and
+  `--ring`-adjacent controls while `--line` stays the decorative rule.
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
