@@ -105,3 +105,21 @@ the supplier pages carrying `TODO(phase-8/11)` comments (imports only),
 - Payables owns six pages under a URL that says `suppliers` — the clearest demonstration that a
   route file only routes.
 - No console code computes a payable balance the API already returns.
+
+## Carry-in from Plan 06 (must be resolved here)
+
+`components/payables/invoice-form.tsx` now imports `#/modules/inventory` for `getReceipt` /
+`listReceipts` / `InventoryReceipt`, because Plan 06 deleted the `api.inventory` group it used.
+
+Combined with `modules/inventory/pages/receipt-detail-page.tsx` importing
+`#/components/payables/invoice-status-badge` today, migrating payables as-is would create a real
+module cycle: `inventory ↔ payables`.
+
+Resolve it in Task 4 before flipping the badge:
+
+1. Move `invoice-status-badge` into `admin/src/components/common/` (same justification as the two
+   pickers: it is the payable's identity shown inside inventory's receipt screen, not a payables
+   screen). Update both importers and delete the payables copy.
+2. Then `modules/inventory → components/common` and `modules/payables → modules/inventory` are the
+   only edges, and the graph is acyclic again.
+3. Record the two edges in `admin/src/modules/README.md`'s dependency graph.
