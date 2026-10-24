@@ -11,7 +11,7 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 06** (shell chrome on the new design system).
+**Next action:** Execute **Phase 7, Plan 07** (phase verification, evidence, and state update).
 
 ---
 
@@ -26,7 +26,7 @@ became Phases 13/14/15.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (5/7 plans) |
+| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (6/7 plans) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -45,7 +45,7 @@ became Phases 13/14/15.
 | 03 | `packages/brand`: tokens, fonts, chart ramp | ✅ Complete |
 | 04 | shadcn primitives and chart layer in both clients | ✅ Complete |
 | 05 | `date-fns` in shared, admin, and desktop | ✅ Complete |
-| 06 | Shell chrome on the new design system | ⬜ Not started |
+| 06 | Shell chrome on the new design system | ✅ Complete |
 | 07 | Phase verification, evidence, and state update | ⬜ Not started |
 
 ### Phase 7 planning notes (2026-10-24)
@@ -226,6 +226,48 @@ became Phases 13/14/15.
   aging, and audit is folded into Plan 07's logged-in verification.
 - **Housekeeping:** `test:print` regenerates the Phase 6 receipt artefacts under
   `phases/06-pos-offline-core/evidence/`; they were restored to HEAD after the run.
+
+- **Plan 06 complete** (commits `42e375e`, `2cfe00f`, `dee787d`, `493a0e3`, `51d751d`,
+  `49a6b46`, `bfcb6bb`, `66060ed`, `713a619`, `913eb57`, `013ab53`). Both clients now open
+  onto Sceptre Drive chrome built from `@sceptre/brand` and the registry primitives.
+  - **Admin:** the hand-rolled `<aside>` and mobile Sheet are gone; the shadcn
+    `SidebarProvider`/`Sidebar collapsible="icon"` carries four groups (Overview, Operations,
+    Organisation, System), the permission filter is unchanged, and the active item is the only
+    brand orange (a 2 px `--brand` rail drawn with `::before`). Width comes from
+    `--layout-sidebar-width`; `use-mobile.ts` moved to a 1024 px breakpoint so the sheet still
+    opens below `lg`. The charcoal `bg-topbar` fascia carries breadcrumb, branch switcher,
+    theme toggle, and user menu; a skip link precedes the shell and `main#main` takes focus.
+  - **Theme:** the official shadcn TanStack Start pattern — `ScriptOnce` from
+    `@tanstack/react-router` writes `light`/`dark` from `localStorage['sceptre:theme']`,
+    resolving `system` through `prefers-color-scheme`, before hydration. Proven: after a
+    reload the `<html>` class is already `dark` at `domcontentloaded`.
+  - **POS:** the counter header is the same fascia at `--layout-topbar-height` with ≥44 px
+    targets; the sync badge is a pill with a semantic dot + icon + word, its state machine and
+    every label byte-identical; boot screens use the `SD` monogram in Space Grotesk; the grand
+    total is `font-display tabular-nums` and the pay button stays 56 px charcoal-on-orange.
+  - **Accessibility deviations, deliberate:** the plan's `2px --brand` focus ring measures
+    **2.83:1** on the canvas, under SC 1.4.11's 3:1, so the global ring uses `--brand-ink`
+    (**4.22:1** light, **7.24:1** dark); the plan's `border-radius` on `:focus-visible` is
+    omitted because it reshapes pills and avatars while focused. The registry primitives'
+    `outline-none` + `ring-ring/50` (**1.76:1**) is overridden by one unlayered rule in both
+    app stylesheets that neutralises only `--tw-ring-shadow`, without editing `components/ui`.
+  - **Contrast fix carried by review:** semantic badge and stock chips no longer colour the
+    label (`text-warn` on `bg-warn/10` was **4.39:1**); the dot or tint carries the colour and
+    the label is `text-foreground` (≥14:1).
+  - **Verification:** admin build + `check-types` green, desktop **339/339**, packaged-shell
+    smoke **38/38**, lint (22 pre-existing/`!important` warnings, exit 0), `brand:check` OK,
+    `bun test` shared + API **360/360** + desktop 339/339. `evidence/capture-shell.mjs`
+    **16/16** against the real console (groups, single active rail, fascia height/colour,
+    skip-link first Tab, 2 px focus outline, print hides chrome, dark persistence with no
+    flash, 375 px drawer opens and Escape closes) with
+    `shots/plan06-admin-{light,dark}.png` and `plan06-admin-mobile-drawer.png`.
+  - **Host note:** `bun run --filter desktop build` fails in Electron Forge's package-manager
+    check because Bun 1.3.14 exports `npm_config_user_agent` as `npm/undefined`. Prefixing
+    `npm_config_user_agent="npm/11.16.0 node/v24.18.0 linux x64"` packages cleanly; this is
+    environmental and predates the plan.
+  - **Deferred to Plan 07:** the enrolled-terminal POS header screenshot (needs enrolment and
+    a shift), the full ten-step walkthrough, `scripts/check-tokens.mjs`, and the ROADMAP
+    update.
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
