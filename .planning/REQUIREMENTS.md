@@ -240,7 +240,8 @@
 ## Branch Operations & Approvals (APR / BRN / CC) — Phase 12
 
 - **APR-01** — One approval entity and one inbox spanning purchase orders, transfer
-  requests, stock write-offs, price changes, credit limit changes, and shift variances.
+  requests, stock write-offs, price changes, credit limit changes, shift variances, and
+  refunds at or above the configured cap.
 - **APR-02** — Request, detail, and decide endpoints that record the requester, the decider,
   a reason code, and the before/after value.
 - **APR-03** — Authority derived from request type and branch scope, with self-approval
@@ -276,7 +277,9 @@
 ## POS Payments, Returns & Shifts (POS / PAY) — Phase 13
 
 - **POS-10** — Returns/refunds: look up the original sale, select lines/quantities, reason,
-  manager approval, restock; cash refunds work offline, electronic refunds require internet.
+  manager PIN approval at the till, per-line restock or write-off; cash refunds work offline;
+  refunds at or above `pos.refundApprovalThresholdMinor` raise a retrospective approval when
+  online, or on the next sync when authorised offline.
 - **POS-11** — Electronic tenders online: Paystack MoMo, card, and bank transfer; split
   tender including cash + electronic; change computed correctly.
 - **POS-12** — Credit repayment at the POS (cash offline, MoMo/card online) with receipt.

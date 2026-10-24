@@ -395,8 +395,8 @@ credit repayments, and full shift reporting work end to end.
    tender, and the receipt shows paid; the verify fallback works.
 2. A card payment completes in the Paystack checkout and is verified server-side.
 3. A split cash + electronic tender computes the remaining balance and change correctly.
-4. A cash refund completes offline after manager approval; a MoMo refund completes online
-   through Paystack.
+4. A cash refund completes offline on a manager PIN; a refund at or above the configured cap
+   raises a retrospective approval, and a MoMo refund completes online through Paystack.
 5. Shift close produces a Z-report whose totals and variance match the local transactions.
 6. A credit repayment at the POS reduces the branch balance and prints a receipt.
 
@@ -415,8 +415,8 @@ through an adapter.
 **Requirements:** ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03
 
 **Success Criteria**
-1. Sales, shifts, terminals, sync conflicts, and devices are inspectable; a conflict can be
-   resolved with an audit record.
+1. Sales, refunds, shifts, terminals, devices, and sync conflicts are inspectable; a conflict
+   can be resolved with an audit record, and a receipt can be reprinted from the server.
 2. Reports (stock, credit aging, payables aging, loyalty liability) match the ledgers and
    export to CSV or print.
 3. A supplier payment via Paystack (test mode) creates a recipient and transfer, and the
@@ -481,7 +481,9 @@ Phase 1 Foundation
 
 Phases 11–12 depend on Phase 10 only because they are built in the module layout and the
 design system; their business dependencies are Phases 3 and 5. Phase 13 builds on the module
-layout from Phase 10 and the approval machinery from Phase 12 for refund approvals.
+layout from Phase 10 and uses the Phase 12 approval entity **only** for refunds at or above
+the cap when the terminal is online; a cash refund authorised offline completes on the till
+PIN and raises that approval retrospectively on sync.
 
 ## Milestone Definition
 

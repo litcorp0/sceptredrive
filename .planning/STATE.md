@@ -32,9 +32,9 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
-| 13 | POS Payments, Returns & Shifts | ⬜ Not started |
-| 14 | Admin Operations & E-VAT | ⬜ Not started |
-| 15 | Production Hardening & Launch | ⬜ Not started |
+| 13 | POS Payments, Returns & Shifts | 🔷 Context locked (9 plans) |
+| 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
+| 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
 ### Phase 7 plan progress
 
@@ -110,8 +110,32 @@ Operator decisions (locked in `phases/11-…/00-CONTEXT.md` and `phases/12-…/0
   the current figure and `sale_line.unit_cost_minor` the historical one.
 
 Phase 7's detailed plans still come first: Phase 7 is the only phase with `NN-PLAN.md` files.
-Phases 11 and 12 carry context and a planned-plan list, and get task-level plans when Phase 10
-completes.
+Phases 11–14 carry context and a planned-plan list, and get task-level plans when the phase
+before them completes. Phase 15 is deliberately context-deferred: its decisions are operator
+inputs (domain, VPS sizing, RPO/RTO, backup retention, signing certificate, PowerSync Cloud
+instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEXT.md`.
+
+### Phase 13–15 context lock (2026-10-24)
+
+- **Why 13 and 14 were locked late:** context is written when a phase is about to be planned.
+  13 and 14 inherit most decisions from earlier phases, so their roadmap entries were
+  considered sufficient. That was wrong for 13: the roadmap claimed refunds would use the
+  Phase 12 approval queue, which contradicts "cash refunds work offline".
+- **Resolved:** refunds are authorised by the Phase 6 manager PIN at the till and work
+  offline. A refund at or above `pos.refundApprovalThresholdMinor` (default 20,000 pesewas,
+  GHS 200) raises a `REFUND` approval for **retrospective** review when online, or on the next
+  sync when authorised offline. Phase 12's approval types now include `REFUND`.
+- **Refund restock:** per line and explicit (`RESALABLE`, `DAMAGED` with a write-off reason,
+  `NOT_RETURNED`).
+- **Failed electronic tender:** the sale stays open with an unpaid balance; the cashier
+  retries or switches to cash. A technical fault never creates a receivable.
+- **Phase 14 re-scoped:** the executive dashboard and the sales/tax/product reports were
+  delivered in Phase 9 and are not rebuilt. Phase 14 owns POS oversight (sales, refunds,
+  shifts, terminals, devices) with conflict resolution and server-side receipt reprint, the
+  stock/aging/liability reports, supplier Paystack transfers, the E-VAT mock adapter, and
+  users/settings/audit. Roles stay the fixed three; no custom roles.
+- **Phase 15 stays deferred on purpose:** eight operator inputs are listed in its context;
+  nothing in Phases 1–14 depends on them except the one-line domain swap.
 
 
 ### Phase 1 plan progress
