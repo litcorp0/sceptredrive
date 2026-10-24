@@ -122,19 +122,33 @@ if (failures.length > 0) {
  * the array out — biome collapses short arrays onto one line, which invalidated the first draft of
  * mutations 9 and 10.
  */
-function readPending(source) {
-  const match = /const PENDING_MODULES = \[([^\]]*)\]/.exec(source)
-  if (!match) throw new Error('PENDING_MODULES declaration not found')
+function readList(source, name) {
+  const match = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(source)
+  if (!match) throw new Error(`${name} declaration not found`)
   return [...match[1].matchAll(/['"]([a-z]+)['"]/g)].map((entry) => entry[1])
 }
 
-function withPending(source, names) {
-  const pattern = /const PENDING_MODULES = \[[^\]]*\]/
-  if (!pattern.test(source)) throw new Error('PENDING_MODULES declaration not found')
-  return source.replace(
-    pattern,
-    `const PENDING_MODULES = [${names.map((n) => `'${n}'`).join(', ')}]`,
-  )
+function withList(source, name, names) {
+  const pattern = new RegExp(`const ${name} = \\[[^\\]]*\\]`)
+  if (!pattern.test(source)) throw new Error(`${name} declaration not found`)
+  const list = names.map((n) => `'${n}'`).join(', ')
+  return source.replace(pattern, `const ${name} = [${list}]`)
+}
+
+const readPending = (source) => readList(source, 'PENDING_MODULES')
+const withPending = (source, names) => withList(source, 'PENDING_MODULES', names)
+
+/**
+ * Gate source carrying a synthetic `probe` module. Once the real pending list is empty the
+ * list-based mutations would have nothing to act on; the probe keeps them meaningful without
+ * touching the tree.
+ */
+function withProbe(source, { pending = true } = {}) {
+  const required = readList(source, 'REQUIRED_MODULES')
+  let out = withList(source, 'REQUIRED_MODULES', [...required, 'probe'])
+  if (pending)
+    out = withList(out, 'PENDING_MODULES', [...readList(out, 'PENDING_MODULES'), 'probe'])
+  return out
 }
 
 // ---------------------------------------------------------------- mutations
@@ -258,11 +272,7 @@ console.log('\n-- mutations --')
 
 // 8. A pending module marked migrated while absent (patches the gate's own list).
 {
-  const mutated = gateSource.replace(
-    /const PENDING_MODULES = \[[\s\S]*?\]/,
-    'const PENDING_MODULES = []',
-  )
-  fs.writeFileSync(GATE, mutated)
+  fs.writeFileSync(GATE, withProbe(gateSource, { pending: false }))
   const r = runGate()
   check(
     r.code !== 0 && r.out.includes('is no longer pending but'),
@@ -318,9 +328,9 @@ console.log('\n-- mutations --')
 
 // 10. A duplicated entry in the pending list.
 {
-  const pending = readPending(gateSource)
-  if (pending.length === 0) throw new Error('mutation 10 needs at least one pending module')
-  fs.writeFileSync(GATE, withPending(gateSource, [pending[0], ...pending]))
+  const probed = withProbe(gateSource)
+  const pending = readPending(probed)
+  fs.writeFileSync(GATE, withPending(probed, [pending[0], ...pending]))
   const r = runGate()
   check(
     r.code !== 0 && r.out.includes('contains a duplicate'),
@@ -351,11 +361,13 @@ console.log('\n-- mutations --')
     PROBE_ROUTE,
     `import { createFileRoute } from "@tanstack/react-router"\nimport { AnalyticsPage } from "#/modules/analytics"\n\nexport const Route = createFileRoute("/_authenticated/gate-probe")({\n\tcomponent: AnalyticsPage,\n})\n`,
   )
+  fs.writeFileSync(GATE, withProbe(gateSource))
   const r = runGate(true)
   const strictFails =
     r.code !== 0 && (r.out.includes('Strict mode:') || r.out.includes('is no longer pending'))
   check(strictFails, 'mutation 12: strict mode rejects a tree with Phase 8 targets remaining')
   restore(snap)
+  fs.writeFileSync(GATE, gateSource)
 }
 
 // ---------------------------------------------------------------- restoration

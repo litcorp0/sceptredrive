@@ -58,7 +58,7 @@ const DEFERRED_MODULES = { analytics: 9 }
  * Names still to migrate. Each plan deletes its own entry; `--strict` fails while any remain.
  * Keep this list free of duplicates and a subset of REQUIRED_MODULES — the gate checks that too.
  */
-const PENDING_MODULES = ['payables']
+const PENDING_MODULES = []
 
 /** Folders a module may contain, plus its barrel. */
 const ALLOWED_ENTRIES = new Set([
@@ -94,6 +94,8 @@ const COMPONENT_FOLDERS = {
 const ROUTE_EXEMPTIONS = {
   '__root.tsx': 'root shell: providers, error boundary and devtools',
   'dev-charts.tsx': 'Phase 7 chart gallery, deleted in Phase 9',
+  '_authenticated/route.tsx':
+    'the authenticated shell layout: it mounts the branch provider and the app shell, which are global infrastructure rather than a domain page',
 }
 
 const MAX_ROUTE_LINES = 25
@@ -164,6 +166,10 @@ for (const name of Object.keys(DEFERRED_MODULES)) {
 }
 
 const migrated = REQUIRED_MODULES.filter((name) => !PENDING_MODULES.includes(name))
+
+// A pending module is outstanding work in its own right, so strict mode cannot go green while the
+// list is non-empty even if no route or import happens to be violating.
+for (const name of PENDING_MODULES) progress.push(`module not migrated: ${name}`)
 
 // ---------------------------------------------------------------- modules: shape and boundaries
 
@@ -257,8 +263,8 @@ for (const file of adminFiles) {
 const routeFiles = walk(ROUTES).filter((file) => file.endsWith('.tsx'))
 
 for (const file of routeFiles) {
-  const name = path.basename(file)
-  if (name in ROUTE_EXEMPTIONS) continue
+  const key = path.relative(ROUTES, file).split(path.sep).join('/')
+  if (key in ROUTE_EXEMPTIONS) continue
 
   const source = read(file)
   const lines = source.split('\n').length - (source.endsWith('\n') ? 1 : 0)
