@@ -21,7 +21,9 @@ import {
 } from "#/components/ui/select"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import { type Category, catalogKeys, createCategory, updateCategory } from "#/modules/catalog"
+import { createCategory, updateCategory } from "../api/catalog"
+import { catalogKeys } from "../api/keys"
+import type { Category } from "../types"
 
 const TOP_LEVEL = "top-level"
 

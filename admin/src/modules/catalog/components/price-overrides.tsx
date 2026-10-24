@@ -7,13 +7,9 @@ import { Input } from "#/components/ui/input"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import type { Branch } from "#/modules/branches"
-import {
-	catalogKeys,
-	type PriceOverride,
-	productPricesOptions,
-	removeProductPrice,
-	setProductPrice,
-} from "#/modules/catalog"
+import { catalogKeys } from "../api/keys"
+import { productPricesOptions, removeProductPrice, setProductPrice } from "../api/products"
+import type { PriceOverride } from "../types"
 
 export function PriceOverrides({
 	productId,

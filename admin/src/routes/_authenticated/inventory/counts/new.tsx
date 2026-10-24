@@ -14,14 +14,20 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
+import { ApiError, api, apiRequest } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
-import { categoryListOptions } from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/inventory/counts/new")({
 	component: NewCountPage,
 })
+
+/** The two levels the filter renders. The inventory module takes this over when it migrates. */
+interface CategoryOption {
+	id: string
+	name: string
+	children: Array<{ id: string; name: string }>
+}
 
 function NewCountPage() {
 	const { session } = Route.useRouteContext()
@@ -36,7 +42,10 @@ function NewCountPage() {
 	const [note, setNote] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 
-	const categoriesQuery = useQuery(categoryListOptions())
+	const categoriesQuery = useQuery({
+		queryKey: ["categories", { includeArchived: false }],
+		queryFn: () => apiRequest<{ categories: CategoryOption[] }>("/api/categories"),
+	})
 
 	const categories = categoriesQuery.data?.categories ?? []
 

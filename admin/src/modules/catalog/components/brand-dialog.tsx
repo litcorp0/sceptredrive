@@ -14,7 +14,9 @@ import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import { type Brand, catalogKeys, createBrand, updateBrand } from "#/modules/catalog"
+import { createBrand, updateBrand } from "../api/catalog"
+import { catalogKeys } from "../api/keys"
+import type { Brand } from "../types"
 
 export function BrandDialog({
 	open,

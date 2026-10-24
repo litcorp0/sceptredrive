@@ -14,7 +14,9 @@ import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import { catalogKeys, createUnit, type Uom, updateUnit } from "#/modules/catalog"
+import { createUnit, updateUnit } from "../api/catalog"
+import { catalogKeys } from "../api/keys"
+import type { Uom } from "../types"
 
 export function UnitDialog({
 	open,

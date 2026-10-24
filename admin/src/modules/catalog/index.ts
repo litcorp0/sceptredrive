@@ -1,7 +1,7 @@
 /**
  * `catalog` — products, categories, brands and units, shared across every branch.
  *
- * Migration note (Phase 8): the catalog section was 1,421 route lines across eight files and seven
+ * Migration note (Phase 8): the catalog section was 1,216 route lines across eight files and seven
  * components under `components/catalog/`. The section layout is now a page (`CatalogLayout`) and
  * every route renders one page and nothing else (decisions D6, D9 — a move, not a rewrite).
  *
@@ -33,7 +33,6 @@ export {
 	archiveProduct,
 	createProduct,
 	getProduct,
-	listProducts,
 	productDetailOptions,
 	productListOptions,
 	productPricesOptions,
@@ -45,7 +44,13 @@ export {
 	suggestProductSku,
 	updateProduct,
 } from "./api/products"
+export { BrandsPage } from "./pages/brands-page"
 export { CatalogLayout } from "./pages/catalog-layout"
+export { CategoriesPage } from "./pages/categories-page"
+export { ProductDetailPage } from "./pages/product-detail-page"
+export { ProductNewPage } from "./pages/product-new-page"
+export { ProductsPage } from "./pages/products-page"
+export { UnitsPage } from "./pages/units-page"
 export type {
 	Barcode,
 	Brand,

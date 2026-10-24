@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { SparklesIcon } from "lucide-react"
 import { type FormEvent, type ReactNode, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { TaxPreview } from "#/components/catalog/tax-preview"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
@@ -17,19 +16,11 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import {
-	type Brand,
-	type CategoryTreeNode,
-	catalogKeys,
-	createProduct,
-	type ProductRow,
-	suggestProductSku,
-	type TaxCategory,
-	type TaxMode,
-	type Uom,
-	updateProduct,
-} from "#/modules/catalog"
 import { settingsListOptions } from "#/modules/settings"
+import { catalogKeys } from "../api/keys"
+import { createProduct, suggestProductSku, updateProduct } from "../api/products"
+import type { Brand, CategoryTreeNode, ProductRow, TaxCategory, TaxMode, Uom } from "../types"
+import { TaxPreview } from "./tax-preview"
 
 const NO_BRAND = "none"
 
