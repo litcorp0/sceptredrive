@@ -75,6 +75,28 @@ check(
   styles.bodyBackground,
 )
 check(styles.bodyColour === 'rgb(27, 31, 35)', 'body text is ink', styles.bodyColour)
+const fieldBorders = await page.evaluate(() => {
+  const inputs = Array.from(document.querySelectorAll('input'))
+  const role = getComputedStyle(document.documentElement).getPropertyValue('--input').trim()
+  const resting = inputs.find((element) => element !== document.activeElement)
+  const focused = document.activeElement instanceof HTMLInputElement ? document.activeElement : null
+  return {
+    role,
+    resting: resting ? getComputedStyle(resting).borderColor : '',
+    focused: focused ? getComputedStyle(focused).borderColor : '',
+  }
+})
+check(fieldBorders.role === '#7c8794', '--input resolves to --line-strong', fieldBorders.role)
+check(
+  fieldBorders.resting === 'rgb(124, 135, 148)',
+  'resting input boundaries use --line-strong (3.65:1), not the decorative rule',
+  fieldBorders.resting,
+)
+check(
+  fieldBorders.focused === 'rgb(242, 106, 27)',
+  'the focused field still carries the brand ring',
+  fieldBorders.focused,
+)
 check(offOrigin.length === 0, 'no request leaves localhost', offOrigin.join(', '))
 
 // Dark mode: the same tokens must flip without a second definition site.

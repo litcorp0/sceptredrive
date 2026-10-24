@@ -11,7 +11,7 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 04** (shadcn primitives and the chart layer in both clients). Plan 04 must first resolve the `--line` non-text-contrast finding recorded in the Phase 7 notes.
+**Next action:** Execute **Phase 7, Plan 04** (shadcn primitives and the chart layer in both clients). The `--line-strong` input-boundary token is in place for Plan 04.
 
 ---
 
@@ -141,16 +141,15 @@ became Phases 13/14/15.
   chart ramp, radius, and no off-machine request — **10/10**. Screens:
   `evidence/shots/plan03-admin-login-{light,dark}.png`, `evidence/shots/plan03-pos-shell.png`.
   Both scripts normalise minified CSS (`#fff`, `.625rem`) before comparing.
-- **Open accessibility finding (needs an operator decision before Plan 04):** `--line
-  #E4E3DF` on white measures **1.28:1** (1.19:1 on canvas) and `--line #333A41` on the dark
-  surface **1.31:1**. That is fine for decorative rules but fails WCAG 2.2 **1.4.11
-  non-text contrast (3:1)** if it is used as the boundary of an input or button, which is
-  exactly what shadcn's `--input: var(--line)` will do in Plan 04. D7 locks the palette, so
-  this is recorded rather than changed. Suggested additive fix (no new hue, no palette
-  change): a `--line-strong` for interactive boundaries — `#7C8794` light (3.65:1 on white,
-  3.38:1 on canvas) and `#6B7280` dark (3.11:1 on `#22272C`) — wired to `--input` and
-  `--ring`-adjacent controls while `--line` stays the decorative rule.
-
+- **Accessibility fix (operator decision 2026-10-24):** `--line #E4E3DF` measures **1.28:1**
+  on white (1.19:1 on canvas) and `#333A41` is **1.31:1** on the dark surface. That is fine
+  for a decorative rule but fails WCAG 2.2 **1.4.11** (3:1) for an input boundary, which is
+  exactly what shadcn maps from the border token. Added **`--line-strong`**: `#7C8794` light
+  (3.65:1 on white, 3.38:1 on canvas) and `#6B7280` dark (3.11:1 on `#22272C`), wired to
+  `--input` while `--border` keeps `--line`. Same graphite family; no hue introduced, and
+  D7's palette is unchanged. Verified in the built CSS and at runtime (resting field border
+  `rgb(124,135,148)`; the focused field still carries the brand ring). `MASTER.md` records
+  the rule: a decorative rule is not a boundary.
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
 An audit of the built system against parts-manager duties found real deficiencies:
