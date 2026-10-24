@@ -12,9 +12,11 @@ import {
 } from "#/components/ui/dialog"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { Transfer } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { transferKeys } from "../api/keys"
+import { shortCloseTransfer } from "../api/transfers"
+import type { Transfer } from "../types"
 
 export function ShortCloseDialog({
 	open,
@@ -38,12 +40,12 @@ export function ShortCloseDialog({
 	const pendingLines = (transfer.lines ?? []).filter((line) => line.pending > 0)
 
 	const mutation = useMutation({
-		mutationFn: (value: string) => api.transfers.shortClose(transfer.id, value),
+		mutationFn: (value: string) => shortCloseTransfer(transfer.id, value),
 		onSuccess: async () => {
 			toast.success("Transfer short-closed")
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["transfers"] }),
-				queryClient.invalidateQueries({ queryKey: ["transfer", transfer.id] }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.all }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.detail(transfer.id) }),
 			])
 			onOpenChange(false)
 		},

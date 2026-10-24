@@ -1,5 +1,5 @@
 import { StatusBadge } from "#/components/common/status-badge"
-import type { TransferStatus } from "#/lib/api-types"
+import type { TransferStatus } from "../types"
 
 const META: Record<
 	TransferStatus,

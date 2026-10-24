@@ -11,9 +11,11 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog"
 import { Input } from "#/components/ui/input"
-import { ApiError, api } from "#/lib/api"
-import type { Transfer } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { inventoryKeys, transferKeys } from "../api/keys"
+import { dispatchTransfer, receiveTransfer } from "../api/transfers"
+import type { Transfer } from "../types"
 
 export function TransferQuantityDialog({
 	open,
@@ -47,14 +49,14 @@ export function TransferQuantityDialog({
 	const mutation = useMutation({
 		mutationFn: (entries: { productId: string; quantity: number }[]) =>
 			isDispatch
-				? api.transfers.dispatch(
+				? dispatchTransfer(
 						transfer.id,
 						entries.map((entry) => ({
 							productId: entry.productId,
 							quantityDispatched: entry.quantity,
 						})),
 					)
-				: api.transfers.receive(
+				: receiveTransfer(
 						transfer.id,
 						entries.map((entry) => ({
 							productId: entry.productId,
@@ -64,10 +66,10 @@ export function TransferQuantityDialog({
 		onSuccess: async () => {
 			toast.success(isDispatch ? "Transfer dispatched" : "Goods received")
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["transfers"] }),
-				queryClient.invalidateQueries({ queryKey: ["transfer", transfer.id] }),
-				queryClient.invalidateQueries({ queryKey: ["inventory-stock"] }),
-				queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.all }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.detail(transfer.id) }),
+				queryClient.invalidateQueries({ queryKey: inventoryKeys.stock }),
+				queryClient.invalidateQueries({ queryKey: inventoryKeys.movements }),
 			])
 			onOpenChange(false)
 		},

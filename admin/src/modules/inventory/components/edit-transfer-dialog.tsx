@@ -12,9 +12,11 @@ import {
 } from "#/components/ui/dialog"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { Transfer } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { transferKeys } from "../api/keys"
+import { replaceTransferLines, updateTransfer } from "../api/transfers"
+import type { Transfer } from "../types"
 import {
 	newTransferLine,
 	type TransferLineDraft,
@@ -70,15 +72,15 @@ export function EditTransferDialog({
 
 			const nextNote = note.trim() ? note.trim() : null
 			if (nextNote !== (transfer.note ?? null)) {
-				await api.transfers.update(transfer.id, { note: nextNote })
+				await updateTransfer(transfer.id, { note: nextNote })
 			}
-			return api.transfers.replaceLines(transfer.id, lines)
+			return replaceTransferLines(transfer.id, lines)
 		},
 		onSuccess: async () => {
 			toast.success("Transfer updated")
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["transfers"] }),
-				queryClient.invalidateQueries({ queryKey: ["transfer", transfer.id] }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.all }),
+				queryClient.invalidateQueries({ queryKey: transferKeys.detail(transfer.id) }),
 			])
 			onOpenChange(false)
 		},
