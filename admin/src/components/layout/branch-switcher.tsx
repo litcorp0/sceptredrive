@@ -32,7 +32,7 @@ export function BranchSwitcher() {
 		>
 			<SelectTrigger
 				size="sm"
-				className="w-32 border-topbar-muted/50 bg-transparent text-topbar-foreground hover:bg-white/10 sm:w-52 [&_svg]:text-topbar-muted"
+				className="w-32 border-topbar-muted/50 bg-transparent text-topbar-foreground hover:bg-white/10 focus-visible:border-topbar-muted/50 sm:w-52 [&_svg]:text-topbar-muted"
 				aria-label="Active branch"
 			>
 				<SelectValue placeholder="All branches" />

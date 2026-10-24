@@ -34,9 +34,12 @@ export function TableMessage({
 	if (resolved === "loading") {
 		return (
 			<>
-				<TableRow>
-					<TableCell colSpan={colSpan} className="sr-only" role="status">
-						{children ?? "Loading…"}
+				{/* One live region, separate from the visual rows: the `sr-only` cell
+				    takes the row out of flow and `border-0` drops its rule, so the
+				    `rows` skeletons keep the exact height of the data that follows. */}
+				<TableRow className="border-0">
+					<TableCell colSpan={colSpan} className="sr-only">
+						<output>{children ?? "Loading…"}</output>
 					</TableCell>
 				</TableRow>
 				{Array.from({ length: rows }, (_, index) => `skeleton-${index}`).map((rowKey) => (

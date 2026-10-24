@@ -107,41 +107,96 @@ const ROLE_LABELS: Record<string, string> = {
 	CASHIER: "Cashier",
 }
 
+/** Section names from the navigation table, so the two can never drift. */
+const SECTION_LABELS: ReadonlyMap<string, string> = new Map(
+	NAV_GROUPS.flatMap((group) => group.items)
+		.filter((item) => item.to !== "/")
+		.map((item) => [item.to.slice(1), item.label] as const),
+)
+
+/** Path segments that name a page rather than a section. */
+const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
+	["products", "Products"],
+	["transfers", "Transfers"],
+	["counts", "Counts"],
+	["receipts", "Receipts"],
+	["stock", "Stock"],
+	["movements", "Movements"],
+	["adjustments", "Adjustments"],
+	["brands", "Brands"],
+	["categories", "Categories"],
+	["units", "Units"],
+	["invoices", "Invoices"],
+	["payments", "Payments"],
+	["aging", "Aging"],
+	["statement", "Statement"],
+	["new", "New"],
+	["edit", "Edit"],
+])
+
+/**
+ * Decode a path segment. A malformed escape must never throw while the shell
+ * renders, so undecodable segments are shown verbatim.
+ */
+function decodeSegment(segment: string): string {
+	try {
+		return decodeURIComponent(segment)
+	} catch {
+		return segment
+	}
+}
+
+/**
+ * Identifier shapes only: a UUID, an all-digit id, a ULID, or a long hex key.
+ * Descriptive slugs are deliberately not matched, so "inventory-reconciliation"
+ * still reads as a page.
+ */
+const IDENTIFIER_PATTERNS: readonly RegExp[] = [
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+	/^\d+$/,
+	/^[0-9A-HJKMNP-TV-Z]{26}$/i,
+	/^[0-9a-f]{24,}$/i,
+]
+
+/** A detail-page segment carries no meaning for a human reader. */
+function isIdentifier(segment: string): boolean {
+	return IDENTIFIER_PATTERNS.some((pattern) => pattern.test(segment))
+}
+
 function humanise(segment: string): string {
-	const spaced = decodeURIComponent(segment).replace(/[-_]+/g, " ").trim()
+	const spaced = decodeSegment(segment).replace(/[-_]+/g, " ").trim()
 	if (spaced === "") return segment
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
-/** A detail-page segment carries no meaning for a human reader. */
-function isIdentifier(segment: string): boolean {
-	return (
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
-		/^\d+$/.test(segment) ||
-		/^[0-9a-z]{20,}$/i.test(segment)
-	)
+function segmentLabel(segment: string): string {
+	return PAGE_LABELS.get(segment) ?? SECTION_LABELS.get(segment) ?? humanise(segment)
 }
 
 /**
- * Section › page for the topbar. The section comes from the navigation table;
- * the page is the last path segment, humanised.
+ * Section › page for the topbar, at most two levels. The section comes from the
+ * navigation table; the page is the last meaningful segment (or two, for
+ * "Products · New"). Identifier segments are dropped rather than relabelled, so
+ * `/branches/<uuid>` reads "Branches" instead of "Branches › Branches".
  */
 export function topbarBreadcrumb(pathname: string): { section: string | null; page: string } {
-	const segments = pathname.split("/").filter(Boolean)
-	if (segments.length === 0) return { section: null, page: "Dashboard" }
+	const segments = pathname
+		.split("/")
+		.filter(Boolean)
+		.map((segment) => decodeSegment(segment))
 
-	const first = segments[0]
-	const navLabel = NAV_GROUPS.flatMap((group) => group.items).find(
-		(item) => item.to === `/${first}`,
-	)?.label
-	const section = navLabel ?? humanise(first)
-	if (segments.length === 1) return { section: null, page: section }
+	const first = segments[0] ?? ""
+	if (first === "") return { section: null, page: "Dashboard" }
 
-	const last = segments[segments.length - 1]
-	const page =
-		isIdentifier(last) && segments.length > 1 ? segments[segments.length - 2] : segments.at(-1)
+	const section = segmentLabel(first)
+	const trail = segments.slice(1).filter((segment) => !isIdentifier(segment))
+	if (trail.length === 0) return { section: null, page: section }
 
-	return { section, page: humanise(page ?? section) }
+	const labels = [...new Set(trail.slice(-2).map((segment) => segmentLabel(segment)))]
+	const page = labels.join(" · ")
+
+	// A page that repeats the section adds nothing to the crumb.
+	return page === section ? { section: null, page } : { section, page }
 }
 
 function visibleGroups(roleValue: string): NavGroup[] {
