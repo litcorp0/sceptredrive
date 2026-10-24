@@ -56,6 +56,10 @@
 								"message": "Import the module barrel (#/modules/<name>) instead of reaching into its internals."
 							},
 							{
+								"group": ["#/components/auth/**", "#/components/staff/**"],
+								"message": "That folder has moved into its module. Import #/modules/<name> instead."
+							},
+							{
 								"group": ["#/components/auth/**"],
 								"message": "#/components/auth was deleted in Phase 8; the auth screens live in #/modules/auth."
 							}
