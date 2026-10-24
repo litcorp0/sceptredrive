@@ -33,6 +33,9 @@ import { toastApiError } from "#/lib/toast"
 // TODO(phase-8/11): a supplier invoice is recorded against a goods receipt, so payables reads
 // inventory's receipt fetchers until payables itself migrates. Keep it a barrel import.
 import { getReceipt, type InventoryReceipt, listReceipts } from "#/modules/inventory"
+// TODO(phase-8/11): payables reads the supplier master through the suppliers barrel; Plan 11 keeps
+// this edge and owns the invoice form.
+import { getSupplier } from "#/modules/suppliers"
 
 type TaxMode = "STANDARD" | "NONE" | "MANUAL"
 
@@ -120,7 +123,7 @@ export function InvoiceForm({
 
 	const initialSupplierQuery = useQuery({
 		queryKey: ["invoice-supplier", supplierId],
-		queryFn: () => api.suppliers.get(supplierId as string),
+		queryFn: () => getSupplier(supplierId as string),
 		enabled: Boolean(supplierId) && !receiptId,
 	})
 
@@ -161,7 +164,7 @@ export function InvoiceForm({
 			if (detail.supplierId) {
 				const supplierIdValue = detail.supplierId
 				try {
-					const data = await api.suppliers.get(supplierIdValue)
+					const data = await getSupplier(supplierIdValue)
 					applySupplier({
 						id: data.supplier.id,
 						code: data.supplier.code,

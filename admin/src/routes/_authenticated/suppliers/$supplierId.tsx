@@ -12,9 +12,8 @@ import {
 import { SupplierOverview } from "#/components/suppliers/supplier-overview"
 import { SupplierProductsPanel } from "#/components/suppliers/supplier-products-panel"
 import { Button } from "#/components/ui/button"
-import { api } from "#/lib/api"
-import type { Supplier } from "#/lib/api-types"
 import { hasPermission } from "#/lib/role"
+import { getSupplier, type Supplier } from "#/modules/suppliers"
 
 export const Route = createFileRoute("/_authenticated/suppliers/$supplierId")({
 	component: SupplierDetailPage,
@@ -31,7 +30,7 @@ function SupplierDetailPage() {
 
 	const supplierQuery = useQuery({
 		queryKey: ["supplier", supplierId],
-		queryFn: () => api.suppliers.get(supplierId),
+		queryFn: () => getSupplier(supplierId),
 	})
 
 	const detail = supplierQuery.data

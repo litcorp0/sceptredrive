@@ -33,6 +33,9 @@ import type { PaymentCreateInput, SupplierPaymentMethod } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+// TODO(phase-8/11): payables reads the supplier master through the suppliers barrel; Plan 11 keeps
+// this edge and owns the payment form.
+import { getSupplier } from "#/modules/suppliers"
 
 export interface InvoicePaymentTarget {
 	id: string
@@ -122,7 +125,7 @@ export function PaymentFormDialog({
 
 	const supplierQuery = useQuery({
 		queryKey: ["supplier", supplier?.id],
-		queryFn: () => api.suppliers.get(supplier?.id as string),
+		queryFn: () => getSupplier(supplier?.id as string),
 		enabled: open && supplier !== null,
 	})
 

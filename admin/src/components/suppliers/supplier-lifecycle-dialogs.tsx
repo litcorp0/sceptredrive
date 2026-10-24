@@ -12,9 +12,14 @@ import {
 } from "#/components/ui/dialog"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { Supplier } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import {
+	archiveSupplier,
+	reactivateSupplier,
+	type Supplier,
+	supplierKeys,
+} from "#/modules/suppliers"
 
 export function ArchiveSupplierDialog({
 	open,
@@ -36,12 +41,12 @@ export function ArchiveSupplierDialog({
 	}, [open])
 
 	const archiveMutation = useMutation({
-		mutationFn: () => api.suppliers.archive(supplier.id, note.trim() || undefined),
+		mutationFn: () => archiveSupplier(supplier.id, note.trim() || undefined),
 		onSuccess: async (data) => {
 			toast.success(`Supplier ${data.supplier.name} archived`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["suppliers"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier", supplier.id] }),
+				queryClient.invalidateQueries({ queryKey: supplierKeys.all }),
+				queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplier.id) }),
 			])
 			onOpenChange(false)
 		},
@@ -112,12 +117,12 @@ export function ReactivateSupplierButton({ supplier }: { supplier: Supplier }) {
 	const queryClient = useQueryClient()
 
 	const reactivateMutation = useMutation({
-		mutationFn: () => api.suppliers.reactivate(supplier.id),
+		mutationFn: () => reactivateSupplier(supplier.id),
 		onSuccess: async (data) => {
 			toast.success(`Supplier ${data.supplier.name} reactivated`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["suppliers"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier", supplier.id] }),
+				queryClient.invalidateQueries({ queryKey: supplierKeys.all }),
+				queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplier.id) }),
 			])
 		},
 		onError: (error) => toastApiError(error),

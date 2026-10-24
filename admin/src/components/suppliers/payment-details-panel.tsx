@@ -21,9 +21,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { SupplierPaymentDetailView } from "#/lib/api-types"
 import { toastApiError } from "#/lib/toast"
+import {
+	type SupplierPaymentDetailView,
+	supplierKeys,
+	updateSupplierPaymentDetail,
+} from "#/modules/suppliers"
 
 export function PaymentDetailsPanel({
 	supplierId,
@@ -42,10 +45,10 @@ export function PaymentDetailsPanel({
 		mutationFn: (input: {
 			detail: SupplierPaymentDetailView
 			patch: { isDefault?: boolean; isActive?: boolean }
-		}) => api.suppliers.updatePaymentDetail(supplierId, input.detail.id, input.patch),
+		}) => updateSupplierPaymentDetail(supplierId, input.detail.id, input.patch),
 		onSuccess: async () => {
 			toast.success("Payment detail updated")
-			await queryClient.invalidateQueries({ queryKey: ["supplier", supplierId] })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplierId) })
 		},
 		onError: (error) => toastApiError(error),
 	})

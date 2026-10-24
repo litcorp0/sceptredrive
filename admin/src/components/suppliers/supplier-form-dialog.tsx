@@ -13,9 +13,9 @@ import {
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { Supplier } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { createSupplier, type Supplier, supplierKeys, updateSupplier } from "#/modules/suppliers"
 
 export function SupplierFormDialog({
 	open,
@@ -70,7 +70,7 @@ export function SupplierFormDialog({
 				notes: notes.trim() || undefined,
 			}
 			if (isEdit && supplier) {
-				return api.suppliers.update(supplier.id, {
+				return updateSupplier(supplier.id, {
 					...input,
 					// Empty optional fields clear the stored value on edit.
 					contactName: contactName.trim() || null,
@@ -82,7 +82,7 @@ export function SupplierFormDialog({
 					notes: notes.trim() || null,
 				})
 			}
-			return api.suppliers.create(input)
+			return createSupplier(input)
 		},
 		onSuccess: async (data) => {
 			toast.success(
@@ -90,8 +90,8 @@ export function SupplierFormDialog({
 					? `Supplier ${data.supplier.name} updated`
 					: `Supplier ${data.supplier.name} created`,
 			)
-			await queryClient.invalidateQueries({ queryKey: ["suppliers"] })
-			await queryClient.invalidateQueries({ queryKey: ["supplier", data.supplier.id] })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.all })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.byId(data.supplier.id) })
 			onOpenChange(false)
 		},
 		onError: (error) => {

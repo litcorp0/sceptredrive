@@ -1,7 +1,7 @@
 import { formatDay } from "@sceptre/shared"
 import type { ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
-import type { Supplier } from "#/lib/api-types"
+import type { Supplier } from "#/modules/suppliers"
 
 export function SupplierOverview({ supplier }: { supplier: Supplier }) {
 	return (

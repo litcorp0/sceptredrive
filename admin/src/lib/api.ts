@@ -5,27 +5,15 @@ import type {
 	PayablesAgingQuery,
 	PayablesAgingResult,
 	PaymentCreateInput,
-	PaymentDetailInput,
-	PaymentDetailUpdateInput,
 	PaymentListQuery,
 	PaymentListResult,
 	PaymentVoidInput,
-	Supplier,
 	SupplierBalanceResult,
-	SupplierCreateInput,
-	SupplierDetail,
 	SupplierInvoiceDetail,
 	SupplierInvoiceListQuery,
 	SupplierInvoiceListResult,
 	SupplierInvoiceRow,
-	SupplierListQuery,
-	SupplierListResult,
 	SupplierPaymentDetail,
-	SupplierPaymentDetailView,
-	SupplierProductInput,
-	SupplierProductMapping,
-	SupplierProductUpdateInput,
-	SupplierUpdateInput,
 } from "./api-types"
 
 export class ApiError extends Error {
@@ -130,58 +118,6 @@ export function isReauthRequired(error: unknown): boolean {
 }
 
 export const api = {
-	suppliers: {
-		list: (query: SupplierListQuery = {}) =>
-			apiRequest<SupplierListResult>("/api/suppliers", { query }),
-		get: (id: string) => apiRequest<SupplierDetail>(`/api/suppliers/${id}`),
-		create: (input: SupplierCreateInput) =>
-			apiRequest<{ supplier: Supplier }>("/api/suppliers", {
-				method: "POST",
-				body: input,
-			}),
-		update: (id: string, input: SupplierUpdateInput) =>
-			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}`, {
-				method: "PATCH",
-				body: input,
-			}),
-		archive: (id: string, note?: string) =>
-			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}/archive`, {
-				method: "POST",
-				body: { note: note || undefined },
-			}),
-		reactivate: (id: string) =>
-			apiRequest<{ supplier: Supplier }>(`/api/suppliers/${id}/reactivate`, {
-				method: "POST",
-			}),
-		addPaymentDetail: (id: string, input: PaymentDetailInput) =>
-			apiRequest<{ paymentDetail: SupplierPaymentDetailView }>(
-				`/api/suppliers/${id}/payment-details`,
-				{
-					method: "POST",
-					body: input,
-				},
-			),
-		updatePaymentDetail: (id: string, detailId: string, input: PaymentDetailUpdateInput) =>
-			apiRequest<{ paymentDetail: SupplierPaymentDetailView }>(
-				`/api/suppliers/${id}/payment-details/${detailId}`,
-				{ method: "PATCH", body: input },
-			),
-		addProduct: (id: string, input: SupplierProductInput) =>
-			apiRequest<{ mapping: SupplierProductMapping }>(`/api/suppliers/${id}/products`, {
-				method: "POST",
-				body: input,
-			}),
-		updateProduct: (id: string, mappingId: string, input: SupplierProductUpdateInput) =>
-			apiRequest<{ mapping: SupplierProductMapping }>(
-				`/api/suppliers/${id}/products/${mappingId}`,
-				{ method: "PATCH", body: input },
-			),
-		removeProduct: (id: string, mappingId: string) =>
-			apiRequest<{ ok: true }>(`/api/suppliers/${id}/products/${mappingId}`, {
-				method: "DELETE",
-			}),
-	},
-
 	payables: {
 		invoices: {
 			list: (query: SupplierInvoiceListQuery = {}) =>

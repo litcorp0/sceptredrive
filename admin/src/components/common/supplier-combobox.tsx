@@ -3,9 +3,8 @@ import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from "lucide-react"
 import { useState } from "react"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
-import { api } from "#/lib/api"
-import type { SupplierListRow } from "#/lib/api-types"
 import { useDebouncedValue } from "#/lib/hooks"
+import { listSuppliers, type SupplierListRow } from "#/modules/suppliers"
 
 export interface PickedSupplier {
 	id: string
@@ -41,7 +40,7 @@ export function SupplierCombobox({
 
 	const resultsQuery = useQuery({
 		queryKey: ["supplier-combobox", query],
-		queryFn: () => api.suppliers.list({ q: query, pageSize: 8 }),
+		queryFn: () => listSuppliers({ q: query, pageSize: 8 }),
 		enabled: open && query.length >= 2,
 	})
 

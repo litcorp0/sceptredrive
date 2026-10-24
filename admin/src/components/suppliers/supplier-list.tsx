@@ -19,10 +19,13 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
-import type { SupplierBalance, SupplierListRow } from "#/lib/api-types"
+// TODO(phase-8/11): the Owed column is payables' balance read, not supplier master data. It moves
+// to the payables module with Plan 11; until then it keeps the legacy `api.payables` group.
+import type { SupplierBalance } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
+import { type SupplierListRow, supplierListOptions } from "#/modules/suppliers"
 
 const PAGE_SIZE = 20
 
@@ -47,10 +50,7 @@ export function SupplierList({ role }: { role: string }) {
 		pageSize: PAGE_SIZE,
 	}
 
-	const suppliersQuery = useQuery({
-		queryKey: ["suppliers", filters],
-		queryFn: () => api.suppliers.list(filters),
-	})
+	const suppliersQuery = useQuery(supplierListOptions(filters))
 
 	// Owed column: one aggregated row per supplier, branch-scoped by the API.
 	const balancesQuery = useQuery({

@@ -19,13 +19,16 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
-import { ApiError, api } from "#/lib/api"
-import type {
-	PaymentDetailInput,
-	SupplierMomoNetwork,
-	SupplierPaymentDetailView,
-} from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import {
+	addSupplierPaymentDetail,
+	type PaymentDetailInput,
+	type SupplierMomoNetwork,
+	type SupplierPaymentDetailView,
+	supplierKeys,
+	updateSupplierPaymentDetail,
+} from "#/modules/suppliers"
 
 export function PaymentDetailDialog({
 	open,
@@ -69,7 +72,7 @@ export function PaymentDetailDialog({
 		mutationFn: () => {
 			if (isEdit && detail) {
 				// The API rejects cross-method fields, so send only the stored method's.
-				return api.suppliers.updatePaymentDetail(supplierId, detail.id, {
+				return updateSupplierPaymentDetail(supplierId, detail.id, {
 					label: label.trim() || null,
 					accountName: accountName.trim() || undefined,
 					...(detail.method === "BANK"
@@ -104,11 +107,11 @@ export function PaymentDetailDialog({
 					phone: phone.trim(),
 				}
 			}
-			return api.suppliers.addPaymentDetail(supplierId, input)
+			return addSupplierPaymentDetail(supplierId, input)
 		},
 		onSuccess: async () => {
 			toast.success(isEdit ? "Payment detail updated" : "Payment detail added")
-			await queryClient.invalidateQueries({ queryKey: ["supplier", supplierId] })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplierId) })
 			onOpenChange(false)
 		},
 		onError: (error) => {

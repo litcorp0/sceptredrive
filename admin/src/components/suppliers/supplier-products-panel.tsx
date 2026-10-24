@@ -30,10 +30,13 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { SupplierProductMapping } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import {
+	removeSupplierProduct,
+	type SupplierProductMapping,
+	supplierKeys,
+} from "#/modules/suppliers"
 
 export function SupplierProductsPanel({
 	supplierId,
@@ -50,11 +53,10 @@ export function SupplierProductsPanel({
 	const [removeTarget, setRemoveTarget] = useState<SupplierProductMapping | null>(null)
 
 	const removeMutation = useMutation({
-		mutationFn: (mapping: SupplierProductMapping) =>
-			api.suppliers.removeProduct(supplierId, mapping.id),
+		mutationFn: (mapping: SupplierProductMapping) => removeSupplierProduct(supplierId, mapping.id),
 		onSuccess: async () => {
 			toast.success("Supplied product removed")
-			await queryClient.invalidateQueries({ queryKey: ["supplier", supplierId] })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplierId) })
 			setRemoveTarget(null)
 		},
 		onError: (error) => toastApiError(error),

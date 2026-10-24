@@ -14,9 +14,14 @@ import {
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { Switch } from "#/components/ui/switch"
-import { ApiError, api } from "#/lib/api"
-import type { SupplierProductMapping } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import {
+	addSupplierProduct,
+	type SupplierProductMapping,
+	supplierKeys,
+	updateSupplierProduct,
+} from "#/modules/suppliers"
 
 export function SupplierProductDialog({
 	open,
@@ -65,14 +70,14 @@ export function SupplierProductDialog({
 		mutationFn: () => {
 			const lead = leadTimeDays.trim() === "" ? null : Number.parseInt(leadTimeDays, 10)
 			if (isEdit && mapping) {
-				return api.suppliers.updateProduct(supplierId, mapping.id, {
+				return updateSupplierProduct(supplierId, mapping.id, {
 					supplierSku: supplierSku.trim() || null,
 					leadTimeDays: lead,
 					isPreferred,
 				})
 			}
 			if (!product) throw new Error("Choose a product first")
-			return api.suppliers.addProduct(supplierId, {
+			return addSupplierProduct(supplierId, {
 				productId: product.id,
 				supplierSku: supplierSku.trim() || undefined,
 				leadTimeDays: lead === null ? undefined : lead,
@@ -81,7 +86,7 @@ export function SupplierProductDialog({
 		},
 		onSuccess: async () => {
 			toast.success(isEdit ? "Supplied product updated" : "Supplied product added")
-			await queryClient.invalidateQueries({ queryKey: ["supplier", supplierId] })
+			await queryClient.invalidateQueries({ queryKey: supplierKeys.byId(supplierId) })
 			onOpenChange(false)
 		},
 		onError: (error) => {
