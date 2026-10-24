@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'

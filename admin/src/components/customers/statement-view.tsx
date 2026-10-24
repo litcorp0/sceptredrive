@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from "@gikautos/shared"
+import { formatGhanaPhone } from "@sceptre/shared"
 import type { CreditStatement, StatementEntry } from "#/lib/api-types"
 import {
 	AGING_BUCKET_LABELS,

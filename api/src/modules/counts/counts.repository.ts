@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { category } from '../catalog/catalog.schema.ts'
 import { stockLevel } from '../inventory/inventory.schema.ts'

@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { and, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
 import { auditLog } from './audit.schema.ts'
 import type { AuditEntry, AuditLogRow, AuditQueryFilters } from './audit.types.ts'

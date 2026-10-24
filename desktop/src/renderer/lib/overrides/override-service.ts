@@ -1,5 +1,5 @@
-import { can, type Permission } from '@gikautos/shared'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { can, type Permission } from '@sceptre/shared'
 import {
   type BindingError,
   getBinding,

@@ -16,7 +16,7 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@gikautos/shared": "workspace:*",
+		"@sceptre/shared": "workspace:*",
 		"@t3-oss/env-core": "^0.13.10",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/react-devtools": "0.10.13",

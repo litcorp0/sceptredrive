@@ -1,5 +1,5 @@
 {
-  "name": "@gikautos/db",
+  "name": "@sceptre/db",
   "version": "0.1.0",
   "private": true,
   "type": "module",

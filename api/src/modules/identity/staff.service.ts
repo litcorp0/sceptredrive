@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto'
-import { db } from '@gikautos/db'
-import type { Role } from '@gikautos/shared'
+import { db } from '@sceptre/db'
+import type { Role } from '@sceptre/shared'
 import { auth } from '../../auth/auth.ts'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'

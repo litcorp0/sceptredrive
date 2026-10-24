@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import { normalizeGhanaPhone } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { normalizeGhanaPhone } from '@sceptre/shared'
 import { roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import {

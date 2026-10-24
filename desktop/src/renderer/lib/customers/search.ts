@@ -1,5 +1,5 @@
-import { normalizeGhanaPhone } from '@gikautos/shared'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { normalizeGhanaPhone } from '@sceptre/shared'
 
 /**
  * Customer lookup on the terminal (Plan 06 Task 3).

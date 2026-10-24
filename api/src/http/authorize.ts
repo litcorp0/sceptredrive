@@ -1,4 +1,4 @@
-import type { Permission } from '@gikautos/shared'
+import type { Permission } from '@sceptre/shared'
 import type { Context } from 'hono'
 import { hasPermission } from '../auth/scope.ts'
 import { ForbiddenError, UnauthorizedError } from './errors.ts'

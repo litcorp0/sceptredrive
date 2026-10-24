@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from "@gikautos/shared"
+import { formatGhanaPhone } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"

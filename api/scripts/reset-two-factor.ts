@@ -1,4 +1,4 @@
-import { closeDb, db } from '@gikautos/db'
+import { closeDb, db } from '@sceptre/db'
 import { eq } from 'drizzle-orm'
 import '../src/config/env.ts'
 import { twoFactor, user } from '../src/modules/identity/staff.schema.ts'

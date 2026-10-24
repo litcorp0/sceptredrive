@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomInt } from 'node:crypto'
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { env } from '../../config/env.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'

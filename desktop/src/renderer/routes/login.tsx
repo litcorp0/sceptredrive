@@ -1,5 +1,5 @@
-import { PIN_PROBLEM_MESSAGES, pinProblem } from '@gikautos/shared'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
 import { useCallback, useEffect, useState } from 'react'
 import { ManagerUnlock } from '../components/auth/manager-unlock'
 import { PinPad } from '../components/auth/pin-pad'

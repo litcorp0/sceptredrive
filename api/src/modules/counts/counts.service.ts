@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'

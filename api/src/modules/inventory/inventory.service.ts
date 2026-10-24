@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import { averageCostAfterReceipt } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { averageCostAfterReceipt } from '@sceptre/shared'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'

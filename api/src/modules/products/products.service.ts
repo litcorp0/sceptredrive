@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import { resolveEffectivePrice } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { resolveEffectivePrice } from '@sceptre/shared'
 import { and, count, eq } from 'drizzle-orm'
 import { branchScope, resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'

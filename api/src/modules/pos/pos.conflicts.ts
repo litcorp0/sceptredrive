@@ -1,4 +1,4 @@
-import type { DbExecutor } from '@gikautos/db'
+import type { DbExecutor } from '@sceptre/db'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { insertConflict } from './pos.repository.ts'
 import type { AppliedConflict, SyncConflictSeverity, SyncConflictType } from './pos.types.ts'

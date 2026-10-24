@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { assertBranchAccess, branchScope } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'

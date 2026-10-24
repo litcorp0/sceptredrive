@@ -1,4 +1,4 @@
-import { can, isRole, type Permission, type Role } from '@gikautos/shared'
+import { can, isRole, type Permission, type Role } from '@sceptre/shared'
 import { ForbiddenError } from '../http/errors.ts'
 import type { SessionUser } from '../http/factory.ts'
 

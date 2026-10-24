@@ -1,4 +1,4 @@
-import type { Role } from '@gikautos/shared'
+import type { Role } from '@sceptre/shared'
 import { useState } from 'react'
 import type { CartDiscount } from '../../lib/cart/types'
 import { DISCOUNT_REASON_CODES, type DiscountReasonCode } from '../../lib/cart/types'

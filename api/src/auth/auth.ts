@@ -1,5 +1,5 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { type BetterAuthOptions, betterAuth } from 'better-auth'
 import { twoFactor } from 'better-auth/plugins/two-factor'
 import { env } from '../config/env.ts'

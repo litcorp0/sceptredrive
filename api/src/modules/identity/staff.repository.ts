@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import type { Role } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import type { Role } from '@sceptre/shared'
 import { and, asc, count, eq, gt, isNull, or, type SQL, sql } from 'drizzle-orm'
 import { posStaffBinding } from '../pos/pos.schema.ts'
 import { account, user as userTable } from './staff.schema.ts'

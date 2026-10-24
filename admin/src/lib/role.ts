@@ -1,5 +1,5 @@
-import type { Permission, Role } from "@gikautos/shared"
-import { can, ROLES } from "@gikautos/shared"
+import type { Permission, Role } from "@sceptre/shared"
+import { can, ROLES } from "@sceptre/shared"
 
 /** Better Auth types additional fields loosely; narrow to the known roles. */
 export function toRole(value: string): Role | null {

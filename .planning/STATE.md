@@ -223,7 +223,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `sale_tender`, `cash_movement`, `pos_sync_transaction`, `sync_conflict`, and
     `pos_staff_binding`, with the one-open-shift and active-binding partial uniques and the
     terminal/client idempotency uniques; `stock_movement` now accepts `SALE`.
-  - `@gikautos/shared` exports `allocateProportionally` and `priceCart` (integer
+  - `@sceptre/shared` exports `allocateProportionally` and `priceCart` (integer
     largest-remainder allocation, line/sale/loyalty discounts, per-line Ghana tax); 20 new
     tests, 70 shared tests pass.
   - Eight `pos.*` settings and the `staff.pin.reset` / `pos.discount` permissions.
@@ -425,8 +425,8 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 ## Repository State
 
 - Fresh git history on `dev`; planning + Phase 1 committed. **No git remote exists yet.**
-- Root Bun workspace with catalogs; `@gikautos/shared` (roles, permissions, branch
-  codes) and `@gikautos/db` (Drizzle client, config, migrations).
+- Root Bun workspace with catalogs; `@sceptre/shared` (roles, permissions, branch
+  codes) and `@sceptre/db` (Drizzle client, config, migrations).
 - API boots on Node 24 with native TypeScript type stripping: `bun run dev:api`.
   Validated env, pino logs, request IDs, security headers, CORS, `/health`, `/ready`.
 - PostgreSQL: the operator's **local instance on `:5432`**. `gikautos_test` holds the
@@ -459,7 +459,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 
 ### Phase 2 additions
 
-- `@gikautos/shared` now exports the Ghana tax engine (`taxBreakdown`, basis-point rates,
+- `@sceptre/shared` now exports the Ghana tax engine (`taxBreakdown`, basis-point rates,
   `addTaxBreakdowns`) and pricing helpers (`resolveEffectivePrice`, `isValidPriceMinor`) —
   integer-only, reused by API, console preview, and (Phase 6) the offline POS.
 - Catalog module (`api/src/modules/catalog`): categories (two-level tree, depth/self-parent/
@@ -478,7 +478,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 
 ### Phase 3 additions
 
-- `@gikautos/shared` exports `averageCostAfterReceipt` (integer weighted average,
+- `@sceptre/shared` exports `averageCostAfterReceipt` (integer weighted average,
   half-up) used by the API and the demo seed.
 - Inventory module (`api/src/modules/inventory`): append-only `stock_movement` ledger +
   `stock_level` projection, receipts (`stock_receipt`, `stock_receipt_line`),
@@ -913,7 +913,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   drift becomes a conflict, never a repricing; `SALE` stock movements use
   `postMovements(..., { allowNegative: true })`; credit/loyalty replay uses internal
   bypass options on `postEntry`; one `pos_sync_transaction` row per client transaction for
-  exactly-once; the shared `priceCart` in `@gikautos/shared` is the only pricing path.
+  exactly-once; the shared `priceCart` in `@sceptre/shared` is the only pricing path.
 - Research deltas since the 2026-10-17 notes: Forge is now **8.0.1** (ESM-only, Vite
   plugin stable on Vite 8, `.cjs` main/preload); Electron is **45** (sync `safeStorage`
   deprecated, async only); PowerSync Web SDK is **2.5.0** (ESM-only, HTTP streaming,
@@ -1012,7 +1012,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 | 2026-10-22 | Plan 03: the compose Postgres host port is `${POSTGRES_PORT:-5433}` (5433 was already taken on this machine; `.env` uses 5434). |
 | 2026-10-22 | Plan 03: the local PowerSync database uses `OPFSCoopSyncVFS` with an explicit `WASQLiteOpenFactory`, `enableMultiTabs: false`, and the SDK's own worker — the configuration the Plan 02 gate proved. |
 | 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
-| 2026-10-23 | Plan 04: PIN policy lives once in `@gikautos/shared` (4–6 digits, no repeated digits or straight sequences) and is enforced by the API, the console, and the terminal. |
+| 2026-10-23 | Plan 04: PIN policy lives once in `@sceptre/shared` (4–6 digits, no repeated digits or straight sequences) and is enforced by the API, the console, and the terminal. |
 | 2026-10-23 | Plan 04: managers may reset only **cashier** PINs in their branch (mirroring the password rule); admins may reset anyone. Role, branch, deactivation, and every PIN reset bump `pinVersion` and revoke live bindings so stale terminals fail closed. |
 | 2026-10-23 | Plan 04: a binding token is 32 random bytes returned once and stored as `HMAC-SHA256` keyed with the auth secret; one active binding per (device, staff) enforced by the partial unique index; expiry 90 days; the token travels in `x-pos-binding`, never a URL or body. |
 | 2026-10-23 | Plan 04: offline PIN hashing runs in the Electron **main process** with `@node-rs/argon2` (Argon2id 64 MiB/t=3/p=4). The 16-byte device salt is stored beside the verifier and used as the Argon2 pepper. The staff session is in memory only; quitting requires the PIN again. |
@@ -1182,7 +1182,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   (`SHOTS_DIR` pointing at `evidence/`). Tests use `TEST_DATABASE_URL`.
 - Phase 6 verification commands (fresh DB, API + PowerSync up, `DATABASE_URL` = Docker
   `:5434/gikautos`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
-  (run with `bun`; they import `@gikautos/shared`), then `node e2e-pos.mjs` (Playwright
+  (run with `bun`; they import `@sceptre/shared`), then `node e2e-pos.mjs` (Playwright
   over CDP must run on Node, not Bun) and `node perf-pos.mjs`. The E2E owns :4000: it stops
   the API to prove the offline relaunch, so stop any other `bun dev` first.
 - The Electron E2E uses the **unpackaged production build** (`.vite` + Electron) because a
@@ -1273,7 +1273,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   fail. Use `POS_PRINTER_DRIVER=fake` for all automated runs; real hardware is a human
   checklist item. `app://` (not `file://`) is required for PowerSync workers.
 
-- Phase 6 Plan 04: PIN policy is `pinProblem()` in `@gikautos/shared`; never duplicate the
+- Phase 6 Plan 04: PIN policy is `pinProblem()` in `@sceptre/shared`; never duplicate the
   digit/trivial checks. Server PIN hashing reuses `auth/password.ts`; the terminal hashes in
   the Electron main process (`main/ipc/pin.ts`) with the stored 16-byte salt as the Argon2
   `secret` (pepper).

@@ -1,5 +1,5 @@
-import { db } from '@gikautos/db'
-import { priceCart } from '@gikautos/shared'
+import { db } from '@sceptre/db'
+import { priceCart } from '@sceptre/shared'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {

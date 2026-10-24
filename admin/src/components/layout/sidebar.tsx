@@ -1,5 +1,5 @@
-import type { Permission } from "@gikautos/shared"
-import { can } from "@gikautos/shared"
+import type { Permission } from "@sceptre/shared"
+import { can } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {

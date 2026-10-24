@@ -1,5 +1,5 @@
-import { closeDb } from '@gikautos/db'
 import { serve } from '@hono/node-server'
+import { closeDb } from '@sceptre/db'
 import { app } from './app.ts'
 import { env } from './config/env.ts'
 import { startJobs, stopJobs } from './jobs/index.ts'

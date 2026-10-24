@@ -44,7 +44,7 @@
     "@electron-forge/plugin-vite": "8.0.1",
     "@electron-forge/shared-types": "8.0.1",
     "@electron/fuses": "2.1.3",
-    "@gikautos/shared": "workspace:*",
+    "@sceptre/shared": "workspace:*",
     "@journeyapps/wa-sqlite": "2.0.8",
     "@powersync/react": "2.1.0",
     "@powersync/web": "2.5.0",

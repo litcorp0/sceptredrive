@@ -1,5 +1,5 @@
-import { checkDb, db } from '@gikautos/db'
-import type { Role } from '@gikautos/shared'
+import { checkDb, db } from '@sceptre/db'
+import type { Role } from '@sceptre/shared'
 import { eq } from 'drizzle-orm'
 import { app } from '../src/app.ts'
 import { auth } from '../src/auth/auth.ts'

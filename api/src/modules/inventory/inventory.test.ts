@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { databaseAvailable, uniqueSuffix } from '../../../test/integration.ts'

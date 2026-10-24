@@ -1,4 +1,4 @@
-import { formatGhanaPhone, normalizeGhanaPhone } from '@gikautos/shared'
+import { formatGhanaPhone, normalizeGhanaPhone } from '@sceptre/shared'
 import { type FormEvent, useState } from 'react'
 import { CUSTOMER_NAME_MAX, createCustomerDraft } from '../../lib/customers/create-draft'
 import type { CustomerHit } from '../../lib/customers/search'

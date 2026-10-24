@@ -1,4 +1,4 @@
-import { PIN_PROBLEM_MESSAGES, pinProblem } from '@gikautos/shared'
+import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
 import { z } from 'zod'
 import { validateJson, validateQuery } from '../../http/validation.ts'
 

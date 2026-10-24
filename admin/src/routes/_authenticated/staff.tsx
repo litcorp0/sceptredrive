@@ -1,4 +1,4 @@
-import type { Role } from "@gikautos/shared"
+import type { Role } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { MoreHorizontalIcon, PlusIcon } from "lucide-react"

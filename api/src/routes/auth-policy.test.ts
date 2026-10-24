@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {

@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import { isRole } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { isRole } from '@sceptre/shared'
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { creditProfile } from '../credit/credit.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'

@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import {
   closeDemoShift,
   createUserWithCredential,

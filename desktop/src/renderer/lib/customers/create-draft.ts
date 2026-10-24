@@ -1,5 +1,5 @@
-import { normalizeGhanaPhone } from '@gikautos/shared'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { normalizeGhanaPhone } from '@sceptre/shared'
 import { uuidv7 } from '../id'
 import { type CustomerHit, findCustomerByPhone } from './search'
 

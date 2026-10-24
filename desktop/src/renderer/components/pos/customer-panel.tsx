@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from '@gikautos/shared'
+import { formatGhanaPhone } from '@sceptre/shared'
 import type { CartCustomer } from '../../lib/cart/types'
 import { creditHeadroom, creditUsed } from '../../lib/credit/headroom'
 import type { CustomerContext } from '../../lib/customers/context'

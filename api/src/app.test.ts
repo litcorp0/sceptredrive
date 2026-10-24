@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@gikautos/db', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@gikautos/db')>()
+vi.mock('@sceptre/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sceptre/db')>()
   return { ...actual, checkDb: vi.fn(), closeDb: vi.fn() }
 })
 
-import { checkDb } from '@gikautos/db'
+import { checkDb } from '@sceptre/db'
 import { app } from './app.ts'
 
 const checkDbMock = vi.mocked(checkDb)
