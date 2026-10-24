@@ -21,14 +21,9 @@ import {
 } from "#/components/ui/select"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import {
-	addSupplierPaymentDetail,
-	type PaymentDetailInput,
-	type SupplierMomoNetwork,
-	type SupplierPaymentDetailView,
-	supplierKeys,
-	updateSupplierPaymentDetail,
-} from "#/modules/suppliers"
+import { supplierKeys } from "../api/keys"
+import { addSupplierPaymentDetail, updateSupplierPaymentDetail } from "../api/suppliers"
+import type { PaymentDetailInput, SupplierMomoNetwork, SupplierPaymentDetailView } from "../types"
 
 export function PaymentDetailDialog({
 	open,

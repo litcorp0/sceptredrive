@@ -3,9 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { PlusIcon, SearchIcon } from "lucide-react"
 import { useState } from "react"
 import { Pagination } from "#/components/common/pagination"
-import { ActiveBadge, StatusBadge } from "#/components/common/status-badge"
 import { TableMessage } from "#/components/common/table-message"
-import { SupplierFormDialog } from "#/components/suppliers/supplier-form-dialog"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
@@ -25,7 +23,9 @@ import type { SupplierBalance } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
-import { type SupplierListRow, supplierListOptions } from "#/modules/suppliers"
+import { supplierListOptions } from "../api/suppliers"
+import { SupplierStatusBadge } from "../ui/supplier-status-badge"
+import { SupplierFormDialog } from "./supplier-form-dialog"
 
 const PAGE_SIZE = 20
 
@@ -164,7 +164,9 @@ export function SupplierList({ role }: { role: string }) {
 										{supplier.paymentTermDays} days
 									</TableCell>
 									{canViewOwed ? <OwedCell balance={owedBySupplier.get(supplier.id)} /> : null}
-									<TableCell>{supplierStatus(supplier)}</TableCell>
+									<TableCell>
+										<SupplierStatusBadge status={supplier.status} />
+									</TableCell>
 								</TableRow>
 							))
 						)}
@@ -177,11 +179,6 @@ export function SupplierList({ role }: { role: string }) {
 			<SupplierFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 		</section>
 	)
-}
-
-function supplierStatus(supplier: SupplierListRow) {
-	if (supplier.status === "ARCHIVED") return <StatusBadge tone="zinc">Archived</StatusBadge>
-	return <ActiveBadge active />
 }
 
 function OwedCell({ balance }: { balance: SupplierBalance | undefined }) {

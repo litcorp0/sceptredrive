@@ -3,7 +3,6 @@ import { PlusIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ActiveBadge, StatusBadge } from "#/components/common/status-badge"
-import { PaymentDetailDialog } from "#/components/suppliers/payment-detail-dialog"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -22,11 +21,11 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { toastApiError } from "#/lib/toast"
-import {
-	type SupplierPaymentDetailView,
-	supplierKeys,
-	updateSupplierPaymentDetail,
-} from "#/modules/suppliers"
+import { supplierKeys } from "../api/keys"
+import { updateSupplierPaymentDetail } from "../api/suppliers"
+import type { SupplierPaymentDetailView } from "../types"
+import { momoNetworkLabel, paymentAccountDisplay } from "../utils/payment-detail"
+import { PaymentDetailDialog } from "./payment-detail-dialog"
 
 export function PaymentDetailsPanel({
 	supplierId,
@@ -102,9 +101,7 @@ export function PaymentDetailsPanel({
 									</TableCell>
 									<TableCell className="text-muted-foreground">{detail.label ?? "—"}</TableCell>
 									<TableCell>
-										<p className="font-mono text-xs">
-											{detail.accountNumber ?? detail.accountNumberMasked ?? "—"}
-										</p>
+										<p className="font-mono text-xs">{paymentAccountDisplay(detail)}</p>
 										{detail.accountName ? (
 											<p className="text-xs text-muted-foreground">{detail.accountName}</p>
 										) : null}
@@ -112,7 +109,7 @@ export function PaymentDetailsPanel({
 									<TableCell className="text-muted-foreground">
 										{detail.method === "BANK"
 											? `${detail.bankName ?? "—"}${detail.bankCode ? ` (${detail.bankCode})` : ""}`
-											: `${networkLabel(detail.momoNetwork)} · ${detail.phone ?? "—"}`}
+											: `${momoNetworkLabel(detail.momoNetwork)} · ${detail.phone ?? "—"}`}
 									</TableCell>
 									<TableCell>
 										<div className="flex flex-wrap gap-1">
@@ -176,11 +173,4 @@ export function PaymentDetailsPanel({
 			/>
 		</Card>
 	)
-}
-
-function networkLabel(network: SupplierPaymentDetailView["momoNetwork"]) {
-	if (network === "MTN") return "MTN MoMo"
-	if (network === "VOD") return "Telecel Cash"
-	if (network === "ATL") return "AirtelTigo Money"
-	return "—"
 }

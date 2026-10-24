@@ -14,12 +14,9 @@ import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import {
-	archiveSupplier,
-	reactivateSupplier,
-	type Supplier,
-	supplierKeys,
-} from "#/modules/suppliers"
+import { supplierKeys } from "../api/keys"
+import { archiveSupplier, reactivateSupplier } from "../api/suppliers"
+import type { Supplier } from "../types"
 
 export function ArchiveSupplierDialog({
 	open,

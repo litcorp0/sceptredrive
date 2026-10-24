@@ -4,7 +4,6 @@ import { PlusIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { StatusBadge } from "#/components/common/status-badge"
-import { SupplierProductDialog } from "#/components/suppliers/supplier-product-dialog"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -32,11 +31,10 @@ import {
 } from "#/components/ui/table"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import {
-	removeSupplierProduct,
-	type SupplierProductMapping,
-	supplierKeys,
-} from "#/modules/suppliers"
+import { supplierKeys } from "../api/keys"
+import { removeSupplierProduct } from "../api/suppliers"
+import type { SupplierProductMapping } from "../types"
+import { SupplierProductDialog } from "./supplier-product-dialog"
 
 export function SupplierProductsPanel({
 	supplierId,

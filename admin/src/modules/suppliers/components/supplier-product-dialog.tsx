@@ -16,12 +16,9 @@ import { Label } from "#/components/ui/label"
 import { Switch } from "#/components/ui/switch"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import {
-	addSupplierProduct,
-	type SupplierProductMapping,
-	supplierKeys,
-	updateSupplierProduct,
-} from "#/modules/suppliers"
+import { supplierKeys } from "../api/keys"
+import { addSupplierProduct, updateSupplierProduct } from "../api/suppliers"
+import type { SupplierProductMapping } from "../types"
 
 export function SupplierProductDialog({
 	open,

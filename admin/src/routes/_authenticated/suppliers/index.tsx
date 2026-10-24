@@ -1,12 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { SupplierList } from "#/components/suppliers/supplier-list"
+import { SuppliersPage } from "#/modules/suppliers"
 
 export const Route = createFileRoute("/_authenticated/suppliers/")({
-	component: SuppliersTab,
+	component: SuppliersPage,
 })
-
-function SuppliersTab() {
-	const { session } = Route.useRouteContext()
-
-	return <SupplierList role={session.user.role} />
-}
