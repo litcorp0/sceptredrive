@@ -12,8 +12,10 @@ import {
 } from "#/components/ui/dialog"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
-import { ApiError, api } from "#/lib/api"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { removeThreshold, setThreshold as setStockThreshold } from "../api/inventory"
+import { inventoryKeys } from "../api/keys"
 
 export function ThresholdDialog({
 	open,
@@ -42,14 +44,14 @@ export function ThresholdDialog({
 
 	async function invalidate() {
 		await Promise.all([
-			queryClient.invalidateQueries({ queryKey: ["inventory-stock"] }),
-			queryClient.invalidateQueries({ queryKey: ["inventory-thresholds"] }),
+			queryClient.invalidateQueries({ queryKey: inventoryKeys.stock }),
+			queryClient.invalidateQueries({ queryKey: inventoryKeys.thresholds }),
 		])
 	}
 
 	const saveMutation = useMutation({
 		mutationFn: (value: number) =>
-			api.inventory.thresholds.set({
+			setStockThreshold({
 				branchId: branchId as string,
 				productId,
 				threshold: value,
@@ -70,7 +72,7 @@ export function ThresholdDialog({
 
 	const removeMutation = useMutation({
 		mutationFn: () =>
-			api.inventory.thresholds.remove(productId, {
+			removeThreshold(productId, {
 				...(branchId ? { branchId } : {}),
 			}),
 		onSuccess: async () => {

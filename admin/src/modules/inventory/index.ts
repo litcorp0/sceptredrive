@@ -48,7 +48,11 @@ export {
 	transferListOptions,
 	updateTransfer,
 } from "./api/transfers"
+export { AdjustDialog } from "./components/adjust-dialog"
+export { ThresholdDialog } from "./components/threshold-dialog"
 export { InventoryLayout } from "./pages/inventory-layout"
+export { StockDetailPage } from "./pages/stock-detail-page"
+export { StockPage } from "./pages/stock-page"
 export type {
 	AdjustmentCreateInput,
 	AdjustmentReason,
