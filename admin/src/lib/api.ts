@@ -28,8 +28,6 @@ import type {
 	CustomerListRow,
 	CustomerSearchResult,
 	CustomerUpdateInput,
-	Device,
-	Enrollment,
 	InventoryReceipt,
 	InvoiceCreateInput,
 	InvoiceVoidInput,
@@ -81,10 +79,6 @@ import type {
 	SupplierProductMapping,
 	SupplierProductUpdateInput,
 	SupplierUpdateInput,
-	Terminal,
-	TerminalCreateInput,
-	TerminalListQuery,
-	TerminalUpdateInput,
 	ThresholdInput,
 	Transfer,
 	TransferCreateInput,
@@ -196,23 +190,6 @@ export function isReauthRequired(error: unknown): boolean {
 }
 
 export const api = {
-	terminals: {
-		list: (query: TerminalListQuery = {}) =>
-			apiRequest<{ terminals: Terminal[] }>("/api/terminals", { query }),
-		get: (id: string) => apiRequest<{ terminal: Terminal }>(`/api/terminals/${id}`),
-		create: (input: TerminalCreateInput) =>
-			apiRequest<{ terminal: Terminal }>("/api/terminals", { method: "POST", body: input }),
-		update: (id: string, input: TerminalUpdateInput) =>
-			apiRequest<{ terminal: Terminal }>(`/api/terminals/${id}`, { method: "PATCH", body: input }),
-		devices: (id: string) => apiRequest<{ devices: Device[] }>(`/api/terminals/${id}/devices`),
-		revokeDevice: (id: string) =>
-			apiRequest<{ device: Device }>(`/api/devices/${id}/revoke`, { method: "POST" }),
-		createEnrollment: (id: string) =>
-			apiRequest<{ enrollment: Enrollment }>(`/api/terminals/${id}/enrollment`, {
-				method: "POST",
-			}),
-	},
-
 	customers: {
 		list: (query: CustomerListQuery = {}) =>
 			apiRequest<CustomerSearchResult>("/api/customers", { query }),

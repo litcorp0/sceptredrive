@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
-import { api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { staffListOptions } from "#/modules/staff"
+import { terminalListOptions } from "#/modules/terminals"
 import { RecentActivity } from "../components/recent-activity"
 import { StatCard } from "../components/stat-card"
 
@@ -18,10 +18,7 @@ export function DashboardPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const { branches, activeBranchId, activeBranch, canSelectBranch } = useBranch()
 
-	const terminalsQuery = useQuery({
-		queryKey: ["terminals", { branchId: activeBranchId ?? undefined }],
-		queryFn: () => api.terminals.list(activeBranchId ? { branchId: activeBranchId } : {}),
-	})
+	const terminalsQuery = useQuery(terminalListOptions({ branchId: activeBranchId ?? undefined }))
 
 	// The key was `['staff', { scope: 'dashboard' }]` before Phase 8; the root is unchanged, so a
 	// staff mutation still invalidates this card through the `['staff']` prefix.
