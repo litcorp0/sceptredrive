@@ -93,3 +93,15 @@ append to `evidence/suites.txt`.
 - Customer identity, branch-local credit, and global loyalty still behave exactly as before.
 - No PII, phone number, or account figure appears in a log line or a query key beyond the search
   term the API already accepts.
+
+## Carry-in from Plan 08 (must be resolved here)
+
+`admin/src/lib/api-types.ts` now has a **type-only reverse import** of `CustomerLoyaltySummary`
+from `#/modules/loyalty`, because Plan 08 moved that type but `CustomerDetail` (which embeds it)
+stayed behind. It is erased at build time, but it is `lib → module` and the convention says that
+edge must not exist.
+
+When this plan moves `CustomerDetail` into `modules/customers/types`, delete the import from
+`lib/api-types.ts` and let the customer module import `CustomerLoyaltySummary` from
+`#/modules/loyalty` instead. Also expose a customer query key from `modules/customers/api/keys.ts`
+and point `loyalty-adjust-dialog`'s raw `["customer", id]` invalidation at it.
