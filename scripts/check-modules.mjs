@@ -63,11 +63,9 @@ const PENDING_MODULES = [
   'catalog',
   'credit',
   'customers',
-  'dashboard',
   'inventory',
   'loyalty',
   'payables',
-  'staff',
   'suppliers',
   'terminals',
 ]
