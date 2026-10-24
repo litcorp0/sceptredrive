@@ -164,7 +164,9 @@ function isIdentifier(segment: string): boolean {
 }
 
 function humanise(segment: string): string {
-	const spaced = decodeSegment(segment).replace(/[-_]+/g, " ").trim()
+	// Callers pass an already-decoded path segment; decoding again would turn
+	// "/50%2525off" into "50%off".
+	const spaced = segment.replace(/[-_]+/g, " ").trim()
 	if (spaced === "") return segment
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }

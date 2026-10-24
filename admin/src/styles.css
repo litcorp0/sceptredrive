@@ -26,5 +26,6 @@
 :is(button, a[href], input, select, textarea, summary, [role="button"], [role="menuitem"], [role="tab"], [role="option"], [tabindex]:not([tabindex="-1"])):focus-visible {
 	outline: 2px solid var(--brand-ink);
 	outline-offset: 2px;
-	box-shadow: none;
+	/* Neutralise only the registry ring; keep elevation and aria-invalid cues. */
+	--tw-ring-shadow: 0 0 #0000;
 }
