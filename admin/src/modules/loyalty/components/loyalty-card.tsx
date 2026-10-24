@@ -1,11 +1,6 @@
 import { formatCount, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
-import {
-	LoyaltyAdjustDialog,
-	type LoyaltyRates,
-} from "#/components/customers/loyalty-adjust-dialog"
-import { LoyaltyHistoryTable } from "#/components/customers/loyalty-history-table"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -24,9 +19,12 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { formatGhs } from "#/lib/format"
-import { accountOptions, daysUntil, impliedValueMinor, isExpiringSoon } from "#/modules/loyalty"
 import type { ResolvedSetting, SettingKey } from "#/modules/settings"
 import { settingsListOptions } from "#/modules/settings"
+import { accountOptions } from "../api/loyalty"
+import { daysUntil, impliedValueMinor, isExpiringSoon } from "../utils/loyalty"
+import { LoyaltyAdjustDialog, type LoyaltyRates } from "./loyalty-adjust-dialog"
+import { LoyaltyHistoryTable } from "./loyalty-history-table"
 
 function numberSetting(settings: ResolvedSetting[], key: SettingKey): number | null {
 	const setting = settings.find((item) => item.key === key)

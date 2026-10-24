@@ -12,7 +12,7 @@ import {
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
-import type { LoyaltyLiabilityReport } from "#/modules/loyalty"
+import type { LoyaltyLiabilityReport } from "../types"
 
 const NUMBER_COLUMNS = [
 	"earnedPoints",

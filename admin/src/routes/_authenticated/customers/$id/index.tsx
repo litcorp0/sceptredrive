@@ -10,7 +10,6 @@ import {
 	ArchiveCustomerDialog,
 	ReactivateCustomerButton,
 } from "#/components/customers/customer-lifecycle-dialogs"
-import { LoyaltyCard } from "#/components/customers/loyalty-card"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -47,6 +46,7 @@ import {
 	CreditProfileDialog,
 	RepaymentDialog,
 } from "#/modules/credit"
+import { LoyaltyCard } from "#/modules/loyalty"
 
 export const Route = createFileRoute("/_authenticated/customers/$id/")({
 	component: CustomerProfilePage,

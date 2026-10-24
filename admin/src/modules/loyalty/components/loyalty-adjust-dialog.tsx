@@ -24,16 +24,15 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import { loyaltyKeys } from "../api/keys"
+import { createLoyaltyEntry } from "../api/loyalty"
+import type { LoyaltyReasonCode, LoyaltyStaffKind } from "../types"
 import {
-	createLoyaltyEntry,
 	impliedValueMinor,
 	LOYALTY_ADJUST_REASONS,
 	LOYALTY_REASON_LABELS,
-	type LoyaltyReasonCode,
-	type LoyaltyStaffKind,
-	loyaltyKeys,
 	signedPoints,
-} from "#/modules/loyalty"
+} from "../utils/loyalty"
 
 export interface LoyaltyRates {
 	earnPointsPerCedi: number

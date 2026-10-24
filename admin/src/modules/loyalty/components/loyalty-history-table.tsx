@@ -10,13 +10,13 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import type { LoyaltyEntry } from "../types"
 import {
 	LOYALTY_KIND_LABELS,
 	LOYALTY_KIND_TONES,
 	LOYALTY_REASON_LABELS,
-	type LoyaltyEntry,
 	signedPoints,
-} from "#/modules/loyalty"
+} from "../utils/loyalty"
 
 /**
  * The loyalty ledger for one customer: recent entries in the order the API

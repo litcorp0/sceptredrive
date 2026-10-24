@@ -14,6 +14,11 @@
 
 export { loyaltyKeys } from "./api/keys"
 export { accountOptions, createLoyaltyEntry, liabilityOptions } from "./api/loyalty"
+export { LiabilityReport } from "./components/liability-report"
+export { LoyaltyAdjustDialog, type LoyaltyRates } from "./components/loyalty-adjust-dialog"
+export { LoyaltyCard } from "./components/loyalty-card"
+export { LoyaltyHistoryTable } from "./components/loyalty-history-table"
+export { LoyaltyPage } from "./pages/loyalty-page"
 export type {
 	CustomerLoyaltySummary,
 	LoyaltyAccount,
