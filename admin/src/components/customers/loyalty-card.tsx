@@ -23,9 +23,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
-import { daysUntil, impliedValueMinor, isExpiringSoon } from "#/lib/loyalty"
+import { accountOptions, daysUntil, impliedValueMinor, isExpiringSoon } from "#/modules/loyalty"
 import type { ResolvedSetting, SettingKey } from "#/modules/settings"
 import { settingsListOptions } from "#/modules/settings"
 
@@ -52,10 +51,7 @@ export function LoyaltyCard({
 }) {
 	const [adjustOpen, setAdjustOpen] = useState(false)
 
-	const accountQuery = useQuery({
-		queryKey: ["loyalty-account", customerId],
-		queryFn: () => api.loyalty.account(customerId),
-	})
+	const accountQuery = useQuery(accountOptions(customerId))
 	const settingsQuery = useQuery({
 		...settingsListOptions({}),
 		staleTime: 5 * 60_000,

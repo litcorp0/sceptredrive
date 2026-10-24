@@ -5,8 +5,9 @@ import { PageHeader } from "#/components/common/page-header"
 import { LiabilityReport } from "#/components/customers/liability-report"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
-import { ApiError, api } from "#/lib/api"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { liabilityOptions } from "#/modules/loyalty"
 
 export const Route = createFileRoute("/_authenticated/loyalty")({
 	component: LoyaltyPage,
@@ -21,10 +22,7 @@ function LoyaltyPage() {
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
 
-	const liabilityQuery = useQuery({
-		queryKey: ["loyalty-liability", { from, to }],
-		queryFn: () => api.loyalty.liability({ from: from || undefined, to: to || undefined }),
-	})
+	const liabilityQuery = useQuery(liabilityOptions({ from, to }))
 
 	const liabilityError =
 		liabilityQuery.error instanceof ApiError

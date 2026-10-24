@@ -18,11 +18,6 @@ import type {
 	CustomerUpdateInput,
 	InvoiceCreateInput,
 	InvoiceVoidInput,
-	LoyaltyAccountDetail,
-	LoyaltyEntryCreateInput,
-	LoyaltyLiabilityQuery,
-	LoyaltyLiabilityReport,
-	LoyaltyPostingResult,
 	PayablesAgingQuery,
 	PayablesAgingResult,
 	PaymentCreateInput,
@@ -212,17 +207,6 @@ export const api = {
 					body: input,
 				}),
 		},
-	},
-
-	loyalty: {
-		account: (customerId: string) =>
-			apiRequest<LoyaltyAccountDetail>(`/api/loyalty/accounts/${customerId}`),
-		entries: {
-			create: (input: LoyaltyEntryCreateInput) =>
-				apiRequest<LoyaltyPostingResult>("/api/loyalty/entries", { method: "POST", body: input }),
-		},
-		liability: (query: LoyaltyLiabilityQuery = {}) =>
-			apiRequest<LoyaltyLiabilityReport>("/api/loyalty/liability", { query }),
 	},
 
 	suppliers: {

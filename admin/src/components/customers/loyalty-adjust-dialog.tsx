@@ -21,16 +21,19 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { LoyaltyReasonCode, LoyaltyStaffKind } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
+import { toastApiError } from "#/lib/toast"
 import {
+	createLoyaltyEntry,
 	impliedValueMinor,
 	LOYALTY_ADJUST_REASONS,
 	LOYALTY_REASON_LABELS,
+	type LoyaltyReasonCode,
+	type LoyaltyStaffKind,
+	loyaltyKeys,
 	signedPoints,
-} from "#/lib/loyalty"
-import { toastApiError } from "#/lib/toast"
+} from "#/modules/loyalty"
 
 export interface LoyaltyRates {
 	earnPointsPerCedi: number
@@ -100,7 +103,7 @@ export function LoyaltyAdjustDialog({
 			reasonCode?: LoyaltyReasonCode
 			note?: string
 		}) =>
-			api.loyalty.entries.create({
+			createLoyaltyEntry({
 				customerId,
 				branchId: branchId ?? undefined,
 				kind,
@@ -124,9 +127,9 @@ export function LoyaltyAdjustDialog({
 				toast.success(`${label[kind]} recorded — ${signedPoints(data.entry.pointsDelta)} points`)
 			}
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["loyalty-account", customerId] }),
+				queryClient.invalidateQueries({ queryKey: loyaltyKeys.account(customerId) }),
 				queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
-				queryClient.invalidateQueries({ queryKey: ["loyalty-liability"] }),
+				queryClient.invalidateQueries({ queryKey: loyaltyKeys.liability }),
 			])
 			onOpenChange(false)
 		},

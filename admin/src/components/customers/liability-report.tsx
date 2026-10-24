@@ -10,9 +10,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import type { LoyaltyLiabilityReport } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
+import type { LoyaltyLiabilityReport } from "#/modules/loyalty"
 
 const NUMBER_COLUMNS = [
 	"earnedPoints",

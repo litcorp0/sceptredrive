@@ -1,6 +1,6 @@
 import { formatCount } from "@sceptre/shared"
 import { differenceInCalendarDays, isAfter } from "date-fns"
-import type { LoyaltyEntryKind, LoyaltyReasonCode, LoyaltyStaffKind } from "#/lib/api-types"
+import type { LoyaltyEntryKind, LoyaltyReasonCode, LoyaltyStaffKind } from "../types"
 
 /** The liability headline looks 30 days ahead, matching the API window. */
 export const EXPIRING_SOON_DAYS = 30
