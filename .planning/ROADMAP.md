@@ -220,12 +220,16 @@ helpers; the first pass of the redesigned shell chrome.
 **Goal:** Every admin screen is assembled inside a domain module and the route file only
 routes, so a feature can be understood, tested, and changed without reading the router.
 
+**Status:** ✅ Complete (verified 2026-10-24 — see
+`phases/08-admin-modules-shell/01-VERIFICATION.md`; transcript in `evidence/suites.txt`)
+
 **Dependencies:** Phases 1–7
 **Requirements:** UIX-06, UIX-07
 
 **Success Criteria**
 1. `admin/src/modules/` contains every domain, and every module has `api/`, `components/`,
-   `hooks/`, `pages/`, `types/`, `ui/`, and `utils/`.
+   `hooks/`, `pages/`, `types/`, `ui/`, and `utils/`. *(D2 refines this: a folder appears
+   only when it has content, so no module carries an empty one.)*
 2. Every file under `admin/src/routes/` is a thin route: `createFileRoute` plus a single
    page import, with no page markup.
 3. A module cannot reach into another module's internals — cross-module use goes through

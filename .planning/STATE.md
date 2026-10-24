@@ -5,13 +5,12 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-24
-**Status:** **Phase 7 (Identity, Design System & Brand Foundation) complete — 7/7 plans,
-verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
-System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
-inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
-(Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
-became Phases 13/14/15.
-**Next action:** Plan **Phase 8** (Admin Module Architecture & Shell).
+**Status:** **Phase 8 (Admin Module Architecture & Shell) complete — 13/13 plans, verified.** The
+roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin
+Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of
+the former Phases 7–9, and a later audit the same day added Phase 11 (Procurement & Replenishment)
+and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
+**Next action:** Plan **Phase 9** (Analytics, Dashboard & Reporting Read Models).
 
 ---
 
@@ -27,7 +26,7 @@ became Phases 13/14/15.
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
-| 8 | Admin Module Architecture & Shell | ⬜ Not started |
+| 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
@@ -35,6 +34,24 @@ became Phases 13/14/15.
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 8 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Module scaffolding, import convention, modules gate | ✅ Complete |
+| 02 | Shared pickers, auth, audit, settings | ✅ Complete |
+| 03 | Staff module (the 742-line route), dashboard pulled forward | ✅ Complete |
+| 04 | Branches and terminals | ✅ Complete |
+| 05 | Catalog module | ✅ Complete |
+| 06 | Inventory module | ✅ Complete |
+| 07 | Credit module | ✅ Complete |
+| 08 | Loyalty module | ✅ Complete |
+| 09 | Customers module (composition root) | ✅ Complete |
+| 10 | Suppliers module | ✅ Complete |
+| 11 | Payables module, last component folder retired | ✅ Complete |
+| 12 | Dashboard module and the UIX-07 shell audit | ✅ Complete |
+| 13 | Section walkthrough, verification, state update | ✅ Complete |
 
 ### Phase 7 plan progress
 
@@ -323,6 +340,59 @@ became Phases 13/14/15.
   - **Re-enrolment consequence unchanged:** the rename moved Electron's `userData` and
     invalidated device tokens, so existing development terminals must re-enrol
     (`desktop/README.md`).
+
+### Phase 8 execution notes (2026-10-24)
+
+- **Goal met:** 14 domain modules exist, every route that owns a body is ≤ 25 lines and imports
+  one barrel, and `lib/api-types.ts` is deleted with zero importers. `bun run modules:check:strict`
+  is green and is now a CI step.
+- **Numbers.** `admin/src/routes` fell from **9,770 to 780 lines** across the same 53 files;
+  `lib/api.ts` from 651 to **102** (transport only); 64 domain components moved into modules;
+  79 inline `queryKey` sites became module `api/keys.ts` factories. Largest route that owns a body
+  is now `login.tsx` at 25 (three exemptions: `__root.tsx`, `dev-charts.tsx`, and the
+  authenticated shell layout, each named in the gate with a reason).
+- **The gate is the phase's real deliverable.** `scripts/check-modules.mjs` separates hard rules
+  (module shape, deep imports, self-aliasing, migrated-route thinness) from progress targets
+  (pending modules, unmigrated routes, legacy component imports, `lib/api-types` importers,
+  `lib/api.ts` groups). Progress fails only `--strict`, which CI runs — otherwise the gate would
+  have been red for the whole phase and a real regression would have hidden in the noise.
+  `evidence/verify-module-gate.mjs` proves it can fail **20/20** with twelve mutations restored
+  byte-for-byte.
+- **Biome finding (carry forward).** `noRestrictedImports` has no importer-aware scope, so the
+  boundary rule cannot exempt a module from deep-importing itself. The convention is therefore
+  *relative imports inside a module, the barrel across modules*, and the gate enforces the
+  self-alias case that Biome cannot. A leading `#` in a pattern is **not** treated as a gitignore
+  comment — verified by probe before building on it.
+- **Two cycles were designed out, one was caught in review.** `supplier-combobox`,
+  `product-picker` and `invoice-status-badge` moved to `components/common` because each is used by
+  more than one domain and each would have made a barrel re-export a component into a cycle. The
+  loyalty adjust dialog's import of the customers key was caught mid-phase and replaced with the
+  literal key. `inventory ↔ payables` and `suppliers ↔ payables` remain two-way **data** edges,
+  documented in `admin/src/modules/README.md`.
+- **Deviations, all recorded.** Migration order amended from D8 (credit → loyalty → customers,
+  because the 470-line customer detail route composes all three; suppliers before payables, which
+  are 9 routes and 19 components between them). The dashboard moved from Plan 12 to Plan 03 because
+  its staff count was the last reader of the `api.staff` group. No `hooks/` folder in staff: its
+  four mutations each close over one component's state, so extracting them would have been a
+  rewrite. `modules:check` judges a route by its body rather than by its imports, because Plan 07
+  required flipping imports in a route whose body belongs to Plan 09.
+- **Verification.** `walkthrough-sections.mjs` **49/49** (25 sections + 8 detail screens + statement,
+  then a manager leg that completes the forced password change, proves the branch lock and a
+  foreign `branchId`), `capture-shell.mjs` **16/16**, API **360**, shared **96**, desktop **339**,
+  `check-types` 6/6, lint clean (24 pre-existing warnings), admin build and desktop package green.
+  Report: `phases/08-admin-modules-shell/01-VERIFICATION.md`; transcript: `evidence/suites.txt`.
+- **Pre-existing defects found, not fixed (D9):** SSR hydration mismatch on
+  `/inventory/transfers/new` (body byte-identical to the pre-Phase-8 route), the shell's branch
+  provider requesting `/api/branches` for managers (one 403 per load), `["supplier-balances"]` never
+  invalidated after a payment, and client-side money arithmetic in the receipt detail and credit
+  ledger.
+- **Test-harness note.** `bun run test` produced one 5 s timeout in
+  `api/src/modules/sync/sync.test.ts` while a browser suite and the build were running concurrently;
+  the file passes 18/18 in isolation and the full suite passes 360/360 alone. Run the suite without
+  parallel browser runs.
+- **The admin still has no unit tests.** The section walkthrough is the regression net; it lives at
+  `admin/test/walkthrough-sections.mjs` and runs as `bun run --filter admin test:walkthrough`, NOT
+  as `test`, so root `bun run test` keeps skipping the admin package.
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
