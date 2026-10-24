@@ -42,5 +42,27 @@
         }
       }
     }
-  ]
+  ],
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": [
+                  "@/modules/*/components/**",
+                  "@/modules/*/ui/**",
+                  "@/modules/*/hooks/**",
+                  "@/modules/*/api/**"
+                ],
+                "message": "Import the module barrel (@/modules/<name>) instead of reaching into its internals."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
 }
