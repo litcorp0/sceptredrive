@@ -1,4 +1,5 @@
 export * from './branch-code.ts'
+export * from './dates.ts'
 export * from './inventory.ts'
 export * from './permissions.ts'
 export * from './phone.ts'
