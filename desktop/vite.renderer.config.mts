@@ -69,6 +69,15 @@ export default defineConfig(({ command }) => {
     build: {
       // Renderer assets are served from the `app://sceptre-drive` origin.
       target: 'chrome140',
+      /**
+       * Fonts are never inlined. The CSP is `font-src 'self'`, so a Base64
+       * `data:` URI is blocked outright — and several `@fontsource` unicode-range
+       * subsets (JetBrains Mono cyrillic, for one) are under Vite's 4 KiB
+       * threshold. Widening the policy to `data:` would weaken it for every
+       * font; opting fonts out of inlining keeps them real files on `app://`.
+       */
+      assetsInlineLimit: (filePath: string) =>
+        /\.(?:woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
     },
   }
 })

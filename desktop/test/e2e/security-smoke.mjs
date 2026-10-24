@@ -75,18 +75,34 @@ async function freePort() {
   })
 }
 
+/**
+ * Wait until the app is actually driveable, not merely listening.
+ *
+ * `/json/version` answers as soon as the DevTools HTTP server binds, which can be
+ * before Chromium has a browser or page target. Connecting at that moment makes
+ * `connectOverCDP` hang until it times out, so wait for a `page` target instead.
+ */
 async function waitForCdp(port, timeoutMs) {
   const deadline = Date.now() + timeoutMs
+  let listening = false
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
-      if (response.ok) return
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`)
+      if (response.ok) {
+        listening = true
+        const targets = await response.json()
+        if (Array.isArray(targets) && targets.some((target) => target.type === 'page')) return
+      }
     } catch {
       // Not listening yet.
     }
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  throw new Error(`CDP endpoint on :${port} did not come up within ${timeoutMs}ms`)
+  throw new Error(
+    listening
+      ? `CDP on :${port} never exposed a page target within ${timeoutMs}ms`
+      : `CDP endpoint on :${port} did not come up within ${timeoutMs}ms`,
+  )
 }
 
 async function checkProductionRenderer() {

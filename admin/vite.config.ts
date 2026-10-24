@@ -21,6 +21,16 @@ const config = defineConfig({
 		// Vite (deduped) instead of Node resolving a second copy from the store.
 		noExternal: ["sonner"],
 	},
+	build: {
+		// Fonts are never inlined. `@fontsource` ships many unicode-range subsets,
+		// and the small ones (JetBrains Mono cyrillic) fall under Vite's 4 KiB
+		// threshold — so they became `data:` URIs, which `font-src 'self'` blocks
+		// in the desktop client and which the browser will not cache here either.
+		// The desktop CSP is deliberately not widened; both apps keep fonts as
+		// real files.
+		assetsInlineLimit: (filePath: string) =>
+			/\.(?:woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
+	},
 	plugins: [
 		devtools(),
 		nitro({ rollupConfig: { external: [/^@sentry\//] } }),
