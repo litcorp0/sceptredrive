@@ -1,9 +1,9 @@
-name: gikautos-dev
+name: sceptre-drive-dev
 
 services:
   postgres:
     image: postgres:18-alpine
-    container_name: gikautos-postgres
+    container_name: sceptre-drive-postgres
     restart: unless-stopped
     command:
       - postgres
@@ -14,9 +14,9 @@ services:
       - -c
       - max_wal_senders=10
     environment:
-      POSTGRES_USER: gikautos
-      POSTGRES_PASSWORD: gikautos
-      POSTGRES_DB: gikautos
+      POSTGRES_USER: sceptre_drive
+      POSTGRES_PASSWORD: sceptre_drive
+      POSTGRES_DB: sceptre_drive
     # Mapped to 5433 on the host so it never clashes with a system Postgres on
     # 5432. Override with POSTGRES_PORT when 5433 is taken (see .env.example).
     ports:
@@ -24,7 +24,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gikautos -d gikautos"]
+      test: ["CMD-SHELL", "pg_isready -U sceptre_drive -d sceptre_drive"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -35,7 +35,7 @@ services:
   # Staging and production use PowerSync Cloud with the same sync-config.yaml.
   powersync:
     image: journeyapps/powersync-service:1.27.1
-    container_name: gikautos-powersync
+    container_name: sceptre-drive-powersync
     restart: unless-stopped
     profiles: ["sync"]
     command: ["start", "-r", "unified"]
@@ -47,8 +47,8 @@ services:
       - "8080:8080"
     environment:
       POWERSYNC_CONFIG_PATH: /config/service.yaml
-      PS_DATA_SOURCE_URI: ${PS_DATA_SOURCE_URI:-postgresql://powersync_role:powersync_role@postgres:5432/gikautos}
-      PS_STORAGE_URI: ${PS_STORAGE_URI:-postgresql://powersync_storage:powersync_storage@postgres:5432/gikautos_powersync}
+      PS_DATA_SOURCE_URI: ${PS_DATA_SOURCE_URI:-postgresql://powersync_role:powersync_role@postgres:5432/sceptre_drive}
+      PS_STORAGE_URI: ${PS_STORAGE_URI:-postgresql://powersync_storage:powersync_storage@postgres:5432/sceptre_drive_powersync}
       # The API runs on the host; the container fetches its JWKS over this alias.
       PS_JWKS_URI: ${PS_JWKS_URI:-http://host.docker.internal:4000/.well-known/jwks.json}
       PS_ADMIN_TOKEN: ${PS_ADMIN_TOKEN:-dev-powersync-admin-token}

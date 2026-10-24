@@ -16,10 +16,10 @@ powersync/
 
 ```bash
 bun run db:up                     # Docker Postgres (host port from POSTGRES_PORT, default 5433)
-DATABASE_URL=postgresql://gikautos:gikautos@localhost:5433/gikautos bun run db:migrate
-DATABASE_URL=postgresql://gikautos:gikautos@localhost:5433/gikautos bun run db:seed -- --demo
+DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:5433/sceptre_drive bun run db:migrate
+DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:5433/sceptre_drive bun run db:seed -- --demo
 bun run sync:init                 # roles + storage DB + publication (first time, idempotent)
-DATABASE_URL=postgresql://gikautos:gikautos@localhost:5433/gikautos bun run dev:api
+DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:5433/sceptre_drive bun run dev:api
 bun run sync:up                   # starts the service on :8080
 bun run sync:logs                 # wait for "Activated new replication stream"
 ```
@@ -33,7 +33,7 @@ file and `db:test:prepare` both honour it) and use the same port in `DATABASE_UR
 |---|---|---|
 | `POSTGRES_PORT` | compose | Host port for the Docker Postgres |
 | `PS_DATA_SOURCE_URI` | service | Replication connection (role `powersync_role`) |
-| `PS_STORAGE_URI` | service | Bucket storage (`gikautos_powersync`, role `powersync_storage`) |
+| `PS_STORAGE_URI` | service | Bucket storage (`sceptre_drive_powersync`, role `powersync_storage`) |
 | `PS_JWKS_URI` | service | Where the service fetches our public key |
 | `PS_ADMIN_TOKEN` | service / CLI | Admin API bearer token (development only) |
 | `POWERSYNC_URL` | API | Instance URL returned to clients; unset ⇒ token endpoint answers 503 |

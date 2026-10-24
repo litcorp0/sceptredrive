@@ -39,7 +39,7 @@ const envSchema = z.object({
   STAFF_ID_PREFIX: z.string().min(1).max(8).default('GA'),
   STAFF_ID_START: z.coerce.number().int().positive().default(1),
   RESEND_API_KEY: optionalNonEmpty(z.string().min(1)),
-  EMAIL_FROM: z.string().min(1).default('GikAutos <no-reply@gikautos.local>'),
+  EMAIL_FROM: z.string().min(1).default('Sceptre Drive <no-reply@sceptre.local>'),
   // --- POS device auth / PowerSync ---
   // Instance URL of the PowerSync service. Absent means "sync not configured":
   // the token endpoint answers 503 instead of the API refusing to boot.

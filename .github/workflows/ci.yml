@@ -19,21 +19,21 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: gikautos
-          POSTGRES_PASSWORD: gikautos
-          POSTGRES_DB: gikautos_test
+          POSTGRES_USER: sceptre_drive
+          POSTGRES_PASSWORD: sceptre_drive
+          POSTGRES_DB: sceptre_drive_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U gikautos -d gikautos_test"
+          --health-cmd "pg_isready -U sceptre_drive -d sceptre_drive_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://gikautos:gikautos@localhost:5432/gikautos_test
-      TEST_DATABASE_URL: postgresql://gikautos:gikautos@localhost:5432/gikautos_test
+      DATABASE_URL: postgresql://sceptre_drive:sceptre_drive@localhost:5432/sceptre_drive_test
+      TEST_DATABASE_URL: postgresql://sceptre_drive:sceptre_drive@localhost:5432/sceptre_drive_test
       BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-32ch
       VITE_API_URL: http://localhost:4000
 

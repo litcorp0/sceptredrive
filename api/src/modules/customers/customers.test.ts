@@ -54,7 +54,7 @@ describe.skipIf(!available)('customers service', () => {
   function makeUser(overrides: Partial<SessionUser>): SessionUser {
     return {
       id: `user-${suffix}`,
-      email: `user-${suffix}@gikautos.test`,
+      email: `user-${suffix}@sceptre.test`,
       name: 'Fixture User',
       emailVerified: false,
       createdAt: new Date(),

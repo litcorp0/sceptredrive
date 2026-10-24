@@ -40,7 +40,7 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v7
         with:
-          name: gikautos-pos-windows-installer
+          name: sceptre-pos-windows-installer
           path: |
             desktop/out/make/**/*.exe
             desktop/out/make/**/*.nupkg

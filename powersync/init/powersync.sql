@@ -1,11 +1,11 @@
 -- PowerSync development bootstrap. Idempotent: safe to re-run.
 --
 -- Run with:  bun run sync:init
---            (docker compose exec -T postgres psql -U gikautos -d gikautos)
+--            (docker compose exec -T postgres psql -U sceptre_drive -d sceptre_drive)
 --
 -- Creates:
 --   1. `powersync_role`        — logical-replication reader on the source DB
---   2. `gikautos_powersync`    — bucket storage database (Postgres storage)
+--   2. `sceptre_drive_powersync`    — bucket storage database (Postgres storage)
 --   3. the `powersync` publication scoped to the synced tables only
 --
 -- Passwords here are development-only. Staging and production use PowerSync
@@ -22,7 +22,7 @@ BEGIN
 END
 $$;
 
-GRANT CONNECT ON DATABASE gikautos TO powersync_role;
+GRANT CONNECT ON DATABASE sceptre_drive TO powersync_role;
 GRANT USAGE ON SCHEMA public TO powersync_role;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role;
@@ -36,11 +36,11 @@ BEGIN
 END
 $$;
 
-SELECT 'CREATE DATABASE gikautos_powersync OWNER powersync_storage'
-WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'gikautos_powersync')
+SELECT 'CREATE DATABASE sceptre_drive_powersync OWNER powersync_storage'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'sceptre_drive_powersync')
 \gexec
 
-GRANT CREATE ON DATABASE gikautos_powersync TO powersync_storage;
+GRANT CREATE ON DATABASE sceptre_drive_powersync TO powersync_storage;
 
 -- 3. Publication ------------------------------------------------------------
 -- Scoped to the synced tables: ledger, staff, audit, and payable tables are

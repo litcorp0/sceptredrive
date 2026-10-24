@@ -25,7 +25,7 @@ export async function seedAdmin(): Promise<SeedAdminResult> {
   await db.transaction(async (tx) => {
     await createUserWithCredential(tx, {
       email,
-      name: 'GikAutos Admin',
+      name: 'Sceptre Drive Admin',
       password,
       role: 'ADMIN',
       branchId: null,

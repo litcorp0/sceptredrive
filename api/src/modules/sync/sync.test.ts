@@ -197,7 +197,7 @@ describe.skipIf(!available)('POS device session and PowerSync token', () => {
     deviceId = deviceRows[0]?.id ?? ''
 
     const cashier = await createStaffForPin({
-      email: `pos-cashier-${suffix}@gikautos.test`,
+      email: `pos-cashier-${suffix}@sceptre.test`,
       name: 'POS Cashier',
       role: 'CASHIER',
       branchId,
@@ -208,7 +208,7 @@ describe.skipIf(!available)('POS device session and PowerSync token', () => {
     await seedPin(cashierUserId, '2468')
 
     const manager = await createStaffForPin({
-      email: `pos-manager-${suffix}@gikautos.test`,
+      email: `pos-manager-${suffix}@sceptre.test`,
       name: 'POS Manager',
       role: 'MANAGER',
       branchId,
@@ -232,7 +232,7 @@ describe.skipIf(!available)('POS device session and PowerSync token', () => {
     createdBranchIds.push(otherBranchId)
 
     const otherCashier = await createStaffForPin({
-      email: `pos-other-${suffix}@gikautos.test`,
+      email: `pos-other-${suffix}@sceptre.test`,
       name: 'Other Branch Cashier',
       role: 'CASHIER',
       branchId: otherBranchId,
@@ -502,7 +502,7 @@ describe.skipIf(!available)('POS device session and PowerSync token', () => {
     expect((await readJson<{ error: { code: string } }>(wrongPin)).error.code).toBe('PIN_INVALID')
 
     const unknown = await authorizeRequest(session.accessToken, {
-      email: `nobody-${suffix}@gikautos.test`,
+      email: `nobody-${suffix}@sceptre.test`,
       pin: '2468',
     })
     expect(unknown.status).toBe(401)
