@@ -19,9 +19,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
-import { ApiError, api } from "#/lib/api"
-import type { Category } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { type Category, catalogKeys, createCategory, updateCategory } from "#/modules/catalog"
 
 const TOP_LEVEL = "top-level"
 
@@ -61,13 +61,11 @@ export function CategoryDialog({
 	const saveMutation = useMutation({
 		mutationFn: () => {
 			const payload = { name, parentId: parentId === TOP_LEVEL ? null : parentId }
-			return isEdit && category
-				? api.catalog.categories.update(category.id, payload)
-				: api.catalog.categories.create(payload)
+			return isEdit && category ? updateCategory(category.id, payload) : createCategory(payload)
 		},
 		onSuccess: async () => {
 			toast.success(isEdit ? "Category updated" : "Category created")
-			await queryClient.invalidateQueries({ queryKey: ["categories"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.categories })
 			onOpenChange(false)
 		},
 		onError: (error) => {

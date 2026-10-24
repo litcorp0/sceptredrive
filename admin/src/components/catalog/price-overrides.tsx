@@ -4,11 +4,16 @@ import { toast } from "sonner"
 import { StatusBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
-import { api } from "#/lib/api"
-import type { PriceOverride } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import type { Branch } from "#/modules/branches"
+import {
+	catalogKeys,
+	type PriceOverride,
+	productPricesOptions,
+	removeProductPrice,
+	setProductPrice,
+} from "#/modules/catalog"
 
 export function PriceOverrides({
 	productId,
@@ -23,10 +28,7 @@ export function PriceOverrides({
 	canOverride: boolean
 	disabled?: boolean
 }) {
-	const pricesQuery = useQuery({
-		queryKey: ["product-prices", productId],
-		queryFn: () => api.products.prices.list(productId),
-	})
+	const pricesQuery = useQuery(productPricesOptions(productId))
 
 	const overrides = pricesQuery.data?.overrides ?? []
 
@@ -96,16 +98,16 @@ function OverrideRow({
 	const effectiveMinor = override ? override.priceMinor : basePriceMinor
 
 	async function invalidate() {
-		await queryClient.invalidateQueries({ queryKey: ["product-prices", productId] })
-		await queryClient.invalidateQueries({ queryKey: ["products"] })
-		await queryClient.invalidateQueries({ queryKey: ["product", productId] })
+		await queryClient.invalidateQueries({ queryKey: catalogKeys.productPrices(productId) })
+		await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
+		await queryClient.invalidateQueries({ queryKey: catalogKeys.productDetail(productId) })
 	}
 
 	const saveMutation = useMutation({
 		mutationFn: () => {
 			const priceMinor = parseGhsToMinor(value)
 			if (priceMinor === null) throw new Error("Enter a valid amount, e.g. 95.00")
-			return api.products.prices.set(productId, { branchId: branch.id, priceMinor })
+			return setProductPrice(productId, { branchId: branch.id, priceMinor })
 		},
 		onSuccess: async () => {
 			toast.success(`Override saved for ${branch.code}`)
@@ -121,7 +123,7 @@ function OverrideRow({
 	})
 
 	const removeMutation = useMutation({
-		mutationFn: () => api.products.prices.remove(productId, branch.id),
+		mutationFn: () => removeProductPrice(productId, branch.id),
 		onSuccess: async () => {
 			toast.success(`Override removed for ${branch.code}`)
 			await invalidate()

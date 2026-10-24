@@ -12,9 +12,9 @@ import {
 } from "#/components/ui/dialog"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
-import { ApiError, api } from "#/lib/api"
-import type { Uom } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { catalogKeys, createUnit, type Uom, updateUnit } from "#/modules/catalog"
 
 export function UnitDialog({
 	open,
@@ -40,13 +40,10 @@ export function UnitDialog({
 	}, [open, unit])
 
 	const saveMutation = useMutation({
-		mutationFn: () =>
-			isEdit && unit
-				? api.catalog.units.update(unit.id, { name })
-				: api.catalog.units.create({ code, name }),
+		mutationFn: () => (isEdit && unit ? updateUnit(unit.id, { name }) : createUnit({ code, name })),
 		onSuccess: async () => {
 			toast.success(isEdit ? "Unit updated" : "Unit created")
-			await queryClient.invalidateQueries({ queryKey: ["uoms"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.uoms })
 			onOpenChange(false)
 		},
 		onError: (error) => {

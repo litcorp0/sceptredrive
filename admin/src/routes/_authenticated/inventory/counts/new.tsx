@@ -17,6 +17,7 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
+import { categoryListOptions } from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/inventory/counts/new")({
 	component: NewCountPage,
@@ -35,10 +36,7 @@ function NewCountPage() {
 	const [note, setNote] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 
-	const categoriesQuery = useQuery({
-		queryKey: ["categories", { includeArchived: false }],
-		queryFn: () => api.catalog.categories.list(),
-	})
+	const categoriesQuery = useQuery(categoryListOptions())
 
 	const categories = categoriesQuery.data?.categories ?? []
 

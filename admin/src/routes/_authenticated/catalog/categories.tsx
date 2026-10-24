@@ -16,10 +16,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { Category } from "#/lib/api-types"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import {
+	archiveCategory,
+	type Category,
+	catalogKeys,
+	categoryListOptions,
+	reactivateCategory,
+} from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/categories")({
 	component: CategoriesTab,
@@ -44,10 +49,7 @@ function CategoriesTab() {
 		action: "archive" | "reactivate"
 	} | null>(null)
 
-	const categoriesQuery = useQuery({
-		queryKey: ["categories", { includeArchived: true }],
-		queryFn: () => api.catalog.categories.list({ includeArchived: true }),
-	})
+	const categoriesQuery = useQuery(categoryListOptions({ includeArchived: true }))
 
 	const parents = categoriesQuery.data?.categories ?? []
 	const rows: Row[] = parents.flatMap((parent) => [
@@ -59,15 +61,13 @@ function CategoriesTab() {
 		mutationFn: () => {
 			if (!confirmTarget) throw new Error("Nothing to confirm")
 			const { category, action } = confirmTarget
-			return action === "archive"
-				? api.catalog.categories.archive(category.id)
-				: api.catalog.categories.reactivate(category.id)
+			return action === "archive" ? archiveCategory(category.id) : reactivateCategory(category.id)
 		},
 		onSuccess: async () => {
 			toast.success(
 				confirmTarget?.action === "archive" ? "Category archived" : "Category reactivated",
 			)
-			await queryClient.invalidateQueries({ queryKey: ["categories"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.categories })
 			setConfirmTarget(null)
 		},
 		onError: (error) => {

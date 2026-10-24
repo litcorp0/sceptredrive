@@ -14,17 +14,21 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type {
-	Brand,
-	CategoryTreeNode,
-	ProductRow,
-	TaxCategory,
-	TaxMode,
-	Uom,
-} from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import {
+	type Brand,
+	type CategoryTreeNode,
+	catalogKeys,
+	createProduct,
+	type ProductRow,
+	suggestProductSku,
+	type TaxCategory,
+	type TaxMode,
+	type Uom,
+	updateProduct,
+} from "#/modules/catalog"
 import { settingsListOptions } from "#/modules/settings"
 
 const NO_BRAND = "none"
@@ -118,8 +122,7 @@ export function ProductForm({
 	useEffect(() => {
 		if (isEdit || readOnly) return
 		let cancelled = false
-		void api.products
-			.suggestSku()
+		void suggestProductSku()
 			.then((suggestion) => {
 				if (cancelled) return
 				setValues((current) => (current.sku ? current : { ...current, sku: suggestion.sku }))
@@ -137,7 +140,7 @@ export function ProductForm({
 	async function handleSuggest() {
 		setSuggesting(true)
 		try {
-			const suggestion = await api.products.suggestSku()
+			const suggestion = await suggestProductSku()
 			update("sku", suggestion.sku)
 		} catch (error) {
 			toastApiError(error)
@@ -172,15 +175,17 @@ export function ProductForm({
 			}
 
 			if (isEdit && initialProduct) {
-				return api.products.update(initialProduct.id, payload)
+				return updateProduct(initialProduct.id, payload)
 			}
-			return api.products.create({ ...payload, barcodes: createBarcodes })
+			return createProduct({ ...payload, barcodes: createBarcodes })
 		},
 		onSuccess: async (data) => {
 			toast.success(isEdit ? "Product saved" : "Product created")
-			await queryClient.invalidateQueries({ queryKey: ["products"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
 			if (isEdit && initialProduct) {
-				await queryClient.invalidateQueries({ queryKey: ["product", initialProduct.id] })
+				await queryClient.invalidateQueries({
+					queryKey: catalogKeys.productDetail(initialProduct.id),
+				})
 			}
 			onSaved?.(data.product)
 		},

@@ -16,10 +16,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { Brand } from "#/lib/api-types"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import {
+	archiveBrand,
+	type Brand,
+	brandListOptions,
+	catalogKeys,
+	reactivateBrand,
+} from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/brands")({
 	component: BrandsTab,
@@ -39,10 +44,7 @@ function BrandsTab() {
 		action: "archive" | "reactivate"
 	} | null>(null)
 
-	const brandsQuery = useQuery({
-		queryKey: ["brands", { includeArchived: true }],
-		queryFn: () => api.catalog.brands.list({ includeArchived: true }),
-	})
+	const brandsQuery = useQuery(brandListOptions({ includeArchived: true }))
 
 	const brands = brandsQuery.data?.brands ?? []
 	const showActions = canUpdate || canArchive
@@ -51,13 +53,11 @@ function BrandsTab() {
 		mutationFn: () => {
 			if (!confirmTarget) throw new Error("Nothing to confirm")
 			const { brand, action } = confirmTarget
-			return action === "archive"
-				? api.catalog.brands.archive(brand.id)
-				: api.catalog.brands.reactivate(brand.id)
+			return action === "archive" ? archiveBrand(brand.id) : reactivateBrand(brand.id)
 		},
 		onSuccess: async () => {
 			toast.success(confirmTarget?.action === "archive" ? "Brand archived" : "Brand reactivated")
-			await queryClient.invalidateQueries({ queryKey: ["brands"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.brands })
 			setConfirmTarget(null)
 		},
 		onError: (error) => {

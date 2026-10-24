@@ -12,9 +12,9 @@ import {
 } from "#/components/ui/dialog"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
-import { ApiError, api } from "#/lib/api"
-import type { Brand } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { type Brand, catalogKeys, createBrand, updateBrand } from "#/modules/catalog"
 
 export function BrandDialog({
 	open,
@@ -38,13 +38,10 @@ export function BrandDialog({
 	}, [open, brand])
 
 	const saveMutation = useMutation({
-		mutationFn: () =>
-			isEdit && brand
-				? api.catalog.brands.update(brand.id, { name })
-				: api.catalog.brands.create({ name }),
+		mutationFn: () => (isEdit && brand ? updateBrand(brand.id, { name }) : createBrand({ name })),
 		onSuccess: async () => {
 			toast.success(isEdit ? "Brand updated" : "Brand created")
-			await queryClient.invalidateQueries({ queryKey: ["brands"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.brands })
 			onOpenChange(false)
 		},
 		onError: (error) => {

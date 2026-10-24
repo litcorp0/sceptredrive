@@ -26,13 +26,20 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { Product } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import {
+	archiveProduct,
+	brandListOptions,
+	catalogKeys,
+	categoryListOptions,
+	type Product,
+	productListOptions,
+	reactivateProduct,
+} from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/products/")({
 	component: ProductsTab,
@@ -57,14 +64,8 @@ function ProductsTab() {
 
 	const debouncedSearch = useDebouncedValue(search, 300)
 
-	const categoriesQuery = useQuery({
-		queryKey: ["categories", { includeArchived: true }],
-		queryFn: () => api.catalog.categories.list({ includeArchived: true }),
-	})
-	const brandsQuery = useQuery({
-		queryKey: ["brands", { includeArchived: false }],
-		queryFn: () => api.catalog.brands.list(),
-	})
+	const categoriesQuery = useQuery(categoryListOptions({ includeArchived: true }))
+	const brandsQuery = useQuery(brandListOptions())
 
 	const filters = {
 		q: debouncedSearch.trim() || undefined,
@@ -76,10 +77,7 @@ function ProductsTab() {
 		offset,
 	}
 
-	const productsQuery = useQuery({
-		queryKey: ["products", filters],
-		queryFn: () => api.products.list(filters),
-	})
+	const productsQuery = useQuery(productListOptions(filters))
 
 	const products = productsQuery.data?.products ?? []
 	const total = productsQuery.data?.total ?? 0
@@ -88,10 +86,10 @@ function ProductsTab() {
 
 	const toggleMutation = useMutation({
 		mutationFn: (product: Product) =>
-			product.isActive ? api.products.archive(product.id) : api.products.reactivate(product.id),
+			product.isActive ? archiveProduct(product.id) : reactivateProduct(product.id),
 		onSuccess: async (_data, product) => {
 			toast.success(product.isActive ? "Product archived" : "Product reactivated")
-			await queryClient.invalidateQueries({ queryKey: ["products"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
 			setConfirmTarget(null)
 		},
 		onError: (error) => {

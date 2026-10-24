@@ -16,10 +16,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { Uom } from "#/lib/api-types"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import {
+	archiveUnit,
+	catalogKeys,
+	reactivateUnit,
+	type Uom,
+	unitListOptions,
+} from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/units")({
 	component: UnitsTab,
@@ -39,10 +44,7 @@ function UnitsTab() {
 		action: "archive" | "reactivate"
 	} | null>(null)
 
-	const unitsQuery = useQuery({
-		queryKey: ["uoms", { includeArchived: true }],
-		queryFn: () => api.catalog.units.list({ includeArchived: true }),
-	})
+	const unitsQuery = useQuery(unitListOptions({ includeArchived: true }))
 
 	const units = unitsQuery.data?.uoms ?? []
 	const showActions = canUpdate || canArchive
@@ -51,13 +53,11 @@ function UnitsTab() {
 		mutationFn: () => {
 			if (!confirmTarget) throw new Error("Nothing to confirm")
 			const { unit, action } = confirmTarget
-			return action === "archive"
-				? api.catalog.units.archive(unit.id)
-				: api.catalog.units.reactivate(unit.id)
+			return action === "archive" ? archiveUnit(unit.id) : reactivateUnit(unit.id)
 		},
 		onSuccess: async () => {
 			toast.success(confirmTarget?.action === "archive" ? "Unit archived" : "Unit reactivated")
-			await queryClient.invalidateQueries({ queryKey: ["uoms"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.uoms })
 			setConfirmTarget(null)
 		},
 		onError: (error) => {

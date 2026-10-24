@@ -4,8 +4,8 @@ import { ArrowLeftIcon } from "lucide-react"
 import { useState } from "react"
 import { BarcodeEditor, type BarcodeItem } from "#/components/catalog/barcode-editor"
 import { ProductForm } from "#/components/catalog/product-form"
-import { api } from "#/lib/api"
 import { hasPermission } from "#/lib/role"
+import { brandListOptions, categoryListOptions, unitListOptions } from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/products/new")({
 	component: NewProductPage,
@@ -19,18 +19,9 @@ function NewProductPage() {
 
 	const [barcodes, setBarcodes] = useState<BarcodeItem[]>([])
 
-	const categoriesQuery = useQuery({
-		queryKey: ["categories", { includeArchived: true }],
-		queryFn: () => api.catalog.categories.list({ includeArchived: true }),
-	})
-	const brandsQuery = useQuery({
-		queryKey: ["brands", { includeArchived: false }],
-		queryFn: () => api.catalog.brands.list(),
-	})
-	const unitsQuery = useQuery({
-		queryKey: ["uoms", { includeArchived: false }],
-		queryFn: () => api.catalog.units.list(),
-	})
+	const categoriesQuery = useQuery(categoryListOptions({ includeArchived: true }))
+	const brandsQuery = useQuery(brandListOptions())
+	const unitsQuery = useQuery(unitListOptions())
 
 	if (!canCreate) {
 		return (

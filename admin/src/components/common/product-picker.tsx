@@ -3,9 +3,8 @@ import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
-import { api } from "#/lib/api"
-import type { Product } from "#/lib/api-types"
 import { useDebouncedValue } from "#/lib/hooks"
+import { getProduct, type Product, productSearchOptions } from "#/modules/catalog"
 
 export interface PickedProduct {
 	id: string
@@ -41,8 +40,7 @@ export function ProductPicker({
 	const query = debounced.trim()
 
 	const resultsQuery = useQuery({
-		queryKey: ["product-picker", query],
-		queryFn: () => api.products.list({ q: query, limit: 8 }),
+		...productSearchOptions(query),
 		enabled: open && query.length > 0,
 	})
 
@@ -51,7 +49,7 @@ export function ProductPicker({
 	async function choose(product: Product) {
 		setPendingId(product.id)
 		try {
-			const detail = await api.products.get(product.id)
+			const detail = await getProduct(product.id)
 			onSelect({
 				id: detail.product.id,
 				sku: detail.product.sku,

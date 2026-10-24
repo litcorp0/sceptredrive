@@ -9,10 +9,21 @@ import { ProductForm } from "#/components/catalog/product-form"
 import { ConfirmDialog } from "#/components/common/confirm-dialog"
 import { ActiveBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
-import { ApiError, api } from "#/lib/api"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import {
+	addProductBarcode,
+	archiveProduct,
+	brandListOptions,
+	catalogKeys,
+	categoryListOptions,
+	productDetailOptions,
+	reactivateProduct,
+	removeProductBarcode,
+	unitListOptions,
+} from "#/modules/catalog"
 
 export const Route = createFileRoute("/_authenticated/catalog/products/$id")({
 	component: EditProductPage,
@@ -28,51 +39,37 @@ function EditProductPage() {
 	const canArchive = hasPermission(session.user.role, "catalog.archive")
 	const canOverride = hasPermission(session.user.role, "price.override")
 
-	const productQuery = useQuery({
-		queryKey: ["product", id],
-		queryFn: () => api.products.get(id),
-		retry: false,
-	})
-	const categoriesQuery = useQuery({
-		queryKey: ["categories", { includeArchived: true }],
-		queryFn: () => api.catalog.categories.list({ includeArchived: true }),
-	})
-	const brandsQuery = useQuery({
-		queryKey: ["brands", { includeArchived: true }],
-		queryFn: () => api.catalog.brands.list({ includeArchived: true }),
-	})
-	const unitsQuery = useQuery({
-		queryKey: ["uoms", { includeArchived: true }],
-		queryFn: () => api.catalog.units.list({ includeArchived: true }),
-	})
+	const productQuery = useQuery(productDetailOptions(id))
+	const categoriesQuery = useQuery(categoryListOptions({ includeArchived: true }))
+	const brandsQuery = useQuery(brandListOptions({ includeArchived: true }))
+	const unitsQuery = useQuery(unitListOptions({ includeArchived: true }))
 
 	const toggleMutation = useMutation({
-		mutationFn: (active: boolean) =>
-			active ? api.products.reactivate(id) : api.products.archive(id),
+		mutationFn: (active: boolean) => (active ? reactivateProduct(id) : archiveProduct(id)),
 		onSuccess: async (_data, active) => {
 			toast.success(active ? "Product reactivated" : "Product archived")
-			await queryClient.invalidateQueries({ queryKey: ["product", id] })
-			await queryClient.invalidateQueries({ queryKey: ["products"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.productDetail(id) })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
 		},
 		onError: (error) => toastApiError(error),
 	})
 
 	const addBarcodeMutation = useMutation({
-		mutationFn: (code: string) => api.products.addBarcode(id, code),
+		mutationFn: (code: string) => addProductBarcode(id, code),
 		onSuccess: async () => {
 			toast.success("Barcode added")
-			await queryClient.invalidateQueries({ queryKey: ["product", id] })
-			await queryClient.invalidateQueries({ queryKey: ["products"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.productDetail(id) })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
 		},
 		onError: (error) => toastApiError(error),
 	})
 
 	const removeBarcodeMutation = useMutation({
-		mutationFn: (barcodeId: string) => api.products.removeBarcode(id, barcodeId),
+		mutationFn: (barcodeId: string) => removeProductBarcode(id, barcodeId),
 		onSuccess: async () => {
 			toast.success("Barcode removed")
-			await queryClient.invalidateQueries({ queryKey: ["product", id] })
-			await queryClient.invalidateQueries({ queryKey: ["products"] })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.productDetail(id) })
+			await queryClient.invalidateQueries({ queryKey: catalogKeys.products })
 		},
 		onError: (error) => toastApiError(error),
 	})
