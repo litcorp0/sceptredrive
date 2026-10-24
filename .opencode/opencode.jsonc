@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Parallel builds need a todo ledger and one extra level of fan-out so a lane
+  // agent can dispatch its own reviewer without routing back through the controller.
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2
+  },
+
+  // The controller (build) may launch lane agents. Lane agents are defined in
+  // .opencode/agents/ and are restricted to their own file lane.
+  "agents": {
+    "build": {
+      "permissions": [{ "action": "subagent", "resource": "*", "effect": "allow" }]
+    }
+  }
+}

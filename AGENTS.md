@@ -105,6 +105,41 @@ auth in `api/src/auth/`.
 - Stop and ask when a decision affects money, credit, stock, loyalty, permissions, or
   production infrastructure.
 
+## Parallel builds
+
+`/parallel-build` runs a plan through parallel lane subagents. The controller keeps
+the plan, the state file, and the root files; it never implements a lane's work
+itself.
+
+| Lane | Agent | Owns |
+|---|---|---|
+| shared | `shared-lane` | `packages/**` |
+| api | `api-lane` | `api/**` (includes migrations and seeds) |
+| admin | `admin-lane` | `admin/**` |
+| pos | `pos-lane` | `desktop/**` |
+| verification | `verify` | nothing — runs gates, read-only |
+| review | `review` | nothing — reviews the diff, read-only |
+
+Rules that make parallelism safe here:
+
+- **One writer per lane.** Never dispatch two implementers into the same lane.
+- **Disjoint file sets.** Two tasks that touch the same file are one lane task.
+- **`packages/**` goes first and alone**, because both clients and the API depend
+  on it. The controller hands the new exported names to the app lanes.
+- **Root files belong to the controller** (`package.json`, `bun.lock`, `biome.json`,
+  `compose.yaml`, `.github/`, `.planning/`, `AGENTS.md`). A lane reports
+  `NEEDS_LANE_CHANGE`; the controller edits serially.
+- **No repository-wide gate while a lane is writing.** Lanes run their own narrow
+  suite, then `verify` runs the full gates once every lane is idle.
+- **Read-only work parallelises freely**: `explore` for research, `verify` for
+  gates, `review` for diffs.
+- `experimental.subagent_depth` is `2`, so a lane may dispatch `verify` or `review`
+  on its own change without routing back through the controller.
+
+The non-negotiables do not relax under parallelism: server authority, integer
+money, append-only ledgers, idempotency keys, and the rule that a decision about
+money, credit, stock, loyalty, permissions, or production still stops and asks.
+
 ## Branching
 
 - `dev` — local integration branch (feature branches → PR to `dev`).
