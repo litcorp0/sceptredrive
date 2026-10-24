@@ -52,7 +52,7 @@
 - Treat webhook/verify as the source of truth; never trust client-reported success.
 - Use unique transfer references per payment attempt; retries must reuse the reference.
 
-## Implications for GikAutos
+## Implications for Sceptre Drive
 
 - `PAYSTACK_MODE=mock` implements the same interfaces with an in-process fake until keys exist.
 - MoMo and card flows are online-only; the POS disables them offline.

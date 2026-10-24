@@ -81,6 +81,25 @@ Phases 7, 8, and 9 became **11, 12, and 13** with scope unchanged.
 Plans 03–05 are independent after 01–02 and may run as one wave; Plan 06 depends on 03, 04,
 and 05.
 
+## Execution deviations
+
+Plan 07's verification found three defects and one earlier-Plan test weakness, and made four
+deliberate departures from the plan text. They are recorded in full in `01-VERIFICATION.md`
+§6 and §7; the decisions that outlive the plan are:
+
+| # | Decision | Why |
+|---|---|---|
+| E1 | Fonts are never inlined (`build.assetsInlineLimit` excludes font files in both apps) | A small `@fontsource` subset otherwise becomes a `data:` URI, which `font-src 'self'` blocks. Widening the policy to `data:` would weaken it for every font; D7's "no remote assets" stands |
+| E2 | The mobile drawer suppresses nav tooltips | A tooltip opens on keyboard focus and is the innermost dismissable layer, so it consumed the first Escape. Labels are always visible in the drawer |
+| E3 | The sync badge treats a downed transport as Offline when the terminal has synced before | Reporting `Downloaded 14:02` on a disconnected till tells a cashier that stock and prices are fresh when they are not. The `lastSyncedAt` guard keeps a first boot from flashing |
+| E4 | The emitted bundle has two `--brand` declarations, not one | `:root` and `.dark` both declare it because D7 fixes the brand as unchanged in dark mode; both come from the one package file, which is the invariant `tokens:check` enforces |
+| E5 | Walkthrough steps 8–9 run the unpackaged build | A packaged app sets `allowLocalOrigins: false` by design (a shipped terminal must never be pointable at a local impersonator), so it cannot reach a local API. Step 10 is the packaged binary |
+
+Carry-forward found by the walkthrough, not fixed here: outbox rows that back off can be
+overtaken by younger rows, so a sale can reach the server before its shift and be
+dead-lettered `SHIFT_MISSING`. The till never blocks; **Phase 13** should enforce causal
+ordering before payments ship.
+
 ## Open Items (carry into later phases)
 
 - **Phase 8:** move admin pages into `modules/`, enforce the import boundary, rebuild the

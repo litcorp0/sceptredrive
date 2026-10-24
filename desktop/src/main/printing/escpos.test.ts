@@ -3,7 +3,7 @@ import { buildDrawerBytes, buildReceiptBytes, drawerKickBytes, RECEIPT_COLUMNS }
 
 const JOB = {
   lines: [
-    { text: 'GikAutos', bold: true },
+    { text: 'Sceptre Drive', bold: true },
     { text: 'RECEIPT ACC-SPX-T01-20261023-0001' },
     { text: 'TOTAL                         GHS 265.00', bold: true },
   ],

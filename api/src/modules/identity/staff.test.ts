@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -124,7 +124,7 @@ describe.skipIf(!available)('staff management API', () => {
   })
 
   it('creates a cashier with a sequential staff ID and a temporary password', async () => {
-    cashierEmail = `cashier-${suffix}@gikautos.test`
+    cashierEmail = `cashier-${suffix}@sceptre.test`
     const { status, body } = await createStaffViaApi(adminCookie, {
       email: cashierEmail.toUpperCase(),
       name: 'Test Cashier',
@@ -163,7 +163,7 @@ describe.skipIf(!available)('staff management API', () => {
 
   it('lets managers create staff in their own branch only', async () => {
     const own = await createStaffViaApi(managerCookie, {
-      email: `manager-cashier-${suffix}@gikautos.test`,
+      email: `manager-cashier-${suffix}@sceptre.test`,
       name: 'Manager Cashier',
       role: 'CASHIER',
       branchId: branchAId,
@@ -171,7 +171,7 @@ describe.skipIf(!available)('staff management API', () => {
     expect(own.status).toBe(201)
 
     const cross = await createStaffViaApi(managerCookie, {
-      email: `cross-${suffix}@gikautos.test`,
+      email: `cross-${suffix}@sceptre.test`,
       name: 'Cross Branch',
       role: 'CASHIER',
       branchId: branchBId,
@@ -179,7 +179,7 @@ describe.skipIf(!available)('staff management API', () => {
     expect(cross.status).toBe(403)
 
     const asAdmin = await createStaffViaApi(managerCookie, {
-      email: `wannabe-admin-${suffix}@gikautos.test`,
+      email: `wannabe-admin-${suffix}@sceptre.test`,
       name: 'Wannabe Admin',
       role: 'ADMIN',
     })
@@ -188,7 +188,7 @@ describe.skipIf(!available)('staff management API', () => {
 
   it('rejects admin accounts assigned to a branch', async () => {
     const { status } = await createStaffViaApi(adminCookie, {
-      email: `bad-admin-${suffix}@gikautos.test`,
+      email: `bad-admin-${suffix}@sceptre.test`,
       name: 'Bad Admin',
       role: 'ADMIN',
       branchId: branchAId,
@@ -422,7 +422,7 @@ describe.skipIf(!available)('staff management API', () => {
 
   it('enforces PIN reset scope and the PIN policy', async () => {
     const otherBranch = await createStaffViaApi(adminCookie, {
-      email: `pin-branch-b-${suffix}@gikautos.test`,
+      email: `pin-branch-b-${suffix}@sceptre.test`,
       name: 'Branch B Cashier',
       role: 'CASHIER',
       branchId: branchBId,
@@ -457,7 +457,7 @@ describe.skipIf(!available)('staff management API', () => {
 
   it('bumps the PIN version and revokes bindings when a role changes', async () => {
     const created = await createStaffViaApi(adminCookie, {
-      email: `pin-role-${suffix}@gikautos.test`,
+      email: `pin-role-${suffix}@sceptre.test`,
       name: 'PIN Role Change',
       role: 'CASHIER',
       branchId: branchAId,
@@ -601,7 +601,7 @@ describe.skipIf(!available)('staff management API', () => {
     expect(deactivate.status).toBe(409)
 
     const secondAdmin = await createStaffViaApi(adminCookie, {
-      email: `admin2-${suffix}@gikautos.test`,
+      email: `admin2-${suffix}@sceptre.test`,
       name: 'Second Admin',
       role: 'ADMIN',
     })

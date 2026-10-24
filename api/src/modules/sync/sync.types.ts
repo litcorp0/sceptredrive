@@ -1,4 +1,4 @@
-import type { TaxMode } from '@gikautos/shared'
+import type { TaxMode } from '@sceptre/shared'
 
 /** The identity attached to a device-authenticated request. */
 export interface DeviceAuthContext {

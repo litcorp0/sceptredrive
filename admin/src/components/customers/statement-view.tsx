@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from "@gikautos/shared"
+import { formatDateTime, formatDay, formatGhanaPhone } from "@sceptre/shared"
 import type { CreditStatement, StatementEntry } from "#/lib/api-types"
 import {
 	AGING_BUCKET_LABELS,
@@ -7,7 +7,7 @@ import {
 	CREDIT_REASON_LABELS,
 	signedGhs,
 } from "#/lib/credit"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 
 /**
  * Printable A4 customer statement: exactly the statement payload — header,
@@ -23,7 +23,7 @@ export function StatementView({ statement }: { statement: CreditStatement }) {
 		<div className="mx-auto w-full max-w-[190mm] bg-white text-black">
 			<div className="flex items-start justify-between gap-6">
 				<div>
-					<p className="text-xl font-semibold tracking-tight">GikAutos</p>
+					<p className="text-xl font-semibold tracking-tight">Sceptre Drive</p>
 					<p className="text-sm text-muted-foreground">Customer credit statement</p>
 				</div>
 				<div className="text-right text-sm">
@@ -135,8 +135,7 @@ export function StatementView({ statement }: { statement: CreditStatement }) {
 			) : null}
 
 			<p className="mt-8 text-xs text-muted-foreground">
-				Generated {new Date().toLocaleString("en-GH", { dateStyle: "medium", timeStyle: "short" })}{" "}
-				· Amounts in GHS
+				Generated {formatDateTime(new Date())} · Amounts in GHS
 			</p>
 		</div>
 	)

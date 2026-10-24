@@ -1,0 +1,22 @@
+{
+  "name": "@sceptre/brand",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./fonts.css": "./src/fonts.css"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@fontsource-variable/space-grotesk": "5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

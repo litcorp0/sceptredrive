@@ -126,7 +126,7 @@ const expected = {
 
 // --- drive the app ----------------------------------------------------------
 
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-sync-smoke-'))
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-sync-smoke-'))
 const app = await electron.launch({
   executablePath: electronBinary(),
   args: ['.', '--no-sandbox', `--user-data-dir=${userDataDir}`],
@@ -145,7 +145,7 @@ try {
   await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
 
   const stored = await page.evaluate(
-    async (token) => (await window.gikautos.secure.set('deviceToken', token)).ok,
+    async (token) => (await window.sceptreDrive.secure.set('deviceToken', token)).ok,
     enrolled.deviceToken,
   )
   check(stored === true, 'device token stored through the preload bridge')
@@ -187,7 +187,7 @@ try {
     .waitFor({ timeout: 60_000 })
   check(true, 'the SDK reports a completed sync')
 
-  const configRows = await page.evaluate(async () => Boolean(window.gikautos))
+  const configRows = await page.evaluate(async () => Boolean(window.sceptreDrive))
   check(configRows, 'preload bridge still available after sync')
 
   await page.getByTestId('config-terminal').filter({ hasText: terminalCode }).waitFor({

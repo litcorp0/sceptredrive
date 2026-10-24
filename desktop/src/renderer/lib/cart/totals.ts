@@ -1,4 +1,4 @@
-import { type PricedCart, priceCart, type TaxMode } from '@gikautos/shared'
+import { type PricedCart, priceCart, type TaxMode } from '@sceptre/shared'
 import type { CartState } from './types'
 
 /**

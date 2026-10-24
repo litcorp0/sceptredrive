@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -140,7 +141,7 @@ function CountsTab() {
 										{count.varianceUnits}
 									</TableCell>
 									<TableCell className="whitespace-nowrap text-muted-foreground">
-										{new Date(count.createdAt).toLocaleDateString("en-GH")}
+										{formatDay(count.createdAt)}
 									</TableCell>
 									<TableCell>
 										<Link

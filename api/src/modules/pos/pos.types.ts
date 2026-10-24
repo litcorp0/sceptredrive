@@ -1,4 +1,4 @@
-import type { Role } from '@gikautos/shared'
+import type { Role } from '@sceptre/shared'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 
 /** The staff identity a terminal may bind to, with the columns needed to verify a PIN. */

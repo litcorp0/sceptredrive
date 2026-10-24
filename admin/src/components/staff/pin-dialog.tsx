@@ -1,4 +1,4 @@
-import { PIN_MAX_LENGTH, PIN_MIN_LENGTH, PIN_PROBLEM_MESSAGES, pinProblem } from "@gikautos/shared"
+import { PIN_MAX_LENGTH, PIN_MIN_LENGTH, PIN_PROBLEM_MESSAGES, pinProblem } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"

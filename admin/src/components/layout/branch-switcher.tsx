@@ -7,13 +7,20 @@ import {
 } from "#/components/ui/select"
 import { useBranch } from "#/lib/branch-context"
 
+/**
+ * Branch scope for the console. Behaviour is unchanged: administrators switch
+ * between branches (or all of them), managers are pinned to their own branch
+ * and see it as a locked badge. Only the fascia styling differs.
+ */
 export function BranchSwitcher() {
 	const { branches, activeBranchId, activeBranch, setActiveBranchId, canSelectBranch } = useBranch()
 
 	if (!canSelectBranch) {
 		return (
-			<div className="flex h-8 items-center rounded-md border bg-muted/40 px-2.5 text-sm text-muted-foreground">
-				{activeBranch ? `${activeBranch.code} · ${activeBranch.name}` : "No branch assigned"}
+			<div className="flex h-8 max-w-36 items-center rounded-md border border-white/15 bg-white/5 px-2.5 text-sm text-topbar-foreground sm:max-w-none">
+				<span className="truncate">
+					{activeBranch ? `${activeBranch.code} · ${activeBranch.name}` : "No branch assigned"}
+				</span>
 			</div>
 		)
 	}
@@ -23,7 +30,11 @@ export function BranchSwitcher() {
 			value={activeBranchId ?? "all"}
 			onValueChange={(value) => setActiveBranchId(value === "all" ? null : value)}
 		>
-			<SelectTrigger size="sm" className="w-52" aria-label="Active branch">
+			<SelectTrigger
+				size="sm"
+				className="w-32 border-topbar-muted/50 bg-transparent text-topbar-foreground hover:bg-white/10 focus-visible:border-topbar-muted/50 sm:w-52 [&_svg]:text-topbar-muted"
+				aria-label="Active branch"
+			>
 				<SelectValue placeholder="All branches" />
 			</SelectTrigger>
 			<SelectContent>

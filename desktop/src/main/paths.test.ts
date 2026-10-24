@@ -2,7 +2,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { APP_ORIGIN, resolveAppAssetPath } from './paths'
 
-const root = '/opt/gikautos/resources/.vite/renderer/main_window'
+const root = '/opt/sceptre-drive/resources/.vite/renderer/main_window'
 
 describe('resolveAppAssetPath', () => {
   it('serves index.html for the origin root', () => {
@@ -39,7 +39,7 @@ describe('resolveAppAssetPath', () => {
 
   it('rejects other hosts and malformed URLs', () => {
     expect(resolveAppAssetPath(root, 'app://evil/index.html')).toBeNull()
-    expect(resolveAppAssetPath(root, 'https://gikautos/index.html')).toBeNull()
+    expect(resolveAppAssetPath(root, 'https://sceptre-drive/index.html')).toBeNull()
     expect(resolveAppAssetPath(root, 'not a url')).toBeNull()
   })
 

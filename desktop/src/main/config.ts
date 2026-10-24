@@ -15,8 +15,15 @@ import { z } from 'zod'
 
 export const DEV_API_BASE_URL = 'http://localhost:4000'
 export const DEV_POWERSYNC_URL = 'http://localhost:8080'
-export const PRODUCTION_API_BASE_URL = 'https://api.gikautos.com'
-export const PRODUCTION_POWERSYNC_URL = 'https://powersync.gikautos.com'
+
+/**
+ * The production apex domain. One constant on purpose: the domain is not yet
+ * purchased, so every origin below derives from it. Changing this line and the
+ * CSP test expectations is the whole swap.
+ */
+export const SCEPTRE_DOMAIN = 'gikautos.com' // TODO(domain): replace when purchased
+export const PRODUCTION_API_BASE_URL = `https://api.${SCEPTRE_DOMAIN}`
+export const PRODUCTION_POWERSYNC_URL = `https://powersync.${SCEPTRE_DOMAIN}`
 
 const httpUrl = z
   .string()

@@ -1,5 +1,5 @@
-import type { DbExecutor } from '@gikautos/db'
-import { resolveEffectivePrice, type TaxMode } from '@gikautos/shared'
+import type { DbExecutor } from '@sceptre/db'
+import { resolveEffectivePrice, type TaxMode } from '@sceptre/shared'
 import { selectProductsForSale } from './pos.repository.ts'
 import type { SaleLinePayload, SaleTotalsPayload } from './pos.types.ts'
 

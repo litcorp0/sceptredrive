@@ -1,4 +1,4 @@
-import type { Role } from "@gikautos/shared"
+import type { Role } from "@sceptre/shared"
 
 /**
  * Response and input types mirroring the API contracts in `api/src/modules/*`.

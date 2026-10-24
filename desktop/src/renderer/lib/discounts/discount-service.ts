@@ -1,4 +1,4 @@
-import type { Role } from '@gikautos/shared'
+import type { Role } from '@sceptre/shared'
 import type { DiscountReasonCode } from '../cart/types'
 import { parseGhsToMinor } from '../format'
 

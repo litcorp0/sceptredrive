@@ -1,3 +1,4 @@
+import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -28,7 +29,7 @@ import {
 import { api } from "#/lib/api"
 import type { SupplierInvoice, SupplierInvoiceStatus } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/")({
@@ -91,7 +92,7 @@ function InvoicesTab() {
 
 	const invoices = invoicesQuery.data?.invoices ?? []
 	const total = invoicesQuery.data?.total ?? 0
-	const today = new Date().toISOString().slice(0, 10)
+	const today = toDateInputValue(new Date())
 
 	function resetOffset() {
 		setOffset(0)

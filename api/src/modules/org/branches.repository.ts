@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
 import { branch } from './branches.schema.ts'
 import type { BranchRow } from './branches.types.ts'

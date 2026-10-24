@@ -1,4 +1,4 @@
-# REQUIREMENTS — GikAutos v1
+# REQUIREMENTS — Sceptre Drive v1
 
 **Scope:** v1 = first national-ready release of the platform.
 **Rule:** every v1 requirement maps to exactly one phase (see `ROADMAP.md`).

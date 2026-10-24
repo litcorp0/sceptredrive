@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { type DbExecutor, db } from '@gikautos/db'
-import { can, priceCart, type TaxMode } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { can, priceCart, type TaxMode } from '@sceptre/shared'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
 import { postEntryInTransaction as postCreditEntry } from '../credit/credit.service.ts'

@@ -1,5 +1,5 @@
-import { db } from '@gikautos/db'
-import { normalizeBranchCode, suggestBranchCode } from '@gikautos/shared'
+import { db } from '@sceptre/db'
+import { normalizeBranchCode, suggestBranchCode } from '@sceptre/shared'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'

@@ -11,7 +11,7 @@ import type { ForgeConfig } from '@electron-forge/shared-types'
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    name: 'GikAutos POS',
+    name: 'Sceptre Drive POS',
   },
   hooks: {
     /**
@@ -48,7 +48,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     // Unsigned Windows installer (Phase 6). Signing and auto-update are Phase 9.
-    new MakerSquirrel({ name: 'gikautos_pos' }),
+    new MakerSquirrel({ name: 'sceptre_drive_pos' }),
     new MakerZIP({}, ['linux', 'darwin']),
   ],
   plugins: [

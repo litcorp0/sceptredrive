@@ -15,11 +15,14 @@ export function AuthShell({
 		<div className="flex min-h-svh items-center justify-center bg-muted/40 p-6">
 			<div className="w-full max-w-sm">
 				<div className="mb-6 flex items-center gap-2.5">
-					<div className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-						GA
+					<div
+						aria-hidden="true"
+						className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground"
+					>
+						SD
 					</div>
 					<div>
-						<p className="text-sm font-semibold leading-none">GikAutos</p>
+						<p className="text-sm font-semibold leading-none">Sceptre Drive</p>
 						<p className="mt-1 text-xs text-muted-foreground">Admin console</p>
 					</div>
 				</div>

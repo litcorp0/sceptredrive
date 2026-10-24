@@ -1,4 +1,5 @@
 import { useQuery } from '@powersync/react'
+import { formatDateTime } from '@sceptre/shared'
 import { navigate } from '../../lib/router'
 
 /**
@@ -83,7 +84,7 @@ export function ConflictList() {
                 </span>
               ) : null}
               <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                {conflict.created_at.slice(0, 16).replace('T', ' ')} · {conflict.status}
+                {formatDateTime(conflict.created_at)} · {conflict.status}
               </span>
             </summary>
             <div className="grid gap-2 border-t border-border px-3 py-2">

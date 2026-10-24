@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SCEPTRE_DOMAIN } from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
 
 function directive(policy: string, name: string): string {
@@ -30,9 +31,9 @@ describe('buildContentSecurityPolicy', () => {
   it('permits the production API, PowerSync Cloud, and our own hosts', () => {
     const connect = directive(buildContentSecurityPolicy({ dev: false }), 'connect-src')
     expect(connect).toContain("'self'")
-    expect(connect).toContain('https://api.gikautos.com')
+    expect(connect).toContain(`https://api.${SCEPTRE_DOMAIN}`)
     expect(connect).toContain('https://*.powersync.journeyapps.com')
-    expect(connect).toContain('https://*.gikautos.com')
+    expect(connect).toContain(`https://*.${SCEPTRE_DOMAIN}`)
     expect(connect).not.toContain('localhost')
   })
 
@@ -40,13 +41,13 @@ describe('buildContentSecurityPolicy', () => {
     const connect = directive(
       buildContentSecurityPolicy({
         dev: false,
-        apiOrigin: 'https://api.gikautos.com',
+        apiOrigin: `https://api.${SCEPTRE_DOMAIN}`,
         powersyncOrigin: 'https://sync.example.com',
       }),
       'connect-src',
     )
     expect(connect).toContain('https://sync.example.com')
-    expect(connect.match(/https:\/\/api\.gikautos\.com/g) ?? []).toHaveLength(1)
+    expect(connect.split(`https://api.${SCEPTRE_DOMAIN}`)).toHaveLength(2)
   })
 
   it('allows localhost only when local origins are enabled', () => {
@@ -70,16 +71,18 @@ describe('buildContentSecurityPolicy', () => {
 
 describe('isAllowedConnectOrigin', () => {
   it('accepts the production API and Cloud PowerSync origins', () => {
-    expect(isAllowedConnectOrigin('https://api.gikautos.com', { allowLocal: false })).toBe(true)
+    expect(isAllowedConnectOrigin(`https://api.${SCEPTRE_DOMAIN}`, { allowLocal: false })).toBe(
+      true,
+    )
     expect(
       isAllowedConnectOrigin('https://abc123.powersync.journeyapps.com', { allowLocal: false }),
     ).toBe(true)
-    expect(isAllowedConnectOrigin('https://powersync.gikautos.com', { allowLocal: false })).toBe(
-      true,
-    )
-    expect(isAllowedConnectOrigin('https://api.staging.gikautos.com', { allowLocal: false })).toBe(
-      true,
-    )
+    expect(
+      isAllowedConnectOrigin(`https://powersync.${SCEPTRE_DOMAIN}`, { allowLocal: false }),
+    ).toBe(true)
+    expect(
+      isAllowedConnectOrigin(`https://api.staging.${SCEPTRE_DOMAIN}`, { allowLocal: false }),
+    ).toBe(true)
   })
 
   it('rejects anything else in a packaged build', () => {

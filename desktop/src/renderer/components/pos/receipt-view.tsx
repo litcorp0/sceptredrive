@@ -1,5 +1,6 @@
+import { formatAccraDateTime } from '@sceptre/shared'
 import { formatMinorWithSymbol } from '../../lib/format'
-import { formatReceiptDateTime, type ReceiptModel } from '../../lib/receipt/render'
+import type { ReceiptModel } from '../../lib/receipt/render'
 
 /**
  * The on-screen receipt (Plan 07 Task 2).
@@ -54,7 +55,7 @@ export function ReceiptView({ model }: { model: ReceiptModel }) {
       </header>
 
       <div className="mt-1 grid gap-0.5 text-[11px]">
-        <Row label="Date" value={formatReceiptDateTime(header.occurredAt)} />
+        <Row label="Date" value={formatAccraDateTime(header.occurredAt)} />
         <Row label="Cashier" value={header.cashier} />
         {header.customer?.name ? <Row label="Customer" value={header.customer.name} /> : null}
         {header.customer?.phone ? <Row label="Phone" value={header.customer.phone} /> : null}

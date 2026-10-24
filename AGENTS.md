@@ -1,4 +1,4 @@
-# AGENTS.md — GikAutos v1
+# AGENTS.md — Sceptre Drive v1
 
 This file is the standing contract for every agent working in this repository.
 Read it at the start of every session, then load the skills it names.
@@ -54,14 +54,20 @@ double-selling or losing a transaction.
 ## Repository layout
 
 ```text
-admin/        TanStack Start console (Admin + Manager)
-api/          Hono API (also owns Drizzle schema, migrations, and seeds)
-desktop/      Electron Forge POS (created in Phase 6)
-packages/     shared, db (Postgres client), sync, ui (created in Phase 1)
-powersync/    sync-config.yaml + setup docs (created in Phase 6)
-infra/        Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 9)
-.planning/    GSD project memory (this is the source of truth for scope)
+admin/         TanStack Start console (Admin + Manager)
+api/           Hono API (also owns Drizzle schema, migrations, and seeds)
+desktop/       Electron Forge POS
+packages/      shared (domain logic), db (Postgres client), brand (design tokens)
+powersync/     sync-config.yaml + setup docs
+design-system/ human-facing design rationale; `packages/brand` is the machine truth
+infra/         Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 15)
+.planning/     GSD project memory (this is the source of truth for scope)
 ```
+
+> **Renamed 2026-10-24:** the product, workspace scope, and infrastructure were renamed to
+> **Sceptre Drive** (`@sceptre/*`). The dev database is `sceptre_drive`, the desktop origin
+> is `app://sceptre-drive`, and the code sweep is complete. The rename moved Electron's
+> `userData` directory, so existing development terminals must re-enrol.
 
 ### API module layout (`api/src/modules/<domain>/`)
 
@@ -99,6 +105,41 @@ auth in `api/src/auth/`.
 - Stop and ask when a decision affects money, credit, stock, loyalty, permissions, or
   production infrastructure.
 
+## Parallel builds
+
+`/parallel-build` runs a plan through parallel lane subagents. The controller keeps
+the plan, the state file, and the root files; it never implements a lane's work
+itself.
+
+| Lane | Agent | Owns |
+|---|---|---|
+| shared | `shared-lane` | `packages/**` |
+| api | `api-lane` | `api/**` (includes migrations and seeds) |
+| admin | `admin-lane` | `admin/**` |
+| pos | `pos-lane` | `desktop/**` |
+| verification | `verify` | nothing — runs gates, read-only |
+| review | `review` | nothing — reviews the diff, read-only |
+
+Rules that make parallelism safe here:
+
+- **One writer per lane.** Never dispatch two implementers into the same lane.
+- **Disjoint file sets.** Two tasks that touch the same file are one lane task.
+- **`packages/**` goes first and alone**, because both clients and the API depend
+  on it. The controller hands the new exported names to the app lanes.
+- **Root files belong to the controller** (`package.json`, `bun.lock`, `biome.json`,
+  `compose.yaml`, `.github/`, `.planning/`, `AGENTS.md`). A lane reports
+  `NEEDS_LANE_CHANGE`; the controller edits serially.
+- **No repository-wide gate while a lane is writing.** Lanes run their own narrow
+  suite, then `verify` runs the full gates once every lane is idle.
+- **Read-only work parallelises freely**: `explore` for research, `verify` for
+  gates, `review` for diffs.
+- `experimental.subagent_depth` is `2`, so a lane may dispatch `verify` or `review`
+  on its own change without routing back through the controller.
+
+The non-negotiables do not relax under parallelism: server authority, integer
+money, append-only ledgers, idempotency keys, and the rule that a decision about
+money, credit, stock, loyalty, permissions, or production still stops and asks.
+
 ## Branching
 
 - `dev` — local integration branch (feature branches → PR to `dev`).
@@ -108,9 +149,12 @@ auth in `api/src/auth/`.
 
 ## Commands
 
-Root scripts will be added in Phase 1 (`bun dev`, `bun lint`, `bun check-types`,
-`bun test`, `bun build`). Until then, each workspace keeps its own scripts:
-`admin/` (Vite/TanStack Start) and `api/` (Hono/tsx).
+From the repository root: `bun dev` (all workspaces), `bun dev:api`, `bun dev:admin`,
+`bun dev:pos`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun test`, `bun build`,
+`bun run brand:check`, plus the `db:*` (migrate, seed, test prepare), `sync:*`
+(init, up, down, logs, config-check), and `*:pos` (build, package, make) scripts.
+`bun test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh
+`docker compose up -d`.
 
 ## Non-negotiables for the POS
 
@@ -123,5 +167,5 @@ Root scripts will be added in Phase 1 (`bun dev`, `bun lint`, `bun check-types`,
 
 ## Current status
 
-Planning is complete and approved. The next step is Phase 1 planning and execution.
-See `.planning/STATE.md`.
+Phases 1–6 are complete and verified. Phase 7 (Identity, Design System & Brand
+Foundation) is in progress; Phases 8–15 are planned. See `.planning/STATE.md`.

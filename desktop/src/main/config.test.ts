@@ -2,17 +2,17 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { ConfigError, loadRuntimeConfig, parseRuntimeConfig } from './config'
+import { ConfigError, loadRuntimeConfig, parseRuntimeConfig, SCEPTRE_DOMAIN } from './config'
 
 describe('parseRuntimeConfig', () => {
   it('accepts http and https URLs', () => {
     expect(
       parseRuntimeConfig({
-        apiBaseUrl: 'https://api.gikautos.com',
+        apiBaseUrl: `https://api.${SCEPTRE_DOMAIN}`,
         powersyncUrl: 'https://abc.powersync.journeyapps.com',
       }),
     ).toEqual({
-      apiBaseUrl: 'https://api.gikautos.com',
+      apiBaseUrl: `https://api.${SCEPTRE_DOMAIN}`,
       powersyncUrl: 'https://abc.powersync.journeyapps.com',
     })
   })
@@ -32,7 +32,7 @@ describe('parseRuntimeConfig', () => {
 })
 
 describe('loadRuntimeConfig', () => {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gikautos-config-'))
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-config-'))
 
   afterAll(() => {
     fs.rmSync(tmpRoot, { recursive: true, force: true })
@@ -47,8 +47,8 @@ describe('loadRuntimeConfig', () => {
 
   it('falls back to the production endpoints in a packaged build', () => {
     expect(loadRuntimeConfig(path.join(tmpRoot, 'missing'), false)).toEqual({
-      apiBaseUrl: 'https://api.gikautos.com',
-      powersyncUrl: 'https://powersync.gikautos.com',
+      apiBaseUrl: `https://api.${SCEPTRE_DOMAIN}`,
+      powersyncUrl: `https://powersync.${SCEPTRE_DOMAIN}`,
     })
   })
 
@@ -73,9 +73,12 @@ describe('loadRuntimeConfig', () => {
     fs.mkdirSync(target, { recursive: true })
     fs.writeFileSync(
       path.join(target, 'config.json'),
-      JSON.stringify({ apiBaseUrl: 'https://api.gikautos.com', powersyncUrl: 'https://x.example' }),
+      JSON.stringify({
+        apiBaseUrl: `https://api.${SCEPTRE_DOMAIN}`,
+        powersyncUrl: 'https://x.example',
+      }),
     )
 
-    expect(loadRuntimeConfig(target, false).apiBaseUrl).toBe('https://api.gikautos.com')
+    expect(loadRuntimeConfig(target, false).apiBaseUrl).toBe(`https://api.${SCEPTRE_DOMAIN}`)
   })
 })

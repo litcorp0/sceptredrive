@@ -1,3 +1,4 @@
+import { formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -173,7 +174,7 @@ function StockDetailPage() {
 										return (
 											<TableRow key={movement.id}>
 												<TableCell className="whitespace-nowrap text-muted-foreground">
-													{new Date(movement.createdAt).toLocaleString("en-GH")}
+													{formatDateTime(movement.createdAt)}
 												</TableCell>
 												<TableCell>
 													<StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>

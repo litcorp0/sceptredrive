@@ -12,7 +12,7 @@ replication:
       # Must be a separate key: the pgwire replication client ignores
       # `sslmode` inside the URI and fails with "postgres does not support ssl".
       sslmode: disable
-      slot_name_prefix: gikautos_
+      slot_name_prefix: sceptre_drive_
 
 # Bucket storage on Postgres (17+; the source and storage servers may share an
 # instance from Postgres 14). Postgres storage supports storage version 2 only.

@@ -31,7 +31,7 @@ client-owned intent/server-owned truth, append-only event models, conflict handl
 10. **Backward compatibility matters.** Deployed POS builds update slowly; the upload
     contract stays additive, and incompatible changes get an explicit replacement plan.
 
-## Mapping to GikAutos
+## Mapping to Sceptre Drive
 
 - **Local:** PowerSync Web SDK SQLite; sales, lines, tenders, returns, shifts, cash
   movements, receipts, and the outbox are local tables. The outbox row is written in the

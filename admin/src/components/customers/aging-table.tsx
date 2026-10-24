@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { TableMessage } from "#/components/common/table-message"
 import {
@@ -10,7 +11,7 @@ import {
 } from "#/components/ui/table"
 import type { BranchAging } from "#/lib/api-types"
 import { AGING_BUCKET_KEYS, AGING_BUCKET_LABELS, AGING_BUCKET_SHORT } from "#/lib/credit"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 
 const COLUMN_COUNT = AGING_BUCKET_KEYS.length + 3
 

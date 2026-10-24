@@ -1,3 +1,4 @@
+import { accraDay, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/pos/app-header'
 import type { StaffSession } from '../../lib/auth/staff-session'
@@ -11,7 +12,6 @@ import {
   type SaleRow,
   type SaleTenderRow,
 } from '../../lib/sale/sale-repository'
-import { accraDay } from '../../lib/time'
 
 /**
  * Today's sales on this terminal (Plan 07 Task 4).
@@ -152,7 +152,7 @@ export function SalesScreen({
                     data-testid="sale-row"
                   >
                     <td className="px-3 py-2 font-mono text-xs">{sale.receiptNumber}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{sale.occurredAt.slice(11, 16)}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{formatTime(sale.occurredAt)}</td>
                     <td className="px-3 py-2 text-xs">{tender?.method ?? 'NONE'}</td>
                     <td className="px-3 py-2 text-right font-mono text-xs">
                       {formatGhs(sale.totalMinor)}

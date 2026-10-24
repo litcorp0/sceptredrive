@@ -16,7 +16,7 @@ const redactPaths = [
 
 export const logger = pino({
   level: env.LOG_LEVEL,
-  base: { service: 'gikautos-api' },
+  base: { service: 'sceptre-drive-api' },
   redact: { paths: redactPaths, censor: '[redacted]' },
   ...(env.NODE_ENV === 'development'
     ? {

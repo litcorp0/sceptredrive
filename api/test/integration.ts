@@ -1,5 +1,5 @@
-import { checkDb, db } from '@gikautos/db'
-import type { Role } from '@gikautos/shared'
+import { checkDb, db } from '@sceptre/db'
+import type { Role } from '@sceptre/shared'
 import { eq } from 'drizzle-orm'
 import { app } from '../src/app.ts'
 import { auth } from '../src/auth/auth.ts'
@@ -45,7 +45,7 @@ export interface TestUserOptions {
 export async function createTestUser(
   options: TestUserOptions = {},
 ): Promise<{ id: string; email: string }> {
-  const email = options.email ?? `test-${uniqueSuffix()}@gikautos.test`
+  const email = options.email ?? `test-${uniqueSuffix()}@sceptre.test`
   const result = await auth.api.signUpEmail({
     body: { email, password: TEST_PASSWORD, name: options.name ?? 'Test User' },
   })

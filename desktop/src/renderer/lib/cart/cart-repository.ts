@@ -1,5 +1,5 @@
-import type { TaxCategory } from '@gikautos/shared'
 import type { PowerSyncDatabase, Transaction } from '@powersync/web'
+import type { TaxCategory } from '@sceptre/shared'
 import type { CartCustomer, CartLine, CartOverrideProof, CartState } from './types'
 
 /**

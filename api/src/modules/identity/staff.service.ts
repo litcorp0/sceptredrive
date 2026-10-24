@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto'
-import { db } from '@gikautos/db'
-import type { Role } from '@gikautos/shared'
+import { db } from '@sceptre/db'
+import type { Role } from '@sceptre/shared'
 import { auth } from '../../auth/auth.ts'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
@@ -60,8 +60,8 @@ async function sendInvitation(data: InvitationData): Promise<boolean> {
   try {
     await email.send({
       to: data.to,
-      subject: 'Your GikAutos account',
-      text: `Hello ${data.name},\n\nAn account has been created for you on GikAutos.\n\nSign in at ${loginUrl}\nEmail: ${data.to}\nTemporary password: ${data.temporaryPassword}\n\nYou will be asked to choose a new password after signing in.`,
+      subject: 'Your Sceptre Drive account',
+      text: `Hello ${data.name},\n\nAn account has been created for you on Sceptre Drive.\n\nSign in at ${loginUrl}\nEmail: ${data.to}\nTemporary password: ${data.temporaryPassword}\n\nYou will be asked to choose a new password after signing in.`,
     })
     return true
   } catch (error) {

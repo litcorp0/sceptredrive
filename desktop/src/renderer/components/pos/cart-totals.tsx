@@ -74,7 +74,7 @@ export function CartTotalsPanel({ totals }: { totals: CartTotals }) {
 
       <div className="mt-1 flex items-baseline justify-between border-t border-border pt-2">
         <span className="text-sm font-semibold">Total</span>
-        <span className="font-mono text-xl font-bold" data-testid="totals-total">
+        <span className="font-display text-xl font-bold tabular-nums" data-testid="totals-total">
           {formatGhs(priced.totalMinor)}
         </span>
       </div>

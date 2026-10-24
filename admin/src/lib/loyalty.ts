@@ -1,3 +1,5 @@
+import { formatCount } from "@sceptre/shared"
+import { differenceInCalendarDays, isAfter } from "date-fns"
 import type { LoyaltyEntryKind, LoyaltyReasonCode, LoyaltyStaffKind } from "#/lib/api-types"
 
 /** The liability headline looks 30 days ahead, matching the API window. */
@@ -43,18 +45,24 @@ export const LOYALTY_ADJUST_REASONS: LoyaltyReasonCode[] = ["GOODWILL", "CORRECT
 /** "+120" / "−400" points, for ledgers and toasts. */
 export function signedPoints(points: number): string {
 	const sign = points > 0 ? "+" : points < 0 ? "−" : ""
-	return `${sign}${Math.abs(points).toLocaleString("en-GH")}`
+	return `${sign}${formatCount(Math.abs(points))}`
 }
 
-/** Whole days from now until an ISO date; negative once it has passed. */
+/**
+ * Whole calendar days from now until an ISO date; negative once it has passed.
+ *
+ * Calendar days rather than millisecond division: a partial day or a clock change must not
+ * flip an expiry by one, and "expires tomorrow" is a date question, not an hour question.
+ */
 export function daysUntil(dateIso: string, now: Date = new Date()): number {
-	return Math.ceil((new Date(dateIso).getTime() - now.getTime()) / 86_400_000)
+	return differenceInCalendarDays(new Date(dateIso), now)
 }
 
-/** True when an expiry falls inside the "expiring soon" window. */
+/** True when an expiry is still ahead and falls inside the "expiring soon" window. */
 export function isExpiringSoon(dateIso: string, now: Date = new Date()): boolean {
-	const days = daysUntil(dateIso, now)
-	return days >= 0 && days <= EXPIRING_SOON_DAYS
+	const expiry = new Date(dateIso)
+	if (!isAfter(expiry, now)) return false
+	return daysUntil(dateIso, now) <= EXPIRING_SOON_DAYS
 }
 
 /**

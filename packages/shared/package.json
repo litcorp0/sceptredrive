@@ -1,5 +1,5 @@
 {
-  "name": "@gikautos/shared",
+  "name": "@sceptre/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "date-fns": "catalog:",
     "libphonenumber-js": "catalog:"
   },
   "devDependencies": {

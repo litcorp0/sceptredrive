@@ -1,4 +1,4 @@
-import type { BranchCodeSuggestion, BranchType } from '@gikautos/shared'
+import type { BranchCodeSuggestion, BranchType } from '@sceptre/shared'
 import type { z } from 'zod'
 import type { branch } from './branches.schema.ts'
 import type {

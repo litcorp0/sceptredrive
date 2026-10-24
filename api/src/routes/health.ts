@@ -1,4 +1,4 @@
-import { checkDb } from '@gikautos/db'
+import { checkDb } from '@sceptre/db'
 import { factory } from '../http/factory.ts'
 
 export const healthRoutes = factory.createApp()

@@ -1,5 +1,5 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { type BetterAuthOptions, betterAuth } from 'better-auth'
 import { twoFactor } from 'better-auth/plugins/two-factor'
 import { env } from '../config/env.ts'
@@ -31,7 +31,7 @@ const betterAuthLogger: NonNullable<BetterAuthOptions['logger']> = {
 }
 
 export const auth = betterAuth({
-  appName: 'GikAutos',
+  appName: 'Sceptre Drive',
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
   trustedOrigins: env.trustedOrigins,
@@ -55,8 +55,8 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       await email.send({
         to: user.email,
-        subject: 'Reset your GikAutos password',
-        text: `Hello ${user.name},\n\nUse this link to reset your GikAutos password. The link expires in one hour.\n\n${url}\n\nIf you did not request this, you can ignore this email.`,
+        subject: 'Reset your Sceptre Drive password',
+        text: `Hello ${user.name},\n\nUse this link to reset your Sceptre Drive password. The link expires in one hour.\n\n${url}\n\nIf you did not request this, you can ignore this email.`,
       })
     },
     onPasswordReset: async ({ user }) => {
@@ -106,7 +106,7 @@ export const auth = betterAuth({
     },
   },
   databaseHooks: authDatabaseHooks,
-  plugins: [twoFactor({ issuer: 'GikAutos' })],
+  plugins: [twoFactor({ issuer: 'Sceptre Drive' })],
 })
 
 export type Auth = typeof auth

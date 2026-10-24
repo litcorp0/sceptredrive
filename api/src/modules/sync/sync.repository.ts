@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { eq } from 'drizzle-orm'
 import { branch } from '../org/branches.schema.ts'
 import { device, terminal } from '../org/terminals.schema.ts'

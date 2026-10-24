@@ -18,7 +18,7 @@ export function Pagination({
 
 	return (
 		<div className="flex items-center justify-between gap-3 px-1 py-2 text-sm text-muted-foreground">
-			<span>
+			<span className="font-mono text-xs tabular-nums">
 				{start}–{end} of {total}
 			</span>
 			<div className="flex gap-2">

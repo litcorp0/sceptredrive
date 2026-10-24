@@ -1,5 +1,6 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+	"root": false,
 	"extends": "//",
 	"files": {
 		"ignoreUnknown": true,
@@ -18,6 +19,51 @@
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/src/components/ui/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useFocusableInteractive": "off",
+						"useSemanticElements": "off"
+					},
+					"correctness": {
+						"useExhaustiveDependencies": "off"
+					},
+					"security": {
+						"noDangerouslySetInnerHtml": "off"
+					},
+					"suspicious": {
+						"noArrayIndexKey": "off",
+						"noDocumentCookie": "off"
+					}
+				}
+			}
+		}
+	],
+	"linter": {
+		"rules": {
+			"style": {
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"patterns": [
+							{
+								"group": [
+									"#/modules/*/components/**",
+									"#/modules/*/ui/**",
+									"#/modules/*/hooks/**",
+									"#/modules/*/api/**"
+								],
+								"message": "Import the module barrel (#/modules/<name>) instead of reaching into its internals."
+							}
+						]
+					}
+				}
+			}
 		}
 	}
 }

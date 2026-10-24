@@ -1,3 +1,4 @@
+import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { WandSparklesIcon } from "lucide-react"
 import { Button } from "#/components/ui/button"
@@ -12,7 +13,7 @@ import {
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
 import type { SupplierInvoice } from "#/lib/api-types"
-import { formatDay, formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
+import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 
 /** invoiceId -> GHS amount string as typed by the operator. */
 export type AllocationDraft = Record<string, string>
@@ -57,7 +58,7 @@ export function AllocationEditor({
 	allocations: AllocationDraft
 	onChange: (next: AllocationDraft) => void
 }) {
-	const today = new Date().toISOString().slice(0, 10)
+	const today = toDateInputValue(new Date())
 
 	const invoicesQuery = useQuery({
 		queryKey: ["payment-outstanding", supplierId, branchId],

@@ -1,4 +1,4 @@
-import { resolveEffectivePrice, type TaxCategory } from '@gikautos/shared'
+import { resolveEffectivePrice, type TaxCategory } from '@sceptre/shared'
 import type { SellableProduct } from '../cart/types'
 import type { CatalogProductRow } from './search'
 

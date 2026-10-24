@@ -1,5 +1,5 @@
-import { db } from '@gikautos/db'
-import { resolveEffectivePrice } from '@gikautos/shared'
+import { db } from '@sceptre/db'
+import { resolveEffectivePrice } from '@sceptre/shared'
 import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {

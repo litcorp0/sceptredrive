@@ -1,5 +1,5 @@
-import { isRole, type Role } from '@gikautos/shared'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { isRole, type Role } from '@sceptre/shared'
 import { ApiError, apiRequest } from '../api/client'
 import type { PosBindingValidationPayload, PosStaffBindingPayload } from '../api/types'
 import {

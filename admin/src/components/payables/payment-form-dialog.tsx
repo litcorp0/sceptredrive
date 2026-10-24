@@ -1,3 +1,4 @@
+import { toDateTimeInputValue } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -44,8 +45,7 @@ export interface InvoicePaymentTarget {
 }
 
 function localDateTimeInput(date: Date): string {
-	const offset = date.getTimezoneOffset() * 60_000
-	return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+	return toDateTimeInputValue(date)
 }
 
 export function PaymentFormDialog({

@@ -19,7 +19,7 @@ const NOW = '2026-10-23T10:15:00.000Z'
 function sampleModel(reprint: boolean): ReceiptModel {
   return {
     header: {
-      seller: 'GikAutos',
+      seller: 'Sceptre Drive',
       branch: 'Accra - Spintex',
       branchCode: 'ACC-SPX',
       terminal: 'ACC-SPX-T01',
@@ -71,7 +71,7 @@ function sampleModel(reprint: boolean): ReceiptModel {
     },
     tender: { method: 'CASH', amountMinor: 20_000, changeMinor: 5_500 },
     loyalty: { earnedPoints: 125, redeemedPoints: 0 },
-    footer: 'Thank you for choosing GikAutos. Goods sold are not returnable after 7 days.',
+    footer: 'Thank you for choosing Sceptre Drive. Goods sold are not returnable after 7 days.',
     evatSerial: null,
     qrPayload: null,
     signature: null,

@@ -1,3 +1,4 @@
+import { formatCount } from "@sceptre/shared"
 import { Card, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { formatGhs } from "#/lib/format"
 
@@ -44,9 +45,7 @@ export function PayablesSummaryCards({
 			<Card>
 				<CardHeader>
 					<CardDescription>Open invoices</CardDescription>
-					<CardTitle className="text-2xl tabular-nums">
-						{invoicesOpen.toLocaleString("en-GH")}
-					</CardTitle>
+					<CardTitle className="text-2xl tabular-nums">{formatCount(invoicesOpen)}</CardTitle>
 					<p className="text-xs text-muted-foreground">with an outstanding balance</p>
 				</CardHeader>
 			</Card>

@@ -31,11 +31,18 @@ const TAX_LABEL: Record<string, string> = {
   EXEMPT: 'Exempt',
 }
 
+/*
+ * Chip colour never carries the meaning: the label does. A 10 px coloured
+ * label on a 10% tint lands under 4.5:1 (measured `text-warn` on `bg-warn/10`
+ * over `bg-card` at 4.39:1), so the tint stays and the text is `text-foreground`.
+ * `oversold` stays on the warn family and `out` on danger; a transparent border
+ * on every tone keeps the chips the same height once `oversold` draws its own.
+ */
 const TONE_CLASS: Record<StockBadge['tone'], string> = {
-  ok: 'bg-muted text-muted-foreground',
-  low: 'bg-amber-50 text-amber-800',
-  out: 'bg-red-50 text-red-700',
-  oversold: 'bg-amber-100 text-amber-900',
+  ok: 'border border-transparent bg-muted text-muted-foreground',
+  low: 'border border-transparent bg-warn/10 text-foreground',
+  out: 'border border-transparent bg-danger/10 text-foreground',
+  oversold: 'border border-warn/30 bg-warn/10 text-foreground',
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -70,7 +77,7 @@ function ProductCard({
       onClick={() => {
         if (product) onAdd(product)
       }}
-      className="flex h-[84px] w-full flex-col justify-between rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-50"
+      className="flex h-[84px] w-full flex-col justify-between rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-muted/40 disabled:opacity-50"
     >
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 text-sm leading-tight font-medium">{row.name}</span>

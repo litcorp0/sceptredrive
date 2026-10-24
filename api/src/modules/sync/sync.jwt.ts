@@ -7,7 +7,7 @@ import { logger } from '../../logger.ts'
 /**
  * Two token families, one Ed25519 key:
  *
- * 1. **Device JWT** (`aud = gikautos-pos`, `typ = device`) authenticates POS API
+ * 1. **Device JWT** (`aud = sceptre-pos`, `typ = device`) authenticates POS API
  *    calls: short-lived, derived from the long-lived device token.
  * 2. **PowerSync JWT** (`aud = POWERSYNC_AUDIENCE`) is handed to the PowerSync
  *    service, which validates it against our JWKS and reads `branch_id` /
@@ -17,7 +17,7 @@ import { logger } from '../../logger.ts'
  * public JWK from `/.well-known/jwks.json`.
  */
 
-export const DEVICE_TOKEN_AUDIENCE = 'gikautos-pos'
+export const DEVICE_TOKEN_AUDIENCE = 'sceptre-pos'
 export const DEVICE_TOKEN_TYPE = 'device'
 
 export interface DeviceTokenClaims {

@@ -24,9 +24,13 @@ export function UserMenu({ session }: { session: Session }) {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="sm" className="gap-1.5">
-					<span className="max-w-40 truncate">{session.user.name}</span>
-					<ChevronDownIcon className="size-3.5 text-muted-foreground" />
+				<Button
+					variant="ghost"
+					size="sm"
+					className="gap-1.5 text-topbar-foreground hover:bg-white/10 hover:text-topbar-foreground"
+				>
+					<span className="max-w-24 truncate sm:max-w-40">{session.user.name}</span>
+					<ChevronDownIcon aria-hidden="true" className="size-3.5 text-topbar-muted" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-56">

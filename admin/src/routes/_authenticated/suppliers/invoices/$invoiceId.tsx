@@ -1,3 +1,4 @@
+import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -18,7 +19,7 @@ import {
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/$invoiceId")({
@@ -50,7 +51,7 @@ function InvoiceDetailPage() {
 		return <p className="text-sm text-destructive">Couldn't load this invoice.</p>
 	}
 
-	const today = new Date().toISOString().slice(0, 10)
+	const today = toDateInputValue(new Date())
 	const branchName = branches.find((branch) => branch.id === invoice.branchId)?.name ?? "Branch"
 	const overdue = invoice.status !== "VOID" && invoice.status !== "PAID" && invoice.dueDate < today
 	const voidBlocked = invoice.amountPaidMinor !== 0

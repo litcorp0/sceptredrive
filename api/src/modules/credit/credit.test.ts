@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -65,7 +65,7 @@ describe.skipIf(!available)('credit service', () => {
   function makeUser(overrides: Partial<SessionUser>): SessionUser {
     return {
       id: `user-${suffix}`,
-      email: `user-${suffix}@gikautos.test`,
+      email: `user-${suffix}@sceptre.test`,
       name: 'Fixture User',
       emailVerified: false,
       createdAt: new Date(),

@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { db } from '@gikautos/db'
+import { hash, type Options } from '@node-rs/argon2'
+import { db } from '@sceptre/db'
 import {
   averageCostAfterReceipt,
   type CartLineInput,
   priceCart,
   type TaxMode,
   taxBreakdown,
-} from '@gikautos/shared'
-import { hash, type Options } from '@node-rs/argon2'
+} from '@sceptre/shared'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../modules/credit/credit.schema.ts'

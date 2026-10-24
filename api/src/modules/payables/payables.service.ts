@@ -1,5 +1,5 @@
-import { type DbExecutor, db } from '@gikautos/db'
-import { taxBreakdown } from '@gikautos/shared'
+import { type DbExecutor, db } from '@sceptre/db'
+import { taxBreakdown } from '@sceptre/shared'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'

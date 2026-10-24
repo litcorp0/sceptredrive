@@ -25,7 +25,7 @@ export const SETTING_DEFINITIONS = {
   },
   'receipt.header': {
     schema: z.string().trim().min(1).max(200),
-    defaultValue: 'Thank you for shopping at GikAutos',
+    defaultValue: 'Thank you for shopping at Sceptre Drive',
     branchScoped: true,
   },
   'loyalty.earnPointsPerCedi': {

@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ForbiddenError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'

@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -171,7 +172,7 @@ function TransfersTab() {
 										{transfer.unitsReceived}
 									</TableCell>
 									<TableCell className="whitespace-nowrap text-muted-foreground">
-										{new Date(transfer.createdAt).toLocaleDateString("en-GH")}
+										{formatDay(transfer.createdAt)}
 									</TableCell>
 									<TableCell>
 										<Link

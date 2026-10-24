@@ -1,3 +1,4 @@
+import { formatCount, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import {
@@ -24,7 +25,7 @@ import {
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
 import type { ResolvedSetting, SettingKey } from "#/lib/api-types"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 import { daysUntil, impliedValueMinor, isExpiringSoon } from "#/lib/loyalty"
 
 function numberSetting(settings: ResolvedSetting[], key: SettingKey): number | null {
@@ -107,7 +108,7 @@ export function LoyaltyCard({
 											: "text-2xl font-semibold tabular-nums"
 									}
 								>
-									{balancePoints.toLocaleString("en-GH")}{" "}
+									{formatCount(balancePoints)}{" "}
 									<span className="text-sm font-normal text-muted-foreground">points</span>
 								</p>
 								{pointsPerCedi !== null ? (
@@ -118,7 +119,7 @@ export function LoyaltyCard({
 								) : null}
 								{expiringSoonPoints > 0 ? (
 									<p className="text-sm text-amber-700">
-										{expiringSoonPoints.toLocaleString("en-GH")} points expire within 30 days.
+										{formatCount(expiringSoonPoints)} points expire within 30 days.
 									</p>
 								) : null}
 							</div>
@@ -141,10 +142,10 @@ export function LoyaltyCard({
 												return (
 													<TableRow key={lot.id}>
 														<TableCell className="text-right tabular-nums">
-															{lot.points.toLocaleString("en-GH")}
+															{formatCount(lot.points)}
 														</TableCell>
 														<TableCell className="text-right tabular-nums">
-															{lot.remainingPoints.toLocaleString("en-GH")}
+															{formatCount(lot.remainingPoints)}
 														</TableCell>
 														<TableCell>
 															{formatDay(lot.expiresAt)}

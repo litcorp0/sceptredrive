@@ -1,17 +1,17 @@
 # STATE — Sceptre Drive v1
 
-> **Renamed 2026-10-24:** GikAutos → **Sceptre Drive**. Historic sections below keep the
+> **Renamed 2026-10-24:** Sceptre Drive → **Sceptre Drive**. Historic sections below keep the
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
 **Updated:** 2026-10-24
-**Status:** **Phase 6 (POS Offline Core) complete and verified (9/9 plans).** The roadmap
-was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin
-Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were inserted
-ahead of the former Phases 7–9, and a later audit the same day added Phase 11 (Procurement &
-Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases
-13/14/15. Phase 7 is planned (7 plans) but not executed.
-**Next action:** Execute **Phase 7, Plan 01** (workspace and package-scope rename).
+**Status:** **Phase 7 (Identity, Design System & Brand Foundation) complete — 7/7 plans,
+verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
+System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
+inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
+(Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
+became Phases 13/14/15.
+**Next action:** Plan **Phase 8** (Admin Module Architecture & Shell).
 
 ---
 
@@ -26,7 +26,7 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔷 Planned (7 plans, not started) |
+| 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -40,13 +40,13 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 
 | Plan | Title | Status |
 |---|---|---|
-| 01 | Workspace and package-scope rename | ⬜ Not started |
-| 02 | Desktop identity, protocol host, CSP, and copy | ⬜ Not started |
-| 03 | `packages/brand`: tokens, fonts, chart ramp | ⬜ Not started |
-| 04 | shadcn primitives and chart layer in both clients | ⬜ Not started |
-| 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
-| 06 | Shell chrome on the new design system | ⬜ Not started |
-| 07 | Phase verification, evidence, and state update | ⬜ Not started |
+| 01 | Workspace and package-scope rename | ✅ Complete |
+| 02 | Desktop identity, protocol host, CSP, and copy | ✅ Complete |
+| 03 | `packages/brand`: tokens, fonts, chart ramp | ✅ Complete |
+| 04 | shadcn primitives and chart layer in both clients | ✅ Complete |
+| 05 | `date-fns` in shared, admin, and desktop | ✅ Complete |
+| 06 | Shell chrome on the new design system | ✅ Complete |
+| 07 | Phase verification, evidence, and state update | ✅ Complete |
 
 ### Phase 7 planning notes (2026-10-24)
 
@@ -70,6 +70,259 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
   constant in Plan 02 so the swap is a one-line change.
 - Renaming `productName` moves Electron's `userData` directory, so existing development
   terminals must re-enrol. Nothing is in production; no migration is written.
+
+### Phase 7 execution notes
+
+- **Plan 01 complete** (commits `4742a71`, `0c6d1b4`, `22a0021`, `ae54542`). Scope
+  the old package scope → `@sceptre/*`, root package `sceptre-drive`; the lockfile kept its
+  resolution (only the nine workspace entries changed, no transitive version drift); Docker
+  project `sceptre-drive-dev` with `sceptre_drive` / `sceptre_drive_powersync`; device JWT
+  audience `sceptre-pos`; logger `sceptre-drive-api`; seed emails `@sceptre.local`; demo
+  supplier "Sceptre Drive Imports"; API 360/360 after the rename.
+- **Dev database decision (operator, 2026-10-24):** the local Postgres on `:5432` is owned by
+  a role without `CREATEDB` and no passwordless superuser exists, so the dev/test databases
+  now live on the **Docker stack** (`:5434`): `sceptre_drive` + `sceptre_drive_test`,
+  recreated with `docker compose down -v`, migrated, seeded (admin + demo), and
+  `sceptre_drive_test` prepared. `.env` (gitignored) points at `:5434` and now sets
+  `TEST_DATABASE_URL`. PowerSync replicated all synced tables against the new source.
+- **Deviations, all deliberate:** `api/test/setup.ts` loads the repo-root `.env` itself
+  (`bun run --filter api test` runs with cwd `api/`, so Bun never saw it and the integration
+  suites silently skipped); `db:test:prepare` derives the host port from
+  `docker compose port postgres 5432` instead of shell-expanded `${POSTGRES_PORT}`;
+  `scripts/check-brand.mjs` scans **tracked** files (`git ls-files`) rather than walking the
+  tree, so build output, `node_modules`, `api/.mail`, and `.env` cannot produce false
+  failures; the allowlist covers `.planning/phases/**` (Phase 7's own plans quote the old
+  name) as well as `api/migrations/**` and the one `SCEPTRE_DOMAIN` line. Admin UI copy was
+  swept here too (the plan only named documents plus the desktop).
+- **Method note:** the ordered sweep must replace the hyphenated DB/container/audience tokens before
+  the bare slug, and the protocol host uses a **hyphen** (`sceptre-drive`) while SQL
+  identifiers use an **underscore** (`sceptre_drive`). Both traps were hit and corrected
+  during the sweep.
+- A stray logo/palette prompt had been pasted into `api/test/setup.ts`; it was preserved
+  outside the repository (`/tmp/opencode/logo-brief-sceptre-drive.md`) before the file was
+  committed clean.
+- **Plan 02 complete** (commits `98d1822`, `b312692`, `a85e244`, `d247f5d`). App protocol host
+  `app://sceptre-drive` (a hyphen is valid in a registered standard-scheme host; traversal,
+  foreign-host, and null-byte rejections unchanged); CSP placeholder `%SCEPTRE_CSP%`; Vite
+  plugin `sceptre-csp`; `productName` "Sceptre Drive POS" and Squirrel `sceptre_drive_pos`
+  (packaged app verified: the asar carries `productName`, so `userData` ends in
+  "Sceptre Drive POS"); one `SCEPTRE_DOMAIN` constant now derives the API/PowerSync origins
+  and `isAllowedConnectOrigin`, with the CSP string byte-identical apart from its source.
+- **Beyond the plan text:** the preload bridge the preload bridge `window.<old brand>` became
+  `window.sceptreDrive` (the old name is not a brand string but cannot survive the gate),
+  and `desktop/test/e2e/**` was updated (packaged path, `app://` origin, bridge name) with
+  the CSP assertion now reading `SCEPTRE_DOMAIN` from `config.ts` instead of repeating the
+  domain. Receipt fallback seller, printer test header, and the local POS database
+  (`sceptre-drive-pos.db`) follow the rename.
+- **Verification:** desktop **339/339** (none edited to pass), `check-types` clean, lint clean,
+  `bun run brand:check` OK over 597 tracked files, `bun run package:pos` produces
+  `out/Sceptre Drive POS-linux-x64`, packaged/unpackaged shell E2E **38/38**. Re-enrolment
+  consequences documented in `desktop/README.md` ("Renamed to Sceptre Drive").
+- **Plan 03 complete** (commits `19115b7`, `602217a`, `ea84203`). `packages/brand` owns
+  `src/tokens.css` (palette, shadcn surface map, chart ramp, radius/shadows, layout tokens)
+  and `src/fonts.css` (`@fontsource-variable/{inter,space-grotesk,jetbrains-mono}@5.3.0`,
+  `wght.css` entries confirmed to exist; families are "Inter Variable", "Space Grotesk
+  Variable", "JetBrains Mono Variable"). Both apps now import the package and their 120-line
+  duplicate token blocks are gone. Admin build emits one token source and 15 bundled woff2
+  files; desktop packages the same. `grep` for the two brand hexes outside `packages/brand`
+  finds nothing.
+- **Deviations, all deliberate:** three commits instead of four (the workspace, tokens, and
+  fonts land together because the package `exports` would otherwise point at files that do
+  not exist yet); `packages/brand` also gets a `tsconfig.json`, a `src/css.d.ts`, and
+  `lint`/`check-types` scripts so the root filters cover it; `biome.json` gained
+  `css.parser.tailwindDirectives` (Biome 2 rejects `@theme`/`@custom-variant` otherwise);
+  the auth-shell monogram was changed alongside `SidebarBrand` (the plan named only the
+  sidebar and header, but the login card carried the same `GA` mark).
+- **Evidence:** `evidence/verify-brand-runtime.mjs` starts a real Chromium against the admin
+  dev server and asserts computed typography, the `--brand`/`--canvas`/`--topbar` values,
+  light and dark token flips, and that **no request leaves localhost** — **12/12**.
+  `evidence/verify-brand-desktop.mjs` does the same inside the real POS renderer (Electron,
+  `app://`, production bundle): typography, `--brand`/`--topbar`/`--canvas`/`--surface`,
+  chart ramp, radius, and no off-machine request — **10/10**. Screens:
+  `evidence/shots/plan03-admin-login-{light,dark}.png`, `evidence/shots/plan03-pos-shell.png`.
+  Both scripts normalise minified CSS (`#fff`, `.625rem`) before comparing.
+- **Accessibility fix (operator decision 2026-10-24):** `--line #E4E3DF` measures **1.28:1**
+  on white (1.19:1 on canvas) and `#333A41` is **1.31:1** on the dark surface. That is fine
+  for a decorative rule but fails WCAG 2.2 **1.4.11** (3:1) for an input boundary, which is
+  exactly what shadcn maps from the border token. Added **`--line-strong`**: `#7C8794` light
+  (3.65:1 on white, 3.38:1 on canvas) and `#6B7280` dark (3.11:1 on `#22272C`), wired to
+  `--input` while `--border` keeps `--line`. Same graphite family; no hue introduced, and
+  D7's palette is unchanged. Verified in the built CSS and at runtime (resting field border
+  `rgb(124,135,148)`; the focused field still carries the brand ring). `MASTER.md` records
+  the rule: a decorative rule is not a boundary.
+- **Plan 04 complete** (commits `07594b9`, `be54e77`, `3603774`, `66a9a78`). Admin gained
+  `chart`, `sidebar`, `tooltip`, `toggle-group`, `toggle`, `popover`, `calendar`, `command`,
+  `avatar`, `scroll-area`, `breadcrumb`, `collapsible`, and `empty` from the registry; the
+  desktop gained its first `components/ui` set (19 primitives). `recharts` is pinned to
+  **^3.10.1** in both apps (the registry writes 3.8.0; 3.10.1 is the React 19-supported
+  release). `cn` is the only class helper in both apps and `desktop/src/renderer/lib/utils.ts`
+  is deleted.
+- **shadcn CLI finding (carry into future phases):** CLI 4.22.1 (a) plans to overwrite every
+  existing registry dependency even without `--overwrite`, and (b) appends **16 default
+  oklch/hsl variables** (`--sidebar*`, `--primary`, …) to the app stylesheet, which would
+  have silently overridden the brand tokens. Both were neutralised: the seven existing
+  primitives were moved aside, generated, and restored byte-identical, and the CSS injection
+  was reverted. **Never run `shadcn add` over a live token file without checking the CSS
+  diff.**
+- **Biome findings:** nested configs are inert until they declare `"root": false` (otherwise
+  Biome aborts with "Found a nested root configuration"). The generated primitives violate
+  five recommended rules (`useFocusableInteractive`, `useSemanticElements`,
+  `noDangerouslySetInnerHtml`, `noArrayIndexKey`, `noDocumentCookie`,
+  `useExhaustiveDependencies`), so a scoped `overrides` block turns them off **only** for
+  `components/ui/**`; nothing else is exempted.
+- **Chart proof:** a dev-only gallery renders a two-series revenue area chart, a stacked
+  tender-mix bar chart, a horizontal top-products bar chart, and a sparkline KPI. Admin route
+  is `/dev-charts` (public but `notFound()` outside `import.meta.env.DEV`; the production
+  build answers **404**, verified against `vite preview`). Desktop route is `#dev/charts`,
+  dispatched from `main.tsx` (the plan pointed at `_pos/app.tsx`, which only switches POS
+  sub-routes). Both galleries carry TODO comments for Phases 9/10.
+- **Bugs found by the proof and fixed:** `window.matchMedia` in a `useState` initialiser broke
+  admin SSR ("window is not defined" on every render) — now guarded and SSR-safe; the chart
+  cards lacked `min-w-0`, so the 320 px layout scrolled horizontally (a grid `min-width:auto`
+  overflow); a 48 px Y-axis clipped `100,000`.
+- **Verification:** `evidence/verify-charts-admin.mjs` **61/61** and
+  `evidence/verify-charts-desktop.mjs` **60/60** — four widths (320/768/1024/1440) × light ×
+  dark × reduced-motion: four containers present, no horizontal scroll, no zero-height chart,
+  no animation under `prefers-reduced-motion`, first series `rgb(242,106,27)`, tooltip on
+  hover **and** on keyboard focus, no off-machine request. 48 screenshots under
+  `evidence/shots/plan04-{admin,pos}-*`. Desktop suite still **339/339**; admin production
+  build OK; the import-boundary probe fails with the intended message and the barrel import
+  passes.
+
+- **Plan 05 complete** (commits `e88815e`, `625e94c`, `ef0330c`, `bcc480e`). `date-fns` 4.4.0
+  is in the root catalog and resolves exactly once; `packages/shared/src/dates.ts` is now the
+  only place a date format is chosen. Twelve helpers: `formatDay`, `formatDayShort`,
+  `formatDateTime`, `formatTime`, `formatMonth`, `formatRange` (three shapes), `formatRelative`,
+  `formatBucket` (day/ISO week/month), `formatCount`, `toDateInputValue`,
+  `toDateTimeInputValue`, `accraDay`, plus `formatAccraDateTime` for paper. Invalid input
+  renders `—`; nothing returns a number; no helper divides money.
+- **Admin adoption:** 16 files stopped formatting dates themselves (ledger, statement,
+  loyalty history, liability, audit, terminals, devices, transfers, counts, receipts,
+  customers, suppliers, dashboard). `admin/src/lib/format.ts` no longer owns `formatDay`;
+  its importers now take it from `@sceptre/shared`. Five `new Date().toISOString().slice(0,10)`
+  defaults became `toDateInputValue`, the `datetime-local` helper became
+  `toDateTimeInputValue`, and number grouping (points, counts, invoice totals) goes through
+  `formatCount`. `daysUntil` uses `differenceInCalendarDays` and `isExpiringSoon` requires a
+  strictly future expiry, so a partial day or clock change cannot flip a badge.
+- **Desktop adoption:** `lib/time.ts` is deleted (`accraDay` lives in shared), the receipt
+  prints `23 Oct 2026 10:15`, the sales table and shift screen use `formatTime`/
+  `formatDateTime`, the sync badge no longer slices ISO strings, the outbox shows
+  `formatRelative` for the next retry (absolute in `title`), and the conflict list shows an
+  absolute timestamp.
+- **Deviation (deliberate, receipt correctness):** the plan said to build the printed date
+  from `formatDay`/`formatTime`, but those format in the host zone. A till laptop set to
+  another timezone would then print a different day from the one its receipt number was
+  allocated from. Added `formatAccraDateTime` to shared: explicit UTC (= Africa/Accra) via
+  `Intl`, the project's one sanctioned `Intl.DateTimeFormat` for dates, and the receipt test
+  now asserts the `Date` line is exactly 42 columns and reads `23 Oct 2026 10:15`.
+- **Registry exception:** `components/ui/chart.tsx` and `calendar.tsx` keep their internal
+  `toLocaleString`/`toLocaleDateString` calls. They are generated shadcn sources; editing them
+  would be drift, and the DoD greps are scoped to app code.
+- **Verification:** shared **96/96** (73 + 23 date tests), desktop **339/339** (existing
+  receipt assertions strengthened, no test deleted), `bun run check-types` 6/6, lint clean,
+  brand gate OK, `bun run --filter admin build` and `bun run --filter desktop build` pass,
+  packaged print smoke **21/21**. `grep` for `toLocaleDateString|dateStyle` in either app now
+  returns nothing outside the registry files. The admin visual pass over ledger, statement,
+  aging, and audit is folded into Plan 07's logged-in verification.
+- **Housekeeping:** `test:print` regenerates the Phase 6 receipt artefacts under
+  `phases/06-pos-offline-core/evidence/`; they were restored to HEAD after the run.
+
+- **Plan 06 complete** (commits `42e375e`, `2cfe00f`, `dee787d`, `493a0e3`, `51d751d`,
+  `49a6b46`, `bfcb6bb`, `66060ed`, `713a619`, `913eb57`, `013ab53`). Both clients now open
+  onto Sceptre Drive chrome built from `@sceptre/brand` and the registry primitives.
+  - **Admin:** the hand-rolled `<aside>` and mobile Sheet are gone; the shadcn
+    `SidebarProvider`/`Sidebar collapsible="icon"` carries four groups (Overview, Operations,
+    Organisation, System), the permission filter is unchanged, and the active item is the only
+    brand orange (a 2 px `--brand` rail drawn with `::before`). Width comes from
+    `--layout-sidebar-width`; `use-mobile.ts` moved to a 1024 px breakpoint so the sheet still
+    opens below `lg`. The charcoal `bg-topbar` fascia carries breadcrumb, branch switcher,
+    theme toggle, and user menu; a skip link precedes the shell and `main#main` takes focus.
+  - **Theme:** the official shadcn TanStack Start pattern — `ScriptOnce` from
+    `@tanstack/react-router` writes `light`/`dark` from `localStorage['sceptre:theme']`,
+    resolving `system` through `prefers-color-scheme`, before hydration. Proven: after a
+    reload the `<html>` class is already `dark` at `domcontentloaded`.
+  - **POS:** the counter header is the same fascia at `--layout-topbar-height` with ≥44 px
+    targets; the sync badge is a pill with a semantic dot + icon + word, its state machine and
+    every label byte-identical; boot screens use the `SD` monogram in Space Grotesk; the grand
+    total is `font-display tabular-nums` and the pay button stays 56 px charcoal-on-orange.
+  - **Accessibility deviations, deliberate:** the plan's `2px --brand` focus ring measures
+    **2.83:1** on the canvas, under SC 1.4.11's 3:1, so the global ring uses `--brand-ink`
+    (**4.22:1** light, **7.24:1** dark); the plan's `border-radius` on `:focus-visible` is
+    omitted because it reshapes pills and avatars while focused. The registry primitives'
+    `outline-none` + `ring-ring/50` (**1.76:1**) is overridden by one unlayered rule in both
+    app stylesheets that neutralises only `--tw-ring-shadow`, without editing `components/ui`.
+  - **Contrast fix carried by review:** semantic badge and stock chips no longer colour the
+    label (`text-warn` on `bg-warn/10` was **4.39:1**); the dot or tint carries the colour and
+    the label is `text-foreground` (≥14:1).
+  - **Verification:** admin build + `check-types` green, desktop **339/339**, packaged-shell
+    smoke **38/38**, lint (22 pre-existing/`!important` warnings, exit 0), `brand:check` OK,
+    `bun test` shared + API **360/360** + desktop 339/339. `evidence/capture-shell.mjs`
+    **16/16** against the real console (groups, single active rail, fascia height/colour,
+    skip-link first Tab, 2 px focus outline, print hides chrome, dark persistence with no
+    flash, 375 px drawer opens and Escape closes) with
+    `shots/plan06-admin-{light,dark}.png` and `plan06-admin-mobile-drawer.png`.
+  - **Host note:** `bun run --filter desktop build` fails in Electron Forge's package-manager
+    check because Bun 1.3.14 exports `npm_config_user_agent` as `npm/undefined`. Prefixing
+    `npm_config_user_agent="npm/11.16.0 node/v24.18.0 linux x64"` packages cleanly; this is
+    environmental and predates the plan.
+  - **Deferred to Plan 07:** the enrolled-terminal POS header screenshot (needs enrolment and
+    a shift), the full ten-step walkthrough, `scripts/check-tokens.mjs`, and the ROADMAP
+    update.
+
+- **Plan 07 complete** (commits `ef5e827`, `b4d429f`, `6581786`, `4b3c160`, `0d39c58`).
+  Phase 7 is verified: `phases/07-identity-design-system/01-VERIFICATION.md` maps every
+  roadmap success criterion to a command or a recorded step, and `evidence/suites.txt` is the
+  whole gate matrix in one transcript.
+  - **New gate.** `scripts/check-tokens.mjs` (`bun run tokens:check`, wired into `ci.yml`) is
+    the machine version of the phase goal. It fails when either client stops importing
+    `@sceptre/brand/tokens.css`, when a brand hex reappears under `admin/src` or
+    `desktop/src/renderer` (317 tracked files scanned), when a required custom property is
+    missing or a literal colour is not redefined in `.dark`, when a contrast pair misses its
+    bound, or when `date-fns` resolves twice. Contrast is computed from the **token file** with
+    the WCAG 2.2 relative-luminance formula — the first draft compared literals copied into the
+    script and could not fail when a token drifted; `evidence/verify-token-gate.mjs` proves the
+    gate can fail, with eleven mutations each asserted to break it and each restored
+    byte-for-byte (**22/22**).
+  - **Suite numbers.** API **360**, shared **96**, desktop **339**, packaged shell E2E
+    **38/38**, chart galleries **61/61** (admin) and **60/60** (POS), admin walkthrough
+    **38/38**, POS walkthrough **16/16**. Baseline in the plan was API 354 / shared ≥ 90 /
+    desktop 339; every suite meets or exceeds it.
+  - **`bun test` is not `bun run test`.** Bun resolves `bun test` to its own builtin runner,
+    which ignores the workspace `test` scripts and runs every test file with the wrong setup
+    (576 tests, 31 failures here). `AGENTS.md` says `bun test`; it should say `bun run test`.
+  - **Three product defects found and fixed.** (a) A `@fontsource` unicode-range subset
+    (JetBrains Mono cyrillic) is under Vite's 4 KiB inline threshold, so it shipped as a
+    `data:` URI and `font-src 'self'` blocked it — one CSP violation per boot and a fallback
+    font; both apps now opt font files out of inlining and the policy was **not** widened.
+    (b) The 375 px drawer needed two Escapes: focusing a nav link opened its tooltip, which
+    consumed the first Escape; tooltips are suppressed in the drawer. (c) An offline terminal
+    read `Downloaded 14:02` instead of Offline because the badge only consulted the uploader;
+    a synced-before terminal whose transport is down now reports Offline, with a
+    `lastSyncedAt` guard so a first boot does not flash. (d) A statement printed from dark
+    mode came out as a slab of ink — dark is a screen mode, not a paper mode — so the one
+    token file now resets the palette inside `@media print`, and walkthrough step 5 prints
+    from dark mode on purpose to prove it.
+  - **Two test defects fixed.** The chart galleries compared the computed transition duration
+    to the string `0s` while the reduced-motion policy caps it at `0.01ms` (Chrome serialises
+    `1e-05s`); both now parse the duration and fail above 1 ms. The packaged smoke connected
+    over CDP as soon as `/json/version` answered, before Chromium exposed a page target, and
+    hung for its full timeout; it now waits for a page target.
+  - **Deliberate deviations** (all in the report §7): `ci.yml` not `checks.yml`; the emitted
+    bundle has **two** `--brand` declarations (`:root` and `.dark`) because D7 fixes the brand
+    as unchanged in dark mode — one would require deleting a deliberate token; contrast pairs
+    resolve through the token graph; steps 8–9 run the unpackaged build because a packaged app
+    sets `allowLocalOrigins: false` by design; the offline leg aborts requests in the driver
+    rather than killing a server it does not own; each POS run creates its own terminal so no
+    shipped ledger row is deleted to make room for a fixture.
+  - **Carry-forwards.** Outbox ordering (a backed-off `SHIFT_OPEN` can be overtaken by a sale,
+    which is then dead-lettered `SHIFT_MISSING` — the till never blocked the sale, but causal
+    order should be enforced before payments) → **Phase 13**. A first install opens the
+    diagnostics shell rather than enrolment, and POS product tiles truncate names → **Phase
+    10**. `STAFF_ID_PREFIX` remains `GA` in `.env`; it is not a brand string and changing it
+    rewrites identity values, so it is an operator decision.
+  - **Re-enrolment consequence unchanged:** the rename moved Electron's `userData` and
+    invalidated device tokens, so existing development terminals must re-enrol
+    (`desktop/README.md`).
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
@@ -223,7 +476,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `sale_tender`, `cash_movement`, `pos_sync_transaction`, `sync_conflict`, and
     `pos_staff_binding`, with the one-open-shift and active-binding partial uniques and the
     terminal/client idempotency uniques; `stock_movement` now accepts `SALE`.
-  - `@gikautos/shared` exports `allocateProportionally` and `priceCart` (integer
+  - `@sceptre/shared` exports `allocateProportionally` and `priceCart` (integer
     largest-remainder allocation, line/sale/loyalty discounts, per-line Ghana tax); 20 new
     tests, 70 shared tests pass.
   - Eight `pos.*` settings and the `staff.pin.reset` / `pos.discount` permissions.
@@ -231,11 +484,11 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `ACC-SPX-T01-S-20261020-01` (float 20000, expected/counted 42500, variance 0), cash sale
     `…0001` (22500, change 7500), credit sale `…0002` (18500, Akosua balance 24500), and one
     RESOLVED `PRICE_MISMATCH` conflict. Re-running `db:seed --demo` is a no-op.
-  - Verification: fresh `gikautos_test` schema → migrate → **API 277/277**, shared 70/70,
-    lint and check-types green; demo seed run twice on `gikautos_dev` with unchanged counts.
+  - Verification: fresh `sceptre_drive_test` schema → migrate → **API 277/277**, shared 70/70,
+    lint and check-types green; demo seed run twice on `sceptre_drive_dev` with unchanged counts.
   - Test DB note: the seed suite now cleans POS sales/shift/device/conflict before its
     fixtures; reset `public` **and** `drizzle` schemas (not just `public`) when rebuilding
-    `gikautos_test`, or Drizzle will believe the migrations already ran.
+    `sceptre_drive_test`, or Drizzle will believe the migrations already ran.
 - **Plan 02 complete** (commits `4dec559`, `98d0395`, `23e24a7`, `4231a34`):
   - `desktop/` is a Bun workspace on Electron Forge 8.0.1 + Vite 8.3.5 + React 19.2;
     `bun run dev:pos|build:pos|package:pos|make:pos` at the root, and root
@@ -247,7 +500,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `installConfig.hoistingLimits` for the hoisted linker. `desktop/scripts/prepare-desktop.mjs`
     links `electron` into the workspace and will materialise native runtime modules as
     real files (Plan 07). API/shared suites and the admin build stay green under it.
-  - **Origin + CSP:** production loads `app://gikautos/index.html` via
+  - **Origin + CSP:** production loads `app://sceptre-drive/index.html` via
     `protocol.handle` (privileged standard scheme, no `file://`); the CSP
     (`src/main/csp.ts`) is sent as a header *and* injected into `index.html` as a meta
     fallback, and is built from config origins that are checked against a fixed
@@ -274,7 +527,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 - **Plan 03 complete** (commits `b3f671e`, `5b4999b`, `4aa1fb2`, `bfe2a0f`, `4fc59c9`, `3277930`):
   - **POS JWT + JWKS:** Ed25519 (`jose`); `POS_JWT_PRIVATE_KEY` required in production
     (boot fails without it), ephemeral + warn in dev/test. `/.well-known/jwks.json` (and an
-    `/api/...` alias) serves the public JWK only. Device JWTs (`aud=gikautos-pos`,
+    `/api/...` alias) serves the public JWK only. Device JWTs (`aud=sceptre-pos`,
     `typ=device`, 15 min) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share the key;
     `verifyDeviceJwt` collapses every failure into 401 `DEVICE_TOKEN_INVALID`.
   - **Enrollment → device token:** `POST /api/enrollments/redeem` now issues a 32-byte
@@ -292,7 +545,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   - **Self-hosted service:** `compose.yaml` gains `journeyapps/powersync-service:1.27.1`
     under `profiles: ["sync"]` (unified mode, port 8080, Postgres bucket storage,
     `extra_hosts` for the JWKS); `powersync/init/powersync.sql` creates `powersync_role`,
-    the `gikautos_powersync` storage database, and a `powersync` publication scoped to the
+    the `sceptre_drive_powersync` storage database, and a `powersync` publication scoped to the
     8 synced tables. `sync-config.yaml` (edition 3) streams products/barcodes globally and
     prices/stock/credit by `auth.parameter('branch_id')`, plus customers and live loyalty
     lots. Root scripts `sync:init|up|down|logs|config-check`.
@@ -312,7 +565,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     one, revocation blocks both endpoints); `test:sync` **18/18** (all 8 tables equal the
     server counts, `hasSynced=true`, offline readable, reconnect, encrypted file header).
     API 305/305, desktop 60/60, lint/check-types green.
-  - Findings recorded: `app://gikautos` must be in `CORS_ORIGINS`; the CSP `<meta>`
+  - Findings recorded: `app://sceptre-drive` must be in `CORS_ORIGINS`; the CSP `<meta>`
     fallback must be a superset of the header (browsers intersect); `allowLocalOrigins`
     replaces `isDev` for localhost policy; the container-to-host firewall path is bypassed
     by generating a service config with the public key inlined; the Docker host port is now
@@ -425,17 +678,17 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 ## Repository State
 
 - Fresh git history on `dev`; planning + Phase 1 committed. **No git remote exists yet.**
-- Root Bun workspace with catalogs; `@gikautos/shared` (roles, permissions, branch
-  codes) and `@gikautos/db` (Drizzle client, config, migrations).
+- Root Bun workspace with catalogs; `@sceptre/shared` (roles, permissions, branch
+  codes) and `@sceptre/db` (Drizzle client, config, migrations).
 - API boots on Node 24 with native TypeScript type stripping: `bun run dev:api`.
   Validated env, pino logs, request IDs, security headers, CORS, `/health`, `/ready`.
-- PostgreSQL: the operator's **local instance on `:5432`**. `gikautos_test` holds the
-  current v1 schema (migrated clean after verification). The local `gikautos` database is
-  the **discarded prototype schema** (PascalCase tables) and must not be used for v1;
-  create a dedicated v1 dev database (the `gikautos` role currently lacks `CREATEDB`) or
-  use the Docker stack. `compose.yaml` remains for CI/Docker (host `:5433`,
-  `wal_level=logical`, 10 slots for Phase 6). Migrations need an explicit `DATABASE_URL`;
-  tests honour `TEST_DATABASE_URL`.
+- PostgreSQL: the **Docker stack** (`sceptre-drive-dev`, host `:5434`) since the Phase 7
+  rename: `sceptre_drive` is the dev database and `sceptre_drive_test` the test database
+  (created by `compose.yaml` and `bun run db:test:prepare`). The operator's local instance on
+  `:5432` still holds the pre-rename databases and the **discarded prototype schema**
+  (PascalCase tables); v1 does not use it. `compose.yaml` sets `wal_level=logical` and 10
+  replication slots for PowerSync. Migrations need an explicit `DATABASE_URL`; tests honour
+  `TEST_DATABASE_URL`.
 - API serves auth (public sign-up blocked), branches, terminals, enrollment, devices,
   staff, `/api/me/password`, audit (with `actorId` + `actorStaffId` filters), settings.
   Middleware: session loading (cookie cache bypassed for authorization), permission
@@ -447,19 +700,21 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 354/354, desktop 339/339 against
-  `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
+- Tests: `bun run test` — shared 73/73, api 360/360, desktop 339/339 against
+  `sceptre_drive_test` (`TEST_DATABASE_URL`; migrate it first). The suite loads the repo-root
+  `.env` itself, so a plain `bun run test` from the root works.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
-  check-types → migrate → test → build). Validated with actionlint; full sequence run
-  locally. **Remote run pending a git remote.** `desktop/` builds and packages as part of
-  that job; `.github/workflows/desktop.yml` adds the manual Windows-installer job and the
+  brand:check → check-types → migrate → test → build). Validated with actionlint; full
+  sequence run locally. **Remote run pending a git remote.** `desktop/` builds and packages
+  as part of that job; `.github/workflows/desktop.yml` adds the manual Windows-installer job
+  and the
   Linux E2E/PowerSync jobs (also pending the remote).
 - `.planning/phases/01-foundation/01-VERIFICATION.md` records all evidence, deviations,
   and the human verification checklist.
 
 ### Phase 2 additions
 
-- `@gikautos/shared` now exports the Ghana tax engine (`taxBreakdown`, basis-point rates,
+- `@sceptre/shared` now exports the Ghana tax engine (`taxBreakdown`, basis-point rates,
   `addTaxBreakdowns`) and pricing helpers (`resolveEffectivePrice`, `isValidPriceMinor`) —
   integer-only, reused by API, console preview, and (Phase 6) the offline POS.
 - Catalog module (`api/src/modules/catalog`): categories (two-level tree, depth/self-parent/
@@ -478,7 +733,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 
 ### Phase 3 additions
 
-- `@gikautos/shared` exports `averageCostAfterReceipt` (integer weighted average,
+- `@sceptre/shared` exports `averageCostAfterReceipt` (integer weighted average,
   half-up) used by the API and the demo seed.
 - Inventory module (`api/src/modules/inventory`): append-only `stock_movement` ledger +
   `stock_level` projection, receipts (`stock_receipt`, `stock_receipt_line`),
@@ -632,7 +887,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 - Permissions: `supplier.read` (admin+manager) and admin-only `supplier.create/update/
   archive`; `payable.read/invoice.manage/payment/void` (admin all; manager branch-scoped);
   cashier none.
-- Demo seed: SUP-00001 Accra Parts Depot (bank + MoMo default), SUP-00002 GikAutos Imports
+- Demo seed: SUP-00001 Accra Parts Depot (bank + MoMo default), SUP-00002 Sceptre Drive Imports
   (MoMo); receipt links for GRN-00001/00002; four product mappings with last costs;
   `SINV-00001` from GRN-00002 with the derived split and a 40% `PAY-00001`; standalone
   freight `SINV-00002`; `PAY-00002` on account; sequences advanced to 3. Fully idempotent.
@@ -844,7 +1099,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `b58cfdb`, `8917f44`, `57acdb4`, `73b14e1`, plus the evidence/state commits). Record:
   `.planning/phases/06-pos-offline-core/01-VERIFICATION.md`.
 - **Fresh cycle:** Docker volume reset → migrate → seed → demo seed ×2 (second is a no-op)
-  → `gikautos_test` migrated → `sync:init` → API on :4000 against :5434 → `sync:up` with the
+  → `sceptre_drive_test` migrated → `sync:init` → API on :4000 against :5434 → `sync:up` with the
   JWKS inlined → all 8 synced tables replicated. Evidence scripts:
   `walkthrough-pos.mjs` **162/162**, `race-last-unit.mjs` **18/18**,
   `duplicate-upload.mjs` **24/24**, `e2e-pos.mjs` **51/51**; packaged `test:e2e`
@@ -899,7 +1154,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   console when off). Screenshots 11–15 under `evidence/shots/`.
 - **Break-glass CLI:** `bun run --filter api two-factor:reset -- --email <address>` clears the
   TOTP secret, backup codes, and `two_factor_enabled`, and audits the action. Used on
-  2026-10-24 to clear the admin's pending enrolment in `gikautos_dev`.
+  2026-10-24 to clear the admin's pending enrolment in `sceptre_drive_dev`.
 - Suites after the fix: API **360/360**, shared 73/73, desktop 339/339; lint and types clean.
 
 ### Phase 6 planning additions (2026-10-22)
@@ -913,7 +1168,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   drift becomes a conflict, never a repricing; `SALE` stock movements use
   `postMovements(..., { allowNegative: true })`; credit/loyalty replay uses internal
   bypass options on `postEntry`; one `pos_sync_transaction` row per client transaction for
-  exactly-once; the shared `priceCart` in `@gikautos/shared` is the only pricing path.
+  exactly-once; the shared `priceCart` in `@sceptre/shared` is the only pricing path.
 - Research deltas since the 2026-10-17 notes: Forge is now **8.0.1** (ESM-only, Vite
   plugin stable on Vite 8, `.cjs` main/preload); Electron is **45** (sync `safeStorage`
   deprecated, async only); PowerSync Web SDK is **2.5.0** (ESM-only, HTTP streaming,
@@ -951,7 +1206,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 | 2026-10-17 | Plan 03: added `branch.deactivate` as an admin-only permission. |
 | 2026-10-17 | Plan 03: enrollment codes are HMAC-hashed with the auth secret, one live code per terminal, redeem rate limited (Phase 6 contract returns 501). |
 | 2026-10-17 | Plan 03: `pinHash`/`pinVersion` are stored with `returned: false` and never leave the server. |
-| 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
+| 2026-10-17 | Plan 03: tests use `sceptre_drive_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
 | 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); `schema` = Drizzle tables, `validation` = Zod schemas + validators. See AGENTS.md. |
 | 2026-10-17 | Drizzle tables live in `api/src/modules/*/*.schema.ts`; drizzle-kit config, migrations, and seeds live in `api/`; `packages/db` is only the Postgres client. |
 | 2026-10-18 | Console design: dense neutral ops console (system font stack, zinc tokens, compact tables); decorative scaffold styling pruned. Radix/new-york shadcn kept (no Base UI migration mid-project). |
@@ -998,21 +1253,21 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 | 2026-10-22 | A voided invoice keeps occupying its receipt slot (one invoice per receipt); voiding frees only the supplier's invoice number for re-entry. Payment voids are append-only RELEASE rows and never delete APPLY history. |
 | 2026-10-22 | Supplier creation/archiving and invoice/payment creation serialize on the supplier row (`FOR UPDATE`), so archiving cannot race a new debt; allocation payments lock invoice rows in id order so parallel payments cannot over-apply. |
 | 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
-| 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
+| 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`sceptre_drive_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
 | 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
 | 2026-10-22 | Root linker switched to Bun **hoisted** (`bunfig.toml`) so Electron Forge can package `desktop/`: Forge does not follow symlinks and Bun 1.3's self-contained workspaces are not available for the hoisted linker. `desktop/scripts/prepare-desktop.mjs` bridges the gap. |
-| 2026-10-22 | Plan 02: the POS renderer is served from `app://gikautos` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
+| 2026-10-22 | Plan 02: the POS renderer is served from `app://sceptre-drive` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
 | 2026-10-22 | Plan 02: the PowerSync Web SDK **passes the phase gate** in the sandboxed `app://` renderer (encrypted WASM SQLite, local-only writes, watch, restart persistence). Production VFS = `OPFSCoopSyncVFS`, fallback `IDBBatchAtomicVFS`; always pass `vfs` explicitly and use `WASQLiteOpenFactory`. |
 | 2026-10-22 | Plan 02: keychain = async `safeStorage` only, `secrets.json` mode 0600, ciphertext only, fail closed with `KEYCHAIN_UNAVAILABLE`. Linux `basic_text` is reported as `secureStorage.level: 'basic'` so Plan 04 enrolment can require `os`. |
-| 2026-10-22 | Plan 03: POS tokens are Ed25519-signed (`jose`); device JWTs (`aud=gikautos-pos`) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share one key served at `/.well-known/jwks.json`. `POS_JWT_PRIVATE_KEY` is required in production (boot fails without it); dev/test fall back to an ephemeral key with one warning. |
+| 2026-10-22 | Plan 03: POS tokens are Ed25519-signed (`jose`); device JWTs (`aud=sceptre-pos`) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share one key served at `/.well-known/jwks.json`. `POS_JWT_PRIVATE_KEY` is required in production (boot fails without it); dev/test fall back to an ephemeral key with one warning. |
 | 2026-10-22 | Plan 03: enrollment redemption issues the device token exactly once and stores only its HMAC-SHA256 hash (row locked `FOR UPDATE`). The device token is also the refresh credential — `/api/pos/session` is both sign-in and refresh. |
-| 2026-10-22 | Plan 03: `allowLocalOrigins = isDev \|\| !app.isPackaged` decides whether `http://localhost` API/PowerSync origins are acceptable; a packaged app still fails closed. `app://gikautos` must be listed in `CORS_ORIGINS`. |
+| 2026-10-22 | Plan 03: `allowLocalOrigins = isDev \|\| !app.isPackaged` decides whether `http://localhost` API/PowerSync origins are acceptable; a packaged app still fails closed. `app://sceptre-drive` must be listed in `CORS_ORIGINS`. |
 | 2026-10-22 | Plan 03: the CSP `<meta>` fallback is always built with local origins included, because browsers enforce the *intersection* of header and meta; the runtime header stays authoritative. |
 | 2026-10-22 | Plan 03: local development generates `powersync/.generated/service.yaml` with the API's public JWK inlined (`sync:up`), so sync works even when the host firewall blocks container→host. Staging/production use the committed `service.yaml` with `jwks_uri`. |
 | 2026-10-22 | Plan 03: the compose Postgres host port is `${POSTGRES_PORT:-5433}` (5433 was already taken on this machine; `.env` uses 5434). |
 | 2026-10-22 | Plan 03: the local PowerSync database uses `OPFSCoopSyncVFS` with an explicit `WASQLiteOpenFactory`, `enableMultiTabs: false`, and the SDK's own worker — the configuration the Plan 02 gate proved. |
 | 2026-10-22 | Phase 6: development and CI use the **self-hosted PowerSync Docker service** (pinned `journeyapps/powersync-service` stable tag, `-r unified`) against the Docker Postgres, with Postgres bucket storage and the API JWKS. **Staging and production use PowerSync Cloud** (two instances) with the same sync config; no Cloud account is needed for development. |
-| 2026-10-23 | Plan 04: PIN policy lives once in `@gikautos/shared` (4–6 digits, no repeated digits or straight sequences) and is enforced by the API, the console, and the terminal. |
+| 2026-10-23 | Plan 04: PIN policy lives once in `@sceptre/shared` (4–6 digits, no repeated digits or straight sequences) and is enforced by the API, the console, and the terminal. |
 | 2026-10-23 | Plan 04: managers may reset only **cashier** PINs in their branch (mirroring the password rule); admins may reset anyone. Role, branch, deactivation, and every PIN reset bump `pinVersion` and revoke live bindings so stale terminals fail closed. |
 | 2026-10-23 | Plan 04: a binding token is 32 random bytes returned once and stored as `HMAC-SHA256` keyed with the auth secret; one active binding per (device, staff) enforced by the partial unique index; expiry 90 days; the token travels in `x-pos-binding`, never a URL or body. |
 | 2026-10-23 | Plan 04: offline PIN hashing runs in the Electron **main process** with `@node-rs/argon2` (Argon2id 64 MiB/t=3/p=4). The 16-byte device salt is stored beside the verifier and used as the Argon2 pepper. The staff session is in memory only; quitting requires the PIN again. |
@@ -1085,12 +1340,12 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   on GitHub (workflow is written and locally verified).
 - Phase 4 and Phase 5 are verified (`phases/04-customers-credit/01-VERIFICATION.md`,
   `phases/05-suppliers-payables/01-VERIFICATION.md`). The verification fixtures live in the
-  local `gikautos_test` database; reset + reseed it before a demo and rerun the admin TOTP
+  local `sceptre_drive_test` database; reset + reseed it before a demo and rerun the admin TOTP
   bootstrap afterwards.
-- Phase 5 verification used `gikautos_test`. The local `gikautos` database on `:5432` is
-  the **discarded prototype schema** (PascalCase tables), not the v1 schema; do not point
-  v1 at it. Create a dedicated local v1 dev database (grant `CREATEDB` or run
-  `createdb` as `postgres`) or use the Docker stack, then migrate + seed.
+- Phase 5 verification used `sceptre_drive_test`. The dev stack is the Docker project
+  `sceptre-drive-dev` on host `:5434` (`sceptre_drive` + `sceptre_drive_test`). The operator's
+  local instance on `:5432` still holds the pre-rename databases and the **discarded prototype
+  schema** (PascalCase tables); do not point v1 at it.
 - Phase 8: Paystack transfers consume `supplier_payment_detail.paystack_recipient_code`
   and the reserved `PAYSTACK` payment method; E-VAT purchase reporting uses the stored
   VAT/NHIL/GETFund split. Receipts and payables-aging exports are Phase 8 scope.
@@ -1159,7 +1414,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `api/src/modules/platform/settings.service.ts`.
 - Integration test fixtures seed catalog rows directly via Drizzle when the API under
   test does not own them; track every created id for scoped cleanup (other suites run
-  in parallel against `gikautos_test`).
+  in parallel against `sceptre_drive_test`).
 - Walkthrough scripts (API + Playwright browser) live under
   `.planning/phases/02-catalog-pricing/evidence/`; run them against a running
   API (`:4000`) and console (`:3000`). The browser script auto-handles forced TOTP
@@ -1176,13 +1431,13 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `walkthrough-payables.mjs` (HTTP + SQL, 102 checks) and
   `smoke-console-suppliers.mjs` (Playwright, 25 checks, 18 screenshots) with their logs.
   Both are **fresh-DB-only** (exact `SUP-00003/4`, `SINV-00003`, `PAY-00003` assertions).
-  Rerun cycle on the local instance: reset the `gikautos_test` schema, migrate, `db:seed`,
+  Rerun cycle on the local instance: reset the `sceptre_drive_test` schema, migrate, `db:seed`,
   `db:seed --demo` twice, start the API with that `DATABASE_URL`, bootstrap TOTP, run the
   API walkthrough, then the browser script from a directory where `playwright` resolves
   (`SHOTS_DIR` pointing at `evidence/`). Tests use `TEST_DATABASE_URL`.
 - Phase 6 verification commands (fresh DB, API + PowerSync up, `DATABASE_URL` = Docker
-  `:5434/gikautos`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
-  (run with `bun`; they import `@gikautos/shared`), then `node e2e-pos.mjs` (Playwright
+  `:5434/sceptre_drive`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
+  (run with `bun`; they import `@sceptre/shared`), then `node e2e-pos.mjs` (Playwright
   over CDP must run on Node, not Bun) and `node perf-pos.mjs`. The E2E owns :4000: it stops
   the API to prove the offline relaunch, so stop any other `bun dev` first.
 - The Electron E2E uses the **unpackaged production build** (`.vite` + Electron) because a
@@ -1196,7 +1451,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   rows lock before debts/archive; totals are always server-computed; account numbers stay
   masked outside the owning supplier detail payload.
 - `bun run db:test:prepare` is Docker-specific; on the local instance, create/migrate
-  `gikautos_test` directly (the role lacks `CREATEDB`, so reset the schema instead of
+  `sceptre_drive_test` directly (the role lacks `CREATEDB`, so reset the schema instead of
   dropping the database).
 - Phase 6 contracts to honour: extend `StockMovementType` (e.g. `SALE`) and add an
   oversell posting mode; keep movements append-only, `reference_number` populated, and
@@ -1235,7 +1490,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   read them or reject invalid writes, so no suite should mutate global loyalty settings.
 - Phase 4: loyalty reads are global, but `getLiability` activity is manager-scoped
   (own branch plus branch-less EXPIRE rows); tests assert per-branch totals only for
-  their own uniquely-coded branches because all suites share `gikautos_test`.
+  their own uniquely-coded branches because all suites share `sceptre_drive_test`.
 - Phase 4: pg-boss lives in `api/src/jobs/` (`boss.ts` singleton, `queues.ts`
   queue/worker/schedule, `index.ts` start/stop); tests import `app.ts` only, never
   `src/index.ts`. The loyalty job test starts its own instance against the test DB with
@@ -1273,7 +1528,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   fail. Use `POS_PRINTER_DRIVER=fake` for all automated runs; real hardware is a human
   checklist item. `app://` (not `file://`) is required for PowerSync workers.
 
-- Phase 6 Plan 04: PIN policy is `pinProblem()` in `@gikautos/shared`; never duplicate the
+- Phase 6 Plan 04: PIN policy is `pinProblem()` in `@sceptre/shared`; never duplicate the
   digit/trivial checks. Server PIN hashing reuses `auth/password.ts`; the terminal hashes in
   the Electron main process (`main/ipc/pin.ts`) with the stored 16-byte salt as the Argon2
   `secret` (pepper).
@@ -1296,8 +1551,8 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `node .planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs` from `desktop/`
   after `bun run build:pos`.
 - Phase 6 Plan 04: the running dev API on :4000 points at the **Docker** Postgres
-  (`localhost:5434/gikautos`), not the local :5432 instance. After adding a migration, run
-  `DATABASE_URL=postgresql://gikautos:gikautos@localhost:5434/gikautos bun run --filter api db:migrate`
+  (`localhost:5434/sceptre_drive`), not the local :5432 instance. After adding a migration, run
+  `DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:5434/sceptre_drive bun run --filter api db:migrate`
   or Better Auth answers 500 (schema validation) on every request.
 - Phase 6 Plan 04: console smoke `evidence/smoke-console-pin.mjs` bootstraps forced TOTP
   and saves the secret to `/tmp/opencode/admin-totp.json`; it needs the API (:4000) and
@@ -1320,7 +1575,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   Postgres, so branch ids are grouped rather than aggregated. Keep the branch filter
   parameterised.
 - Phase 6 Plan 05: the last-active-admin assertion in `staff.test.ts` is global to
-  `gikautos_test`. An aborted suite can leave an active `test-*@gikautos.test` admin and
+  `sceptre_drive_test`. An aborted suite can leave an active `test-*@sceptre.test` admin and
   break it; clean those rows (or reset the DB) before a verification run.
 - Phase 6 Plan 05: `sync.upload.test.ts` covers the endpoint (replay, concurrency,
   per-item rejection, 50-item cap, device mismatch, conflict/state reads); `pos.test.ts`

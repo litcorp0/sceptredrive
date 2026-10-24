@@ -1,4 +1,4 @@
-import { closeDb, db } from '@gikautos/db'
+import { closeDb, db } from '@sceptre/db'
 import { eq } from 'drizzle-orm'
 import '../src/config/env.ts'
 import { twoFactor, user } from '../src/modules/identity/staff.schema.ts'
@@ -12,7 +12,7 @@ import { auditLog } from '../src/modules/platform/audit.schema.ts'
  * backup codes, and sets `two_factor_enabled = false`; the next sign-in uses the
  * password only. Sessions are left alone.
  *
- *   DATABASE_URL=… bun run --filter api two-factor:reset -- --email admin@gikautos.local
+ *   DATABASE_URL=… bun run --filter api two-factor:reset -- --email admin@sceptre.local
  *
  * This prints no secret and is audited as `auth.two_factor.reset` with the CLI
  * as the actor. Run it deliberately — it weakens the account's security.

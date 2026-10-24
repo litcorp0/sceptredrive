@@ -24,7 +24,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     minHeight: 700,
     show: false,
     backgroundColor: '#ffffff',
-    title: 'GikAutos POS',
+    title: 'Sceptre Drive POS',
     autoHideMenuBar: true,
     webPreferences: {
       preload: options.preloadPath,

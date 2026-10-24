@@ -1,4 +1,4 @@
-import type { PricedLine } from '@gikautos/shared'
+import type { PricedLine } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import type { CartLine as CartLineModel } from '../../lib/cart/types'
 import { formatGhs } from '../../lib/format'

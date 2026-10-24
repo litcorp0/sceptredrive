@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from '@gikautos/shared'
+import { formatGhanaPhone } from '@sceptre/shared'
 import { useEffect, useRef, useState } from 'react'
 import type { CartCustomer } from '../../lib/cart/types'
 import { type CustomerHit, searchCustomers } from '../../lib/customers/search'

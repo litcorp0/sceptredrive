@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
@@ -42,10 +42,10 @@ import { databaseAvailable, signIn } from './integration.ts'
 const available = await databaseAvailable()
 if (!available) console.warn('[seed.test] database unavailable; integration tests skipped')
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@gikautos.test'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@sceptre.test'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'test-admin-password-123'
-const DEMO_MANAGER_EMAIL = 'manager@gikautos.local'
-const DEMO_CASHIER_EMAIL = 'cashier@gikautos.local'
+const DEMO_MANAGER_EMAIL = 'manager@sceptre.local'
+const DEMO_CASHIER_EMAIL = 'cashier@sceptre.local'
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? 'demo-password-1234'
 const SEEDED_EMAILS = [ADMIN_EMAIL, DEMO_MANAGER_EMAIL, DEMO_CASHIER_EMAIL]
 const DEMO_SETTING_KEYS = [

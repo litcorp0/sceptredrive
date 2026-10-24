@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import { createUserWithCredential, findUserByEmail } from './helpers.ts'
 
 export type SeedAdminResult = 'created' | 'skipped'
@@ -25,7 +25,7 @@ export async function seedAdmin(): Promise<SeedAdminResult> {
   await db.transaction(async (tx) => {
     await createUserWithCredential(tx, {
       email,
-      name: 'GikAutos Admin',
+      name: 'Sceptre Drive Admin',
       password,
       role: 'ADMIN',
       branchId: null,

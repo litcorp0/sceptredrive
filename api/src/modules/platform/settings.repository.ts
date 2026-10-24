@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { and, eq, isNull } from 'drizzle-orm'
 import { setting } from './settings.schema.ts'
 

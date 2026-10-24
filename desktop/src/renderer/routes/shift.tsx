@@ -1,3 +1,4 @@
+import { formatDateTime, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import {
   CashMovementDialog,
@@ -104,7 +105,7 @@ export function ShiftRoute() {
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            GikAutos POS
+            Sceptre Drive POS
           </p>
           <p className="text-sm font-semibold">
             {session?.branch.code ?? '—'} · {session?.terminal.code ?? '—'}
@@ -182,7 +183,7 @@ export function ShiftRoute() {
               <div>
                 <h1 className="text-xl font-semibold">Shift {shift.number}</h1>
                 <p className="text-sm text-muted-foreground">
-                  Opened {new Date(shift.openedAt).toLocaleString()} by {staff.name}
+                  Opened {formatDateTime(shift.openedAt)} by {staff.name}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -246,7 +247,7 @@ export function ShiftRoute() {
                     state?.movements.map((movement) => (
                       <tr key={movement.id}>
                         <td className="px-4 py-2 text-muted-foreground">
-                          {new Date(movement.occurredAt).toLocaleTimeString()}
+                          {formatTime(movement.occurredAt)}
                         </td>
                         <td className="px-4 py-2">
                           {movement.type === 'CASH_IN' ? 'Cash in' : 'Cash out'}

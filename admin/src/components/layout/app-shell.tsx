@@ -1,51 +1,78 @@
-import { Outlet } from "@tanstack/react-router"
-import { MenuIcon } from "lucide-react"
-import { useState } from "react"
+import { Outlet, useRouterState } from "@tanstack/react-router"
+import type { CSSProperties } from "react"
 import { BranchSwitcher } from "#/components/layout/branch-switcher"
-import { SidebarBrand, SidebarNav } from "#/components/layout/sidebar"
+import { AppSidebar, topbarBreadcrumb } from "#/components/layout/sidebar"
+import { ThemeToggle } from "#/components/layout/theme-toggle"
 import { UserMenu } from "#/components/layout/user-menu"
-import { Button } from "#/components/ui/button"
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "#/components/ui/sheet"
+import {
+	Breadcrumb,
+	BreadcrumbItem,
+	BreadcrumbList,
+	BreadcrumbPage,
+	BreadcrumbSeparator,
+} from "#/components/ui/breadcrumb"
+import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar"
 import type { Session } from "#/lib/auth-client"
 
 export function AppShell({ session }: { session: Session }) {
-	const [mobileOpen, setMobileOpen] = useState(false)
+	const pathname = useRouterState({ select: (state) => state.location.pathname })
+	const { section, page } = topbarBreadcrumb(pathname)
 
 	return (
-		<div className="flex min-h-svh">
-			<aside className="sticky top-0 hidden h-svh w-58 shrink-0 flex-col border-r bg-sidebar lg:flex print:hidden">
-				<SidebarBrand />
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					<SidebarNav role={session.user.role} />
+		<>
+			<a
+				href="#main"
+				className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-fg"
+			>
+				Skip to main content
+			</a>
+
+			<SidebarProvider
+				// Printed statements hide the whole rail: the primitive reserves its width
+				// with a sibling gap element, so hiding only the container would leave a
+				// 15.5rem blank margin on paper.
+				className="[&_[data-slot=sidebar]]:print:hidden"
+				style={{ "--sidebar-width": "var(--layout-sidebar-width)" } as CSSProperties}
+			>
+				<AppSidebar role={session.user.role} />
+
+				<div className="flex min-w-0 flex-1 flex-col">
+					<header className="sticky top-0 z-30 flex h-(--layout-topbar-height) items-center gap-3 bg-topbar px-3 text-topbar-foreground print:hidden sm:px-4">
+						<SidebarTrigger
+							aria-label="Toggle navigation"
+							className="-ml-1 size-8 text-topbar-foreground hover:bg-white/10 hover:text-topbar-foreground"
+						/>
+
+						<Breadcrumb className="hidden min-w-0 sm:block">
+							<BreadcrumbList className="flex-nowrap gap-1.5 text-topbar-muted sm:gap-2">
+								{section ? (
+									<>
+										<BreadcrumbItem className="hidden md:inline-flex">
+											<span>{section}</span>
+										</BreadcrumbItem>
+										<BreadcrumbSeparator className="hidden text-topbar-muted md:block" />
+									</>
+								) : null}
+								<BreadcrumbItem className="min-w-0">
+									<BreadcrumbPage className="max-w-[18ch] truncate text-topbar-foreground">
+										{page}
+									</BreadcrumbPage>
+								</BreadcrumbItem>
+							</BreadcrumbList>
+						</Breadcrumb>
+
+						<div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+							<BranchSwitcher />
+							<ThemeToggle />
+							<UserMenu session={session} />
+						</div>
+					</header>
+
+					<main id="main" tabIndex={-1} className="min-w-0 flex-1 p-4 md:p-6 print:p-0">
+						<Outlet />
+					</main>
 				</div>
-			</aside>
-
-			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur print:hidden">
-					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open menu">
-								<MenuIcon />
-							</Button>
-						</SheetTrigger>
-						<SheetContent side="left" className="w-64 p-0">
-							<SheetTitle className="sr-only">Navigation</SheetTitle>
-							<SidebarBrand />
-							<SidebarNav role={session.user.role} onNavigate={() => setMobileOpen(false)} />
-						</SheetContent>
-					</Sheet>
-
-					<BranchSwitcher />
-
-					<div className="ml-auto">
-						<UserMenu session={session} />
-					</div>
-				</header>
-
-				<main className="min-w-0 flex-1 p-4 md:p-6 print:p-0">
-					<Outlet />
-				</main>
-			</div>
-		</div>
+			</SidebarProvider>
+		</>
 	)
 }

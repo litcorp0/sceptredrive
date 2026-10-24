@@ -9,7 +9,7 @@ import {
 
 function installBridge(bridge: DesktopApi | undefined): void {
   Object.defineProperty(globalThis, 'window', {
-    value: bridge ? { gikautos: bridge } : {},
+    value: bridge ? { sceptreDrive: bridge } : {},
     configurable: true,
     writable: true,
   })

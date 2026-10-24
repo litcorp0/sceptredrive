@@ -1,3 +1,4 @@
+import { formatDateTime } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -192,8 +193,7 @@ function BranchDetailPage() {
 			</form>
 
 			<p className="mt-3 text-xs text-muted-foreground">
-				Created {new Date(branch.createdAt).toLocaleString()} · Updated{" "}
-				{new Date(branch.updatedAt).toLocaleString()}
+				Created {formatDateTime(branch.createdAt)} · Updated {formatDateTime(branch.updatedAt)}
 			</p>
 
 			<ConfirmDialog

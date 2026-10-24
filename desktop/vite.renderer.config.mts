@@ -27,14 +27,14 @@ function cspPlugin(dev: boolean): Plugin {
     .filter((directive) => !directive.startsWith('frame-ancestors'))
     .join('; ')
   return {
-    name: 'gikautos-csp',
+    name: 'sceptre-csp',
     // The dev server sends the policy as a header (`server.headers`); the meta
     // tag exists for the packaged document, which always gets the header too but
     // must stay safe if it is ever served without it.
     apply: 'build',
     transformIndexHtml(html) {
       return html.replace(
-        '<!--%GIKAUTOS_CSP%-->',
+        '<!--%SCEPTRE_CSP%-->',
         `<meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`,
       )
     },
@@ -67,8 +67,17 @@ export default defineConfig(({ command }) => {
       format: 'es',
     },
     build: {
-      // Renderer assets are served from the `app://gikautos` origin.
+      // Renderer assets are served from the `app://sceptre-drive` origin.
       target: 'chrome140',
+      /**
+       * Fonts are never inlined. The CSP is `font-src 'self'`, so a Base64
+       * `data:` URI is blocked outright — and several `@fontsource` unicode-range
+       * subsets (JetBrains Mono cyrillic, for one) are under Vite's 4 KiB
+       * threshold. Widening the policy to `data:` would weaken it for every
+       * font; opting fonts out of inlining keeps them real files on `app://`.
+       */
+      assetsInlineLimit: (filePath: string) =>
+        /\.(?:woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
     },
   }
 })

@@ -1,4 +1,4 @@
-import { type DbExecutor, db } from '@gikautos/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import { and, eq } from 'drizzle-orm'
 import { env } from '../../config/env.ts'
 import { AppError } from '../../http/errors.ts'

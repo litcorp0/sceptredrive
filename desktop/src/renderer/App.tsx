@@ -67,7 +67,7 @@ export function App() {
     <main className="min-h-screen bg-background p-8 text-foreground">
       <header className="mb-6">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          GikAutos POS
+          Sceptre Drive POS
         </p>
         <h1 className="mt-1 text-2xl font-semibold" data-testid="shell-ready">
           Desktop shell ready

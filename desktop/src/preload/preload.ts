@@ -40,4 +40,4 @@ const api: DesktopApi = {
   },
 }
 
-contextBridge.exposeInMainWorld('gikautos', api)
+contextBridge.exposeInMainWorld('sceptreDrive', api)

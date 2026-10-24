@@ -1,5 +1,5 @@
 {
-  "name": "gikautos",
+  "name": "sceptre-drive",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -20,6 +20,7 @@
       "@types/node": "24.19.2",
       "@types/pg": "8.23.1",
       "better-auth": "1.7.10",
+      "date-fns": "4.4.0",
       "dotenv": "18.0.8",
       "drizzle-kit": "0.31.11",
       "drizzle-orm": "0.45.4",
@@ -42,7 +43,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
-    "db:test:prepare": "docker compose exec -T postgres createdb -U gikautos gikautos_test || true && DATABASE_URL=postgresql://gikautos:gikautos@localhost:${POSTGRES_PORT:-5433}/gikautos_test bun run --filter api db:migrate",
+    "db:test:prepare": "docker compose exec -T postgres createdb -U sceptre_drive sceptre_drive_test || true && DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:$(docker compose port postgres 5432 | cut -d: -f2)/sceptre_drive_test bun run --filter api db:migrate",
     "dev": "bun run --parallel --if-present --filter '*' dev",
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",
@@ -59,11 +60,13 @@
     "db:generate": "bun run --filter api db:generate",
     "db:migrate": "bun run --filter api db:migrate",
     "db:seed": "bun run --filter api db:seed",
-    "sync:init": "docker compose exec -T postgres psql -U gikautos -d gikautos < powersync/init/powersync.sql",
+    "sync:init": "docker compose exec -T postgres psql -U sceptre_drive -d sceptre_drive < powersync/init/powersync.sql",
     "sync:up": "bun run scripts/prepare-powersync-service.mjs && docker compose --profile sync up -d powersync",
     "sync:down": "docker compose stop powersync",
     "sync:logs": "docker compose logs -f powersync",
-    "sync:config-check": "bun run scripts/check-sync-config.mjs"
+    "sync:config-check": "bun run scripts/check-sync-config.mjs",
+    "brand:check": "node scripts/check-brand.mjs",
+    "tokens:check": "node scripts/check-tokens.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

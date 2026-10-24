@@ -1,4 +1,4 @@
-import { db } from '@gikautos/db'
+import { db } from '@sceptre/db'
 import {
   closeDemoShift,
   createUserWithCredential,
@@ -36,8 +36,8 @@ export interface SeedDemoResult {
   created: string[]
 }
 
-const DEMO_MANAGER_EMAIL = 'manager@gikautos.local'
-const DEMO_CASHIER_EMAIL = 'cashier@gikautos.local'
+const DEMO_MANAGER_EMAIL = 'manager@sceptre.local'
+const DEMO_CASHIER_EMAIL = 'cashier@sceptre.local'
 const DEMO_PASSWORD_DEFAULT = 'demo-password-1234'
 
 export const DEMO_UNITS = [
@@ -272,7 +272,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
 
   const settingsSeeded = await Promise.all([
     ensureSetting('staff.idPrefix', process.env.STAFF_ID_PREFIX?.trim() || 'GA'),
-    ensureSetting('receipt.header', 'Thank you for shopping at GikAutos'),
+    ensureSetting('receipt.header', 'Thank you for shopping at Sceptre Drive'),
     ensureSetting('loyalty.earnPointsPerCedi', 1),
     ensureSetting('loyalty.pointsPerCedi', 100),
     ensureSetting('loyalty.expiryMonths', 12),
@@ -373,7 +373,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     await ensureStockReceipt({
       number: 'GRN-00001',
       branchId: warehouse.id,
-      supplierName: 'GikAutos Imports',
+      supplierName: 'Sceptre Drive Imports',
       supplierInvoiceNumber: 'INV-2026-001',
       note: 'Opening stock — warehouse',
       createdAt: new Date('2026-10-01T08:00:00.000Z'),
@@ -418,17 +418,17 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   })
   if (accraParts.created) created.push('supplier SUP-00001 Accra Parts Depot')
 
-  const gikAutosImports = await ensureSupplier({
+  const sceptreImports = await ensureSupplier({
     code: 'SUP-00002',
-    name: 'GikAutos Imports',
+    name: 'Sceptre Drive Imports',
     contactName: 'Esi Danso',
     phone: '+233302555002',
-    email: 'finance@gikautosimports.example',
+    email: 'finance@sceptredrive.example',
     address: 'Tema Harbour Area, Tema',
     tin: 'C0098765432',
     paymentTermDays: 14,
   })
-  if (gikAutosImports.created) created.push('supplier SUP-00002 GikAutos Imports')
+  if (sceptreImports.created) created.push('supplier SUP-00002 Sceptre Drive Imports')
 
   if (
     await ensureSupplierPaymentDetail({
@@ -459,9 +459,9 @@ export async function seedDemo(): Promise<SeedDemoResult> {
 
   if (
     await ensureSupplierPaymentDetail({
-      supplierId: gikAutosImports.id,
+      supplierId: sceptreImports.id,
       method: 'MOMO',
-      accountName: 'GikAutos Imports',
+      accountName: 'Sceptre Drive Imports',
       accountNumber: '0244000002',
       momoNetwork: 'MTN',
       phone: '+233244000002',
@@ -473,7 +473,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
 
   const linkedReceipts = await linkReceiptSuppliers({
     'Accra Parts Depot': accraParts.id,
-    'GikAutos Imports': gikAutosImports.id,
+    'Sceptre Drive Imports': sceptreImports.id,
   })
   if (linkedReceipts > 0) created.push(`linked ${linkedReceipts} receipt(s) to suppliers`)
 
@@ -492,7 +492,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     lastCostMinor,
     isPreferred,
   ] of supplierProductMappings) {
-    const supplierId = supplierCode === 'SUP-00001' ? accraParts.id : gikAutosImports.id
+    const supplierId = supplierCode === 'SUP-00001' ? accraParts.id : sceptreImports.id
     if (
       await ensureSupplierProduct({
         supplierId,
@@ -546,7 +546,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
 
   const standaloneInvoice = await ensureSupplierInvoice({
     number: 'SINV-00002',
-    supplierId: gikAutosImports.id,
+    supplierId: sceptreImports.id,
     branchId: retail.id,
     supplierInvoiceNumber: 'GIKIMP-7781',
     invoiceDate: '2026-10-08',
@@ -566,7 +566,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   if (
     await ensureSupplierPayment({
       number: 'PAY-00002',
-      supplierId: gikAutosImports.id,
+      supplierId: sceptreImports.id,
       branchId: retail.id,
       method: 'BANK',
       amountMinor: 20_000,

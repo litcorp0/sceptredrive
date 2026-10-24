@@ -1,4 +1,4 @@
-import type { Role } from '@gikautos/shared'
+import type { Role } from '@sceptre/shared'
 import { useSyncExternalStore } from 'react'
 import type { LocalStaffBinding } from './bindings'
 

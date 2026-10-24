@@ -1,5 +1,5 @@
-import type { TaxCategory, TaxMode } from "@gikautos/shared"
-import { taxBreakdown } from "@gikautos/shared"
+import type { TaxCategory, TaxMode } from "@sceptre/shared"
+import { taxBreakdown } from "@sceptre/shared"
 import { StatusBadge } from "#/components/common/status-badge"
 import { formatGhs } from "#/lib/format"
 

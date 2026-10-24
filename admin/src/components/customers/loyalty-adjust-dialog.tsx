@@ -1,3 +1,4 @@
+import { formatCount } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -245,11 +246,8 @@ export function LoyaltyAdjustDialog({
 							/>
 							{parsedAmount !== null && rates !== null ? (
 								<p className="text-xs text-muted-foreground">
-									={" "}
-									{Math.floor((parsedAmount * rates.earnPointsPerCedi) / 100).toLocaleString(
-										"en-GH",
-									)}{" "}
-									points at the current rate.
+									= {formatCount(Math.floor((parsedAmount * rates.earnPointsPerCedi) / 100))} points
+									at the current rate.
 								</p>
 							) : null}
 						</div>
@@ -271,8 +269,8 @@ export function LoyaltyAdjustDialog({
 									</p>
 									{belowRedeemMinimum ? (
 										<p className="text-xs text-amber-700">
-											Below the {rates.minimumRedeemPoints.toLocaleString("en-GH")} point minimum —
-											the server will reject this.
+											Below the {formatCount(rates.minimumRedeemPoints)} point minimum — the server
+											will reject this.
 										</p>
 									) : null}
 								</div>

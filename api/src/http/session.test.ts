@@ -31,7 +31,7 @@ function user(overrides: Partial<SessionUser> = {}): SessionUser {
   return {
     id: 'user-1',
     name: 'Test User',
-    email: 'test@gikautos.local',
+    email: 'test@sceptre.local',
     emailVerified: false,
     createdAt: new Date(),
     updatedAt: new Date(),

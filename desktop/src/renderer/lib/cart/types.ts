@@ -1,4 +1,4 @@
-import type { Role, TaxCategory } from '@gikautos/shared'
+import type { Role, TaxCategory } from '@sceptre/shared'
 
 /**
  * The selling cart, as the terminal holds it.

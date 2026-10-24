@@ -1,4 +1,4 @@
-import { BRANCH_TYPES, isValidBranchCode } from '@gikautos/shared'
+import { BRANCH_TYPES, isValidBranchCode } from '@sceptre/shared'
 import { z } from 'zod'
 import { validateJson, validateParam, validateQuery } from '../../http/validation.ts'
 

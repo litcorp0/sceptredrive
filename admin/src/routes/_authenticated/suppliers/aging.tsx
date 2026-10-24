@@ -1,3 +1,4 @@
+import { toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
@@ -42,7 +43,7 @@ function PayablesAgingTab() {
 
 	// undefined follows the header branch switcher; null means all branches.
 	const [branchChoice, setBranchChoice] = useState<string | null | undefined>(undefined)
-	const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
+	const [asOf, setAsOf] = useState(() => toDateInputValue(new Date()))
 	const [supplier, setSupplier] = useState<PickedSupplier | null>(null)
 
 	const effectiveBranchId = canSelectBranch

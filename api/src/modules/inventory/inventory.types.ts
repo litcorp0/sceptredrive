@@ -1,4 +1,4 @@
-import type { DbExecutor } from '@gikautos/db'
+import type { DbExecutor } from '@sceptre/db'
 import type {
   stockAdjustmentReasonEnum,
   stockLevel,
