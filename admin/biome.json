@@ -52,12 +52,7 @@
 					"options": {
 						"patterns": [
 							{
-								"group": [
-									"#/modules/*/components/**",
-									"#/modules/*/ui/**",
-									"#/modules/*/hooks/**",
-									"#/modules/*/api/**"
-								],
+								"group": ["#/modules/*/*", "#/modules/*/*/**"],
 								"message": "Import the module barrel (#/modules/<name>) instead of reaching into its internals."
 							}
 						]
