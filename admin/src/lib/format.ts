@@ -24,12 +24,3 @@ export function formatMinorPlain(minorUnits: number): string {
 	const fraction = Math.abs(minorUnits % 100)
 	return `${whole}.${String(fraction).padStart(2, "0")}`
 }
-
-/** Formats an ISO date (or datetime) as "02 Nov 2026" for statements and reports. */
-export function formatDay(value: string): string {
-	return new Date(value).toLocaleDateString("en-GH", {
-		day: "2-digit",
-		month: "short",
-		year: "numeric",
-	})
-}

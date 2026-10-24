@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from "@sceptre/shared"
+import { formatDay, formatGhanaPhone } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -174,8 +174,7 @@ function CustomerProfilePage() {
 							<DetailsRow label="Email">{customer.email ?? "—"}</DetailsRow>
 							<DetailsRow label="Address">{customer.address ?? "—"}</DetailsRow>
 							<DetailsRow label="Created">
-								{new Date(customer.createdAt).toLocaleDateString("en-GH")} at{" "}
-								{customer.createdBranchName}
+								{formatDay(customer.createdAt)} at {customer.createdBranchName}
 							</DetailsRow>
 							<DetailsRow label="Customer ID">
 								<span className="font-mono text-xs">{customer.id}</span>

@@ -1,3 +1,4 @@
+import { formatCount } from "@sceptre/shared"
 import { createFileRoute, notFound } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import {
@@ -18,6 +19,7 @@ import {
 	ChartTooltip,
 	ChartTooltipContent,
 } from "#/components/ui/chart"
+import { formatGhs } from "#/lib/format"
 
 /**
  * Chart-layer proof (Phase 7 Plan 04). Development only.
@@ -36,14 +38,10 @@ export const Route = createFileRoute("/dev-charts")({
 })
 
 /** Display-only conversion: data stays in integer pesewas (D12). */
-function ghs(minor: number): string {
-	const whole = Math.trunc(minor / 100)
-	const fraction = Math.abs(minor % 100)
-	return `GHS ${whole.toLocaleString("en-GH")}.${String(fraction).padStart(2, "0")}`
-}
+const ghs = formatGhs
 
 function cedis(minor: number): string {
-	return Math.round(minor / 100).toLocaleString("en-GH")
+	return formatCount(Math.round(minor / 100))
 }
 
 function usePrefersReducedMotion(): boolean {

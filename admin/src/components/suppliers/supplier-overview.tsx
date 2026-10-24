@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import type { ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
 import type { Supplier } from "#/lib/api-types"
@@ -22,9 +23,7 @@ export function SupplierOverview({ supplier }: { supplier: Supplier }) {
 				<DetailsRow label="Email">{supplier.email ?? "—"}</DetailsRow>
 				<DetailsRow label="TIN">{supplier.tin ?? "—"}</DetailsRow>
 				<DetailsRow label="VAT number">{supplier.vatNumber ?? "—"}</DetailsRow>
-				<DetailsRow label="Created">
-					{new Date(supplier.createdAt).toLocaleDateString("en-GH")}
-				</DetailsRow>
+				<DetailsRow label="Created">{formatDay(supplier.createdAt)}</DetailsRow>
 				<DetailsRow label="Address">{supplier.address ?? "—"}</DetailsRow>
 				<DetailsRow label="Notes">{supplier.notes ?? "—"}</DetailsRow>
 			</CardContent>

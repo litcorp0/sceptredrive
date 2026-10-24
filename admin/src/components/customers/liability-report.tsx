@@ -1,3 +1,4 @@
+import { formatCount, formatDay } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -51,7 +52,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 					<CardHeader>
 						<CardDescription>Outstanding points</CardDescription>
 						<CardTitle className="text-2xl tabular-nums">
-							{report.outstandingPoints.toLocaleString("en-GH")}
+							{formatCount(report.outstandingPoints)}
 						</CardTitle>
 					</CardHeader>
 				</Card>
@@ -62,7 +63,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 							{formatGhs(report.outstandingValueMinor)}
 						</CardTitle>
 						<p className="text-xs text-muted-foreground">
-							at {report.pointsPerCedi.toLocaleString("en-GH")} points = GHS 1.00
+							at {formatCount(report.pointsPerCedi)} points = GHS 1.00
 						</p>
 					</CardHeader>
 				</Card>
@@ -76,7 +77,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 									: "text-2xl tabular-nums"
 							}
 						>
-							{report.expiringSoonPoints.toLocaleString("en-GH")}
+							{formatCount(report.expiringSoonPoints)}
 						</CardTitle>
 						<p className="text-xs text-muted-foreground">points not yet redeemed or expired</p>
 					</CardHeader>
@@ -88,7 +89,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 					<CardTitle>Branch activity</CardTitle>
 					<CardDescription>
 						{activity.from || activity.to
-							? `Entries from ${activity.from ? new Date(activity.from).toLocaleDateString("en-GH") : "the beginning"} to ${activity.to ? new Date(activity.to).toLocaleDateString("en-GH") : "now"}.`
+							? `Entries from ${activity.from ? formatDay(activity.from) : "the beginning"} to ${activity.to ? formatDay(activity.to) : "now"}.`
 							: "Every entry on record."}
 					</CardDescription>
 				</CardHeader>
@@ -128,22 +129,22 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 												) : null}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.earnedPoints.toLocaleString("en-GH")}
+												{formatCount(row.earnedPoints)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.redeemedPoints.toLocaleString("en-GH")}
+												{formatCount(row.redeemedPoints)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.clawedBackPoints.toLocaleString("en-GH")}
+												{formatCount(row.clawedBackPoints)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.adjustedPoints.toLocaleString("en-GH")}
+												{formatCount(row.adjustedPoints)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.expiredPoints.toLocaleString("en-GH")}
+												{formatCount(row.expiredPoints)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums font-medium">
-												{row.netPoints.toLocaleString("en-GH")}
+												{formatCount(row.netPoints)}
 											</TableCell>
 										</TableRow>
 									))
@@ -155,7 +156,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 										<TableCell>Total</TableCell>
 										{NUMBER_COLUMNS.map((column) => (
 											<TableCell key={column} className="text-right tabular-nums">
-												{totals[column].toLocaleString("en-GH")}
+												{formatCount(totals[column])}
 											</TableCell>
 										))}
 									</TableRow>
@@ -194,7 +195,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 										<p className="text-xs text-muted-foreground">{branchName(row.branchId)}</p>
 									</div>
 									<span className="tabular-nums text-sm font-medium text-destructive">
-										{row.balancePoints.toLocaleString("en-GH")} points
+										{formatCount(row.balancePoints)} points
 									</span>
 								</li>
 							))}

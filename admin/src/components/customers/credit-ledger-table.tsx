@@ -1,3 +1,4 @@
+import { formatDateTime, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { Pagination } from "#/components/common/pagination"
@@ -176,10 +177,7 @@ export function CreditLedgerTable({
 								return (
 									<TableRow key={entry.id}>
 										<TableCell className="whitespace-nowrap text-muted-foreground">
-											{new Date(entry.occurredAt).toLocaleString("en-GH", {
-												dateStyle: "medium",
-												timeStyle: "short",
-											})}
+											{formatDateTime(entry.occurredAt)}
 										</TableCell>
 										<TableCell>
 											<StatusBadge tone={CREDIT_KIND_TONES[entry.kind]}>
@@ -190,7 +188,7 @@ export function CreditLedgerTable({
 											{entry.referenceNumber ?? "—"}
 										</TableCell>
 										<TableCell className="text-muted-foreground">
-											{entry.dueDate ? new Date(entry.dueDate).toLocaleDateString("en-GH") : "—"}
+											{entry.dueDate ? formatDay(entry.dueDate) : "—"}
 										</TableCell>
 										<TableCell className="text-right tabular-nums">
 											{entry.amountMinor < 0 ? (

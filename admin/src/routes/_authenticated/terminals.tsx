@@ -1,3 +1,4 @@
+import { formatDateTime } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { KeyRoundIcon, MonitorSmartphoneIcon, PlusIcon } from "lucide-react"
@@ -116,7 +117,7 @@ function TerminalsPage() {
 										<ActiveBadge active={terminal.isActive} />
 									</TableCell>
 									<TableCell className="text-muted-foreground">
-										{terminal.lastSeenAt ? new Date(terminal.lastSeenAt).toLocaleString() : "Never"}
+										{terminal.lastSeenAt ? formatDateTime(terminal.lastSeenAt) : "Never"}
 									</TableCell>
 									<TableCell className="text-right">
 										<Button variant="outline" size="sm" onClick={() => setEnrollTerminal(terminal)}>
@@ -395,7 +396,7 @@ function DevicesDialog({ terminal, onClose }: { terminal: Terminal; onClose: () 
 											</StatusBadge>
 										</TableCell>
 										<TableCell className="text-muted-foreground">
-											{new Date(device.enrolledAt).toLocaleString()}
+											{formatDateTime(device.enrolledAt)}
 										</TableCell>
 										<TableCell className="text-right">
 											{canRevoke && device.status === "ACTIVE" ? (

@@ -1,3 +1,4 @@
+import { formatDateTime } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon, SearchIcon } from "lucide-react"
@@ -248,10 +249,8 @@ function CountDetailPage() {
 
 			<div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
 				<CountStatusBadge status={count.status} />
-				<span>Opened {new Date(count.createdAt).toLocaleString("en-GH")}</span>
-				{count.postedAt ? (
-					<span>Posted {new Date(count.postedAt).toLocaleString("en-GH")}</span>
-				) : null}
+				<span>Opened {formatDateTime(count.createdAt)}</span>
+				{count.postedAt ? <span>Posted {formatDateTime(count.postedAt)}</span> : null}
 				<span>
 					{count.lineCount} lines · {isOpen ? summary.counted : count.countedCount} counted
 				</span>

@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -29,7 +30,7 @@ import {
 import { api } from "#/lib/api"
 import type { SupplierPaymentMethod, SupplierPaymentStatus } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 
 export const Route = createFileRoute("/_authenticated/suppliers/payments/")({

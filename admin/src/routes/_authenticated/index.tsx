@@ -1,3 +1,4 @@
+import { formatDateTime, formatRelative } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { api } from "#/lib/api"
@@ -78,8 +79,11 @@ function DashboardPage() {
 					<ul className="divide-y">
 						{auditQuery.data?.entries.map((entry) => (
 							<li key={entry.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-								<span className="font-mono text-xs text-muted-foreground">
-									{new Date(entry.createdAt).toLocaleString()}
+								<span
+									className="font-mono text-xs text-muted-foreground"
+									title={formatDateTime(entry.createdAt)}
+								>
+									{formatRelative(entry.createdAt)}
 								</span>
 								<span className="font-medium">{entry.action}</span>
 								<span className="text-muted-foreground">

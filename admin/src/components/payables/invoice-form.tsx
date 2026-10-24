@@ -1,6 +1,7 @@
-import { taxBreakdown } from "@sceptre/shared"
+import { formatDay, taxBreakdown, toDateInputValue } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
+import { addDays, parseISO } from "date-fns"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
@@ -27,19 +28,17 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import type { InventoryReceipt, InvoiceCreateInput } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
-import { formatDay, formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
+import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 
 type TaxMode = "STANDARD" | "NONE" | "MANUAL"
 
 function isoToday(): string {
-	return new Date().toISOString().slice(0, 10)
+	return toDateInputValue(new Date())
 }
 
 function addDaysToIsoDate(isoDate: string, days: number): string {
-	const date = new Date(`${isoDate}T00:00:00.000Z`)
-	date.setUTCDate(date.getUTCDate() + days)
-	return date.toISOString().slice(0, 10)
+	return toDateInputValue(addDays(parseISO(isoDate), days))
 }
 
 /** Empty manual tax boxes mean zero; unparseable values return null. */

@@ -1,3 +1,4 @@
+import { formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { cn } from "cn"
@@ -223,9 +224,7 @@ function AuditRow({
 						</Button>
 					) : null}
 				</TableCell>
-				<TableCell className="text-muted-foreground">
-					{new Date(entry.createdAt).toLocaleString()}
-				</TableCell>
+				<TableCell className="text-muted-foreground">{formatDateTime(entry.createdAt)}</TableCell>
 				<TableCell className="font-mono text-xs">{entry.action}</TableCell>
 				<TableCell className="text-muted-foreground">{entry.entity}</TableCell>
 				<TableCell className="font-mono text-xs text-muted-foreground">

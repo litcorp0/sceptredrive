@@ -1,3 +1,4 @@
+import { formatCount, formatDateTime } from "@sceptre/shared"
 import { StatusBadge } from "#/components/common/status-badge"
 import { TableMessage } from "#/components/common/table-message"
 import {
@@ -65,10 +66,7 @@ export function LoyaltyHistoryTable({
 							entries.map((entry) => (
 								<TableRow key={entry.id}>
 									<TableCell className="whitespace-nowrap text-muted-foreground">
-										{new Date(entry.occurredAt).toLocaleString("en-GH", {
-											dateStyle: "medium",
-											timeStyle: "short",
-										})}
+										{formatDateTime(entry.occurredAt)}
 									</TableCell>
 									<TableCell>
 										<StatusBadge tone={LOYALTY_KIND_TONES[entry.kind]}>
@@ -110,7 +108,7 @@ export function LoyaltyHistoryTable({
 			</div>
 			{!isLoading && !isError && entryTotal > entries.length ? (
 				<p className="mt-2 text-xs text-muted-foreground">
-					Showing the latest {entries.length} of {entryTotal.toLocaleString("en-GH")} entries.
+					Showing the latest {entries.length} of {formatCount(entryTotal)} entries.
 				</p>
 			) : null}
 		</section>

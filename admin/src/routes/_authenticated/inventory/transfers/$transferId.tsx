@@ -1,3 +1,4 @@
+import { formatDateTime, formatDay } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -126,18 +127,16 @@ function TransferDetailPage() {
 			<div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
 				<TransferStatusBadge status={transfer.status} />
 				<span>
-					Requested {new Date(transfer.createdAt).toLocaleDateString("en-GH")}
+					Requested {formatDay(transfer.createdAt)}
 					{transfer.createdBy ? ` by ${transfer.createdBy}` : ""}
 				</span>
 				{transfer.dispatchedAt ? (
-					<span>Dispatched {new Date(transfer.dispatchedAt).toLocaleString("en-GH")}</span>
+					<span>Dispatched {formatDateTime(transfer.dispatchedAt)}</span>
 				) : null}
 				{transfer.receivedAt ? (
-					<span>Last receipt {new Date(transfer.receivedAt).toLocaleString("en-GH")}</span>
+					<span>Last receipt {formatDateTime(transfer.receivedAt)}</span>
 				) : null}
-				{transfer.closedAt ? (
-					<span>Short-closed {new Date(transfer.closedAt).toLocaleString("en-GH")}</span>
-				) : null}
+				{transfer.closedAt ? <span>Short-closed {formatDateTime(transfer.closedAt)}</span> : null}
 			</div>
 
 			{transfer.note ? (

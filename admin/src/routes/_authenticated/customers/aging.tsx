@@ -1,3 +1,4 @@
+import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
@@ -13,7 +14,6 @@ import {
 } from "#/components/ui/select"
 import { ApiError, api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
-import { formatDay } from "#/lib/format"
 
 export const Route = createFileRoute("/_authenticated/customers/aging")({
 	component: AgingTab,
@@ -29,7 +29,7 @@ function AgingTab() {
 
 	// undefined follows the header branch switcher; null means all branches.
 	const [branchChoice, setBranchChoice] = useState<string | null | undefined>(undefined)
-	const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
+	const [asOf, setAsOf] = useState(() => toDateInputValue(new Date()))
 
 	const effectiveBranchId = canSelectBranch
 		? branchChoice === undefined

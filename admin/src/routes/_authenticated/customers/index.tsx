@@ -1,4 +1,4 @@
-import { formatGhanaPhone } from "@sceptre/shared"
+import { formatDay, formatGhanaPhone } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { PlusIcon, SearchIcon } from "lucide-react"
@@ -144,7 +144,7 @@ function CustomersTab() {
 									</TableCell>
 									<TableCell className="text-muted-foreground">{customer.email ?? "—"}</TableCell>
 									<TableCell className="text-muted-foreground">
-										{new Date(customer.createdAt).toLocaleDateString("en-GH")}
+										{formatDay(customer.createdAt)}
 									</TableCell>
 									<TableCell>{customerStatus(customer)}</TableCell>
 								</TableRow>

@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon } from "lucide-react"
 import { useState } from "react"
@@ -31,7 +32,7 @@ import {
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
 import type { SupplierProductMapping } from "#/lib/api-types"
-import { formatDay, formatGhs } from "#/lib/format"
+import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 
 export function SupplierProductsPanel({
