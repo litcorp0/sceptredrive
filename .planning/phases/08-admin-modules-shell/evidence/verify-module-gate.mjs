@@ -156,7 +156,7 @@ console.log('\n-- mutations --')
   restore(snap)
 }
 
-// 2. A thin route over the line budget.
+// 2. A route whose body is still too large.
 {
   const snap = snapshot(PROBE_ROUTE)
   const padding = Array.from({ length: 30 }, (_, i) => `// padding ${i}`).join('\n')
@@ -164,10 +164,16 @@ console.log('\n-- mutations --')
     PROBE_ROUTE,
     `import { createFileRoute } from "@tanstack/react-router"\nimport { AnalyticsPage } from "#/modules/analytics"\n${padding}\n\nexport const Route = createFileRoute("/_authenticated/gate-probe")({\n\tcomponent: AnalyticsPage,\n})\n`,
   )
+  // An over-long body is outstanding work, not a violation: it must be reported by name and must
+  // fail the strict (CI) run.
   const r = runGate()
+  const strict = runGate(true)
   check(
-    r.code !== 0 && r.out.includes('must be at most'),
-    'mutation 2: a route over the line budget is rejected',
+    r.code === 0 &&
+      r.out.includes('route not migrated') &&
+      r.out.includes('gate-probe.tsx') &&
+      strict.code !== 0,
+    'mutation 2: an over-long route is reported as unmigrated and fails strict mode',
   )
   restore(snap)
 }
