@@ -245,28 +245,41 @@ console.log('\n-- mutations --')
   fs.writeFileSync(GATE, gateSource)
 }
 
-// 9. A legacy domain import after that domain migrated.
+// 9. A legacy component import for a domain that has already migrated.
 {
-  // Claim `catalog` is migrated *and* give it a module, so the only violation left is the
-  // legacy component import — not the missing module directory.
-  const catalogDir = snapshot(path.join(MODULES, 'catalog'))
-  fs.mkdirSync(path.join(MODULES, 'catalog'), { recursive: true })
-  fs.writeFileSync(
-    path.join(MODULES, 'catalog', 'index.ts'),
-    'export const CatalogPage = () => null\n',
-  )
-
+  // Derived, not hard-coded, so the mutation stays valid through the whole phase. Candidates are
+  // the folders the gate maps to exactly one module; that module is claimed as migrated below, so
+  // the only violation left is the legacy import itself.
   const pendingAt = gateSource.indexOf('const PENDING_MODULES')
-  const mutated =
-    gateSource.slice(0, pendingAt) +
-    gateSource.slice(pendingAt).replace(/\n\s+["']catalog["'],/, '')
-  if (mutated === gateSource) throw new Error('mutation 9 could not edit the pending list')
+  const pendingBlock = gateSource.slice(pendingAt)
+  const isPending = (name) => new RegExp(`\\n\\s+['"]${name}['"],`).test(pendingBlock)
+  const candidates = ['inventory', 'payables', 'suppliers']
+  const target = candidates.find(isPending) ?? candidates[0]
+
+  const moduleSnap = snapshot(path.join(MODULES, target))
+  fs.mkdirSync(path.join(MODULES, target), { recursive: true })
+  fs.writeFileSync(path.join(MODULES, target, 'index.ts'), 'export const ProbePage = () => null\n')
+
+  let mutated = gateSource
+  if (isPending(target)) {
+    const entry = new RegExp(`\\n\\s+['"]${target}['"],`)
+    mutated = gateSource.slice(0, pendingAt) + pendingBlock.replace(entry, '')
+    if (mutated === gateSource) throw new Error('mutation 9 could not claim a module as migrated')
+  }
   fs.writeFileSync(GATE, mutated)
+
+  // Create the legacy folder whether or not it still exists, so the import resolves and the only
+  // violation is the import statement.
+  const legacyFolder = path.join(ADMIN, 'components', target)
+  const folderSnap = snapshot(legacyFolder)
+  fs.mkdirSync(legacyFolder, { recursive: true })
+  fs.writeFileSync(path.join(legacyFolder, 'probe-legacy.tsx'), 'export const ProbeLegacy = 1\n')
+
   const probe = path.join(ADMIN, 'gate-probe-legacy.ts')
   const snap = snapshot(probe)
   fs.writeFileSync(
     probe,
-    'import { BrandDialog } from "#/components/catalog/brand-dialog"\nexport const use = BrandDialog\n',
+    `import { ProbeLegacy } from "#/components/${target}/probe-legacy"\nexport const use = ProbeLegacy\n`,
   )
   const r = runGate()
   check(
@@ -274,8 +287,9 @@ console.log('\n-- mutations --')
     'mutation 9: a legacy component import after migration is rejected',
   )
   restore(snap)
+  restore(folderSnap)
+  restore(moduleSnap)
   fs.writeFileSync(GATE, gateSource)
-  restore(catalogDir)
 }
 
 // 10. A duplicated entry in the pending list.

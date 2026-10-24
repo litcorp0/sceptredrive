@@ -58,15 +58,7 @@ const DEFERRED_MODULES = { analytics: 9 }
  * Names still to migrate. Each plan deletes its own entry; `--strict` fails while any remain.
  * Keep this list free of duplicates and a subset of REQUIRED_MODULES — the gate checks that too.
  */
-const PENDING_MODULES = [
-  'catalog',
-  'credit',
-  'customers',
-  'inventory',
-  'loyalty',
-  'payables',
-  'suppliers',
-]
+const PENDING_MODULES = ['credit', 'customers', 'inventory', 'loyalty', 'payables', 'suppliers']
 
 /** Folders a module may contain, plus its barrel. */
 const ALLOWED_ENTRIES = new Set([
@@ -277,22 +269,37 @@ for (const file of routeFiles) {
     continue
   }
 
+  // Two shapes are legitimately complete without importing a barrel, because they render nothing
+  // of their own: a pure redirect (`beforeLoad` throws and there is no component) and a bare
+  // `<Outlet />` pass-through for a parent segment.
+  const passThrough = /component:\s*\(\)\s*=>\s*<Outlet\s*\/>/.test(source)
+  const redirectOnly = !source.includes('component:') && source.includes('redirect(')
+
+  if (passThrough || redirectOnly) {
+    if (lines > MAX_ROUTE_LINES) {
+      hard.push(
+        `${rel(file)}: ${lines} lines — a ${passThrough ? 'pass-through' : 'redirect'} route must be at most ${MAX_ROUTE_LINES}`,
+      )
+    }
+    for (const token of FORBIDDEN_TOKENS) {
+      if (source.includes(token))
+        hard.push(`${rel(file)}: contains "${token}" — that belongs to a module page`)
+    }
+    continue
+  }
+
   // A route that does not yet import a barrel is still pre-migration: count it, do not fail it.
   if (!barrel) {
     progress.push(`route not migrated: ${rel(file)} (${lines} lines)`)
     continue
   }
 
-  const passThrough = /component:\s*\(\)\s*=>\s*<Outlet\s*\/>/.test(source)
-
   if (lines > MAX_ROUTE_LINES) {
     hard.push(`${rel(file)}: ${lines} lines — a migrated route must be at most ${MAX_ROUTE_LINES}`)
   }
   const barrelCount = [...source.matchAll(/from\s+["']#\/modules\//g)].length
-  if (passThrough ? barrelCount !== 0 : barrelCount !== 1) {
-    hard.push(
-      `${rel(file)}: expected ${passThrough ? 0 : 1} "#/modules/<name>" imports, found ${barrelCount}`,
-    )
+  if (barrelCount !== 1) {
+    hard.push(`${rel(file)}: expected 1 "#/modules/<name>" imports, found ${barrelCount}`)
   }
   for (const token of FORBIDDEN_TOKENS) {
     if (source.includes(token))
