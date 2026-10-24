@@ -1,5 +1,6 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+	"root": false,
 	"extends": "//",
 	"files": {
 		"ignoreUnknown": true,
@@ -19,5 +20,28 @@
 		"formatter": {
 			"quoteStyle": "double"
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["**/src/components/ui/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useFocusableInteractive": "off",
+						"useSemanticElements": "off"
+					},
+					"correctness": {
+						"useExhaustiveDependencies": "off"
+					},
+					"security": {
+						"noDangerouslySetInnerHtml": "off"
+					},
+					"suspicious": {
+						"noArrayIndexKey": "off",
+						"noDocumentCookie": "off"
+					}
+				}
+			}
+		}
+	]
 }
