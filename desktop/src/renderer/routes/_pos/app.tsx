@@ -31,10 +31,13 @@ function Centered({ title, detail }: { title: string; detail?: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-8">
       <div className="max-w-sm text-center">
+        <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-md bg-primary font-display text-base font-semibold text-primary-foreground">
+          SD
+        </div>
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Sceptre Drive POS
         </p>
-        <h1 className="mt-2 text-lg font-semibold">{title}</h1>
+        <h1 className="mt-2 font-display text-lg font-semibold">{title}</h1>
         {detail ? <p className="mt-1 text-sm text-muted-foreground">{detail}</p> : null}
       </div>
     </main>

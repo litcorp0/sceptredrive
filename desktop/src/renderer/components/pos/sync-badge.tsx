@@ -1,5 +1,6 @@
 import { useQuery } from '@powersync/react'
 import { formatTime } from '@sceptre/shared'
+import { Check, Clock, CloudOff, type LucideIcon, TriangleAlert, Upload } from 'lucide-react'
 import { usePos } from '../../lib/powersync/provider'
 import { useSyncStatus } from '../../lib/powersync/status'
 import { navigate } from '../../lib/router'
@@ -12,16 +13,28 @@ import { useUploadStatus } from '../../lib/sync/sync-status-store'
  * It is a button, never a modal: tapping it opens the sync screen, and nothing
  * here can block or slow down a sale. Colour is driven by what a cashier can act
  * on — pending work, being offline, or a dead letter/HIGH conflict.
+ *
+ * The badge sits on the charcoal fascia, where the light-mode semantic colours
+ * are too dark to read as text: the colour is a dot, backed by an icon and the
+ * word, so the state never depends on colour alone.
  */
 
 type BadgeState = 'action' | 'offline' | 'pending' | 'synced' | 'idle'
 
-const STYLES: Record<BadgeState, string> = {
-  action: 'bg-red-50 text-red-700 ring-1 ring-red-200',
-  offline: 'bg-red-50 text-red-700 ring-1 ring-red-200',
-  pending: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
-  synced: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  idle: 'bg-muted text-muted-foreground ring-1 ring-border',
+const DOT: Record<BadgeState, string> = {
+  action: 'bg-danger',
+  offline: 'bg-danger',
+  pending: 'bg-warn',
+  synced: 'bg-ok',
+  idle: 'bg-topbar-muted',
+}
+
+const ICON: Record<BadgeState, LucideIcon> = {
+  action: TriangleAlert,
+  offline: CloudOff,
+  pending: Upload,
+  synced: Check,
+  idle: Clock,
 }
 
 function shortTime(iso: string | null): string {
@@ -85,6 +98,8 @@ export function SyncBadge() {
     ? `${label} — ${upload.lastError}`
     : `${label} · ${download.online ? 'PowerSync connected' : 'PowerSync offline'}`
 
+  const Icon = ICON[state]
+
   return (
     <button
       type="button"
@@ -93,11 +108,13 @@ export function SyncBadge() {
       data-state={state}
       title={detail}
       aria-label={`Sync status: ${label}. Open sync details`}
-      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${STYLES[state]} ${
+      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-topbar-foreground transition-colors hover:bg-white/15 ${
         state === 'pending' && upload.draining ? 'animate-pulse' : ''
       }`}
     >
-      {label}
+      <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${DOT[state]}`} />
+      <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span>{label}</span>
     </button>
   )
 }

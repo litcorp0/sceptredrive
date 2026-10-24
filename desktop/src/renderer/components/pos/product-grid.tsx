@@ -33,9 +33,9 @@ const TAX_LABEL: Record<string, string> = {
 
 const TONE_CLASS: Record<StockBadge['tone'], string> = {
   ok: 'bg-muted text-muted-foreground',
-  low: 'bg-amber-50 text-amber-800',
-  out: 'bg-red-50 text-red-700',
-  oversold: 'bg-amber-100 text-amber-900',
+  low: 'bg-warn/10 text-warn',
+  out: 'bg-danger/10 text-danger',
+  oversold: 'bg-danger/20 text-danger',
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -70,7 +70,7 @@ function ProductCard({
       onClick={() => {
         if (product) onAdd(product)
       }}
-      className="flex h-[84px] w-full flex-col justify-between rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-50"
+      className="flex h-[84px] w-full flex-col justify-between rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-muted/40 disabled:opacity-50"
     >
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 text-sm leading-tight font-medium">{row.name}</span>
