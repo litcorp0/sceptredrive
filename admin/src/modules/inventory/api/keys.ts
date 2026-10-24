@@ -5,10 +5,13 @@ import type { CountListQuery, ReceiptListQuery, StockListQuery, TransferListQuer
  *
  * The roots are spelled exactly as they were before Phase 8 — `["inventory-stock"]`,
  * `["inventory-movements"]`, `["inventory-receipts"]`, `["inventory-receipt"]`,
- * `["inventory-thresholds"]`, `["receipt-invoice"]`, `["transfers"]`, `["transfer"]`,
- * `["counts"]` and `["count"]` — because every dialog invalidates them by prefix from several
- * places. A renamed root would still typecheck and still render, but the stock ledger would stop
- * refreshing after a posting, which is the one thing these screens exist to show.
+ * `["inventory-thresholds"]`, `["transfers"]`, `["transfer"]`, `["counts"]` and `["count"]` —
+ * because every dialog invalidates them by prefix from several places. A renamed root would still
+ * typecheck and still render, but the stock ledger would stop refreshing after a posting, which is
+ * the one thing these screens exist to show.
+ *
+ * `["receipt-invoice"]` is not here any more: the linked-invoice read is payables' data and moved
+ * to `#/modules/payables` in Plan 11.
  */
 export const inventoryKeys = {
 	stock: ["inventory-stock"] as const,
@@ -16,7 +19,6 @@ export const inventoryKeys = {
 	receipts: ["inventory-receipts"] as const,
 	receipt: ["inventory-receipt"] as const,
 	thresholds: ["inventory-thresholds"] as const,
-	receiptInvoice: ["receipt-invoice"] as const,
 
 	stockList: (query: StockListQuery) => [...inventoryKeys.stock, "list", query] as const,
 	stockDetail: (productId: string, branchId: string | null) =>
@@ -25,7 +27,6 @@ export const inventoryKeys = {
 		[...inventoryKeys.movements, query] as const,
 	receiptList: (query: ReceiptListQuery) => [...inventoryKeys.receipts, query] as const,
 	receiptDetail: (id: string) => [...inventoryKeys.receipt, id] as const,
-	receiptInvoiceFor: (receiptId: string) => [...inventoryKeys.receiptInvoice, receiptId] as const,
 }
 
 export const transferKeys = {

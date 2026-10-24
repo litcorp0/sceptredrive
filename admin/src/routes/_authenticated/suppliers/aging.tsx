@@ -17,9 +17,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
-import { ApiError, api } from "#/lib/api"
-import type { AgingBuckets } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { type AgingBuckets, payablesAgingOptions } from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/aging")({
 	component: PayablesAgingTab,
@@ -54,15 +54,7 @@ function PayablesAgingTab() {
 			: branchChoice
 		: (session.user.branchId ?? null)
 
-	const agingQuery = useQuery({
-		queryKey: ["payables-aging", effectiveBranchId, asOf, supplier?.id ?? null],
-		queryFn: () =>
-			api.payables.aging.get({
-				branchId: effectiveBranchId ?? undefined,
-				asOf: asOf || undefined,
-				supplierId: supplier?.id,
-			}),
-	})
+	const agingQuery = useQuery(payablesAgingOptions(effectiveBranchId, asOf, supplier?.id ?? null))
 
 	const aging = agingQuery.data
 	const totals = aging?.totals ?? EMPTY_BUCKETS

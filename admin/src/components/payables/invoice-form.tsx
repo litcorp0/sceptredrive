@@ -25,17 +25,24 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { InvoiceCreateInput } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-// TODO(phase-8/11): a supplier invoice is recorded against a goods receipt, so payables reads
-// inventory's receipt fetchers until payables itself migrates. Keep it a barrel import.
-import { getReceipt, type InventoryReceipt, listReceipts } from "#/modules/inventory"
-// TODO(phase-8/11): payables reads the supplier master through the suppliers barrel; Plan 11 keeps
-// this edge and owns the invoice form.
-import { getSupplier } from "#/modules/suppliers"
+// A supplier invoice is recorded against a goods receipt, so payables reads inventory's receipt
+// fetchers through its barrel. This is the sanctioned `payables → inventory` edge.
+import { getReceipt, type InventoryReceipt } from "#/modules/inventory"
+import {
+	createInvoice,
+	type InvoiceCreateInput,
+	invoiceSupplierOptions,
+	payablesKeys,
+	receiptPickerOptions,
+	receiptSourceOptions,
+} from "#/modules/payables"
+// Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); it
+// never reaches into the supplier store.
+import { getSupplier, supplierKeys } from "#/modules/suppliers"
 
 type TaxMode = "STANDARD" | "NONE" | "MANUAL"
 
@@ -105,27 +112,11 @@ export function InvoiceForm({
 		setDueDate(addDaysToIsoDate(invoiceDate, supplier.paymentTermDays))
 	}, [supplier, invoiceDate, dueDateTouched])
 
-	const receiptOptionsQuery = useQuery({
-		queryKey: ["invoice-receipt-options", effectiveBranchId],
-		queryFn: () =>
-			listReceipts({
-				branchId: effectiveBranchId || undefined,
-				limit: 50,
-			}),
-		enabled: effectiveBranchId !== "" || canSelectBranch,
-	})
+	const receiptOptionsQuery = useQuery(receiptPickerOptions(effectiveBranchId, canSelectBranch))
 
-	const initialReceiptQuery = useQuery({
-		queryKey: ["invoice-receipt", receiptId],
-		queryFn: () => getReceipt(receiptId as string),
-		enabled: Boolean(receiptId),
-	})
+	const initialReceiptQuery = useQuery(receiptSourceOptions(receiptId))
 
-	const initialSupplierQuery = useQuery({
-		queryKey: ["invoice-supplier", supplierId],
-		queryFn: () => getSupplier(supplierId as string),
-		enabled: Boolean(supplierId) && !receiptId,
-	})
+	const initialSupplierQuery = useQuery(invoiceSupplierOptions(supplierId, receiptId))
 
 	const applySupplier = useCallback(
 		(next: { id: string; code: string; name: string; paymentTermDays: number }) => {
@@ -255,7 +246,7 @@ export function InvoiceForm({
 	}
 
 	const saveMutation = useMutation({
-		mutationFn: (input: InvoiceCreateInput) => api.payables.invoices.create(input),
+		mutationFn: (input: InvoiceCreateInput) => createInvoice(input),
 		onSuccess: async (data) => {
 			idempotencyKey.current = null
 			toast.success(
@@ -264,9 +255,11 @@ export function InvoiceForm({
 					: `Invoice ${data.invoice.invoice.number} recorded`,
 			)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoices"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier", data.invoice.invoice.supplierId] }),
-				queryClient.invalidateQueries({ queryKey: ["invoice-receipt-options"] }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoices }),
+				queryClient.invalidateQueries({
+					queryKey: supplierKeys.byId(data.invoice.invoice.supplierId),
+				}),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.receiptOptions }),
 			])
 			await navigate({
 				to: "/suppliers/invoices/$invoiceId",

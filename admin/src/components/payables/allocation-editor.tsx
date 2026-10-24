@@ -11,9 +11,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { SupplierInvoice } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
+import { paymentOutstandingOptions, type SupplierInvoice } from "#/modules/payables"
 
 /** invoiceId -> GHS amount string as typed by the operator. */
 export type AllocationDraft = Record<string, string>
@@ -60,17 +59,7 @@ export function AllocationEditor({
 }) {
 	const today = toDateInputValue(new Date())
 
-	const invoicesQuery = useQuery({
-		queryKey: ["payment-outstanding", supplierId, branchId],
-		queryFn: () =>
-			api.payables.invoices.list({
-				supplierId: supplierId as string,
-				branchId: branchId || undefined,
-				limit: 100,
-				offset: 0,
-			}),
-		enabled: supplierId !== null,
-	})
+	const invoicesQuery = useQuery(paymentOutstandingOptions(supplierId, branchId))
 
 	const invoices = sortedByOldest(
 		(invoicesQuery.data?.invoices ?? []).filter((invoice) => invoice.outstandingMinor > 0),

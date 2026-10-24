@@ -1,5 +1,5 @@
 import { StatusBadge } from "#/components/common/status-badge"
-import type { SupplierPaymentMethod } from "#/lib/api-types"
+import type { SupplierPaymentMethod } from "#/modules/payables"
 
 export function PaymentMethodBadge({ method }: { method: SupplierPaymentMethod }) {
 	if (method === "CASH") return <StatusBadge tone="green">Cash</StatusBadge>

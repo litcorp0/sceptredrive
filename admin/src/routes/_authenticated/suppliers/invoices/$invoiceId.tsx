@@ -19,10 +19,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
+import { invoiceDetailOptions } from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/$invoiceId")({
 	component: InvoiceDetailPage,
@@ -37,10 +37,7 @@ function InvoiceDetailPage() {
 	const [voidOpen, setVoidOpen] = useState(false)
 	const [paymentOpen, setPaymentOpen] = useState(false)
 
-	const invoiceQuery = useQuery({
-		queryKey: ["supplier-invoice", invoiceId],
-		queryFn: () => api.payables.invoices.get(invoiceId),
-	})
+	const invoiceQuery = useQuery(invoiceDetailOptions(invoiceId))
 
 	const detail = invoiceQuery.data
 	const invoice = detail?.invoice

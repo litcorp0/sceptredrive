@@ -8,8 +8,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import type { AgingBucketKey, AgingBuckets, PayableAgingSupplier } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
+import type { AgingBucketKey, AgingBuckets, PayableAgingSupplier } from "#/modules/payables"
 
 const BUCKETS: Array<{ key: AgingBucketKey; label: string; short: string }> = [
 	{ key: "current", label: "Not yet due", short: "Current" },

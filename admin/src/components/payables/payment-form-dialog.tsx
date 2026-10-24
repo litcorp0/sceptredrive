@@ -28,15 +28,19 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { PaymentCreateInput, SupplierPaymentMethod } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-// TODO(phase-8/11): payables reads the supplier master through the suppliers barrel; Plan 11 keeps
-// this edge and owns the payment form.
-import { getSupplier } from "#/modules/suppliers"
-
+import {
+	createPayment,
+	type PaymentCreateInput,
+	payablesKeys,
+	type SupplierPaymentMethod,
+} from "#/modules/payables"
+// Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); the
+// payment details it lists are the supplier's own, masked by the API.
+import { supplierDetailOptions, supplierKeys } from "#/modules/suppliers"
 export interface InvoicePaymentTarget {
 	id: string
 	number: string
@@ -124,8 +128,7 @@ export function PaymentFormDialog({
 	}, [canSelectBranch, branchId, activeBranchId, branches])
 
 	const supplierQuery = useQuery({
-		queryKey: ["supplier", supplier?.id],
-		queryFn: () => getSupplier(supplier?.id as string),
+		...supplierDetailOptions(supplier?.id as string),
 		enabled: open && supplier !== null,
 	})
 
@@ -137,7 +140,7 @@ export function PaymentFormDialog({
 	const allocatedMinor = allocationDraftsTotal(allocations)
 
 	const saveMutation = useMutation({
-		mutationFn: (input: PaymentCreateInput) => api.payables.payments.create(input),
+		mutationFn: (input: PaymentCreateInput) => createPayment(input),
 		onSuccess: async (data) => {
 			idempotencyKey.current = null
 			toast.success(
@@ -146,11 +149,13 @@ export function PaymentFormDialog({
 					: `Payment ${data.payment.payment.number} recorded`,
 			)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["supplier-payments"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoices"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoice"] }),
-				queryClient.invalidateQueries({ queryKey: ["payment-outstanding"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier", data.payment.payment.supplierId] }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.payments }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoices }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoice }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.outstanding }),
+				queryClient.invalidateQueries({
+					queryKey: supplierKeys.byId(data.payment.payment.supplierId),
+				}),
 			])
 			onOpenChange(false)
 		},

@@ -19,7 +19,8 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-import { receiptDetailOptions, receiptInvoiceOptions } from "../api/inventory"
+import { receiptInvoiceOptions } from "#/modules/payables"
+import { receiptDetailOptions } from "../api/inventory"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 const receiptRoute = getRouteApi("/_authenticated/inventory/receipts/$receiptId")

@@ -1,5 +1,5 @@
 import { StatusBadge } from "#/components/common/status-badge"
-import type { SupplierInvoiceStatus } from "#/lib/api-types"
+import type { SupplierInvoiceStatus } from "#/modules/payables"
 
 export function InvoiceStatusBadge({
 	status,

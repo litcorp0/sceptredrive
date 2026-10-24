@@ -1,14 +1,12 @@
-/**
- * Response and input types mirroring the API contracts in `api/src/modules/*`.
- * Hand-maintained for Phase 1; a shared contracts package can replace this in
- * Phase 2 when catalog endpoints land.
- */
+// --- Payables (supplier invoices, payments, balances, aging) ---
+//
+// These mirror the API contracts in `api/src/modules/payables`. They moved here from
+// `lib/api-types.ts` in Phase 8; the barrel is `#/modules/payables`.
+//
+// The aging bucket shape is the one piece of vocabulary credit shares: its receivables report
+// uses the same five buckets, and `#/modules/credit` re-exports it from here rather than
+// declaring a second copy that could drift.
 
-/**
- * The aging bucket shape, shared by credit's report (owned by `#/modules/credit`, which
- * re-exports these) and the payables aging report below. Payables still reads them from here;
- * Plan 11 decides where they finally live.
- */
 export type AgingBucketKey = "current" | "days1To30" | "days31To60" | "days61To90" | "over90"
 
 export interface AgingBuckets {
@@ -18,12 +16,6 @@ export interface AgingBuckets {
 	days61To90: number
 	over90: number
 }
-
-// --- Payables (supplier invoices, payments, balances, aging) ---
-//
-// The supplier master (supplier rows, payment details, supplied products) moved to
-// `#/modules/suppliers` in Phase 8. Payables still reads the supplier rows it joins onto its own
-// documents through the ageing and balance shapes below; Plan 11 moves these too.
 
 export type SupplierInvoiceStatus = "OPEN" | "PARTIAL" | "PAID" | "VOID"
 export type SupplierInvoiceVoidReason = "DUPLICATE" | "CANCELLED" | "ERROR" | "OTHER"

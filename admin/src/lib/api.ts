@@ -1,20 +1,4 @@
 import { env } from "#/env"
-import type {
-	InvoiceCreateInput,
-	InvoiceVoidInput,
-	PayablesAgingQuery,
-	PayablesAgingResult,
-	PaymentCreateInput,
-	PaymentListQuery,
-	PaymentListResult,
-	PaymentVoidInput,
-	SupplierBalanceResult,
-	SupplierInvoiceDetail,
-	SupplierInvoiceListQuery,
-	SupplierInvoiceListResult,
-	SupplierInvoiceRow,
-	SupplierPaymentDetail,
-} from "./api-types"
 
 export class ApiError extends Error {
 	readonly status: number
@@ -115,47 +99,4 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 /** True when the API asks for a fresh sign-in before a sensitive action. */
 export function isReauthRequired(error: unknown): boolean {
 	return error instanceof ApiError && error.code === "REAUTH_REQUIRED"
-}
-
-export const api = {
-	payables: {
-		invoices: {
-			list: (query: SupplierInvoiceListQuery = {}) =>
-				apiRequest<SupplierInvoiceListResult>("/api/payables/invoices", { query }),
-			get: (id: string) => apiRequest<SupplierInvoiceDetail>(`/api/payables/invoices/${id}`),
-			create: (input: InvoiceCreateInput) =>
-				apiRequest<{ invoice: SupplierInvoiceDetail; replayed: boolean }>(
-					"/api/payables/invoices",
-					{ method: "POST", body: input },
-				),
-			void: (id: string, input: InvoiceVoidInput) =>
-				apiRequest<{ invoice: SupplierInvoiceRow }>(`/api/payables/invoices/${id}/void`, {
-					method: "POST",
-					body: input,
-				}),
-		},
-		payments: {
-			list: (query: PaymentListQuery = {}) =>
-				apiRequest<PaymentListResult>("/api/payables/payments", { query }),
-			get: (id: string) => apiRequest<SupplierPaymentDetail>(`/api/payables/payments/${id}`),
-			create: (input: PaymentCreateInput) =>
-				apiRequest<{ payment: SupplierPaymentDetail; replayed: boolean }>(
-					"/api/payables/payments",
-					{ method: "POST", body: input },
-				),
-			void: (id: string, input: PaymentVoidInput) =>
-				apiRequest<{ payment: SupplierPaymentDetail }>(`/api/payables/payments/${id}/void`, {
-					method: "POST",
-					body: input,
-				}),
-		},
-		balances: {
-			list: (query: { branchId?: string } = {}) =>
-				apiRequest<SupplierBalanceResult>("/api/payables/balances", { query }),
-		},
-		aging: {
-			get: (query: PayablesAgingQuery = {}) =>
-				apiRequest<PayablesAgingResult>("/api/payables/aging", { query }),
-		},
-	},
 }

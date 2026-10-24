@@ -18,10 +18,16 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
-import { ApiError, api } from "#/lib/api"
-import type { SupplierPaymentDetail, SupplierPaymentVoidReason } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import {
+	payablesKeys,
+	type SupplierPaymentDetail,
+	type SupplierPaymentVoidReason,
+	voidPayment,
+} from "#/modules/payables"
+import { supplierKeys } from "#/modules/suppliers"
 
 const VOID_REASONS: Array<{ value: SupplierPaymentVoidReason; label: string }> = [
 	{ value: "DUPLICATE", label: "Duplicate payment" },
@@ -62,17 +68,19 @@ export function VoidPaymentDialog({
 	const releases = [...netByInvoice.values()].filter((row) => row.net > 0)
 
 	const voidMutation = useMutation({
-		mutationFn: () => api.payables.payments.void(payment.payment.id, { reason }),
+		mutationFn: () => voidPayment(payment.payment.id, { reason }),
 		onSuccess: async () => {
 			toast.success(`Payment ${payment.payment.number} voided`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["supplier-payment", payment.payment.id] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-payments"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoices"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoice"] }),
-				queryClient.invalidateQueries({ queryKey: ["payment-outstanding"] }),
 				queryClient.invalidateQueries({
-					queryKey: ["supplier", payment.payment.supplierId],
+					queryKey: payablesKeys.paymentDetail(payment.payment.id),
+				}),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.payments }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoices }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoice }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.outstanding }),
+				queryClient.invalidateQueries({
+					queryKey: supplierKeys.byId(payment.payment.supplierId),
 				}),
 			])
 			onOpenChange(false)

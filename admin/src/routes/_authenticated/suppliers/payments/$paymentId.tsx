@@ -18,10 +18,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
+import { paymentDetailOptions } from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/payments/$paymentId")({
 	component: PaymentDetailPage,
@@ -34,10 +34,7 @@ function PaymentDetailPage() {
 	const canVoid = hasPermission(session.user.role, "payable.void")
 	const [voidOpen, setVoidOpen] = useState(false)
 
-	const paymentQuery = useQuery({
-		queryKey: ["supplier-payment", paymentId],
-		queryFn: () => api.payables.payments.get(paymentId),
-	})
+	const paymentQuery = useQuery(paymentDetailOptions(paymentId))
 
 	const detail = paymentQuery.data
 	const payment = detail?.payment

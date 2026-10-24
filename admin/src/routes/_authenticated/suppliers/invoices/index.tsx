@@ -28,15 +28,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { SupplierInvoice, SupplierInvoiceStatus } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-// TODO(phase-8/11): this screen is payables'; Plan 11 moves it into modules/payables and keeps the
-// supplier read through the suppliers barrel.
-import { getSupplier } from "#/modules/suppliers"
-
+import {
+	invoiceListOptions,
+	type SupplierInvoice,
+	type SupplierInvoiceStatus,
+} from "#/modules/payables"
+// This screen is payables' even though its URL says suppliers; the supplier read stays on the
+// suppliers barrel.
+import { supplierDetailOptions } from "#/modules/suppliers"
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/")({
 	validateSearch: (search: Record<string, unknown>): { supplierId?: string } => ({
 		supplierId: typeof search.supplierId === "string" ? search.supplierId : undefined,
@@ -62,8 +64,7 @@ function InvoicesTab() {
 	const [offset, setOffset] = useState(0)
 
 	const initialSupplierQuery = useQuery({
-		queryKey: ["supplier", supplierId],
-		queryFn: () => getSupplier(supplierId as string),
+		...supplierDetailOptions(supplierId as string),
 		enabled: Boolean(supplierId) && supplier === null,
 	})
 	useEffect(() => {
@@ -90,10 +91,7 @@ function InvoicesTab() {
 		offset,
 	}
 
-	const invoicesQuery = useQuery({
-		queryKey: ["supplier-invoices", filters],
-		queryFn: () => api.payables.invoices.list(filters),
-	})
+	const invoicesQuery = useQuery(invoiceListOptions(filters))
 
 	const invoices = invoicesQuery.data?.invoices ?? []
 	const total = invoicesQuery.data?.total ?? 0

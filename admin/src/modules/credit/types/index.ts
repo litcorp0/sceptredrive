@@ -1,6 +1,6 @@
-import type { AgingBucketKey, AgingBuckets } from "#/lib/api-types"
+import type { AgingBucketKey, AgingBuckets } from "#/modules/payables"
 
-export type { AgingBucketKey, AgingBuckets } from "#/lib/api-types"
+export type { AgingBucketKey, AgingBuckets } from "#/modules/payables"
 
 export type CreditEntryKind = "CHARGE" | "REPAYMENT" | "REFUND" | "ADJUSTMENT"
 export type CreditMethod = "CASH" | "MOMO" | "BANK"
@@ -77,8 +77,8 @@ export interface CreditPostingResult {
 
 /**
  * `AgingBucketKey` and `AgingBuckets` are the one piece of credit vocabulary that payables also
- * uses (`PayablesAgingResult`), so they stay in `#/lib/api-types` until Plan 11 moves that block.
- * Declaring them twice would let the two reports drift apart on the bucket names.
+ * uses (`PayablesAgingResult`), so they are declared once in `#/modules/payables` and re-exported
+ * here. Declaring them twice would let the two reports drift apart on the bucket names.
  */
 export interface AgingChargeRow {
 	entryId: string

@@ -17,8 +17,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import type { InvoiceLineInput } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
+import type { InvoiceLineInput } from "#/modules/payables"
 
 export interface InvoiceLineDraft {
 	key: string

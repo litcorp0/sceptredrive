@@ -13,9 +13,10 @@
  * dialog invalidates them by prefix, from several places, by name. Money stays integer minor units
  * and formatting stays in `lib/format`.
  *
- * Two legacy edges survive until payables migrates in Plan 11 and are marked in place:
- * `receipt-detail-page` imports the payable status badge from `#/components/payables`, and
- * `components/payables/invoice-form` reads goods receipts through this barrel.
+ * Two reads cross the module boundary, and both are deliberate: `receipt-detail-page` reads the
+ * receipt's linked invoice through the `payables` barrel (the badge is shared from
+ * `components/common`), and payables' invoice form reads goods receipts through this barrel. A
+ * receipt's invoice and an invoice's receipt are the same relationship seen from both sides.
  */
 export {
 	cancelCount,
@@ -32,7 +33,6 @@ export {
 	listReceipts,
 	movementListOptions,
 	receiptDetailOptions,
-	receiptInvoiceOptions,
 	receiptListOptions,
 	removeThreshold,
 	setThreshold,

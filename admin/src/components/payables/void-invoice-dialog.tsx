@@ -18,9 +18,15 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
-import { ApiError, api } from "#/lib/api"
-import type { SupplierInvoiceRow, SupplierInvoiceVoidReason } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import {
+	payablesKeys,
+	type SupplierInvoiceRow,
+	type SupplierInvoiceVoidReason,
+	voidInvoice,
+} from "#/modules/payables"
+import { supplierKeys } from "#/modules/suppliers"
 
 const VOID_REASONS: Array<{ value: SupplierInvoiceVoidReason; label: string }> = [
 	{ value: "DUPLICATE", label: "Duplicate invoice" },
@@ -49,13 +55,13 @@ export function VoidInvoiceDialog({
 	}, [open])
 
 	const voidMutation = useMutation({
-		mutationFn: () => api.payables.invoices.void(invoice.id, { reason }),
+		mutationFn: () => voidInvoice(invoice.id, { reason }),
 		onSuccess: async () => {
 			toast.success(`Invoice ${invoice.number} voided`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoice", invoice.id] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier-invoices"] }),
-				queryClient.invalidateQueries({ queryKey: ["supplier", invoice.supplierId] }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoiceDetail(invoice.id) }),
+				queryClient.invalidateQueries({ queryKey: payablesKeys.invoices }),
+				queryClient.invalidateQueries({ queryKey: supplierKeys.byId(invoice.supplierId) }),
 			])
 			onOpenChange(false)
 		},

@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query"
-import { api, apiRequest } from "#/lib/api"
+import { apiRequest } from "#/lib/api"
 import type {
 	AdjustmentCreateInput,
 	InventoryReceipt,
@@ -80,20 +80,6 @@ export function receiptDetailOptions(id: string) {
 	return queryOptions({
 		queryKey: inventoryKeys.receiptDetail(id),
 		queryFn: () => getReceipt(id),
-	})
-}
-
-/**
- * The purchase invoice recorded against a goods receipt.
- *
- * TODO(phase-8/11): this read belongs to `#/modules/payables` and moves there in Plan 11. Until
- * then it is the second half of the documented inventory → payables edge: the receipt screen shows
- * the invoice's status, and this lookup finds it.
- */
-export function receiptInvoiceOptions(receiptId: string) {
-	return queryOptions({
-		queryKey: inventoryKeys.receiptInvoiceFor(receiptId),
-		queryFn: () => api.payables.invoices.list({ receiptId, limit: 1 }),
 	})
 }
 
