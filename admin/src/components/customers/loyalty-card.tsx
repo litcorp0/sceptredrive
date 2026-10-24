@@ -24,9 +24,10 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
-import type { ResolvedSetting, SettingKey } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
 import { daysUntil, impliedValueMinor, isExpiringSoon } from "#/lib/loyalty"
+import type { ResolvedSetting, SettingKey } from "#/modules/settings"
+import { settingsListOptions } from "#/modules/settings"
 
 function numberSetting(settings: ResolvedSetting[], key: SettingKey): number | null {
 	const setting = settings.find((item) => item.key === key)
@@ -56,8 +57,7 @@ export function LoyaltyCard({
 		queryFn: () => api.loyalty.account(customerId),
 	})
 	const settingsQuery = useQuery({
-		queryKey: ["settings", {}],
-		queryFn: () => api.settings.list(),
+		...settingsListOptions({}),
 		staleTime: 5 * 60_000,
 	})
 

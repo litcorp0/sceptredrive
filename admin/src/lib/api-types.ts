@@ -76,34 +76,6 @@ export interface SetStaffPinResult {
 	pinVersion: number
 }
 
-export type SettingKey =
-	| "auth.requireTwoFactor"
-	| "staff.idPrefix"
-	| "staff.idSequence"
-	| "receipt.header"
-	| "loyalty.earnPointsPerCedi"
-	| "loyalty.pointsPerCedi"
-	| "loyalty.expiryMonths"
-	| "loyalty.minimumRedeemPoints"
-	| "credit.repaymentPrefix"
-	| "credit.repaymentSequence"
-	| "catalog.skuPrefix"
-	| "catalog.skuSequence"
-	| "pricing.taxMode"
-	| "supplier.codePrefix"
-	| "supplier.codeSequence"
-	| "payable.invoicePrefix"
-	| "payable.invoiceSequence"
-	| "payable.paymentPrefix"
-	| "payable.paymentSequence"
-
-export interface ResolvedSetting {
-	key: SettingKey
-	value: unknown
-	branchScoped: boolean
-	source: "branch" | "global" | "default"
-}
-
 export interface Enrollment {
 	code: string
 	expiresAt: string
@@ -193,12 +165,6 @@ export type StaffListQuery = {
 	search?: string
 	limit?: number
 	offset?: number
-}
-
-export interface SettingsUpdateInput {
-	key: string
-	value: unknown
-	branchId?: string | null
 }
 
 export type TaxCategory = "STANDARD" | "ZERO_RATED" | "EXEMPT"

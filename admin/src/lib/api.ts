@@ -66,10 +66,8 @@ import type {
 	ReceiptListQuery,
 	RepaymentCreateInput,
 	ResetPasswordResult,
-	ResolvedSetting,
 	SetStaffPinInput,
 	SetStaffPinResult,
-	SettingsUpdateInput,
 	Staff,
 	StaffCreateInput,
 	StaffListQuery,
@@ -332,15 +330,6 @@ export const api = {
 		},
 		liability: (query: LoyaltyLiabilityQuery = {}) =>
 			apiRequest<LoyaltyLiabilityReport>("/api/loyalty/liability", { query }),
-	},
-
-	settings: {
-		list: (query: { branchId?: string } = {}) =>
-			apiRequest<{ settings: ResolvedSetting[]; branchId: string | null }>("/api/settings", {
-				query,
-			}),
-		update: (input: SettingsUpdateInput) =>
-			apiRequest<{ setting: ResolvedSetting }>("/api/settings", { method: "PATCH", body: input }),
 	},
 
 	catalog: {

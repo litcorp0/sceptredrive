@@ -10,7 +10,6 @@ import { ConfirmDialog } from "#/components/common/confirm-dialog"
 import { ActiveBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { ApiError, api } from "#/lib/api"
-import type { TaxMode } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
@@ -46,10 +45,6 @@ function EditProductPage() {
 		queryKey: ["uoms", { includeArchived: true }],
 		queryFn: () => api.catalog.units.list({ includeArchived: true }),
 	})
-	const settingsQuery = useQuery({
-		queryKey: ["settings", {}],
-		queryFn: () => api.settings.list(),
-	})
 
 	const toggleMutation = useMutation({
 		mutationFn: (active: boolean) =>
@@ -81,11 +76,6 @@ function EditProductPage() {
 		},
 		onError: (error) => toastApiError(error),
 	})
-
-	const taxMode =
-		(settingsQuery.data?.settings.find((setting) => setting.key === "pricing.taxMode")?.value as
-			| TaxMode
-			| undefined) ?? "INCLUSIVE"
 
 	if (productQuery.isPending) {
 		return <p className="text-sm text-muted-foreground">Loading product…</p>
@@ -143,7 +133,6 @@ function EditProductPage() {
 				categories={categoriesQuery.data?.categories ?? []}
 				brands={brandsQuery.data?.brands ?? []}
 				units={unitsQuery.data?.uoms ?? []}
-				taxMode={taxMode}
 				canEditCost={canEditCost}
 				readOnly={readOnly}
 				barcodeEditor={

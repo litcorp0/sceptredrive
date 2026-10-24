@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { SparklesIcon } from "lucide-react"
 import { type FormEvent, type ReactNode, useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -25,6 +25,7 @@ import type {
 } from "#/lib/api-types"
 import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import { settingsListOptions } from "#/modules/settings"
 
 const NO_BRAND = "none"
 
@@ -72,7 +73,6 @@ export function ProductForm({
 	categories,
 	brands,
 	units,
-	taxMode,
 	canEditCost,
 	readOnly = false,
 	barcodeEditor,
@@ -84,7 +84,6 @@ export function ProductForm({
 	categories: CategoryTreeNode[]
 	brands: Brand[]
 	units: Uom[]
-	taxMode: TaxMode
 	canEditCost: boolean
 	readOnly?: boolean
 	barcodeEditor?: ReactNode
@@ -94,6 +93,14 @@ export function ProductForm({
 }) {
 	const queryClient = useQueryClient()
 	const isEdit = mode === "edit"
+
+	// The tax mode is a settings value, not a form value: the form reads it so the price labels
+	// and the tax preview agree with what the API will charge.
+	const settingsQuery = useQuery(settingsListOptions({}))
+	const taxMode =
+		(settingsQuery.data?.settings.find((setting) => setting.key === "pricing.taxMode")?.value as
+			| TaxMode
+			| undefined) ?? "INCLUSIVE"
 
 	const [values, setValues] = useState<ProductFormValues>(EMPTY_VALUES)
 	const [formError, setFormError] = useState<string | null>(null)

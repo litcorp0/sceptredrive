@@ -5,7 +5,6 @@ import { useState } from "react"
 import { BarcodeEditor, type BarcodeItem } from "#/components/catalog/barcode-editor"
 import { ProductForm } from "#/components/catalog/product-form"
 import { api } from "#/lib/api"
-import type { TaxMode } from "#/lib/api-types"
 import { hasPermission } from "#/lib/role"
 
 export const Route = createFileRoute("/_authenticated/catalog/products/new")({
@@ -32,15 +31,6 @@ function NewProductPage() {
 		queryKey: ["uoms", { includeArchived: false }],
 		queryFn: () => api.catalog.units.list(),
 	})
-	const settingsQuery = useQuery({
-		queryKey: ["settings", {}],
-		queryFn: () => api.settings.list(),
-	})
-
-	const taxMode =
-		(settingsQuery.data?.settings.find((setting) => setting.key === "pricing.taxMode")?.value as
-			| TaxMode
-			| undefined) ?? "INCLUSIVE"
 
 	if (!canCreate) {
 		return (
@@ -74,7 +64,6 @@ function NewProductPage() {
 					categories={categoriesQuery.data?.categories ?? []}
 					brands={brandsQuery.data?.brands ?? []}
 					units={unitsQuery.data?.uoms ?? []}
-					taxMode={taxMode}
 					canEditCost={canEditCost}
 					createBarcodes={barcodes.map((item) => item.code)}
 					onSaved={(product) => {
