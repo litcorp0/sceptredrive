@@ -56,7 +56,11 @@
 								"message": "Import the module barrel (#/modules/<name>) instead of reaching into its internals."
 							},
 							{
-								"group": ["#/components/auth/**", "#/components/staff/**"],
+								"group": [
+									"#/components/auth/**",
+									"#/components/staff/**",
+									"#/components/catalog/**"
+								],
 								"message": "That folder has moved into its module. Import #/modules/<name> instead."
 							},
 							{
