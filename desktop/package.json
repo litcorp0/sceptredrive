@@ -1,14 +1,14 @@
 {
   "name": "desktop",
-  "productName": "GikAutos POS",
+  "productName": "Sceptre Drive POS",
   "version": "0.1.0",
   "private": true,
-  "description": "GikAutos offline-first point of sale",
+  "description": "Sceptre Drive offline-first point of sale",
   "type": "module",
   "main": ".vite/build/main.cjs",
   "author": {
-    "name": "GikAutos",
-    "email": "engineering@gikautos.com"
+    "name": "Sceptre Drive",
+    "email": "engineering@sceptre-drive.example"
   },
   "license": "UNLICENSED",
   "installConfig": {

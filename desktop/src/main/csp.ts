@@ -1,4 +1,4 @@
-import { DEV_API_BASE_URL, DEV_POWERSYNC_URL } from './config.ts'
+import { DEV_API_BASE_URL, DEV_POWERSYNC_URL, SCEPTRE_DOMAIN } from './config.ts'
 
 /**
  * The renderer's Content-Security-Policy.
@@ -12,10 +12,10 @@ import { DEV_API_BASE_URL, DEV_POWERSYNC_URL } from './config.ts'
  */
 
 /** Origins the packaged app may talk to, on top of the configured API/PowerSync URLs. */
-export const PRODUCTION_API_ORIGINS = ['https://api.gikautos.com'] as const
+export const PRODUCTION_API_ORIGINS = [`https://api.${SCEPTRE_DOMAIN}`] as const
 export const PRODUCTION_POWERSYNC_ORIGINS = [
   'https://*.powersync.journeyapps.com',
-  'https://*.gikautos.com',
+  `https://*.${SCEPTRE_DOMAIN}`,
 ] as const
 
 export type CspOptions = {
@@ -81,8 +81,8 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
  * Used to reject config values that would point the app at an origin the policy
  * forbids: the CSP is built from the config, so an unvalidated config could
  * silently widen the policy. The allowlist is deliberately narrow — our own
- * `*.gikautos.com` hosts, PowerSync Cloud hosts, and (local only) any localhost
- * origin.
+ * `*.${SCEPTRE_DOMAIN}` hosts, PowerSync Cloud hosts, and (local only) any
+ * localhost origin.
  */
 export function isAllowedConnectOrigin(url: string, options: { allowLocal: boolean }): boolean {
   let origin: string
@@ -109,7 +109,7 @@ export function isAllowedConnectOrigin(url: string, options: { allowLocal: boole
     return false
   }
 
-  if (hostname === 'gikautos.com' || hostname.endsWith('.gikautos.com')) {
+  if (hostname === SCEPTRE_DOMAIN || hostname.endsWith(`.${SCEPTRE_DOMAIN}`)) {
     return true
   }
 
