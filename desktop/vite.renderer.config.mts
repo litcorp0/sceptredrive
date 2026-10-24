@@ -27,14 +27,14 @@ function cspPlugin(dev: boolean): Plugin {
     .filter((directive) => !directive.startsWith('frame-ancestors'))
     .join('; ')
   return {
-    name: 'gikautos-csp',
+    name: 'sceptre-csp',
     // The dev server sends the policy as a header (`server.headers`); the meta
     // tag exists for the packaged document, which always gets the header too but
     // must stay safe if it is ever served without it.
     apply: 'build',
     transformIndexHtml(html) {
       return html.replace(
-        '<!--%GIKAUTOS_CSP%-->',
+        '<!--%SCEPTRE_CSP%-->',
         `<meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`,
       )
     },
@@ -67,7 +67,7 @@ export default defineConfig(({ command }) => {
       format: 'es',
     },
     build: {
-      // Renderer assets are served from the `app://gikautos` origin.
+      // Renderer assets are served from the `app://sceptre-drive` origin.
       target: 'chrome140',
     },
   }

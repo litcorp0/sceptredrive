@@ -1,7 +1,7 @@
 import path from 'node:path'
 
 export const APP_SCHEME = 'app'
-export const APP_HOST = 'gikautos'
+export const APP_HOST = 'sceptre-drive'
 export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`
 
 /**

@@ -4,7 +4,7 @@ import { net, protocol } from 'electron'
 import { APP_SCHEME, resolveAppAssetPath } from './paths'
 
 /**
- * Serves the packaged renderer from `app://gikautos/…`.
+ * Serves the packaged renderer from `app://sceptre-drive/…`.
  *
  * A privileged standard scheme gives the renderer a real origin, which is what
  * web workers, WASM, IndexedDB/OPFS, and a strict CSP need. `file://` is an
