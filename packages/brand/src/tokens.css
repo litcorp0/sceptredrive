@@ -134,6 +134,41 @@
   --sidebar-border: var(--line);
 }
 
+/*
+ * Printing always uses the light palette.
+ *
+ * A dark-mode statement printed as-is fills the page with ink and the fine rules vanish.
+ * The POS never prints from the DOM (receipts go through ESC/POS), so this only affects
+ * admin documents: customer statements and the aging report. Declared after `.dark`, which
+ * targets the same element at the same specificity, so `@media print` wins by source order.
+ */
+@media print {
+  :root {
+    --ink: #1b1f23;
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --muted-ink: #4a5058;
+    --line: #c9cdd3;
+    --line-strong: #7c8794;
+    --background: #ffffff;
+    --foreground: #1b1f23;
+    --card: #ffffff;
+    --card-foreground: #1b1f23;
+    --popover: #ffffff;
+    --popover-foreground: #1b1f23;
+    --muted: #f2f2f0;
+    --muted-foreground: #4a5058;
+    --secondary: #f2f2f0;
+    --secondary-foreground: #1b1f23;
+    --accent: #fdeadd;
+    --accent-foreground: #1b1f23;
+    --border: #c9cdd3;
+    --input: #7c8794;
+    --sidebar: #ffffff;
+    --sidebar-border: #c9cdd3;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

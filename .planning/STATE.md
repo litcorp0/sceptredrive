@@ -5,13 +5,13 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-24
-**Status:** **Phase 7 (Identity, Design System & Brand Foundation) in progress — Plans 01 and 02
-complete.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
+**Status:** **Phase 7 (Identity, Design System & Brand Foundation) complete — 7/7 plans,
+verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
 System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 07** (phase verification, evidence, and state update).
+**Next action:** Plan **Phase 8** (Admin Module Architecture & Shell).
 
 ---
 
@@ -26,7 +26,7 @@ became Phases 13/14/15.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (6/7 plans) |
+| 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -46,7 +46,7 @@ became Phases 13/14/15.
 | 04 | shadcn primitives and chart layer in both clients | ✅ Complete |
 | 05 | `date-fns` in shared, admin, and desktop | ✅ Complete |
 | 06 | Shell chrome on the new design system | ✅ Complete |
-| 07 | Phase verification, evidence, and state update | ⬜ Not started |
+| 07 | Phase verification, evidence, and state update | ✅ Complete |
 
 ### Phase 7 planning notes (2026-10-24)
 
@@ -268,6 +268,58 @@ became Phases 13/14/15.
   - **Deferred to Plan 07:** the enrolled-terminal POS header screenshot (needs enrolment and
     a shift), the full ten-step walkthrough, `scripts/check-tokens.mjs`, and the ROADMAP
     update.
+
+- **Plan 07 complete** (commits `ef5e827`, `b4d429f`, `6581786`, `4b3c160`, `0d39c58`).
+  Phase 7 is verified: `phases/07-identity-design-system/01-VERIFICATION.md` maps every
+  roadmap success criterion to a command or a recorded step, and `evidence/suites.txt` is the
+  whole gate matrix in one transcript.
+  - **New gate.** `scripts/check-tokens.mjs` (`bun run tokens:check`, wired into `ci.yml`) is
+    the machine version of the phase goal. It fails when either client stops importing
+    `@sceptre/brand/tokens.css`, when a brand hex reappears under `admin/src` or
+    `desktop/src/renderer` (317 tracked files scanned), when a required custom property is
+    missing or a literal colour is not redefined in `.dark`, when a contrast pair misses its
+    bound, or when `date-fns` resolves twice. Contrast is computed from the **token file** with
+    the WCAG 2.2 relative-luminance formula — the first draft compared literals copied into the
+    script and could not fail when a token drifted; `evidence/verify-token-gate.mjs` proves the
+    gate can fail, with eleven mutations each asserted to break it and each restored
+    byte-for-byte (**22/22**).
+  - **Suite numbers.** API **360**, shared **96**, desktop **339**, packaged shell E2E
+    **38/38**, chart galleries **61/61** (admin) and **60/60** (POS), admin walkthrough
+    **37/37**, POS walkthrough **16/16**. Baseline in the plan was API 354 / shared ≥ 90 /
+    desktop 339; every suite meets or exceeds it.
+  - **`bun test` is not `bun run test`.** Bun resolves `bun test` to its own builtin runner,
+    which ignores the workspace `test` scripts and runs every test file with the wrong setup
+    (576 tests, 31 failures here). `AGENTS.md` says `bun test`; it should say `bun run test`.
+  - **Three product defects found and fixed.** (a) A `@fontsource` unicode-range subset
+    (JetBrains Mono cyrillic) is under Vite's 4 KiB inline threshold, so it shipped as a
+    `data:` URI and `font-src 'self'` blocked it — one CSP violation per boot and a fallback
+    font; both apps now opt font files out of inlining and the policy was **not** widened.
+    (b) The 375 px drawer needed two Escapes: focusing a nav link opened its tooltip, which
+    consumed the first Escape; tooltips are suppressed in the drawer. (c) An offline terminal
+    read `Downloaded 14:02` instead of Offline because the badge only consulted the uploader;
+    a synced-before terminal whose transport is down now reports Offline, with a
+    `lastSyncedAt` guard so a first boot does not flash.
+  - **Two test defects fixed.** The chart galleries compared the computed transition duration
+    to the string `0s` while the reduced-motion policy caps it at `0.01ms` (Chrome serialises
+    `1e-05s`); both now parse the duration and fail above 1 ms. The packaged smoke connected
+    over CDP as soon as `/json/version` answered, before Chromium exposed a page target, and
+    hung for its full timeout; it now waits for a page target.
+  - **Deliberate deviations** (all in the report §7): `ci.yml` not `checks.yml`; the emitted
+    bundle has **two** `--brand` declarations (`:root` and `.dark`) because D7 fixes the brand
+    as unchanged in dark mode — one would require deleting a deliberate token; contrast pairs
+    resolve through the token graph; steps 8–9 run the unpackaged build because a packaged app
+    sets `allowLocalOrigins: false` by design; the offline leg aborts requests in the driver
+    rather than killing a server it does not own; each POS run creates its own terminal so no
+    shipped ledger row is deleted to make room for a fixture.
+  - **Carry-forwards.** Outbox ordering (a backed-off `SHIFT_OPEN` can be overtaken by a sale,
+    which is then dead-lettered `SHIFT_MISSING` — the till never blocked the sale, but causal
+    order should be enforced before payments) → **Phase 13**. A first install opens the
+    diagnostics shell rather than enrolment, and POS product tiles truncate names → **Phase
+    10**. `STAFF_ID_PREFIX` remains `GA` in `.env`; it is not a brand string and changing it
+    rewrites identity values, so it is an operator decision.
+  - **Re-enrolment consequence unchanged:** the rename moved Electron's `userData` and
+    invalidated device tokens, so existing development terminals must re-enrol
+    (`desktop/README.md`).
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 

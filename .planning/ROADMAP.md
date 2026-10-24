@@ -189,6 +189,9 @@ needed.
 both clients draw from one design-token source, one typography set, one primitive library,
 and one date formatter — so the admin console and the POS cannot drift apart again.
 
+**Status:** ✅ Complete (verified 2026-10-24 — see
+`phases/07-identity-design-system/01-VERIFICATION.md`; gates in `evidence/suites.txt`)
+
 **Dependencies:** Phase 6
 **Requirements:** UIX-01…05
 

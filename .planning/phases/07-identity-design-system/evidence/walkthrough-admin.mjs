@@ -505,11 +505,15 @@ try {
     const header = document.querySelector('header')
     const cells = [...document.querySelectorAll('main td')]
     const sizes = cells.map((cell) => Number.parseFloat(getComputedStyle(cell).fontSize))
+    const root = getComputedStyle(document.documentElement)
     return {
       sidebar: sidebar ? getComputedStyle(sidebar).display : 'missing',
       header: header ? getComputedStyle(header).display : 'missing',
       cells: cells.length,
       minFontSize: sizes.length > 0 ? Math.min(...sizes) : 0,
+      canvas: root.getPropertyValue('--canvas').trim(),
+      ink: root.getPropertyValue('--ink').trim(),
+      bodyBackground: getComputedStyle(document.body).backgroundColor,
     }
   })
   check(
@@ -521,6 +525,13 @@ try {
     printState.cells > 0 && printState.minFontSize >= 9,
     'statement tables stay legible in print',
     `min ${printState.minFontSize}px over ${printState.cells} cells`,
+  )
+  check(
+    printState.canvas.toLowerCase() === '#ffffff' &&
+      printState.ink.toLowerCase() === '#1b1f23' &&
+      printState.bodyBackground === 'rgb(255, 255, 255)',
+    'a dark-mode print still prints a light sheet',
+    `${printState.canvas} / ${printState.ink} / body ${printState.bodyBackground}`,
   )
   await shot('plan07-05-admin-statement-print')
   await page.emulateMedia({ media: 'screen' })
