@@ -5,9 +5,10 @@ import { StatusBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { api } from "#/lib/api"
-import type { Branch, PriceOverride } from "#/lib/api-types"
+import type { PriceOverride } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import type { Branch } from "#/modules/branches"
 
 export function PriceOverrides({
 	productId,
@@ -18,7 +19,7 @@ export function PriceOverrides({
 }: {
 	productId: string
 	basePriceMinor: number
-	branches: Branch[]
+	branches: Array<Pick<Branch, "id" | "code" | "name">>
 	canOverride: boolean
 	disabled?: boolean
 }) {
@@ -77,7 +78,7 @@ function OverrideRow({
 	disabled,
 }: {
 	productId: string
-	branch: Branch
+	branch: Pick<Branch, "id" | "code" | "name">
 	basePriceMinor: number
 	override: PriceOverride | null
 	canOverride: boolean

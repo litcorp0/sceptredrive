@@ -1,19 +1,31 @@
 import { useQuery } from "@tanstack/react-query"
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react"
-import { api } from "#/lib/api"
-import type { Branch } from "#/lib/api-types"
+import { apiRequest } from "#/lib/api"
 import type { Session } from "#/lib/auth-client"
 import { SHELL_KEYS } from "#/lib/query-keys"
 
 const STORAGE_KEY = "sceptre-drive.admin.branchId"
 
+/**
+ * The branch fields the console shell actually reads (the switcher and the branch columns its
+ * consumers render). The full record belongs to `modules/branches`; `lib` must not import a module
+ * — that would make `lib → modules/branches → lib` a cycle — so the shell declares the subset it
+ * needs and keeps its own transport call.
+ */
+interface ShellBranch {
+	id: string
+	code: string
+	name: string
+	isActive: boolean
+}
+
 interface BranchContextValue {
 	/** Branches visible to the signed-in user. */
-	branches: Branch[]
+	branches: ShellBranch[]
 	isLoading: boolean
 	/** null means "all branches" (admins only). */
 	activeBranchId: string | null
-	activeBranch: Branch | null
+	activeBranch: ShellBranch | null
 	setActiveBranchId: (id: string | null) => void
 	/** Admins can switch; managers are pinned to their own branch. */
 	canSelectBranch: boolean
@@ -26,7 +38,7 @@ export function BranchProvider({ session, children }: { session: Session; childr
 
 	const { data, isLoading } = useQuery({
 		queryKey: SHELL_KEYS.branches,
-		queryFn: () => api.branches.list(),
+		queryFn: () => apiRequest<{ branches: ShellBranch[] }>("/api/branches"),
 	})
 	const branches = useMemo(() => data?.branches ?? [], [data])
 

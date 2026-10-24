@@ -4,10 +4,6 @@ import type {
 	AgingQuery,
 	AgingResult,
 	Barcode,
-	Branch,
-	BranchCreateInput,
-	BranchListQuery,
-	BranchUpdateInput,
 	Brand,
 	BrandCreateInput,
 	BrandUpdateInput,
@@ -69,7 +65,6 @@ import type {
 	StockListQuery,
 	StockRow,
 	StockThreshold,
-	SuggestCode,
 	Supplier,
 	SupplierBalanceResult,
 	SupplierCreateInput,
@@ -201,20 +196,6 @@ export function isReauthRequired(error: unknown): boolean {
 }
 
 export const api = {
-	branches: {
-		list: (query: BranchListQuery = {}) =>
-			apiRequest<{ branches: Branch[] }>("/api/branches", { query }),
-		get: (id: string) => apiRequest<{ branch: Branch }>(`/api/branches/${id}`),
-		create: (input: BranchCreateInput) =>
-			apiRequest<{ branch: Branch }>("/api/branches", { method: "POST", body: input }),
-		update: (id: string, input: BranchUpdateInput) =>
-			apiRequest<{ branch: Branch }>(`/api/branches/${id}`, { method: "PATCH", body: input }),
-		deactivate: (id: string) =>
-			apiRequest<{ branch: Branch }>(`/api/branches/${id}/deactivate`, { method: "POST" }),
-		suggestCode: (query: { city: string; area?: string; type: string }) =>
-			apiRequest<SuggestCode>("/api/branches/suggest-code", { query }),
-	},
-
 	terminals: {
 		list: (query: TerminalListQuery = {}) =>
 			apiRequest<{ terminals: Terminal[] }>("/api/terminals", { query }),
