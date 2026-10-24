@@ -59,7 +59,8 @@
 								"group": [
 									"#/components/auth/**",
 									"#/components/staff/**",
-									"#/components/catalog/**"
+									"#/components/catalog/**",
+									"#/components/inventory/**"
 								],
 								"message": "That folder has moved into its module. Import #/modules/<name> instead."
 							},

@@ -26,10 +26,13 @@ import {
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
-import type { InventoryReceipt, InvoiceCreateInput } from "#/lib/api-types"
+import type { InvoiceCreateInput } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+// TODO(phase-8/11): a supplier invoice is recorded against a goods receipt, so payables reads
+// inventory's receipt fetchers until payables itself migrates. Keep it a barrel import.
+import { getReceipt, type InventoryReceipt, listReceipts } from "#/modules/inventory"
 
 type TaxMode = "STANDARD" | "NONE" | "MANUAL"
 
@@ -102,7 +105,7 @@ export function InvoiceForm({
 	const receiptOptionsQuery = useQuery({
 		queryKey: ["invoice-receipt-options", effectiveBranchId],
 		queryFn: () =>
-			api.inventory.receipts.list({
+			listReceipts({
 				branchId: effectiveBranchId || undefined,
 				limit: 50,
 			}),
@@ -111,7 +114,7 @@ export function InvoiceForm({
 
 	const initialReceiptQuery = useQuery({
 		queryKey: ["invoice-receipt", receiptId],
-		queryFn: () => api.inventory.receipts.get(receiptId as string),
+		queryFn: () => getReceipt(receiptId as string),
 		enabled: Boolean(receiptId),
 	})
 
@@ -206,7 +209,7 @@ export function InvoiceForm({
 			return
 		}
 		try {
-			const data = await api.inventory.receipts.get(nextId)
+			const data = await getReceipt(nextId)
 			await applyReceipt(data.receipt)
 		} catch (error) {
 			toastApiError(error)
