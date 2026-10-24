@@ -21,7 +21,7 @@ primitive library, and one date formatter.**
 
 | # | Success criterion (ROADMAP) | Proof | Result |
 |---|---|---|---|
-| 1 | `brand:check` over the repository returns only the documented allowlist | `bun run brand:check` | **OK — 650 tracked files, old brand absent.** Allowlist is unchanged from Plan 01: `desktop/src/main/config.ts` (the one `SCEPTRE_DOMAIN` placeholder line), `api/migrations/**`, `.planning/phases/**`, `bun.lock`, and the check script itself |
+| 1 | `brand:check` over the repository returns only the documented allowlist | `bun run brand:check` | **OK — 651 tracked files, old brand absent.** Allowlist is unchanged from Plan 01: `desktop/src/main/config.ts` (the one `SCEPTRE_DOMAIN` placeholder line), `api/migrations/**`, `.planning/phases/**`, `bun.lock`, and the check script itself |
 | 2 | Both clients import the same token file; one hex change reaches both | `bun run tokens:check`; emitted-CSS count in `suites.txt` | **OK.** Both stylesheets import `@sceptre/brand/tokens.css` and declare no brand token. 317 tracked app files carry no brand hex. Each emitted bundle has exactly **2** `--brand` declarations, both `#f26a1b`, both from the one package file (`:root` and `.dark`) |
 | 3 | The palette is AA-compliant: charcoal on orange, never white on orange | `bun run tokens:check` (measured, not hard-coded) | **OK.** 11 pairs measured with the WCAG 2.2 relative-luminance formula — table in §2. White on brand is asserted to **stay** below 4.5:1, so the rejected pairing cannot be "improved" into a failure |
 | 4 | Every date goes through `@sceptre/shared`; no bare `toLocaleDateString` remains | `walkthrough-admin.mjs` step 7; `grep`; desktop receipt test | **OK.** Three screens checked against the one formatter (§3). No ISO or slash date leaks anywhere. The only `toLocaleString`/`toLocaleDateString` left are inside two generated registry files (`components/ui/chart.tsx`, `calendar.tsx`), as recorded in Plan 05 |
@@ -94,7 +94,7 @@ The full transcript is `evidence/suites.txt`, produced by `evidence/run-suites.s
 | `bun install` | exit 0, 650 installs / 813 packages, no changes |
 | `bun run lint` | exit 0, 24 warnings (all pre-existing, in earlier-phase evidence files) |
 | `bun run check-types` | exit 0, 6/6 workspaces |
-| `bun run brand:check` | exit 0, 650 tracked files |
+| `bun run brand:check` | exit 0, 651 tracked files |
 | `bun run tokens:check` | exit 0 |
 | `bun run test` | **API 360/360, shared 96/96, desktop 339/339** |
 | `bun run --filter admin build` | exit 0 |
@@ -111,7 +111,7 @@ the wrong setup (576 tests, 31 failures on this tree). The root script is `bun r
 
 ## 5. Walkthrough record
 
-### Admin console — `evidence/walkthrough-admin.mjs`, **37/37**
+### Admin console — `evidence/walkthrough-admin.mjs`, **38/38**
 
 | Step | Proved |
 |---|---|
@@ -119,7 +119,7 @@ the wrong setup (576 tests, 31 failures on this tree). The root script is `bun r
 | 2. Dark | theme applies, `--canvas` = `#1b1f23` and `--brand` unchanged from the token file, reload applies dark **before hydration** (no flash), layout identical |
 | 3. 375 px drawer | opens, Tab stays inside the panel for 12 presses (focus trap), > 5 links reachable, **Escape closes in one press** |
 | 4. Keyboard only | first Tab reaches the skip link, the next control draws a solid 2 px outline, the audit row expands from its chevron button with Enter, the customer ledger opens with Enter |
-| 5. Print | sidebar and fascia `display:none`, statement tables still ≥ 9 px |
+| 5. Print | printed **from dark mode on purpose**: sidebar and fascia `display:none`, statement tables still ≥ 9 px, and the sheet is white with charcoal ink |
 | 7. Dates | §3 |
 
 ### Desktop POS — `evidence/walkthrough-pos.mjs` + `evidence/run-pos-walkthrough.sh`, **16/16**
@@ -170,10 +170,16 @@ and fixed inside Phase 7.
    only, so a till launched with no network read `Downloaded 14:02` from persisted state while
    PowerSync was disconnected. A terminal that has synced before and whose transport is down
    now reports Offline; the `lastSyncedAt` guard prevents a boot-time flash.
+4. **A statement printed from dark mode came out as a slab of ink.** Dark is a screen mode, not
+   a paper mode. The one token file now resets the palette inside `@media print`, so admin
+   documents print as a white A4 sheet with charcoal ink whatever the screen theme. The POS is
+   unaffected: its receipts never print from the DOM.
 
-Two test defects were also fixed: the reduced-motion assertion compared the computed duration
-to the string `'0s'` while the policy caps it at `0.01ms` (Chrome serialises `1e-05s`), and
-the packaged smoke connected over CDP before Chromium exposed a page target.
+Three test defects were also fixed: the reduced-motion assertion compared the computed
+duration to the string `'0s'` while the policy caps it at `0.01ms` (Chrome serialises
+`1e-05s`); the packaged smoke connected over CDP before Chromium exposed a page target; and
+the admin chart proof measured a cold dev server mid-paint (a 361 px layout against a 320 px
+viewport, once) and now waits for the layout to settle.
 
 ---
 
@@ -257,11 +263,8 @@ bash .planning/phases/07-identity-design-system/evidence/run-suites.sh
 # Prove the token gate can fail
 node .planning/phases/07-identity-design-system/evidence/verify-token-gate.mjs
 
-# Admin walkthrough (needs the API and an admin dev server)
-ADMIN_URL=http://localhost:3001 \
-  node .planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs
-
-# POS walkthrough (starts and stops its own admin dev server)
+# Walkthroughs — each starts and stops its own admin dev server
+bash .planning/phases/07-identity-design-system/evidence/run-admin-walkthrough.sh
 bash .planning/phases/07-identity-design-system/evidence/run-pos-walkthrough.sh
 
 # Chart layer
@@ -269,3 +272,6 @@ ADMIN_URL=http://localhost:3001 \
   node .planning/phases/07-identity-design-system/evidence/verify-charts-admin.mjs
 node .planning/phases/07-identity-design-system/evidence/verify-charts-desktop.mjs
 ```
+
+Each walkthrough writes to `evidence/shots/` and exits non-zero with a named failure list, so
+re-running one is the way to check a regression rather than re-reading this document.

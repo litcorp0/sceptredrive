@@ -72,6 +72,20 @@ for (const width of WIDTHS) {
         await page.waitForTimeout(200)
       }
 
+      /*
+       * A cold dev server can paint the charts once before the stylesheet has settled: a
+       * 361px layout measured against a 320px viewport on a first run, then never again.
+       * Wait for the steady state instead of racing it — the claim is about the final layout.
+       */
+      for (let settle = 0; settle < 20; settle += 1) {
+        const settled = await page.evaluate(
+          (target) => document.documentElement.scrollWidth <= target,
+          width,
+        )
+        if (settled) break
+        await page.waitForTimeout(250)
+      }
+
       const geo = await geometry()
       const tag = `${width}px ${theme} ${motion}`
       check(geo.count === 4, `${tag}: four chart containers`, String(geo.count))

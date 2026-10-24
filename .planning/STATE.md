@@ -285,7 +285,7 @@ became Phases 13/14/15.
     byte-for-byte (**22/22**).
   - **Suite numbers.** API **360**, shared **96**, desktop **339**, packaged shell E2E
     **38/38**, chart galleries **61/61** (admin) and **60/60** (POS), admin walkthrough
-    **37/37**, POS walkthrough **16/16**. Baseline in the plan was API 354 / shared ≥ 90 /
+    **38/38**, POS walkthrough **16/16**. Baseline in the plan was API 354 / shared ≥ 90 /
     desktop 339; every suite meets or exceeds it.
   - **`bun test` is not `bun run test`.** Bun resolves `bun test` to its own builtin runner,
     which ignores the workspace `test` scripts and runs every test file with the wrong setup
@@ -298,7 +298,10 @@ became Phases 13/14/15.
     consumed the first Escape; tooltips are suppressed in the drawer. (c) An offline terminal
     read `Downloaded 14:02` instead of Offline because the badge only consulted the uploader;
     a synced-before terminal whose transport is down now reports Offline, with a
-    `lastSyncedAt` guard so a first boot does not flash.
+    `lastSyncedAt` guard so a first boot does not flash. (d) A statement printed from dark
+    mode came out as a slab of ink — dark is a screen mode, not a paper mode — so the one
+    token file now resets the palette inside `@media print`, and walkthrough step 5 prints
+    from dark mode on purpose to prove it.
   - **Two test defects fixed.** The chart galleries compared the computed transition duration
     to the string `0s` while the reduced-motion policy caps it at `0.01ms` (Chrome serialises
     `1e-05s`); both now parse the duration and fail above 1 ms. The packaged smoke connected

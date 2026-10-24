@@ -1,10 +1,10 @@
-captured 2026-10-24T14:49:16Z on Linux 7.2.9-2-cachyos x86_64
+captured 2026-10-24T15:08:37Z on Linux 7.2.9-2-cachyos x86_64
 
 ### bun install
-[0.29ms] ".env"
+[0.30ms] ".env"
 bun install v1.3.14 (0d9b296a)
 
-Checked 650 installs across 813 packages (no changes) [732.00ms]
+Checked 650 installs across 813 packages (no changes) [319.00ms]
 (exit 0)
 
 ### bun run lint
@@ -297,76 +297,76 @@ $ biome check .
      608  608 │   
   
 
-packages/brand/src/tokens.css:215:34 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+packages/brand/src/tokens.css:250:34 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
 
   ! Avoid the use of the !important style.
   
-    213 │     *::before,
-    214 │     *::after {
-  > 215 │       animation-duration: 0.01ms !important;
+    248 │     *::before,
+    249 │     *::after {
+  > 250 │       animation-duration: 0.01ms !important;
         │                                  ^^^^^^^^^^
-    216 │       animation-iteration-count: 1 !important;
-    217 │       transition-duration: 0.01ms !important;
+    251 │       animation-iteration-count: 1 !important;
+    252 │       transition-duration: 0.01ms !important;
   
   i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
   
   i Unsafe fix: Remove the style.
   
-    215 │ ······animation-duration:·0.01ms·!important;
+    250 │ ······animation-duration:·0.01ms·!important;
         │                                 ----------- 
 
-packages/brand/src/tokens.css:216:36 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+packages/brand/src/tokens.css:251:36 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
 
   ! Avoid the use of the !important style.
   
-    214 │     *::after {
-    215 │       animation-duration: 0.01ms !important;
-  > 216 │       animation-iteration-count: 1 !important;
+    249 │     *::after {
+    250 │       animation-duration: 0.01ms !important;
+  > 251 │       animation-iteration-count: 1 !important;
         │                                    ^^^^^^^^^^
-    217 │       transition-duration: 0.01ms !important;
-    218 │       scroll-behavior: auto !important;
+    252 │       transition-duration: 0.01ms !important;
+    253 │       scroll-behavior: auto !important;
   
   i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
   
   i Unsafe fix: Remove the style.
   
-    216 │ ······animation-iteration-count:·1·!important;
+    251 │ ······animation-iteration-count:·1·!important;
         │                                   ----------- 
 
-packages/brand/src/tokens.css:217:35 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+packages/brand/src/tokens.css:252:35 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
 
   ! Avoid the use of the !important style.
   
-    215 │       animation-duration: 0.01ms !important;
-    216 │       animation-iteration-count: 1 !important;
-  > 217 │       transition-duration: 0.01ms !important;
+    250 │       animation-duration: 0.01ms !important;
+    251 │       animation-iteration-count: 1 !important;
+  > 252 │       transition-duration: 0.01ms !important;
         │                                   ^^^^^^^^^^
-    218 │       scroll-behavior: auto !important;
-    219 │     }
+    253 │       scroll-behavior: auto !important;
+    254 │     }
   
   i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
   
   i Unsafe fix: Remove the style.
   
-    217 │ ······transition-duration:·0.01ms·!important;
+    252 │ ······transition-duration:·0.01ms·!important;
         │                                  ----------- 
 
-packages/brand/src/tokens.css:218:29 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+packages/brand/src/tokens.css:253:29 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
 
   ! Avoid the use of the !important style.
   
-    216 │       animation-iteration-count: 1 !important;
-    217 │       transition-duration: 0.01ms !important;
-  > 218 │       scroll-behavior: auto !important;
+    251 │       animation-iteration-count: 1 !important;
+    252 │       transition-duration: 0.01ms !important;
+  > 253 │       scroll-behavior: auto !important;
         │                             ^^^^^^^^^^
-    219 │     }
-    220 │   }
+    254 │     }
+    255 │   }
   
   i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
   
   i Unsafe fix: Remove the style.
   
-    218 │ ······scroll-behavior:·auto·!important;
+    253 │ ······scroll-behavior:·auto·!important;
         │                            ----------- 
 
 The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
@@ -377,11 +377,11 @@ Found 24 warnings.
 
 ### bun run check-types
 $ bun run --if-present --filter '*' check-types
-@sceptre/brand check-types: Exited with code 0
-@sceptre/db check-types: Exited with code 0
 @sceptre/shared check-types: Exited with code 0
-api check-types: Exited with code 0
+@sceptre/db check-types: Exited with code 0
+@sceptre/brand check-types: Exited with code 0
 desktop check-types: Exited with code 0
+api check-types: Exited with code 0
 admin check-types: Exited with code 0
 (exit 0)
 
@@ -413,6 +413,9 @@ token check OK
 
 ### bun run test
 $ bun run --if-present --filter '*' test
+@sceptre/shared test: 
+@sceptre/shared test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+@sceptre/shared test: 
 @sceptre/db test: 
 @sceptre/db test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/db
 @sceptre/db test: 
@@ -426,16 +429,13 @@ desktop test:
 desktop test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/desktop
 desktop test: 
 @sceptre/shared test: 
-@sceptre/shared test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
-@sceptre/shared test: 
-@sceptre/shared test: 
 @sceptre/shared test:  Test Files  9 passed (9)
 @sceptre/shared test:       Tests  96 passed (96)
-@sceptre/shared test:    Start at  14:49:51
-@sceptre/shared test:    Duration  6.81s (import 68%, transform 16%, tests 14%, worker 2%)
+@sceptre/shared test:    Start at  15:09:10
+@sceptre/shared test:    Duration  5.83s (import 68%, transform 22%, tests 8%, worker 2%)
 @sceptre/shared test: 
-@sceptre/shared test:     Isolate  9 workers spawned · ~575ms startup each (spawn + environment, per file)
-@sceptre/shared test:              at least ~1.15s faster with isolate: false — reuses workers across files instead of one per file
+@sceptre/shared test:     Isolate  9 workers spawned · ~440ms startup each (spawn + environment, per file)
+@sceptre/shared test:              at least ~880ms faster with isolate: false — reuses workers across files instead of one per file
 @sceptre/shared test: 
 @sceptre/shared test: Exited with code 0
 api test: 
@@ -444,72 +444,26 @@ api test:
 desktop test: 
 desktop test:  Test Files  38 passed (38)
 desktop test:       Tests  339 passed (339)
-desktop test:    Start at  14:49:50
-desktop test:    Duration  27.99s (import 91%, tests 6%, transform 1%, worker 1%)
+desktop test:    Start at  15:09:11
+desktop test:    Duration  27.08s (import 86%, transform 8%, tests 5%, worker 1%)
 desktop test: 
-desktop test:      Import  106 modules were evaluated 222 times · 60.33s total, 91% of tracked time
-desktop test:              ~6.16s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+desktop test:      Import  106 modules were evaluated 212 times · 54.82s total, 86% of tracked time
+desktop test:              ~4.83s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
 desktop test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
 desktop test: 
 desktop test: Exited with code 0
-api test:  ❯ src/modules/products/products.test.ts (31 tests | 31 skipped) 11905ms
-api test:  ❯ src/modules/sync/sync.test.ts (18 tests | 18 skipped) 11606ms
-api test:  ❯ src/modules/credit/credit.test.ts (25 tests | 9 skipped) 27840ms
 api test: 
-api test: ⎯⎯⎯⎯⎯⎯ Failed Suites 3 ⎯⎯⎯⎯⎯⎯⎯
+api test:  Test Files  30 passed (30)
+api test:       Tests  360 passed (360)
+api test:    Start at  15:09:17
+api test:    Duration  352.11s (tests 53%, import 44%, transform 3%)
 api test: 
-api test:  FAIL  src/modules/credit/credit.test.ts > credit HTTP surface
-api test: Error: Hook timed out in 10000ms.
-api test: If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
-api test:  ❯ src/modules/credit/credit.test.ts:826:3
-api test:     824|   }
-api test:     825|
-api test:     826|   beforeAll(async () => {
-api test:        |   ^
-api test:     827|     const branches = await db
-api test:     828|       .insert(branch)
-api test: 
-api test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
-api test: 
-api test:  FAIL  src/modules/products/products.test.ts > products API
-api test: Error: Hook timed out in 10000ms.
-api test: If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
-api test:  ❯ src/modules/products/products.test.ts:204:3
-api test:     202|   }
-api test:     203|
-api test:     204|   beforeAll(async () => {
-api test:        |   ^
-api test:     205|     const branchRows = await db
-api test:     206|       .insert(branch)
-api test: 
-api test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
-api test: 
-api test:  FAIL  src/modules/sync/sync.test.ts > POS device session and PowerSync token
-api test: Error: Hook timed out in 10000ms.
-api test: If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
-api test:  ❯ src/modules/sync/sync.test.ts:162:3
-api test:     160|   }
-api test:     161|
-api test:     162|   beforeAll(async () => {
-api test:        |   ^
-api test:     163|     const admin = await createTestUser({ role: 'ADMIN' })
-api test:     164|     createdUserIds.push(admin.id)
-api test: 
-api test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
-api test: 
-api test: 
-api test:  Test Files  3 failed | 27 passed (30)
-api test:       Tests  302 passed | 58 skipped (360)
-api test:    Start at  14:49:59
-api test:    Duration  429.67s (import 51%, tests 45%, transform 4%)
-api test: 
-api test:      Import  214 modules were evaluated 4345 times · 210.17s total, 51% of tracked time
-api test:              ~199.82s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+api test:      Import  214 modules were evaluated 4345 times · 148.09s total, 44% of tracked time
+api test:              ~140.80s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
 api test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
 api test: 
-api test: Exited with code 1
-error: script "test" exited with code 1
-(exit 1)
+api test: Exited with code 0
+(exit 0)
 
 ### bun run --filter admin build
 admin build: vite v8.3.5 building client environment for production...
@@ -663,7 +617,18 @@ admin build: .output/public/assets/phone-wSRnSxPd.js                            
 admin build: .output/public/assets/index-DTnCdtyk.js                                       352.07 kB │ gzip: 107.55 kB
 admin build: .output/public/assets/dev-charts-rVo2bjWo.js                                  403.84 kB │ gzip: 116.03 kB
 admin build: 
-admin build: ✓ built in 5.63s
+admin build: ✓ built in 10.65s
+admin build: [33m[PLUGIN_TIMINGS] [0mJavaScript callbacks ran for 9.3s of this 10.6s build (88%).
+admin build: The slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+admin build:   - plugin tanstack-router:code-splitter:compile-reference-file transform (30%, 3.2s, 55 calls)
+admin build:   - plugin tanstack-router:code-splitter:compile-virtual-file transform (20%, 2.1s, 50 calls)
+admin build:   - plugin @tailwindcss/vite:generate:build transform (15%, 1.6s, 1 call)
+admin build: Additional callback time came from the callbacks below and from callbacks under 1s.
+admin build: 2 callbacks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+admin build:   - plugin tanstack-start-core:import-protection resolveId (11226 calls)
+admin build:   - plugin tanstack-start-core::server-fn:client transform (17 calls)
+admin build: See https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.
+admin build: 
 admin build: vite v8.3.5 building ssr environment for production...
 admin build: transforming...
 admin build: 
@@ -792,10 +757,11 @@ admin build: node_modules/.nitro/vite/services/ssr/assets/_id-BDCoY2Jn.js       
 admin build: node_modules/.nitro/vite/services/ssr/assets/router-B7SWYKET.js                                       88.81 kB │ gzip: 18.71 kB
 admin build: node_modules/.nitro/vite/services/ssr/index.js                                                        99.94 kB │ gzip: 25.30 kB
 admin build: 
-admin build: ✓ built in 4.07s
-admin build: [33m[PLUGIN_TIMINGS] [0mJavaScript callbacks ran for 3.6s of this 4.0s build (89%).
+admin build: ✓ built in 6.13s
+admin build: [33m[PLUGIN_TIMINGS] [0mJavaScript callbacks ran for 5.5s of this 6.1s build (90%).
 admin build: The slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-admin build:   - plugin tanstack-router:code-splitter:compile-reference-file transform (44%, 1.8s, 53 calls)
+admin build:   - plugin tanstack-router:code-splitter:compile-reference-file transform (36%, 2.2s, 53 calls)
+admin build:   - plugin tanstack-router:code-splitter:compile-virtual-file transform (29%, 1.7s, 50 calls)
 admin build: Additional callback time came from the callbacks below and from callbacks under 1s.
 admin build: 2 callbacks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
 admin build:   - plugin tanstack-start-core:import-protection resolveId (1726 calls)
@@ -811,7 +777,7 @@ admin build: transforming...
 admin build: ✓ 3270 modules transformed.
 admin build: ℹ Tracing dependencies:
 admin build: - tslib (2.8.1)
-admin build: ✔ Traced 1 dependencies (4 files) in 327ms.
+admin build: ✔ Traced 1 dependencies (4 files) in 87ms.
 admin build: ℹ Ensure your production environment matches the builder OS and architecture (linux-x64) to avoid native module issues.
 admin build: rendering chunks...
 admin build: computing gzip size...
@@ -953,7 +919,7 @@ admin build: .output/server/_ssr/staff-CmQKYt_z.mjs                            3
 admin build: .output/server/_ssr/route-CDHdyfh6.mjs                            38.91 kB │ gzip:   9.42 kB
 admin build: .output/server/_supplierId-B6dibhcY.mjs                           43.04 kB │ gzip:   7.02 kB
 admin build: .output/server/_libs/qrcode-generator.mjs                         43.94 kB │ gzip:   9.82 kB
-admin build: .output/server/index.mjs                                          44.02 kB │ gzip:  10.77 kB
+admin build: .output/server/index.mjs                                          44.02 kB │ gzip:  10.87 kB
 admin build: .output/server/_libs/cn.mjs                                       44.47 kB │ gzip:  13.76 kB
 admin build: .output/server/_libs/h3+rou3+srvx.mjs                             46.02 kB │ gzip:  12.35 kB
 admin build: .output/server/_libs/@radix-ui/react-select+[...].mjs             47.40 kB │ gzip:   9.98 kB
@@ -992,26 +958,6 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useRouter.js" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useRouter.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
@@ -1032,28 +978,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useMatch.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useMatch.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/link.js" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/link.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useBlocker.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useBlocker.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1072,28 +998,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/Matches.js" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/Matches.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useLocation.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useLocation.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1142,48 +1048,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQueries.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQueries.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQuery.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQuery.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useBlocker.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useBlocker.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1222,6 +1088,106 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useLocation.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useLocation.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useMatch.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useMatch.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQueries.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQueries.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useMutation.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useMutation.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/QueryErrorResetBoundary.js" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/QueryErrorResetBoundary.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
@@ -1232,8 +1198,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useIsFetching.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useIsFetching.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1242,8 +1208,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1252,28 +1218,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1302,8 +1248,28 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useMutation.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useMutation.js:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1322,218 +1288,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useIsFetching.js" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useIsFetching.js:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-accessible-icon/dist/index.mjs" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-accessible-icon/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-avatar/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-avatar/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-checkbox/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-checkbox/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-context-menu/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-context-menu/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-accordion/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-accordion/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-switch/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-switch/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popover/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popover/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-progress/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-progress/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-tabs/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-tabs/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toolbar/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toolbar/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toast/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toast/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1552,8 +1308,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-form/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-form/dist/index.mjs:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1562,8 +1318,98 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-radio-group/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-radio-group/dist/index.mjs:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-accordion/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-accordion/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-avatar/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-avatar/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-checkbox/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-checkbox/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-context-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-context-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-form/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-form/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1592,26 +1438,6 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-scroll-area/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-scroll-area/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-separator/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-separator/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-menubar/dist/index.mjs" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-menubar/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
@@ -1632,6 +1458,76 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popover/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popover/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-progress/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-progress/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-radio-group/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-radio-group/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-scroll-area/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-scroll-area/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-select/dist/index.mjs" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-select/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
@@ -1642,8 +1538,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-separator/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-separator/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1662,8 +1558,8 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1672,8 +1568,68 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 [38;5;246m][0m
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-switch/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-switch/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-tabs/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-tabs/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toast/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toast/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toolbar/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toolbar/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1692,8 +1648,48 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-focus-scope/dist/index.mjs" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-focus-scope/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
 admin build:  [38;5;246m1 │[0m "use client";
 admin build:  [38;5;240m  │[0m ──────┬──────  
@@ -1722,36 +1718,6 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
-admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
-admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 [38;5;246m][0m
-admin build:    [38;5;246m│[0m
-admin build:  [38;5;246m1 │[0m "use client";
-admin build:  [38;5;240m  │[0m ──────┬──────  
-admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
-admin build:  [38;5;240m  │[0m 
-admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-admin build: [38;5;246m───╯[0m
-admin build: 
 admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-arrow/dist/index.mjs" may not be preserved when bundling.
 admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-arrow/dist/index.mjs:1:1 [38;5;246m][0m
 admin build:    [38;5;246m│[0m
@@ -1762,7 +1728,7 @@ admin build:  [38;5;240m  │[0m
 admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
 admin build: [38;5;246m───╯[0m
 admin build: 
-admin build: ✓ built in 2.41s
+admin build: ✓ built in 2.26s
 admin build: ℹ Generated .output/nitro.json
 admin build: 
 admin build: [nitro] ✔ You can preview this build using npx vite preview
