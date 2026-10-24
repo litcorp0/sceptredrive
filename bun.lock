@@ -12,6 +12,7 @@
     "admin": {
       "name": "admin",
       "dependencies": {
+        "@sceptre/brand": "workspace:*",
         "@sceptre/shared": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
         "@tailwindcss/vite": "^4.1.18",
@@ -56,11 +57,11 @@
       "version": "0.1.0",
       "dependencies": {
         "@better-auth/drizzle-adapter": "catalog:",
-        "@sceptre/db": "workspace:*",
-        "@sceptre/shared": "workspace:*",
         "@hono/node-server": "catalog:",
         "@hono/zod-validator": "catalog:",
         "@node-rs/argon2": "catalog:",
+        "@sceptre/db": "workspace:*",
+        "@sceptre/shared": "workspace:*",
         "better-auth": "catalog:",
         "dotenv": "catalog:",
         "drizzle-orm": "catalog:",
@@ -96,10 +97,11 @@
         "@electron-forge/plugin-vite": "8.0.1",
         "@electron-forge/shared-types": "8.0.1",
         "@electron/fuses": "2.1.3",
-        "@sceptre/shared": "workspace:*",
         "@journeyapps/wa-sqlite": "2.0.8",
         "@powersync/react": "2.1.0",
         "@powersync/web": "2.5.0",
+        "@sceptre/brand": "workspace:*",
+        "@sceptre/shared": "workspace:*",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-virtual": "3.14.22",
         "@types/node": "catalog:",
@@ -122,6 +124,18 @@
         "vite": "8.3.5",
         "vitest": "catalog:",
         "zod": "catalog:",
+      },
+    },
+    "packages/brand": {
+      "name": "@sceptre/brand",
+      "version": "0.1.0",
+      "dependencies": {
+        "@fontsource-variable/inter": "5.3.0",
+        "@fontsource-variable/jetbrains-mono": "5.3.0",
+        "@fontsource-variable/space-grotesk": "5.3.0",
+      },
+      "devDependencies": {
+        "typescript": "catalog:",
       },
     },
     "packages/db": {
@@ -370,9 +384,11 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@sceptre/db": ["@sceptre/db@workspace:packages/db"],
+    "@fontsource-variable/inter": ["@fontsource-variable/inter@5.3.0", "", {}, "sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA=="],
 
-    "@sceptre/shared": ["@sceptre/shared@workspace:packages/shared"],
+    "@fontsource-variable/jetbrains-mono": ["@fontsource-variable/jetbrains-mono@5.3.0", "", {}, "sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw=="],
+
+    "@fontsource-variable/space-grotesk": ["@fontsource-variable/space-grotesk@5.3.0", "", {}, "sha512-2IxmvfB08i9vnGB3Ym/AXvhRE+8XOjWMXIyDum03c+tPwH0FUoMNQfGpU8NXPxjbws0Vvss3AH0Zqt4oJBBAdw=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
 
@@ -655,6 +671,12 @@
     "@rolldown/binding-win32-x64-msvc": ["@rolldown/binding-win32-x64-msvc@1.2.14", "", { "os": "win32", "cpu": "x64" }, "sha512-9mE94bf2GZUaR/fUSXCMpBoWkctu421Mi0ORpm4zqfbkjKep7RxzPFa5etcGs5h+2KApoWBOA/hAJa/7saGgEQ=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
+
+    "@sceptre/brand": ["@sceptre/brand@workspace:packages/brand"],
+
+    "@sceptre/db": ["@sceptre/db@workspace:packages/db"],
+
+    "@sceptre/shared": ["@sceptre/shared@workspace:packages/shared"],
 
     "@serialport/bindings-interface": ["@serialport/bindings-interface@1.2.2", "", {}, "sha512-CJaUd5bLvtM9c5dmO9rPBHPXTa9R2UwpkJ0wdh9JCYcbrPWsKz+ErvR0hBLeo7NPeiFdjFO4sonRljiw4d2XiA=="],
 
