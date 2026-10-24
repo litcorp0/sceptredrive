@@ -1,0 +1,160 @@
+import { formatDay, formatGhanaPhone } from "@sceptre/shared"
+import { useQuery } from "@tanstack/react-query"
+import { getRouteApi, Link } from "@tanstack/react-router"
+import { PlusIcon, SearchIcon } from "lucide-react"
+import { useState } from "react"
+import { Pagination } from "#/components/common/pagination"
+import { TableMessage } from "#/components/common/table-message"
+import { Button } from "#/components/ui/button"
+import { Input } from "#/components/ui/input"
+import { Label } from "#/components/ui/label"
+import { Switch } from "#/components/ui/switch"
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "#/components/ui/table"
+import { useDebouncedValue } from "#/lib/hooks"
+import { hasPermission } from "#/lib/role"
+import { customerListOptions } from "../api/customers"
+import { CustomerFormDialog } from "../components/customer-form-dialog"
+import { CustomerStatusBadge } from "../components/customer-status-badge"
+
+// The page lives outside `routes/`, so it reads the shell's context through the router API instead
+// of `Route.useRouteContext()`.
+const authenticatedRoute = getRouteApi("/_authenticated")
+
+const PAGE_SIZE = 20
+
+export function CustomersPage() {
+	const { session } = authenticatedRoute.useRouteContext()
+	const canCreate = hasPermission(session.user.role, "customer.create")
+	const canViewArchived = hasPermission(session.user.role, "customer.archive")
+
+	const [search, setSearch] = useState("")
+	const [includeArchived, setIncludeArchived] = useState(false)
+	const [offset, setOffset] = useState(0)
+	const [dialogOpen, setDialogOpen] = useState(false)
+
+	const debouncedSearch = useDebouncedValue(search, 300)
+	const trimmedSearch = debouncedSearch.trim()
+
+	const filters = {
+		// The API requires at least two characters before it will search.
+		q: trimmedSearch.length >= 2 ? trimmedSearch : undefined,
+		includeArchived: canViewArchived && includeArchived ? true : undefined,
+		page: Math.floor(offset / PAGE_SIZE) + 1,
+		pageSize: PAGE_SIZE,
+	}
+
+	const customersQuery = useQuery(customerListOptions(filters))
+
+	const customers = customersQuery.data?.customers ?? []
+	const total = customersQuery.data?.total ?? 0
+
+	return (
+		<section>
+			<div className="mb-3 flex flex-wrap items-end gap-3">
+				<div className="relative min-w-56 flex-1">
+					<SearchIcon
+						className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+						aria-hidden="true"
+					/>
+					<Input
+						className="pl-8"
+						placeholder="Search by phone or name…"
+						value={search}
+						onChange={(event) => {
+							setSearch(event.target.value)
+							setOffset(0)
+						}}
+						aria-label="Search customers by phone or name"
+					/>
+				</div>
+
+				{canViewArchived ? (
+					<div className="flex items-center gap-2 pb-2">
+						<Switch
+							id="show-archived-customers"
+							checked={includeArchived}
+							onCheckedChange={(checked) => {
+								setIncludeArchived(checked)
+								setOffset(0)
+							}}
+						/>
+						<Label htmlFor="show-archived-customers" className="text-sm text-muted-foreground">
+							Show archived
+						</Label>
+					</div>
+				) : null}
+
+				{canCreate ? (
+					<Button size="sm" className="ml-auto" onClick={() => setDialogOpen(true)}>
+						<PlusIcon className="size-4" aria-hidden="true" />
+						New customer
+					</Button>
+				) : null}
+			</div>
+
+			<div className="rounded-lg border bg-card">
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>Name</TableHead>
+							<TableHead className="w-40">Phone</TableHead>
+							<TableHead className="w-56">Email</TableHead>
+							<TableHead className="w-36">Created</TableHead>
+							<TableHead className="w-28">Status</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{customersQuery.isLoading ? (
+							<TableMessage colSpan={5}>Loading customers…</TableMessage>
+						) : customersQuery.isError ? (
+							<TableMessage colSpan={5} tone="error">
+								Couldn't load customers.
+							</TableMessage>
+						) : customers.length === 0 ? (
+							<TableMessage colSpan={5}>
+								{trimmedSearch.length >= 2
+									? "No customers match this search."
+									: "No customers yet. Create the first one."}
+							</TableMessage>
+						) : (
+							customers.map((customer) => (
+								<TableRow key={customer.id}>
+									<TableCell>
+										<Link
+											to="/customers/$id"
+											params={{ id: customer.id }}
+											className="font-medium hover:underline"
+										>
+											{customer.name}
+										</Link>
+									</TableCell>
+									<TableCell className="tabular-nums text-muted-foreground">
+										{customer.phone ? formatGhanaPhone(customer.phone) : "—"}
+									</TableCell>
+									<TableCell className="text-muted-foreground">{customer.email ?? "—"}</TableCell>
+									<TableCell className="text-muted-foreground">
+										{formatDay(customer.createdAt)}
+									</TableCell>
+									<TableCell>
+										<CustomerStatusBadge customer={customer} />
+									</TableCell>
+								</TableRow>
+							))
+						)}
+					</TableBody>
+				</Table>
+			</div>
+
+			<Pagination total={total} limit={PAGE_SIZE} offset={offset} onOffsetChange={setOffset} />
+
+			<CustomerFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+		</section>
+	)
+}

@@ -18,13 +18,9 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import type { CreditProfileListRow } from "#/modules/credit"
-import {
-	anonymizeCustomer,
-	archiveCustomer,
-	type CustomerListRow,
-	customerKeys,
-	reactivateCustomer,
-} from "#/modules/customers"
+import { anonymizeCustomer, archiveCustomer, reactivateCustomer } from "../api/customers"
+import { customerKeys } from "../api/keys"
+import type { CustomerListRow } from "../types"
 
 /** Case-management actions: archive (blocks new credit), reactivate, anonymize. */
 

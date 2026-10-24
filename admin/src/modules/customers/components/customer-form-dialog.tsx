@@ -24,8 +24,9 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
-import type { CustomerListRow } from "#/modules/customers"
-import { createCustomer, customerKeys, updateCustomer } from "#/modules/customers"
+import { createCustomer, updateCustomer } from "../api/customers"
+import { customerKeys } from "../api/keys"
+import type { CustomerListRow } from "../types"
 
 /**
  * The API's duplicate-phone conflict ends with the existing customer id in

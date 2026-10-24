@@ -25,6 +25,16 @@ export {
 	updateCustomer,
 } from "./api/customers"
 export { customerKeys } from "./api/keys"
+export { CustomerFormDialog } from "./components/customer-form-dialog"
+export {
+	AnonymizeCustomerDialog,
+	ArchiveCustomerDialog,
+	ReactivateCustomerButton,
+} from "./components/customer-lifecycle-dialogs"
+export { CustomerStatusBadge } from "./components/customer-status-badge"
+export { CustomerDetailPage } from "./pages/customer-detail-page"
+export { CustomersLayout } from "./pages/customers-layout"
+export { CustomersPage } from "./pages/customers-page"
 export type {
 	CustomerCreateInput,
 	CustomerCreditProfileRow,
