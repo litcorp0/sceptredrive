@@ -4,9 +4,6 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { ActiveBadge, StatusBadge } from "#/components/common/status-badge"
-import { CreditEntryDialog } from "#/components/customers/credit-entry-dialog"
-import { CreditLedgerTable } from "#/components/customers/credit-ledger-table"
-import { CreditProfileDialog } from "#/components/customers/credit-profile-dialog"
 import { CustomerFormDialog } from "#/components/customers/customer-form-dialog"
 import {
 	AnonymizeCustomerDialog,
@@ -14,7 +11,6 @@ import {
 	ReactivateCustomerButton,
 } from "#/components/customers/customer-lifecycle-dialogs"
 import { LoyaltyCard } from "#/components/customers/loyalty-card"
-import { RepaymentDialog } from "#/components/customers/repayment-dialog"
 import { Button } from "#/components/ui/button"
 import {
 	Card,
@@ -45,6 +41,12 @@ import type { CustomerListRow } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
+import {
+	CreditEntryDialog,
+	CreditLedgerTable,
+	CreditProfileDialog,
+	RepaymentDialog,
+} from "#/modules/credit"
 
 export const Route = createFileRoute("/_authenticated/customers/$id/")({
 	component: CustomerProfilePage,

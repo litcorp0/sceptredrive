@@ -14,10 +14,12 @@ import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { Switch } from "#/components/ui/switch"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { CreditProfileListRow } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import { updateCreditProfile } from "../api/credit"
+import { creditKeys } from "../api/keys"
+import type { CreditProfileListRow } from "../types"
 
 /**
  * Credit settings for one customer at one branch. Saving creates the profile
@@ -63,13 +65,15 @@ export function CreditProfileDialog({
 			hold: boolean
 			notes: string | null
 		}) =>
-			api.credit.profiles.update(customerId, {
+			updateCreditProfile(customerId, {
 				branchId: branchId ?? undefined,
 				...input,
 			}),
 		onSuccess: async () => {
 			toast.success("Credit settings saved")
-			await queryClient.invalidateQueries({ queryKey: ["credit-profiles", customerId] })
+			await queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) })
+			// The customers profile key, still owned by `lib/api-types`' caller; Plan 09 moves it
+			// behind `#/modules/customers` and this invalidation imports it from there.
 			await queryClient.invalidateQueries({ queryKey: ["customer", customerId] })
 			onOpenChange(false)
 		},

@@ -20,11 +20,13 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { CreditMethod } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { CREDIT_METHOD_LABELS } from "#/modules/credit"
+import { createRepayment } from "../api/credit"
+import { creditKeys } from "../api/keys"
+import type { CreditMethod } from "../types"
+import { CREDIT_METHOD_LABELS } from "../utils/credit"
 
 const METHODS: CreditMethod[] = ["CASH", "MOMO", "BANK"]
 
@@ -72,7 +74,7 @@ export function RepaymentDialog({
 
 	const payMutation = useMutation({
 		mutationFn: (input: { amountMinor: number; method: CreditMethod; note?: string }) =>
-			api.credit.repayments.create({
+			createRepayment({
 				customerId,
 				branchId: branchId ?? undefined,
 				...input,
@@ -81,10 +83,12 @@ export function RepaymentDialog({
 		onSuccess: async (data) => {
 			toast.success(`Repayment recorded — receipt ${data.entry.referenceNumber}`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["credit-entries"] }),
-				queryClient.invalidateQueries({ queryKey: ["credit-profiles", customerId] }),
+				queryClient.invalidateQueries({ queryKey: creditKeys.entries }),
+				queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) }),
+				// The customers profile key, still owned by the customer route; Plan 09 moves it
+				// behind `#/modules/customers` and this invalidation imports it from there.
 				queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
-				queryClient.invalidateQueries({ queryKey: ["aging"] }),
+				queryClient.invalidateQueries({ queryKey: creditKeys.aging }),
 			])
 			onOpenChange(false)
 		},

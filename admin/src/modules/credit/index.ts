@@ -26,6 +26,10 @@ export {
 	updateCreditProfile,
 } from "./api/credit"
 export { type CreditEntryFilters, creditKeys } from "./api/keys"
+export { CreditEntryDialog } from "./components/credit-entry-dialog"
+export { CreditLedgerTable } from "./components/credit-ledger-table"
+export { CreditProfileDialog } from "./components/credit-profile-dialog"
+export { RepaymentDialog } from "./components/repayment-dialog"
 export type {
 	AgingChargeRow,
 	AgingCustomerRow,

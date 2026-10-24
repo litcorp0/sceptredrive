@@ -21,10 +21,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { CreditEntryKind } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
-import { CREDIT_KIND_LABELS, CREDIT_KIND_TONES, signedGhs } from "#/modules/credit"
+import { entryListOptions } from "../api/credit"
+import type { CreditEntryKind } from "../types"
+import { CREDIT_KIND_LABELS, CREDIT_KIND_TONES, signedGhs } from "../utils/credit"
 
 const PAGE_SIZE = 20
 
@@ -51,12 +51,7 @@ export function CreditLedgerTable({
 		pageSize: PAGE_SIZE,
 	}
 
-	const entriesQuery = useQuery({
-		queryKey: ["credit-entries", customerId, branchId, filters],
-		queryFn: () =>
-			api.credit.entries.list({ customerId, branchId: branchId ?? undefined, ...filters }),
-		enabled: branchId !== null,
-	})
+	const entriesQuery = useQuery(entryListOptions(customerId, branchId, filters))
 
 	const entries = entriesQuery.data?.entries ?? []
 	const total = entriesQuery.data?.total ?? 0
