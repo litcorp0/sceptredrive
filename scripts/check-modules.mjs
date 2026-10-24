@@ -58,7 +58,7 @@ const DEFERRED_MODULES = { analytics: 9 }
  * Names still to migrate. Each plan deletes its own entry; `--strict` fails while any remain.
  * Keep this list free of duplicates and a subset of REQUIRED_MODULES — the gate checks that too.
  */
-const PENDING_MODULES = ['customers', 'payables', 'suppliers']
+const PENDING_MODULES = ['payables', 'suppliers']
 
 /** Folders a module may contain, plus its barrel. */
 const ALLOWED_ENTRIES = new Set([

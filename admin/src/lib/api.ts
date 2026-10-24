@@ -1,15 +1,5 @@
 import { env } from "#/env"
 import type {
-	AgingQuery,
-	AgingResult,
-	CreditEntryCreateInput,
-	CreditEntryListQuery,
-	CreditEntryListResult,
-	CreditPostingResult,
-	CreditProfile,
-	CreditProfileListRow,
-	CreditProfileUpdateInput,
-	CreditStatement,
 	InvoiceCreateInput,
 	InvoiceVoidInput,
 	PayablesAgingQuery,
@@ -20,8 +10,6 @@ import type {
 	PaymentListQuery,
 	PaymentListResult,
 	PaymentVoidInput,
-	RepaymentCreateInput,
-	StatementQuery,
 	Supplier,
 	SupplierBalanceResult,
 	SupplierCreateInput,
@@ -142,34 +130,6 @@ export function isReauthRequired(error: unknown): boolean {
 }
 
 export const api = {
-	credit: {
-		aging: (query: AgingQuery) => apiRequest<AgingResult>("/api/credit/aging", { query }),
-		statement: (customerId: string, query: StatementQuery) =>
-			apiRequest<CreditStatement>(`/api/credit/statements/${customerId}`, { query }),
-		profiles: {
-			list: (query: { customerId: string; branchId?: string }) =>
-				apiRequest<{ profiles: CreditProfileListRow[] }>("/api/credit/profiles", { query }),
-			update: (customerId: string, input: CreditProfileUpdateInput) =>
-				apiRequest<{ profile: CreditProfile }>(`/api/credit/profiles/${customerId}`, {
-					method: "PUT",
-					body: input,
-				}),
-		},
-		entries: {
-			list: (query: CreditEntryListQuery) =>
-				apiRequest<CreditEntryListResult>("/api/credit/entries", { query }),
-			create: (input: CreditEntryCreateInput) =>
-				apiRequest<CreditPostingResult>("/api/credit/entries", { method: "POST", body: input }),
-		},
-		repayments: {
-			create: (input: RepaymentCreateInput) =>
-				apiRequest<CreditPostingResult>("/api/credit/repayments", {
-					method: "POST",
-					body: input,
-				}),
-		},
-	},
-
 	suppliers: {
 		list: (query: SupplierListQuery = {}) =>
 			apiRequest<SupplierListResult>("/api/suppliers", { query }),

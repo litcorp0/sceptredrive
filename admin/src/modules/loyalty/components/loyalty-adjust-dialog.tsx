@@ -24,7 +24,6 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { customerKeys } from "#/modules/customers"
 import { loyaltyKeys } from "../api/keys"
 import { createLoyaltyEntry } from "../api/loyalty"
 import type { LoyaltyReasonCode, LoyaltyStaffKind } from "../types"
@@ -128,7 +127,10 @@ export function LoyaltyAdjustDialog({
 			}
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: loyaltyKeys.account(customerId) }),
-				queryClient.invalidateQueries({ queryKey: customerKeys.byId(customerId) }),
+				// The customer profile's key, spelled literally on purpose: importing
+				// `#/modules/customers` here would make loyalty -> customers -> loyalty a module
+				// cycle. The value is identical to `customerKeys.byId(customerId)`.
+				queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
 				queryClient.invalidateQueries({ queryKey: loyaltyKeys.liability }),
 			])
 			onOpenChange(false)
