@@ -57,7 +57,15 @@ export function SyncBadge() {
   const highOpen = conflicts.data?.[0]?.high ?? 0
   const pending = outbox.pending
   const needsAction = outbox.failed > 0 || highOpen > 0 || upload.deadLetters > 0
-  const offline = !upload.online || upload.pauseReason === 'OFFLINE'
+  /*
+   * A terminal is offline when the uploader says so, **or** when it has synced before and the
+   * PowerSync transport is down now. Without the second clause a till that is launched with no
+   * network reports `Downloaded 14:02` from its persisted state and looks current while it is
+   * not — the cashier would keep believing stock and prices are fresh. The `lastSyncedAt` guard
+   * keeps a first-ever boot from flashing "Offline" before the first connection is attempted.
+   */
+  const transportDown = download.lastSyncedAt !== null && !download.online
+  const offline = !upload.online || upload.pauseReason === 'OFFLINE' || transportDown
   const revoked = upload.pauseReason === 'REVOKED'
   const auth = upload.pauseReason === 'AUTH'
 
