@@ -100,9 +100,7 @@ try {
   await page.locator('[data-slot="sidebar-group-label"]').first().waitFor({ timeout: 20_000 })
 
   // ---- sidebar ----
-  const groupLabels = await page
-    .locator('[data-slot="sidebar-group-label"]')
-    .allTextContents()
+  const groupLabels = await page.locator('[data-slot="sidebar-group-label"]').allTextContents()
   check(
     ['Overview', 'Operations', 'Organisation', 'System'].every((label) =>
       groupLabels.map((value) => value.trim()).includes(label),
@@ -130,18 +128,21 @@ try {
     JSON.stringify(rail),
   )
 
-  const accentCount = await page
-    .locator('[data-slot="sidebar"] .bg-brand')
-    .count()
+  const accentCount = await page.locator('[data-slot="sidebar"] .bg-brand').count()
   check(accentCount === 0, 'no solid brand block competes with the rail', String(accentCount))
 
   // ---- topbar ----
-  const topbar = await page.locator('header').first().evaluate((element) => {
-    const style = getComputedStyle(element)
-    return { background: style.backgroundColor, height: style.height, position: style.position }
-  })
+  const topbar = await page
+    .locator('header')
+    .first()
+    .evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, height: style.height, position: style.position }
+    })
   check(
-    topbar.background === 'rgb(27, 31, 35)' && topbar.height === '52px' && topbar.position === 'sticky',
+    topbar.background === 'rgb(27, 31, 35)' &&
+      topbar.height === '52px' &&
+      topbar.position === 'sticky',
     'topbar is the charcoal fascia at the token height',
     JSON.stringify(topbar),
   )
@@ -227,12 +228,18 @@ try {
     'theme toggle switches to dark and persists',
     JSON.stringify(darkState),
   )
-  check(darkState.canvas === '#1b1f23', 'dark canvas comes from the shared token file', darkState.canvas)
+  check(
+    darkState.canvas === '#1b1f23',
+    'dark canvas comes from the shared token file',
+    darkState.canvas,
+  )
   await shot('plan06-admin-dark')
 
   // No flash: the pre-hydration script must set the class before React paints.
   await page.reload({ waitUntil: 'domcontentloaded' })
-  const preHydration = await page.evaluate(() => document.documentElement.classList.contains('dark'))
+  const preHydration = await page.evaluate(() =>
+    document.documentElement.classList.contains('dark'),
+  )
   check(preHydration, 'reload applies dark before hydration (no light flash)')
 
   // ---- mobile drawer ----

@@ -51,6 +51,9 @@ jobs:
       - name: Brand check
         run: bun run brand:check
 
+      - name: Token check
+        run: bun run tokens:check
+
       - name: Typecheck
         run: bun run check-types
 
