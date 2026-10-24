@@ -1,8 +1,9 @@
 # ROADMAP — Sceptre Drive v1
 
-> **Renamed 2026-10-24.** The product is **Sceptre Drive** (formerly GikAutos). The code,
-> workspace package scope, app protocol, Docker names, and remaining documents are
-> renamed in **Phase 7**. Historic phase records keep the old name until that sweep.
+> **Renamed 2026-10-24.** The product is **Sceptre Drive**, renamed from the previous brand
+> on 2026-10-24. The code, workspace package scope, app protocol, Docker names, and remaining
+> documents are renamed in **Phase 7**. Historic phase records keep the old name until that
+> sweep.
 
 ## Overview
 
@@ -174,7 +175,7 @@ loyalty; ESC/POS receipts and drawer; outbox + upload endpoint; sync streams; co
 sync status UI; Windows packaging groundwork.
 
 **Key risk (retired for the Web SDK):** Plan 02 proved the PowerSync Web SDK (WASM workers,
-encrypted SQLite) inside the sandboxed Electron 45 renderer served from `app://gikautos`,
+encrypted SQLite) inside the sandboxed Electron 45 renderer served from `app://sceptre-drive`,
 including restart persistence in a packaged build. Forge 8 + Vite 8 packaging of the Bun
 workspace also works (`bun run package:pos`). Remaining packaging risk: the native printer
 module and the Squirrel installer on Windows (Plans 07/09). The Node-SDK fallback is not
@@ -192,7 +193,7 @@ and one date formatter — so the admin console and the POS cannot drift apart a
 **Requirements:** UIX-01…05
 
 **Success Criteria**
-1. `grep -rIl gikautos` over the repository returns only the documented allowlist (the
+1. `bun run brand:check` over the repository returns only the documented allowlist (the
    placeholder domain constant, applied migration history, and historical phase records).
 2. Admin and desktop both import the same `@sceptre/brand` token file; changing one hex
    value changes both apps and requires no other edit.

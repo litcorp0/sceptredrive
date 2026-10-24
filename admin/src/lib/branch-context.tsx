@@ -4,7 +4,7 @@ import { api } from "#/lib/api"
 import type { Branch } from "#/lib/api-types"
 import type { Session } from "#/lib/auth-client"
 
-const STORAGE_KEY = "gikautos.admin.branchId"
+const STORAGE_KEY = "sceptre-drive.admin.branchId"
 
 interface BranchContextValue {
 	/** Branches visible to the signed-in user. */

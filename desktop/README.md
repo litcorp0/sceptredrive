@@ -1,7 +1,7 @@
-# GikAutos POS (desktop)
+# Sceptre Drive POS (desktop)
 
 Electron Forge 8 + Vite 8 + React 19 shell for the offline-first point of sale. The
-renderer is served from `app://gikautos` behind a strict CSP with no Node access; the main
+renderer is served from `app://sceptre-drive` behind a strict CSP with no Node access; the main
 process owns the OS keychain, PIN hashing, and the ESC/POS printer adapter.
 
 > Phase 6 status: shell, security baseline, keychain, PowerSync sync, offline PIN/shift,
@@ -107,7 +107,7 @@ triggers on the first `start`/`package` — no postinstall hook is involved, so
 
 ## Security baseline
 
-- `app://gikautos` is a privileged standard scheme. `file://` is never used.
+- `app://sceptre-drive` is a privileged standard scheme. `file://` is never used.
 - `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webviewTag: false`,
   `webSecurity: true`. DevTools are disabled in packaged builds.
 - Navigation is limited to the app origin; `window.open` and `<webview>` are denied; every

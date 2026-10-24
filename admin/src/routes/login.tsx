@@ -81,7 +81,7 @@ function LoginPage() {
 	return (
 		<AuthShell
 			title="Sign in"
-			description="Use your GikAutos staff account to continue."
+			description="Use your Sceptre Drive staff account to continue."
 			footer={
 				<Link
 					to="/forgot-password"

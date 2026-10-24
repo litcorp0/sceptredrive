@@ -1,4 +1,4 @@
-# AGENTS.md — GikAutos v1
+# AGENTS.md — Sceptre Drive v1
 
 This file is the standing contract for every agent working in this repository.
 Read it at the start of every session, then load the skills it names.
@@ -54,14 +54,20 @@ double-selling or losing a transaction.
 ## Repository layout
 
 ```text
-admin/        TanStack Start console (Admin + Manager)
-api/          Hono API (also owns Drizzle schema, migrations, and seeds)
-desktop/      Electron Forge POS (created in Phase 6)
-packages/     shared, db (Postgres client), sync, ui (created in Phase 1)
-powersync/    sync-config.yaml + setup docs (created in Phase 6)
-infra/        Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 9)
-.planning/    GSD project memory (this is the source of truth for scope)
+admin/         TanStack Start console (Admin + Manager)
+api/           Hono API (also owns Drizzle schema, migrations, and seeds)
+desktop/       Electron Forge POS
+packages/      shared (domain logic), db (Postgres client), brand (design tokens)
+powersync/     sync-config.yaml + setup docs
+design-system/ human-facing design rationale; `packages/brand` is the machine truth
+infra/         Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 15)
+.planning/     GSD project memory (this is the source of truth for scope)
 ```
+
+> **Renamed 2026-10-24:** the product, workspace scope, and infrastructure were renamed to
+> **Sceptre Drive** (`@sceptre/*`). The dev database is `sceptre_drive`, the desktop origin
+> is `app://sceptre-drive`, and the code sweep is complete. The rename moved Electron's
+> `userData` directory, so existing development terminals must re-enrol.
 
 ### API module layout (`api/src/modules/<domain>/`)
 
@@ -123,5 +129,5 @@ Root scripts will be added in Phase 1 (`bun dev`, `bun lint`, `bun check-types`,
 
 ## Current status
 
-Planning is complete and approved. The next step is Phase 1 planning and execution.
-See `.planning/STATE.md`.
+Phases 1–6 are complete and verified. Phase 7 (Identity, Design System & Brand
+Foundation) is in progress; Phases 8–15 are planned. See `.planning/STATE.md`.

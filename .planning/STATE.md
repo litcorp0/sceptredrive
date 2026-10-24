@@ -1,6 +1,6 @@
 # STATE — Sceptre Drive v1
 
-> **Renamed 2026-10-24:** GikAutos → **Sceptre Drive**. Historic sections below keep the
+> **Renamed 2026-10-24:** Sceptre Drive → **Sceptre Drive**. Historic sections below keep the
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
@@ -231,11 +231,11 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `ACC-SPX-T01-S-20261020-01` (float 20000, expected/counted 42500, variance 0), cash sale
     `…0001` (22500, change 7500), credit sale `…0002` (18500, Akosua balance 24500), and one
     RESOLVED `PRICE_MISMATCH` conflict. Re-running `db:seed --demo` is a no-op.
-  - Verification: fresh `gikautos_test` schema → migrate → **API 277/277**, shared 70/70,
-    lint and check-types green; demo seed run twice on `gikautos_dev` with unchanged counts.
+  - Verification: fresh `sceptre_drive_test` schema → migrate → **API 277/277**, shared 70/70,
+    lint and check-types green; demo seed run twice on `sceptre_drive_dev` with unchanged counts.
   - Test DB note: the seed suite now cleans POS sales/shift/device/conflict before its
     fixtures; reset `public` **and** `drizzle` schemas (not just `public`) when rebuilding
-    `gikautos_test`, or Drizzle will believe the migrations already ran.
+    `sceptre_drive_test`, or Drizzle will believe the migrations already ran.
 - **Plan 02 complete** (commits `4dec559`, `98d0395`, `23e24a7`, `4231a34`):
   - `desktop/` is a Bun workspace on Electron Forge 8.0.1 + Vite 8.3.5 + React 19.2;
     `bun run dev:pos|build:pos|package:pos|make:pos` at the root, and root
@@ -247,7 +247,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     `installConfig.hoistingLimits` for the hoisted linker. `desktop/scripts/prepare-desktop.mjs`
     links `electron` into the workspace and will materialise native runtime modules as
     real files (Plan 07). API/shared suites and the admin build stay green under it.
-  - **Origin + CSP:** production loads `app://gikautos/index.html` via
+  - **Origin + CSP:** production loads `app://sceptre-drive/index.html` via
     `protocol.handle` (privileged standard scheme, no `file://`); the CSP
     (`src/main/csp.ts`) is sent as a header *and* injected into `index.html` as a meta
     fallback, and is built from config origins that are checked against a fixed
@@ -274,7 +274,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 - **Plan 03 complete** (commits `b3f671e`, `5b4999b`, `4aa1fb2`, `bfe2a0f`, `4fc59c9`, `3277930`):
   - **POS JWT + JWKS:** Ed25519 (`jose`); `POS_JWT_PRIVATE_KEY` required in production
     (boot fails without it), ephemeral + warn in dev/test. `/.well-known/jwks.json` (and an
-    `/api/...` alias) serves the public JWK only. Device JWTs (`aud=gikautos-pos`,
+    `/api/...` alias) serves the public JWK only. Device JWTs (`aud=sceptre-pos`,
     `typ=device`, 15 min) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share the key;
     `verifyDeviceJwt` collapses every failure into 401 `DEVICE_TOKEN_INVALID`.
   - **Enrollment → device token:** `POST /api/enrollments/redeem` now issues a 32-byte
@@ -292,7 +292,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   - **Self-hosted service:** `compose.yaml` gains `journeyapps/powersync-service:1.27.1`
     under `profiles: ["sync"]` (unified mode, port 8080, Postgres bucket storage,
     `extra_hosts` for the JWKS); `powersync/init/powersync.sql` creates `powersync_role`,
-    the `gikautos_powersync` storage database, and a `powersync` publication scoped to the
+    the `sceptre_drive_powersync` storage database, and a `powersync` publication scoped to the
     8 synced tables. `sync-config.yaml` (edition 3) streams products/barcodes globally and
     prices/stock/credit by `auth.parameter('branch_id')`, plus customers and live loyalty
     lots. Root scripts `sync:init|up|down|logs|config-check`.
@@ -312,7 +312,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
     one, revocation blocks both endpoints); `test:sync` **18/18** (all 8 tables equal the
     server counts, `hasSynced=true`, offline readable, reconnect, encrypted file header).
     API 305/305, desktop 60/60, lint/check-types green.
-  - Findings recorded: `app://gikautos` must be in `CORS_ORIGINS`; the CSP `<meta>`
+  - Findings recorded: `app://sceptre-drive` must be in `CORS_ORIGINS`; the CSP `<meta>`
     fallback must be a superset of the header (browsers intersect); `allowLocalOrigins`
     replaces `isDev` for localhost policy; the container-to-host firewall path is bypassed
     by generating a service config with the public key inlined; the Docker host port is now
@@ -429,13 +429,13 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   codes) and `@sceptre/db` (Drizzle client, config, migrations).
 - API boots on Node 24 with native TypeScript type stripping: `bun run dev:api`.
   Validated env, pino logs, request IDs, security headers, CORS, `/health`, `/ready`.
-- PostgreSQL: the operator's **local instance on `:5432`**. `gikautos_test` holds the
-  current v1 schema (migrated clean after verification). The local `gikautos` database is
-  the **discarded prototype schema** (PascalCase tables) and must not be used for v1;
-  create a dedicated v1 dev database (the `gikautos` role currently lacks `CREATEDB`) or
-  use the Docker stack. `compose.yaml` remains for CI/Docker (host `:5433`,
-  `wal_level=logical`, 10 slots for Phase 6). Migrations need an explicit `DATABASE_URL`;
-  tests honour `TEST_DATABASE_URL`.
+- PostgreSQL: the **Docker stack** (`sceptre-drive-dev`, host `:5434`) since the Phase 7
+  rename: `sceptre_drive` is the dev database and `sceptre_drive_test` the test database
+  (created by `compose.yaml` and `bun run db:test:prepare`). The operator's local instance on
+  `:5432` still holds the pre-rename databases and the **discarded prototype schema**
+  (PascalCase tables); v1 does not use it. `compose.yaml` sets `wal_level=logical` and 10
+  replication slots for PowerSync. Migrations need an explicit `DATABASE_URL`; tests honour
+  `TEST_DATABASE_URL`.
 - API serves auth (public sign-up blocked), branches, terminals, enrollment, devices,
   staff, `/api/me/password`, audit (with `actorId` + `actorStaffId` filters), settings.
   Middleware: session loading (cookie cache bypassed for authorization), permission
@@ -448,7 +448,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
 - Tests: `bun run test` — shared 73/73, api 354/354, desktop 339/339 against
-  `gikautos_test` (`TEST_DATABASE_URL`; migrate it first).
+  `sceptre_drive_test` (`TEST_DATABASE_URL`; migrate it first).
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
   check-types → migrate → test → build). Validated with actionlint; full sequence run
   locally. **Remote run pending a git remote.** `desktop/` builds and packages as part of
@@ -632,7 +632,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 - Permissions: `supplier.read` (admin+manager) and admin-only `supplier.create/update/
   archive`; `payable.read/invoice.manage/payment/void` (admin all; manager branch-scoped);
   cashier none.
-- Demo seed: SUP-00001 Accra Parts Depot (bank + MoMo default), SUP-00002 GikAutos Imports
+- Demo seed: SUP-00001 Accra Parts Depot (bank + MoMo default), SUP-00002 Sceptre Drive Imports
   (MoMo); receipt links for GRN-00001/00002; four product mappings with last costs;
   `SINV-00001` from GRN-00002 with the derived split and a 40% `PAY-00001`; standalone
   freight `SINV-00002`; `PAY-00002` on account; sequences advanced to 3. Fully idempotent.
@@ -844,7 +844,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `b58cfdb`, `8917f44`, `57acdb4`, `73b14e1`, plus the evidence/state commits). Record:
   `.planning/phases/06-pos-offline-core/01-VERIFICATION.md`.
 - **Fresh cycle:** Docker volume reset → migrate → seed → demo seed ×2 (second is a no-op)
-  → `gikautos_test` migrated → `sync:init` → API on :4000 against :5434 → `sync:up` with the
+  → `sceptre_drive_test` migrated → `sync:init` → API on :4000 against :5434 → `sync:up` with the
   JWKS inlined → all 8 synced tables replicated. Evidence scripts:
   `walkthrough-pos.mjs` **162/162**, `race-last-unit.mjs` **18/18**,
   `duplicate-upload.mjs` **24/24**, `e2e-pos.mjs` **51/51**; packaged `test:e2e`
@@ -899,7 +899,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   console when off). Screenshots 11–15 under `evidence/shots/`.
 - **Break-glass CLI:** `bun run --filter api two-factor:reset -- --email <address>` clears the
   TOTP secret, backup codes, and `two_factor_enabled`, and audits the action. Used on
-  2026-10-24 to clear the admin's pending enrolment in `gikautos_dev`.
+  2026-10-24 to clear the admin's pending enrolment in `sceptre_drive_dev`.
 - Suites after the fix: API **360/360**, shared 73/73, desktop 339/339; lint and types clean.
 
 ### Phase 6 planning additions (2026-10-22)
@@ -951,7 +951,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 | 2026-10-17 | Plan 03: added `branch.deactivate` as an admin-only permission. |
 | 2026-10-17 | Plan 03: enrollment codes are HMAC-hashed with the auth secret, one live code per terminal, redeem rate limited (Phase 6 contract returns 501). |
 | 2026-10-17 | Plan 03: `pinHash`/`pinVersion` are stored with `returned: false` and never leave the server. |
-| 2026-10-17 | Plan 03: tests use `gikautos_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
+| 2026-10-17 | Plan 03: tests use `sceptre_drive_test` (`bun run db:test:prepare`); `TEST_DATABASE_URL` overrides for CI. |
 | 2026-10-17 | API modules follow a fixed seven-file layout (`routes`, `validation`, `controller`, `service`, `repository`, `schema`, `types`); `schema` = Drizzle tables, `validation` = Zod schemas + validators. See AGENTS.md. |
 | 2026-10-17 | Drizzle tables live in `api/src/modules/*/*.schema.ts`; drizzle-kit config, migrations, and seeds live in `api/`; `packages/db` is only the Postgres client. |
 | 2026-10-18 | Console design: dense neutral ops console (system font stack, zinc tokens, compact tables); decorative scaffold styling pruned. Radix/new-york shadcn kept (no Base UI migration mid-project). |
@@ -998,15 +998,15 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
 | 2026-10-22 | A voided invoice keeps occupying its receipt slot (one invoice per receipt); voiding frees only the supplier's invoice number for re-entry. Payment voids are append-only RELEASE rows and never delete APPLY history. |
 | 2026-10-22 | Supplier creation/archiving and invoice/payment creation serialize on the supplier row (`FOR UPDATE`), so archiving cannot race a new debt; allocation payments lock invoice rows in id order so parallel payments cannot over-apply. |
 | 2026-10-22 | Console money forms keep one idempotency key per form session (kept on network failure, cleared on any API response), the Phase 4 pattern. |
-| 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`gikautos_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
+| 2026-10-22 | Verification runs on the operator's **local PostgreSQL `:5432`** (`sceptre_drive_test`, schema reset because the role lacks `CREATEDB`), not Docker; tests use `TEST_DATABASE_URL`. The walkthrough is fresh-DB-only and asserts the seeded starting points (`SUP-00001/2`, `SINV-00001/2`, `PAY-00001/2`, sequences = 3). |
 | 2026-10-22 | Phase 5 verification fixes kept: payment list rows carry supplier/branch names; supplier-product create/update return the joined product view; invoice lists filter by `receiptId`; the admin client surfaces API error `details`. |
 | 2026-10-22 | Root linker switched to Bun **hoisted** (`bunfig.toml`) so Electron Forge can package `desktop/`: Forge does not follow symlinks and Bun 1.3's self-contained workspaces are not available for the hoisted linker. `desktop/scripts/prepare-desktop.mjs` bridges the gap. |
-| 2026-10-22 | Plan 02: the POS renderer is served from `app://gikautos` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
+| 2026-10-22 | Plan 02: the POS renderer is served from `app://sceptre-drive` (privileged standard scheme), never `file://`; CSP is emitted as a header by the protocol handler and mirrored as a meta fallback, with config origins checked against a fixed allowlist. |
 | 2026-10-22 | Plan 02: the PowerSync Web SDK **passes the phase gate** in the sandboxed `app://` renderer (encrypted WASM SQLite, local-only writes, watch, restart persistence). Production VFS = `OPFSCoopSyncVFS`, fallback `IDBBatchAtomicVFS`; always pass `vfs` explicitly and use `WASQLiteOpenFactory`. |
 | 2026-10-22 | Plan 02: keychain = async `safeStorage` only, `secrets.json` mode 0600, ciphertext only, fail closed with `KEYCHAIN_UNAVAILABLE`. Linux `basic_text` is reported as `secureStorage.level: 'basic'` so Plan 04 enrolment can require `os`. |
-| 2026-10-22 | Plan 03: POS tokens are Ed25519-signed (`jose`); device JWTs (`aud=gikautos-pos`) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share one key served at `/.well-known/jwks.json`. `POS_JWT_PRIVATE_KEY` is required in production (boot fails without it); dev/test fall back to an ephemeral key with one warning. |
+| 2026-10-22 | Plan 03: POS tokens are Ed25519-signed (`jose`); device JWTs (`aud=sceptre-pos`) and PowerSync JWTs (`aud=POWERSYNC_AUDIENCE`) share one key served at `/.well-known/jwks.json`. `POS_JWT_PRIVATE_KEY` is required in production (boot fails without it); dev/test fall back to an ephemeral key with one warning. |
 | 2026-10-22 | Plan 03: enrollment redemption issues the device token exactly once and stores only its HMAC-SHA256 hash (row locked `FOR UPDATE`). The device token is also the refresh credential — `/api/pos/session` is both sign-in and refresh. |
-| 2026-10-22 | Plan 03: `allowLocalOrigins = isDev \|\| !app.isPackaged` decides whether `http://localhost` API/PowerSync origins are acceptable; a packaged app still fails closed. `app://gikautos` must be listed in `CORS_ORIGINS`. |
+| 2026-10-22 | Plan 03: `allowLocalOrigins = isDev \|\| !app.isPackaged` decides whether `http://localhost` API/PowerSync origins are acceptable; a packaged app still fails closed. `app://sceptre-drive` must be listed in `CORS_ORIGINS`. |
 | 2026-10-22 | Plan 03: the CSP `<meta>` fallback is always built with local origins included, because browsers enforce the *intersection* of header and meta; the runtime header stays authoritative. |
 | 2026-10-22 | Plan 03: local development generates `powersync/.generated/service.yaml` with the API's public JWK inlined (`sync:up`), so sync works even when the host firewall blocks container→host. Staging/production use the committed `service.yaml` with `jwks_uri`. |
 | 2026-10-22 | Plan 03: the compose Postgres host port is `${POSTGRES_PORT:-5433}` (5433 was already taken on this machine; `.env` uses 5434). |
@@ -1085,12 +1085,12 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   on GitHub (workflow is written and locally verified).
 - Phase 4 and Phase 5 are verified (`phases/04-customers-credit/01-VERIFICATION.md`,
   `phases/05-suppliers-payables/01-VERIFICATION.md`). The verification fixtures live in the
-  local `gikautos_test` database; reset + reseed it before a demo and rerun the admin TOTP
+  local `sceptre_drive_test` database; reset + reseed it before a demo and rerun the admin TOTP
   bootstrap afterwards.
-- Phase 5 verification used `gikautos_test`. The local `gikautos` database on `:5432` is
-  the **discarded prototype schema** (PascalCase tables), not the v1 schema; do not point
-  v1 at it. Create a dedicated local v1 dev database (grant `CREATEDB` or run
-  `createdb` as `postgres`) or use the Docker stack, then migrate + seed.
+- Phase 5 verification used `sceptre_drive_test`. The dev stack is the Docker project
+  `sceptre-drive-dev` on host `:5434` (`sceptre_drive` + `sceptre_drive_test`). The operator's
+  local instance on `:5432` still holds the pre-rename databases and the **discarded prototype
+  schema** (PascalCase tables); do not point v1 at it.
 - Phase 8: Paystack transfers consume `supplier_payment_detail.paystack_recipient_code`
   and the reserved `PAYSTACK` payment method; E-VAT purchase reporting uses the stored
   VAT/NHIL/GETFund split. Receipts and payables-aging exports are Phase 8 scope.
@@ -1159,7 +1159,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `api/src/modules/platform/settings.service.ts`.
 - Integration test fixtures seed catalog rows directly via Drizzle when the API under
   test does not own them; track every created id for scoped cleanup (other suites run
-  in parallel against `gikautos_test`).
+  in parallel against `sceptre_drive_test`).
 - Walkthrough scripts (API + Playwright browser) live under
   `.planning/phases/02-catalog-pricing/evidence/`; run them against a running
   API (`:4000`) and console (`:3000`). The browser script auto-handles forced TOTP
@@ -1176,12 +1176,12 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `walkthrough-payables.mjs` (HTTP + SQL, 102 checks) and
   `smoke-console-suppliers.mjs` (Playwright, 25 checks, 18 screenshots) with their logs.
   Both are **fresh-DB-only** (exact `SUP-00003/4`, `SINV-00003`, `PAY-00003` assertions).
-  Rerun cycle on the local instance: reset the `gikautos_test` schema, migrate, `db:seed`,
+  Rerun cycle on the local instance: reset the `sceptre_drive_test` schema, migrate, `db:seed`,
   `db:seed --demo` twice, start the API with that `DATABASE_URL`, bootstrap TOTP, run the
   API walkthrough, then the browser script from a directory where `playwright` resolves
   (`SHOTS_DIR` pointing at `evidence/`). Tests use `TEST_DATABASE_URL`.
 - Phase 6 verification commands (fresh DB, API + PowerSync up, `DATABASE_URL` = Docker
-  `:5434/gikautos`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
+  `:5434/sceptre_drive`): `walkthrough-pos.mjs` → `race-last-unit.mjs` → `duplicate-upload.mjs`
   (run with `bun`; they import `@sceptre/shared`), then `node e2e-pos.mjs` (Playwright
   over CDP must run on Node, not Bun) and `node perf-pos.mjs`. The E2E owns :4000: it stops
   the API to prove the offline relaunch, so stop any other `bun dev` first.
@@ -1196,7 +1196,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   rows lock before debts/archive; totals are always server-computed; account numbers stay
   masked outside the owning supplier detail payload.
 - `bun run db:test:prepare` is Docker-specific; on the local instance, create/migrate
-  `gikautos_test` directly (the role lacks `CREATEDB`, so reset the schema instead of
+  `sceptre_drive_test` directly (the role lacks `CREATEDB`, so reset the schema instead of
   dropping the database).
 - Phase 6 contracts to honour: extend `StockMovementType` (e.g. `SALE`) and add an
   oversell posting mode; keep movements append-only, `reference_number` populated, and
@@ -1235,7 +1235,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   read them or reject invalid writes, so no suite should mutate global loyalty settings.
 - Phase 4: loyalty reads are global, but `getLiability` activity is manager-scoped
   (own branch plus branch-less EXPIRE rows); tests assert per-branch totals only for
-  their own uniquely-coded branches because all suites share `gikautos_test`.
+  their own uniquely-coded branches because all suites share `sceptre_drive_test`.
 - Phase 4: pg-boss lives in `api/src/jobs/` (`boss.ts` singleton, `queues.ts`
   queue/worker/schedule, `index.ts` start/stop); tests import `app.ts` only, never
   `src/index.ts`. The loyalty job test starts its own instance against the test DB with
@@ -1296,8 +1296,8 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   `node .planning/phases/06-pos-offline-core/evidence/smoke-pin-ui.mjs` from `desktop/`
   after `bun run build:pos`.
 - Phase 6 Plan 04: the running dev API on :4000 points at the **Docker** Postgres
-  (`localhost:5434/gikautos`), not the local :5432 instance. After adding a migration, run
-  `DATABASE_URL=postgresql://gikautos:gikautos@localhost:5434/gikautos bun run --filter api db:migrate`
+  (`localhost:5434/sceptre_drive`), not the local :5432 instance. After adding a migration, run
+  `DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:5434/sceptre_drive bun run --filter api db:migrate`
   or Better Auth answers 500 (schema validation) on every request.
 - Phase 6 Plan 04: console smoke `evidence/smoke-console-pin.mjs` bootstraps forced TOTP
   and saves the secret to `/tmp/opencode/admin-totp.json`; it needs the API (:4000) and
@@ -1320,7 +1320,7 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   Postgres, so branch ids are grouped rather than aggregated. Keep the branch filter
   parameterised.
 - Phase 6 Plan 05: the last-active-admin assertion in `staff.test.ts` is global to
-  `gikautos_test`. An aborted suite can leave an active `test-*@gikautos.test` admin and
+  `sceptre_drive_test`. An aborted suite can leave an active `test-*@sceptre.test` admin and
   break it; clean those rows (or reset the DB) before a verification run.
 - Phase 6 Plan 05: `sync.upload.test.ts` covers the endpoint (replay, concurrency,
   per-item rejection, 50-item cap, device mismatch, conflict/state reads); `pos.test.ts`

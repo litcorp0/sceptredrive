@@ -9,7 +9,7 @@ export const env = createEnv({
 	clientPrefix: "VITE_",
 
 	client: {
-		/** Base URL of the GikAutos API, e.g. http://localhost:4000. */
+		/** Base URL of the Sceptre Drive API, e.g. http://localhost:4000. */
 		VITE_API_URL: z.url(),
 		VITE_APP_TITLE: z.string().min(1).optional(),
 	},

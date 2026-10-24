@@ -223,13 +223,13 @@ function TwoFactorPage() {
 									size="sm"
 									onClick={() => {
 										const blob = new Blob(
-											[`GikAutos backup codes\n\n${backupCodes.join("\n")}\n`],
+											[`Sceptre Drive backup codes\n\n${backupCodes.join("\n")}\n`],
 											{ type: "text/plain" },
 										)
 										const url = URL.createObjectURL(blob)
 										const anchor = document.createElement("a")
 										anchor.href = url
-										anchor.download = "gikautos-backup-codes.txt"
+										anchor.download = "sceptre-drive-backup-codes.txt"
 										anchor.click()
 										URL.revokeObjectURL(url)
 									}}

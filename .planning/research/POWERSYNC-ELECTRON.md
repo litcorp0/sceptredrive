@@ -65,7 +65,7 @@ security and IP filtering, self-hosting), `powersync.com/pricing`, PowerSync SDK
 - Private endpoints (AWS PrivateLink) and client certificates are available on higher plans.
 - Postgres 14+ can host both the source and the bucket storage database on one server.
 
-## Implications for GikAutos
+## Implications for Sceptre Drive
 
 - Local SQLite schema mirrors down-synced tables; sales/returns/shifts/receipts/outbox are
   local-only tables.

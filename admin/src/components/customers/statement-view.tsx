@@ -23,7 +23,7 @@ export function StatementView({ statement }: { statement: CreditStatement }) {
 		<div className="mx-auto w-full max-w-[190mm] bg-white text-black">
 			<div className="flex items-start justify-between gap-6">
 				<div>
-					<p className="text-xl font-semibold tracking-tight">GikAutos</p>
+					<p className="text-xl font-semibold tracking-tight">Sceptre Drive</p>
 					<p className="text-sm text-muted-foreground">Customer credit statement</p>
 				</div>
 				<div className="text-right text-sm">

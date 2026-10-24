@@ -23,11 +23,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "GikAutos Admin",
+				title: "Sceptre Drive Admin",
 			},
 			{
 				name: "description",
-				content: "GikAutos back office console",
+				content: "Sceptre Drive back office console",
 			},
 		],
 		links: [

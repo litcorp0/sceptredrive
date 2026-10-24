@@ -3,7 +3,7 @@ import { createAuthClient } from "better-auth/react"
 import { env } from "#/env"
 
 /**
- * Better Auth client for the GikAutos API. The API is the only auth provider;
+ * Better Auth client for the Sceptre Drive API. The API is the only auth provider;
  * this client talks to it directly (dev: cross-origin with CORS credentials;
  * production: same-site behind Caddy).
  *

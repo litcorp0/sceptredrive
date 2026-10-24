@@ -93,7 +93,7 @@ export function SidebarBrand() {
 				GA
 			</div>
 			<div className="min-w-0">
-				<p className="truncate text-sm font-semibold leading-none">GikAutos</p>
+				<p className="truncate text-sm font-semibold leading-none">Sceptre Drive</p>
 				<p className="mt-1 text-xs leading-none text-muted-foreground">Admin console</p>
 			</div>
 		</div>

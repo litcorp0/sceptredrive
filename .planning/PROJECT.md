@@ -1,4 +1,4 @@
-# GikAutos v1 — Project Context
+# Sceptre Drive v1 — Project Context
 
 **Initialized:** 2026-10-17
 **Type:** Greenfield (fresh repository history; the earlier prototype was deleted)
@@ -151,5 +151,4 @@ All development runs with mocks until these exist:
 ## History
 
 The previous prototype was removed on 2026-10-17. A git bundle of its history is
-kept outside the repository at
-`/tmp/opencode/gikautos-old-history.bundle` (safe to delete).
+kept outside the repository at `/tmp/opencode/*-old-history.bundle` (safe to delete).

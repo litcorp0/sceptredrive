@@ -19,7 +19,7 @@ export function AuthShell({
 						GA
 					</div>
 					<div>
-						<p className="text-sm font-semibold leading-none">GikAutos</p>
+						<p className="text-sm font-semibold leading-none">Sceptre Drive</p>
 						<p className="mt-1 text-xs text-muted-foreground">Admin console</p>
 					</div>
 				</div>

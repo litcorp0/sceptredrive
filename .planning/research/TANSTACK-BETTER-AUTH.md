@@ -32,7 +32,7 @@
 - Cross-subdomain cookies are supported (`advanced.crossSubDomainCookies`); otherwise use
   same-origin requests (proxy `/api` under the admin domain).
 
-## Chosen architecture for GikAutos
+## Chosen architecture for Sceptre Drive
 
 - The **API is the only auth provider**. Better Auth lives in `api/`.
 - The admin uses the Better Auth client against the API:
@@ -46,7 +46,7 @@
 - 2FA (TOTP) is provided by the Better Auth two-factor plugin and can be required by policy
   for Admin/Manager accounts.
 
-## Implications for GikAutos
+## Implications for Sceptre Drive
 
 - Phase 1 must prove the admin → API cookie session round trip in dev and in the container
   topology (admin and API behind one Caddy origin).
