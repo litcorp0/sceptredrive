@@ -1,6 +1,6 @@
-import { formatDateTime, formatRelative } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
+import { RecentActivity } from "#/components/common/recent-activity"
 import { api } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 
@@ -20,11 +20,6 @@ function DashboardPage() {
 	const staffQuery = useQuery({
 		queryKey: ["staff", { scope: "dashboard" }],
 		queryFn: () => api.staff.list({ limit: 1 }),
-	})
-
-	const auditQuery = useQuery({
-		queryKey: ["audit", { scope: "dashboard" }],
-		queryFn: () => api.audit.list({ limit: 6 }),
 	})
 
 	const scopeLabel = canSelectBranch
@@ -63,38 +58,7 @@ function DashboardPage() {
 				/>
 			</div>
 
-			<div className="rounded-lg border">
-				<div className="border-b px-4 py-3">
-					<h2 className="text-sm font-medium">Recent activity</h2>
-				</div>
-				{auditQuery.isLoading ? (
-					<p className="px-4 py-6 text-sm text-muted-foreground">Loading…</p>
-				) : auditQuery.isError ? (
-					<p className="px-4 py-6 text-sm text-destructive">Couldn't load recent activity.</p>
-				) : (auditQuery.data?.entries.length ?? 0) === 0 ? (
-					<p className="px-4 py-6 text-sm text-muted-foreground">
-						No activity yet. Changes you make appear here.
-					</p>
-				) : (
-					<ul className="divide-y">
-						{auditQuery.data?.entries.map((entry) => (
-							<li key={entry.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-								<span
-									className="font-mono text-xs text-muted-foreground"
-									title={formatDateTime(entry.createdAt)}
-								>
-									{formatRelative(entry.createdAt)}
-								</span>
-								<span className="font-medium">{entry.action}</span>
-								<span className="text-muted-foreground">
-									{entry.entity}
-									{entry.actorStaffId ? ` · ${entry.actorStaffId}` : ""}
-								</span>
-							</li>
-						))}
-					</ul>
-				)}
-			</div>
+			<RecentActivity />
 		</div>
 	)
 }

@@ -76,23 +76,6 @@ export interface SetStaffPinResult {
 	pinVersion: number
 }
 
-export interface AuditEntry {
-	id: string
-	actorId: string | null
-	actorStaffId: string | null
-	action: string
-	entity: string
-	entityId: string | null
-	before: unknown
-	after: unknown
-	branchId: string | null
-	terminalId: string | null
-	ip: string | null
-	userAgent: string | null
-	requestId: string | null
-	createdAt: string
-}
-
 export type SettingKey =
 	| "auth.requireTwoFactor"
 	| "staff.idPrefix"
@@ -208,19 +191,6 @@ export type StaffListQuery = {
 	branchId?: string
 	includeInactive?: boolean
 	search?: string
-	limit?: number
-	offset?: number
-}
-
-export type AuditListQuery = {
-	actorId?: string
-	actorStaffId?: string
-	action?: string
-	entity?: string
-	entityId?: string
-	branchId?: string
-	from?: string
-	to?: string
 	limit?: number
 	offset?: number
 }

@@ -3,8 +3,6 @@ import type {
 	AdjustmentCreateInput,
 	AgingQuery,
 	AgingResult,
-	AuditEntry,
-	AuditListQuery,
 	Barcode,
 	Branch,
 	BranchCreateInput,
@@ -334,11 +332,6 @@ export const api = {
 		},
 		liability: (query: LoyaltyLiabilityQuery = {}) =>
 			apiRequest<LoyaltyLiabilityReport>("/api/loyalty/liability", { query }),
-	},
-
-	audit: {
-		list: (query: AuditListQuery = {}) =>
-			apiRequest<{ entries: AuditEntry[]; total: number }>("/api/audit", { query }),
 	},
 
 	settings: {
