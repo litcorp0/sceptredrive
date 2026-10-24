@@ -9,9 +9,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import type { BranchAging } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
-import { AGING_BUCKET_KEYS, AGING_BUCKET_LABELS, AGING_BUCKET_SHORT } from "#/modules/credit"
+import type { BranchAging } from "../types"
+import { AGING_BUCKET_KEYS, AGING_BUCKET_LABELS, AGING_BUCKET_SHORT } from "../utils/credit"
 
 const COLUMN_COUNT = AGING_BUCKET_KEYS.length + 3
 

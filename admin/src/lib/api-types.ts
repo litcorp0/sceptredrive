@@ -74,6 +74,10 @@ export interface CustomerUpdateInput {
 	address?: string | null
 }
 
+// TODO(phase-8/09): credit declares these in `#/modules/credit/types` now. This block survives
+// only because `lib/api.ts` still exposes `api.credit` for the customer profile route; delete both
+// together when Plan 09 migrates that page. `AgingBucketKey`/`AgingBuckets` below are the exception
+// — payables shares them until Plan 11.
 export type CreditEntryKind = "CHARGE" | "REPAYMENT" | "REFUND" | "ADJUSTMENT"
 export type CreditMethod = "CASH" | "MOMO" | "BANK"
 export type CreditReasonCode =

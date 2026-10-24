@@ -1,13 +1,13 @@
 import { formatDateTime, formatDay, formatGhanaPhone } from "@sceptre/shared"
-import type { CreditStatement, StatementEntry } from "#/lib/api-types"
 import { formatGhs } from "#/lib/format"
+import type { CreditStatement, StatementEntry } from "../types"
 import {
 	AGING_BUCKET_LABELS,
 	CREDIT_KIND_LABELS,
 	CREDIT_METHOD_LABELS,
 	CREDIT_REASON_LABELS,
 	signedGhs,
-} from "#/modules/credit"
+} from "../utils/credit"
 
 /**
  * Printable A4 customer statement: exactly the statement payload — header,

@@ -183,6 +183,9 @@ export const api = {
 			}),
 	},
 
+	// TODO(phase-8/09): credit's own screens read `#/modules/credit` now, but the customer profile
+	// route still calls `profiles.list` from here and its body is Plan 09's. Delete this group when
+	// that page migrates — the duplication is deliberate only for that one commit window.
 	credit: {
 		aging: (query: AgingQuery) => apiRequest<AgingResult>("/api/credit/aging", { query }),
 		statement: (customerId: string, query: StatementQuery) =>
