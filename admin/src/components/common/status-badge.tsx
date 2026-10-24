@@ -1,32 +1,54 @@
 import { cn } from "cn"
 
+/** Legacy tone names; mapped onto the semantic variants below. */
 type Tone = "green" | "zinc" | "amber" | "red" | "blue"
 
-const TONES: Record<Tone, string> = {
-	green: "border-emerald-200 bg-emerald-50 text-emerald-700",
-	zinc: "border-zinc-200 bg-zinc-50 text-zinc-600",
-	amber: "border-amber-200 bg-amber-50 text-amber-700",
-	red: "border-red-200 bg-red-50 text-red-700",
-	blue: "border-blue-200 bg-blue-50 text-blue-700",
+export type StatusVariant = "ok" | "warn" | "danger" | "info" | "muted"
+
+/**
+ * Each variant carries a dot *and* a text label, so state is never conveyed by
+ * colour alone (WCAG 2.2 SC 1.4.1). Colours are the brand semantic tokens.
+ */
+const VARIANTS: Record<StatusVariant, { container: string; dot: string }> = {
+	ok: { container: "border-ok/30 bg-ok/10 text-ok", dot: "bg-ok" },
+	warn: { container: "border-warn/30 bg-warn/10 text-warn", dot: "bg-warn" },
+	danger: { container: "border-danger/30 bg-danger/10 text-danger", dot: "bg-danger" },
+	info: { container: "border-info/30 bg-info/10 text-info", dot: "bg-info" },
+	muted: {
+		container: "border-border bg-muted text-muted-foreground",
+		dot: "bg-muted-foreground",
+	},
 }
 
-export function StatusBadge({
-	children,
-	tone = "zinc",
-	className,
-}: {
+const TONE_VARIANTS: Record<Tone, StatusVariant> = {
+	green: "ok",
+	zinc: "muted",
+	amber: "warn",
+	red: "danger",
+	blue: "info",
+}
+
+interface StatusBadgeProps {
 	children: React.ReactNode
+	/** Legacy API, kept so existing callers compile unchanged. */
 	tone?: Tone
+	variant?: StatusVariant
 	className?: string
-}) {
+}
+
+export function StatusBadge({ children, tone, variant, className }: StatusBadgeProps) {
+	const resolved = variant ?? TONE_VARIANTS[tone ?? "zinc"]
+	const styles = VARIANTS[resolved]
+
 	return (
 		<span
 			className={cn(
-				"inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-				TONES[tone],
+				"inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
+				styles.container,
 				className,
 			)}
 		>
+			<span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", styles.dot)} />
 			{children}
 		</span>
 	)
@@ -34,11 +56,11 @@ export function StatusBadge({
 
 export function ActiveBadge({ active }: { active: boolean }) {
 	return (
-		<StatusBadge tone={active ? "green" : "zinc"}>{active ? "Active" : "Inactive"}</StatusBadge>
+		<StatusBadge variant={active ? "ok" : "muted"}>{active ? "Active" : "Inactive"}</StatusBadge>
 	)
 }
 
 export function RoleBadge({ role }: { role: string }) {
-	const tone = role === "ADMIN" ? "blue" : role === "MANAGER" ? "amber" : "zinc"
-	return <StatusBadge tone={tone}>{role}</StatusBadge>
+	const variant: StatusVariant = role === "ADMIN" ? "info" : role === "MANAGER" ? "warn" : "muted"
+	return <StatusBadge variant={variant}>{role}</StatusBadge>
 }
