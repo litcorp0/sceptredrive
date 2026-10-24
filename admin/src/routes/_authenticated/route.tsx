@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router"
 import { AppShell } from "#/components/layout/app-shell"
+import { getAuthPolicy } from "#/lib/auth-policy"
 import { BranchProvider } from "#/lib/branch-context"
 import { getSession } from "#/lib/session.functions"
 
@@ -16,7 +17,10 @@ export const Route = createFileRoute("/_authenticated")({
 		}
 
 		if (session.user.role === "ADMIN" && session.user.twoFactorEnabled !== true) {
-			throw redirect({ to: "/two-factor", search: { setup: "1" } })
+			const policy = await getAuthPolicy()
+			if (policy.requireTwoFactor) {
+				throw redirect({ to: "/two-factor", search: { setup: "1" } })
+			}
 		}
 
 		return { session }

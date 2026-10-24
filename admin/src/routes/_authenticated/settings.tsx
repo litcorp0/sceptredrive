@@ -13,6 +13,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
+import { Switch } from "#/components/ui/switch"
 import { api } from "#/lib/api"
 import type { ResolvedSetting, SettingKey } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
@@ -28,11 +29,19 @@ interface SettingMeta {
 	group: string
 	label: string
 	description: string
-	type: "text" | "int" | "decimal" | "select"
+	type: "text" | "int" | "decimal" | "select" | "switch"
 	options?: Array<{ value: string; label: string }>
 }
 
 const SETTING_META: SettingMeta[] = [
+	{
+		key: "auth.requireTwoFactor",
+		group: "Security",
+		label: "Require two-factor authentication",
+		description:
+			"Administrators must set up an authenticator app before using the console. Enable 2FA on your own account before turning this on.",
+		type: "switch",
+	},
 	{
 		key: "staff.idPrefix",
 		group: "Staff IDs",
@@ -258,9 +267,19 @@ function SettingRow({
 	const dirty = value !== String(setting.value)
 
 	const updateMutation = useMutation({
-		mutationFn: () => {
-			const parsed = meta.type === "text" || meta.type === "select" ? value : Number(value)
-			if (meta.type !== "text" && meta.type !== "select" && !Number.isFinite(parsed)) {
+		mutationFn: (next: string) => {
+			const parsed =
+				meta.type === "text" || meta.type === "select"
+					? next
+					: meta.type === "switch"
+						? next === "true"
+						: Number(next)
+			if (
+				meta.type !== "text" &&
+				meta.type !== "select" &&
+				meta.type !== "switch" &&
+				!Number.isFinite(parsed)
+			) {
 				throw new Error("Enter a valid number")
 			}
 			return api.settings.update({ key: meta.key, value: parsed, branchId })
@@ -281,7 +300,7 @@ function SettingRow({
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		if (!dirty) return
-		updateMutation.mutate()
+		updateMutation.mutate(value)
 	}
 
 	const sourceLabel =
@@ -300,7 +319,22 @@ function SettingRow({
 			</div>
 
 			<div className="flex items-center gap-2">
-				{meta.type === "select" ? (
+				{meta.type === "switch" ? (
+					<>
+						<Switch
+							checked={setting.value === true}
+							disabled={!canEdit || updateMutation.isPending}
+							onCheckedChange={(checked) => {
+								setValue(String(checked))
+								updateMutation.mutate(String(checked))
+							}}
+							aria-label={meta.label}
+						/>
+						<span className="w-6 text-xs text-muted-foreground">
+							{setting.value === true ? "On" : "Off"}
+						</span>
+					</>
+				) : meta.type === "select" ? (
 					<Select value={value} onValueChange={(next) => setValue(next)} disabled={!canEdit}>
 						<SelectTrigger className="h-8 w-44" aria-label={meta.label}>
 							<SelectValue />
@@ -324,9 +358,11 @@ function SettingRow({
 						aria-label={meta.label}
 					/>
 				)}
-				<Button type="submit" size="sm" disabled={!canEdit || !dirty || updateMutation.isPending}>
-					{updateMutation.isPending ? "Saving…" : "Save"}
-				</Button>
+				{meta.type === "switch" ? null : (
+					<Button type="submit" size="sm" disabled={!canEdit || !dirty || updateMutation.isPending}>
+						{updateMutation.isPending ? "Saving…" : "Save"}
+					</Button>
+				)}
 			</div>
 
 			{globalOnly ? (

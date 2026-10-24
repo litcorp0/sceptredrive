@@ -3,6 +3,11 @@ import { env } from '../../config/env.ts'
 import { validateJson, validateQuery } from '../../http/validation.ts'
 
 export const SETTING_DEFINITIONS = {
+  'auth.requireTwoFactor': {
+    schema: z.boolean(),
+    defaultValue: false,
+    branchScoped: false,
+  },
   'staff.idPrefix': {
     schema: z
       .string()

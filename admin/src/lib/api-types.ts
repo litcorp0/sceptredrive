@@ -94,6 +94,7 @@ export interface AuditEntry {
 }
 
 export type SettingKey =
+	| "auth.requireTwoFactor"
 	| "staff.idPrefix"
 	| "staff.idSequence"
 	| "receipt.header"

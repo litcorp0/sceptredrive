@@ -13,7 +13,8 @@
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
-    "keys:generate": "bun run scripts/generate-pos-keys.ts"
+    "keys:generate": "bun run scripts/generate-pos-keys.ts",
+    "two-factor:reset": "bun run scripts/reset-two-factor.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "catalog:",

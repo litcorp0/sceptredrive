@@ -5,6 +5,7 @@ import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { authClient } from "#/lib/auth-client"
+import { getAuthPolicy } from "#/lib/auth-policy"
 import { getSession } from "#/lib/session.functions"
 
 export const Route = createFileRoute("/login")({
@@ -19,7 +20,10 @@ export const Route = createFileRoute("/login")({
 			throw redirect({ to: "/change-password" })
 		}
 		if (session.user.role === "ADMIN" && session.user.twoFactorEnabled !== true) {
-			throw redirect({ to: "/two-factor", search: { setup: "1" } })
+			const policy = await getAuthPolicy()
+			if (policy.requireTwoFactor) {
+				throw redirect({ to: "/two-factor", search: { setup: "1" } })
+			}
 		}
 		throw redirect({ to: "/" })
 	},

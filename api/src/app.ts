@@ -27,6 +27,7 @@ import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { syncRoutes } from './modules/sync/sync.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
 import { authRoutes } from './routes/auth.ts'
+import { authPolicyRoutes } from './routes/auth-policy.ts'
 import { healthRoutes } from './routes/health.ts'
 import { jwksRoutes } from './routes/jwks.ts'
 
@@ -40,6 +41,8 @@ app.use('*', corsMiddleware)
 
 app.route('/', healthRoutes)
 app.route('/', jwksRoutes)
+// Before the Better Auth catch-all: `/api/auth/policy` is our route.
+app.route('/', authPolicyRoutes)
 app.route('/', authRoutes)
 app.route('/', branchesRoutes)
 app.route('/', terminalsRoutes)
