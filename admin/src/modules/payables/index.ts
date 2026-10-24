@@ -73,7 +73,12 @@ export { type InvoicePaymentTarget, PaymentFormDialog } from "./components/payme
 export { PaymentMethodBadge } from "./components/payment-method-badge"
 export { VoidInvoiceDialog } from "./components/void-invoice-dialog"
 export { VoidPaymentDialog } from "./components/void-payment-dialog"
+export { InvoiceDetailPage } from "./pages/invoice-detail-page"
 export { InvoiceNewPage } from "./pages/invoice-new-page"
+export { InvoicesPage } from "./pages/invoices-page"
+export { PayablesAgingPage } from "./pages/payables-aging-page"
+export { PaymentDetailPage } from "./pages/payment-detail-page"
+export { PaymentsPage } from "./pages/payments-page"
 export type {
 	AgingBucketKey,
 	AgingBuckets,
