@@ -12,6 +12,10 @@
  * `["receipt-invoice"]`, `["transfers"]`, `["transfer"]`, `["counts"]`, `["count"]`) because every
  * dialog invalidates them by prefix, from several places, by name. Money stays integer minor units
  * and formatting stays in `lib/format`.
+ *
+ * Two legacy edges survive until payables migrates in Plan 11 and are marked in place:
+ * `receipt-detail-page` imports the payable status badge from `#/components/payables`, and
+ * `components/payables/invoice-form` reads goods receipts through this barrel.
  */
 export {
 	cancelCount,
@@ -49,6 +53,7 @@ export {
 	updateTransfer,
 } from "./api/transfers"
 export { AdjustDialog } from "./components/adjust-dialog"
+export { CountStatusBadge } from "./components/count-status-badge"
 export { EditTransferDialog } from "./components/edit-transfer-dialog"
 export { ReceiveDialog } from "./components/receive-dialog"
 export { ShortCloseDialog } from "./components/short-close-dialog"
@@ -61,6 +66,9 @@ export {
 } from "./components/transfer-lines-editor"
 export { TransferQuantityDialog } from "./components/transfer-quantity-dialog"
 export { TransferStatusBadge } from "./components/transfer-status-badge"
+export { CountDetailPage } from "./pages/count-detail-page"
+export { CountNewPage } from "./pages/count-new-page"
+export { CountsPage } from "./pages/counts-page"
 export { InventoryLayout } from "./pages/inventory-layout"
 export { ReceiptDetailPage } from "./pages/receipt-detail-page"
 export { ReceiptsPage } from "./pages/receipts-page"
