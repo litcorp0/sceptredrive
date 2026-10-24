@@ -117,6 +117,26 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
+/**
+ * Read and rewrite `PENDING_MODULES` in the gate's source without assuming how the formatter laid
+ * the array out — biome collapses short arrays onto one line, which invalidated the first draft of
+ * mutations 9 and 10.
+ */
+function readPending(source) {
+  const match = /const PENDING_MODULES = \[([^\]]*)\]/.exec(source)
+  if (!match) throw new Error('PENDING_MODULES declaration not found')
+  return [...match[1].matchAll(/['"]([a-z]+)['"]/g)].map((entry) => entry[1])
+}
+
+function withPending(source, names) {
+  const pattern = /const PENDING_MODULES = \[[^\]]*\]/
+  if (!pattern.test(source)) throw new Error('PENDING_MODULES declaration not found')
+  return source.replace(
+    pattern,
+    `const PENDING_MODULES = [${names.map((n) => `'${n}'`).join(', ')}]`,
+  )
+}
+
 // ---------------------------------------------------------------- mutations
 console.log('\n-- mutations --')
 
@@ -248,25 +268,23 @@ console.log('\n-- mutations --')
 // 9. A legacy component import for a domain that has already migrated.
 {
   // Derived, not hard-coded, so the mutation stays valid through the whole phase. Candidates are
-  // the folders the gate maps to exactly one module; that module is claimed as migrated below, so
-  // the only violation left is the legacy import itself.
-  const pendingAt = gateSource.indexOf('const PENDING_MODULES')
-  const pendingBlock = gateSource.slice(pendingAt)
-  const isPending = (name) => new RegExp(`\\n\\s+['"]${name}['"],`).test(pendingBlock)
+  // folders the gate maps to exactly one module; that module is claimed as migrated below, so the
+  // only violation left is the legacy import itself.
+  const pending = readPending(gateSource)
   const candidates = ['inventory', 'payables', 'suppliers']
-  const target = candidates.find(isPending) ?? candidates[0]
+  const target = candidates.find((name) => pending.includes(name)) ?? candidates[0]
 
   const moduleSnap = snapshot(path.join(MODULES, target))
   fs.mkdirSync(path.join(MODULES, target), { recursive: true })
   fs.writeFileSync(path.join(MODULES, target, 'index.ts'), 'export const ProbePage = () => null\n')
 
-  let mutated = gateSource
-  if (isPending(target)) {
-    const entry = new RegExp(`\\n\\s+['"]${target}['"],`)
-    mutated = gateSource.slice(0, pendingAt) + pendingBlock.replace(entry, '')
-    if (mutated === gateSource) throw new Error('mutation 9 could not claim a module as migrated')
-  }
-  fs.writeFileSync(GATE, mutated)
+  fs.writeFileSync(
+    GATE,
+    withPending(
+      gateSource,
+      pending.filter((name) => name !== target),
+    ),
+  )
 
   // Create the legacy folder whether or not it still exists, so the import resolves and the only
   // violation is the import statement.
@@ -294,14 +312,9 @@ console.log('\n-- mutations --')
 
 // 10. A duplicated entry in the pending list.
 {
-  const at = gateSource.indexOf('const PENDING_MODULES')
-  const block = gateSource.slice(at)
-  const first = /\n(\s+)['"]([a-z]+)['"],/.exec(block)
-  if (!first) throw new Error('mutation 10 could not read the pending list')
-  const mutated =
-    gateSource.slice(0, at) + block.replace(first[0], `${first[0]}\n${first[1]}'${first[2]}',`)
-  if (mutated === gateSource) throw new Error('mutation 10 could not duplicate an entry')
-  fs.writeFileSync(GATE, mutated)
+  const pending = readPending(gateSource)
+  if (pending.length === 0) throw new Error('mutation 10 needs at least one pending module')
+  fs.writeFileSync(GATE, withPending(gateSource, [pending[0], ...pending]))
   const r = runGate()
   check(
     r.code !== 0 && r.out.includes('contains a duplicate'),
