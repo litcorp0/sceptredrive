@@ -11,7 +11,7 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 05** (`date-fns` in shared, admin, and desktop).
+**Next action:** Execute **Phase 7, Plan 06** (shell chrome on the new design system).
 
 ---
 
@@ -26,7 +26,7 @@ became Phases 13/14/15.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (4/7 plans) |
+| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (5/7 plans) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -44,7 +44,7 @@ became Phases 13/14/15.
 | 02 | Desktop identity, protocol host, CSP, and copy | ✅ Complete |
 | 03 | `packages/brand`: tokens, fonts, chart ramp | ✅ Complete |
 | 04 | shadcn primitives and chart layer in both clients | ✅ Complete |
-| 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
+| 05 | `date-fns` in shared, admin, and desktop | ✅ Complete |
 | 06 | Shell chrome on the new design system | ⬜ Not started |
 | 07 | Phase verification, evidence, and state update | ⬜ Not started |
 
@@ -188,6 +188,44 @@ became Phases 13/14/15.
   `evidence/shots/plan04-{admin,pos}-*`. Desktop suite still **339/339**; admin production
   build OK; the import-boundary probe fails with the intended message and the barrel import
   passes.
+
+- **Plan 05 complete** (commits `e88815e`, `625e94c`, `ef0330c`, `bcc480e`). `date-fns` 4.4.0
+  is in the root catalog and resolves exactly once; `packages/shared/src/dates.ts` is now the
+  only place a date format is chosen. Twelve helpers: `formatDay`, `formatDayShort`,
+  `formatDateTime`, `formatTime`, `formatMonth`, `formatRange` (three shapes), `formatRelative`,
+  `formatBucket` (day/ISO week/month), `formatCount`, `toDateInputValue`,
+  `toDateTimeInputValue`, `accraDay`, plus `formatAccraDateTime` for paper. Invalid input
+  renders `—`; nothing returns a number; no helper divides money.
+- **Admin adoption:** 16 files stopped formatting dates themselves (ledger, statement,
+  loyalty history, liability, audit, terminals, devices, transfers, counts, receipts,
+  customers, suppliers, dashboard). `admin/src/lib/format.ts` no longer owns `formatDay`;
+  its importers now take it from `@sceptre/shared`. Five `new Date().toISOString().slice(0,10)`
+  defaults became `toDateInputValue`, the `datetime-local` helper became
+  `toDateTimeInputValue`, and number grouping (points, counts, invoice totals) goes through
+  `formatCount`. `daysUntil` uses `differenceInCalendarDays` and `isExpiringSoon` requires a
+  strictly future expiry, so a partial day or clock change cannot flip a badge.
+- **Desktop adoption:** `lib/time.ts` is deleted (`accraDay` lives in shared), the receipt
+  prints `23 Oct 2026 10:15`, the sales table and shift screen use `formatTime`/
+  `formatDateTime`, the sync badge no longer slices ISO strings, the outbox shows
+  `formatRelative` for the next retry (absolute in `title`), and the conflict list shows an
+  absolute timestamp.
+- **Deviation (deliberate, receipt correctness):** the plan said to build the printed date
+  from `formatDay`/`formatTime`, but those format in the host zone. A till laptop set to
+  another timezone would then print a different day from the one its receipt number was
+  allocated from. Added `formatAccraDateTime` to shared: explicit UTC (= Africa/Accra) via
+  `Intl`, the project's one sanctioned `Intl.DateTimeFormat` for dates, and the receipt test
+  now asserts the `Date` line is exactly 42 columns and reads `23 Oct 2026 10:15`.
+- **Registry exception:** `components/ui/chart.tsx` and `calendar.tsx` keep their internal
+  `toLocaleString`/`toLocaleDateString` calls. They are generated shadcn sources; editing them
+  would be drift, and the DoD greps are scoped to app code.
+- **Verification:** shared **96/96** (73 + 23 date tests), desktop **339/339** (existing
+  receipt assertions strengthened, no test deleted), `bun run check-types` 6/6, lint clean,
+  brand gate OK, `bun run --filter admin build` and `bun run --filter desktop build` pass,
+  packaged print smoke **21/21**. `grep` for `toLocaleDateString|dateStyle` in either app now
+  returns nothing outside the registry files. The admin visual pass over ledger, statement,
+  aging, and audit is folded into Plan 07's logged-in verification.
+- **Housekeeping:** `test:print` regenerates the Phase 6 receipt artefacts under
+  `phases/06-pos-offline-core/evidence/`; they were restored to HEAD after the run.
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
