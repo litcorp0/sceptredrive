@@ -1,4 +1,5 @@
 import { useQuery } from '@powersync/react'
+import { formatDateTime, formatRelative } from '@sceptre/shared'
 import { navigate } from '../../lib/router'
 
 /**
@@ -27,13 +28,6 @@ const STATE_STYLES: Record<string, string> = {
   acked: 'bg-emerald-50 text-emerald-800',
   conflict: 'bg-amber-50 text-amber-900',
   dead_letter: 'bg-red-50 text-red-700',
-}
-
-function time(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toISOString().slice(5, 16).replace('T', ' ')
 }
 
 export function SyncLog({
@@ -93,7 +87,7 @@ export function SyncLog({
                   <span className="font-mono text-xs">{row.type}</span>
                 )}
               </td>
-              <td className="px-3 py-2 font-mono text-xs">{time(row.occurred_at)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{formatDateTime(row.occurred_at)}</td>
               <td className="px-3 py-2 font-mono text-xs">{row.attempts}</td>
               <td className="px-3 py-2">
                 <span
@@ -106,7 +100,12 @@ export function SyncLog({
                   {row.status.replace('_', ' ')}
                 </span>
               </td>
-              <td className="px-3 py-2 font-mono text-xs">{time(row.next_attempt_at)}</td>
+              <td
+                className="px-3 py-2 font-mono text-xs"
+                title={row.next_attempt_at ? formatDateTime(row.next_attempt_at) : undefined}
+              >
+                {row.next_attempt_at ? formatRelative(row.next_attempt_at) : '—'}
+              </td>
               <td className="max-w-[18rem] px-3 py-2 text-xs">
                 {row.last_error_code ? (
                   <span title={row.last_error_message ?? undefined}>

@@ -1,8 +1,8 @@
+import { formatAccraDateTime } from '@sceptre/shared'
 import { describe, expect, it } from 'vitest'
 import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repository'
 import {
   buildReceiptModel,
-  formatReceiptDateTime,
   leftRight,
   type ReceiptModel,
   receiptToText,
@@ -157,6 +157,11 @@ describe('42-column ESC/POS text', () => {
 
     for (const line of text) expect(line.length).toBeLessThanOrEqual(42)
     expect(text.join('\n')).toContain('ACC-SPX-T01-20261023-0007')
+    // The sale timestamp is a printed contract: Accra time, one 42-column line.
+    const dateLine = text.find((line) => line.startsWith('Date'))
+    expect(dateLine).toBeDefined()
+    expect(dateLine).toContain('23 Oct 2026 10:15')
+    expect(dateLine).toHaveLength(42)
     expect(text.join('\n')).toContain('VAT 15%')
     expect(text.join('\n')).toContain('NHIL 2.5%')
     expect(text.join('\n')).toContain('GETFund 2.5%')
@@ -243,9 +248,9 @@ describe('42-column ESC/POS text', () => {
 
 describe('column helpers', () => {
   it('formats the receipt date in Accra (UTC) time', () => {
-    expect(formatReceiptDateTime('2026-10-23T10:15:00.000Z')).toBe('2026-10-23 10:15')
-    expect(formatReceiptDateTime('2026-10-23T23:59:00.000Z')).toBe('2026-10-23 23:59')
-    expect(formatReceiptDateTime('not-a-date')).toBe('not-a-date')
+    expect(formatAccraDateTime('2026-10-23T10:15:00.000Z')).toBe('23 Oct 2026 10:15')
+    expect(formatAccraDateTime('2026-10-23T23:59:00.000Z')).toBe('23 Oct 2026 23:59')
+    expect(formatAccraDateTime('not-a-date')).toBe('—')
   })
 
   it('right-aligns in exactly the column width', () => {

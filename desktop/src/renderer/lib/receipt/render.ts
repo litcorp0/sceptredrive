@@ -1,3 +1,4 @@
+import { formatAccraDateTime } from '@sceptre/shared'
 import type { PrintLine } from '../../../shared/printing'
 import { formatMinorWithSymbol } from '../format'
 import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repository'
@@ -162,16 +163,6 @@ export function buildReceiptModel(input: BuildReceiptInput): ReceiptModel {
   }
 }
 
-/** `2026-10-23 15:04` in Accra (UTC, no DST), independent of the host locale. */
-export function formatReceiptDateTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(
-    date.getUTCHours(),
-  )}:${pad(date.getUTCMinutes())}`
-}
-
 /** Wraps by words, hard-breaking a token that is longer than the column width. */
 export function wrapText(text: string, width = RECEIPT_COLUMNS): string[] {
   if (width < 1) return [text]
@@ -258,7 +249,7 @@ export function toEscPosLines(model: ReceiptModel, options: RenderOptions = {}):
   centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
   rows.push({ text: divider })
   centerRow(`RECEIPT ${model.header.receiptNumber}`, true)
-  pair('Date', formatReceiptDateTime(model.header.occurredAt))
+  pair('Date', formatAccraDateTime(model.header.occurredAt))
   pair('Cashier', model.header.cashier)
   if (model.header.customer?.name) pair('Customer', model.header.customer.name)
   if (model.header.customer?.phone) pair('Phone', model.header.customer.phone)

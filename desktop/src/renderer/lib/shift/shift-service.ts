@@ -1,9 +1,9 @@
 import type { PowerSyncDatabase } from '@powersync/web'
+import { accraDay } from '@sceptre/shared'
 import { getStaffSession, requireStaffSession, type StaffSession } from '../auth/staff-session'
 import { nextDocumentValue } from '../document-sequence'
 import { notifyOutboxChanged } from '../outbox/outbox-events'
 import { type PosIdentity, readPosIdentity } from '../pos-config'
-import { accraDay } from '../time'
 import {
   findOpenShift,
   findShiftById,
@@ -18,7 +18,7 @@ import {
 } from './shift-repository'
 
 /** Re-exported for the shift screen and the existing formatting tests. */
-export { accraDay } from '../time'
+export { accraDay } from '@sceptre/shared'
 
 /**
  * Offline shift lifecycle (POS-04).

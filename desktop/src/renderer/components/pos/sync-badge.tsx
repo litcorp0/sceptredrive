@@ -1,4 +1,5 @@
 import { useQuery } from '@powersync/react'
+import { formatTime } from '@sceptre/shared'
 import { usePos } from '../../lib/powersync/provider'
 import { useSyncStatus } from '../../lib/powersync/status'
 import { navigate } from '../../lib/router'
@@ -25,9 +26,7 @@ const STYLES: Record<BadgeState, string> = {
 
 function shortTime(iso: string | null): string {
   if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toISOString().slice(11, 16)
+  return formatTime(iso)
 }
 
 export function SyncBadge() {
