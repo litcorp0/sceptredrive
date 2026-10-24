@@ -19,10 +19,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
-import { api } from "#/lib/api"
-import type { CustomerListRow } from "#/lib/api-types"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
+import type { CustomerListRow } from "#/modules/customers"
+import { customerListOptions } from "#/modules/customers"
 
 export const Route = createFileRoute("/_authenticated/customers/")({
 	component: CustomersTab,
@@ -51,10 +51,7 @@ function CustomersTab() {
 		pageSize: PAGE_SIZE,
 	}
 
-	const customersQuery = useQuery({
-		queryKey: ["customers", filters],
-		queryFn: () => api.customers.list(filters),
-	})
+	const customersQuery = useQuery(customerListOptions(filters))
 
 	const customers = customersQuery.data?.customers ?? []
 	const total = customersQuery.data?.total ?? 0

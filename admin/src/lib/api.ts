@@ -10,12 +10,6 @@ import type {
 	CreditProfileListRow,
 	CreditProfileUpdateInput,
 	CreditStatement,
-	CustomerCreateInput,
-	CustomerDetail,
-	CustomerListQuery,
-	CustomerListRow,
-	CustomerSearchResult,
-	CustomerUpdateInput,
 	InvoiceCreateInput,
 	InvoiceVoidInput,
 	PayablesAgingQuery,
@@ -148,39 +142,6 @@ export function isReauthRequired(error: unknown): boolean {
 }
 
 export const api = {
-	customers: {
-		list: (query: CustomerListQuery = {}) =>
-			apiRequest<CustomerSearchResult>("/api/customers", { query }),
-		get: (id: string) => apiRequest<CustomerDetail>(`/api/customers/${id}`),
-		create: (input: CustomerCreateInput) =>
-			apiRequest<{ customer: CustomerListRow }>("/api/customers", {
-				method: "POST",
-				body: input,
-			}),
-		update: (id: string, input: CustomerUpdateInput) =>
-			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}`, {
-				method: "PATCH",
-				body: input,
-			}),
-		archive: (id: string, note?: string) =>
-			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/archive`, {
-				method: "POST",
-				body: { note: note || undefined },
-			}),
-		reactivate: (id: string) =>
-			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/reactivate`, {
-				method: "POST",
-			}),
-		anonymize: (id: string, note?: string) =>
-			apiRequest<{ customer: CustomerListRow }>(`/api/customers/${id}/anonymize`, {
-				method: "POST",
-				body: { note: note || undefined },
-			}),
-	},
-
-	// TODO(phase-8/09): credit's own screens read `#/modules/credit` now, but the customer profile
-	// route still calls `profiles.list` from here and its body is Plan 09's. Delete this group when
-	// that page migrates — the duplication is deliberate only for that one commit window.
 	credit: {
 		aging: (query: AgingQuery) => apiRequest<AgingResult>("/api/credit/aging", { query }),
 		statement: (customerId: string, query: StatementQuery) =>

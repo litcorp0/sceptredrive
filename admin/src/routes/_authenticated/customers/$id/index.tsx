@@ -35,8 +35,6 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs"
-import { api } from "#/lib/api"
-import type { CustomerListRow } from "#/lib/api-types"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
@@ -44,8 +42,11 @@ import {
 	CreditEntryDialog,
 	CreditLedgerTable,
 	CreditProfileDialog,
+	profileListOptions,
 	RepaymentDialog,
 } from "#/modules/credit"
+import type { CustomerListRow } from "#/modules/customers"
+import { customerDetailOptions } from "#/modules/customers"
 import { LoyaltyCard } from "#/modules/loyalty"
 
 export const Route = createFileRoute("/_authenticated/customers/$id/")({
@@ -74,14 +75,8 @@ function CustomerProfilePage() {
 	const [anonymizeOpen, setAnonymizeOpen] = useState(false)
 	const [creditBranchId, setCreditBranchId] = useState<string | null>(null)
 
-	const customerQuery = useQuery({
-		queryKey: ["customer", id],
-		queryFn: () => api.customers.get(id),
-	})
-	const profilesQuery = useQuery({
-		queryKey: ["credit-profiles", id],
-		queryFn: () => api.credit.profiles.list({ customerId: id }),
-	})
+	const customerQuery = useQuery(customerDetailOptions(id))
+	const profilesQuery = useQuery(profileListOptions(id))
 
 	const detail = customerQuery.data
 	const customer = detail?.customer

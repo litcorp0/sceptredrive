@@ -21,10 +21,11 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { CustomerListRow } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
+import type { CustomerListRow } from "#/modules/customers"
+import { createCustomer, customerKeys, updateCustomer } from "#/modules/customers"
 
 /**
  * The API's duplicate-phone conflict ends with the existing customer id in
@@ -72,8 +73,8 @@ export function CustomerFormDialog({
 				address: address.trim() || null,
 			}
 			return isEdit && customer
-				? api.customers.update(customer.id, input)
-				: api.customers.create({
+				? updateCustomer(customer.id, input)
+				: createCustomer({
 						...input,
 						email: input.email ?? undefined,
 						address: input.address ?? undefined,
@@ -86,8 +87,8 @@ export function CustomerFormDialog({
 					? `Customer ${data.customer.name} updated`
 					: `Customer ${data.customer.name} created`,
 			)
-			await queryClient.invalidateQueries({ queryKey: ["customers"] })
-			await queryClient.invalidateQueries({ queryKey: ["customer", data.customer.id] })
+			await queryClient.invalidateQueries({ queryKey: customerKeys.all })
+			await queryClient.invalidateQueries({ queryKey: customerKeys.byId(data.customer.id) })
 			onOpenChange(false)
 		},
 		onError: (error) => {

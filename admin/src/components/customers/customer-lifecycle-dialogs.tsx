@@ -14,10 +14,17 @@ import {
 } from "#/components/ui/dialog"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { CreditProfileListRow, CustomerListRow } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import type { CreditProfileListRow } from "#/modules/credit"
+import {
+	anonymizeCustomer,
+	archiveCustomer,
+	type CustomerListRow,
+	customerKeys,
+	reactivateCustomer,
+} from "#/modules/customers"
 
 /** Case-management actions: archive (blocks new credit), reactivate, anonymize. */
 
@@ -41,12 +48,12 @@ export function ArchiveCustomerDialog({
 	}, [open])
 
 	const archiveMutation = useMutation({
-		mutationFn: () => api.customers.archive(customer.id, note.trim() || undefined),
+		mutationFn: () => archiveCustomer(customer.id, note.trim() || undefined),
 		onSuccess: async (data) => {
 			toast.success(`Customer ${data.customer.name} archived`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["customers"] }),
-				queryClient.invalidateQueries({ queryKey: ["customer", customer.id] }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.all }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.byId(customer.id) }),
 			])
 			onOpenChange(false)
 		},
@@ -114,12 +121,12 @@ export function ReactivateCustomerButton({ customer }: { customer: CustomerListR
 	const queryClient = useQueryClient()
 
 	const reactivateMutation = useMutation({
-		mutationFn: () => api.customers.reactivate(customer.id),
+		mutationFn: () => reactivateCustomer(customer.id),
 		onSuccess: async (data) => {
 			toast.success(`Customer ${data.customer.name} reactivated`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["customers"] }),
-				queryClient.invalidateQueries({ queryKey: ["customer", customer.id] }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.all }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.byId(customer.id) }),
 			])
 		},
 		onError: (error) => toastApiError(error),
@@ -171,12 +178,12 @@ export function AnonymizeCustomerDialog({
 	}, [open])
 
 	const anonymizeMutation = useMutation({
-		mutationFn: () => api.customers.anonymize(customer.id, note.trim() || undefined),
+		mutationFn: () => anonymizeCustomer(customer.id, note.trim() || undefined),
 		onSuccess: async () => {
 			toast.success("Customer anonymized")
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["customers"] }),
-				queryClient.invalidateQueries({ queryKey: ["customer", customer.id] }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.all }),
+				queryClient.invalidateQueries({ queryKey: customerKeys.byId(customer.id) }),
 			])
 			onOpenChange(false)
 			await navigate({ to: "/customers" })
