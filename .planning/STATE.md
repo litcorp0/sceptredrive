@@ -5,13 +5,13 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-24
-**Status:** **Phase 6 (POS Offline Core) complete and verified (9/9 plans).** The roadmap
-was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin
-Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were inserted
-ahead of the former Phases 7–9, and a later audit the same day added Phase 11 (Procurement &
-Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases
-13/14/15. Phase 7 is planned (7 plans) but not executed.
-**Next action:** Execute **Phase 7, Plan 01** (workspace and package-scope rename).
+**Status:** **Phase 7 (Identity, Design System & Brand Foundation) in progress — Plans 01 and 02
+complete.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
+System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
+inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
+(Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
+became Phases 13/14/15.
+**Next action:** Execute **Phase 7, Plan 03** (`packages/brand`: tokens, fonts, chart ramp).
 
 ---
 
@@ -26,7 +26,7 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔷 Planned (7 plans, not started) |
+| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (2/7 plans) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -40,8 +40,8 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 
 | Plan | Title | Status |
 |---|---|---|
-| 01 | Workspace and package-scope rename | ⬜ Not started |
-| 02 | Desktop identity, protocol host, CSP, and copy | ⬜ Not started |
+| 01 | Workspace and package-scope rename | ✅ Complete |
+| 02 | Desktop identity, protocol host, CSP, and copy | ✅ Complete |
 | 03 | `packages/brand`: tokens, fonts, chart ramp | ⬜ Not started |
 | 04 | shadcn primitives and chart layer in both clients | ⬜ Not started |
 | 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
@@ -70,6 +70,54 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
   constant in Plan 02 so the swap is a one-line change.
 - Renaming `productName` moves Electron's `userData` directory, so existing development
   terminals must re-enrol. Nothing is in production; no migration is written.
+
+### Phase 7 execution notes
+
+- **Plan 01 complete** (commits `4742a71`, `0c6d1b4`, `22a0021`, `ae54542`). Scope
+  the old package scope → `@sceptre/*`, root package `sceptre-drive`; the lockfile kept its
+  resolution (only the nine workspace entries changed, no transitive version drift); Docker
+  project `sceptre-drive-dev` with `sceptre_drive` / `sceptre_drive_powersync`; device JWT
+  audience `sceptre-pos`; logger `sceptre-drive-api`; seed emails `@sceptre.local`; demo
+  supplier "Sceptre Drive Imports"; API 360/360 after the rename.
+- **Dev database decision (operator, 2026-10-24):** the local Postgres on `:5432` is owned by
+  a role without `CREATEDB` and no passwordless superuser exists, so the dev/test databases
+  now live on the **Docker stack** (`:5434`): `sceptre_drive` + `sceptre_drive_test`,
+  recreated with `docker compose down -v`, migrated, seeded (admin + demo), and
+  `sceptre_drive_test` prepared. `.env` (gitignored) points at `:5434` and now sets
+  `TEST_DATABASE_URL`. PowerSync replicated all synced tables against the new source.
+- **Deviations, all deliberate:** `api/test/setup.ts` loads the repo-root `.env` itself
+  (`bun run --filter api test` runs with cwd `api/`, so Bun never saw it and the integration
+  suites silently skipped); `db:test:prepare` derives the host port from
+  `docker compose port postgres 5432` instead of shell-expanded `${POSTGRES_PORT}`;
+  `scripts/check-brand.mjs` scans **tracked** files (`git ls-files`) rather than walking the
+  tree, so build output, `node_modules`, `api/.mail`, and `.env` cannot produce false
+  failures; the allowlist covers `.planning/phases/**` (Phase 7's own plans quote the old
+  name) as well as `api/migrations/**` and the one `SCEPTRE_DOMAIN` line. Admin UI copy was
+  swept here too (the plan only named documents plus the desktop).
+- **Method note:** the ordered sweep must replace the hyphenated DB/container/audience tokens before
+  the bare slug, and the protocol host uses a **hyphen** (`sceptre-drive`) while SQL
+  identifiers use an **underscore** (`sceptre_drive`). Both traps were hit and corrected
+  during the sweep.
+- A stray logo/palette prompt had been pasted into `api/test/setup.ts`; it was preserved
+  outside the repository (`/tmp/opencode/logo-brief-sceptre-drive.md`) before the file was
+  committed clean.
+- **Plan 02 complete** (commits `98d1822`, `b312692`, `a85e244`, `d247f5d`). App protocol host
+  `app://sceptre-drive` (a hyphen is valid in a registered standard-scheme host; traversal,
+  foreign-host, and null-byte rejections unchanged); CSP placeholder `%SCEPTRE_CSP%`; Vite
+  plugin `sceptre-csp`; `productName` "Sceptre Drive POS" and Squirrel `sceptre_drive_pos`
+  (packaged app verified: the asar carries `productName`, so `userData` ends in
+  "Sceptre Drive POS"); one `SCEPTRE_DOMAIN` constant now derives the API/PowerSync origins
+  and `isAllowedConnectOrigin`, with the CSP string byte-identical apart from its source.
+- **Beyond the plan text:** the preload bridge the preload bridge `window.<old brand>` became
+  `window.sceptreDrive` (the old name is not a brand string but cannot survive the gate),
+  and `desktop/test/e2e/**` was updated (packaged path, `app://` origin, bridge name) with
+  the CSP assertion now reading `SCEPTRE_DOMAIN` from `config.ts` instead of repeating the
+  domain. Receipt fallback seller, printer test header, and the local POS database
+  (`sceptre-drive-pos.db`) follow the rename.
+- **Verification:** desktop **339/339** (none edited to pass), `check-types` clean, lint clean,
+  `bun run brand:check` OK over 597 tracked files, `bun run package:pos` produces
+  `out/Sceptre Drive POS-linux-x64`, packaged/unpackaged shell E2E **38/38**. Re-enrolment
+  consequences documented in `desktop/README.md` ("Renamed to Sceptre Drive").
 
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
@@ -447,12 +495,14 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   and settings. Dense neutral design (system font stack, zinc tokens).
 - Dev email: file provider writes to `api/.mail/` in development (gitignored); console
   provider elsewhere; Resend when `RESEND_API_KEY` is set.
-- Tests: `bun run test` — shared 73/73, api 354/354, desktop 339/339 against
-  `sceptre_drive_test` (`TEST_DATABASE_URL`; migrate it first).
+- Tests: `bun run test` — shared 73/73, api 360/360, desktop 339/339 against
+  `sceptre_drive_test` (`TEST_DATABASE_URL`; migrate it first). The suite loads the repo-root
+  `.env` itself, so a plain `bun run test` from the root works.
 - CI: `.github/workflows/ci.yml` (checkout@v7, setup-bun@v2, Postgres 18 service, lint →
-  check-types → migrate → test → build). Validated with actionlint; full sequence run
-  locally. **Remote run pending a git remote.** `desktop/` builds and packages as part of
-  that job; `.github/workflows/desktop.yml` adds the manual Windows-installer job and the
+  brand:check → check-types → migrate → test → build). Validated with actionlint; full
+  sequence run locally. **Remote run pending a git remote.** `desktop/` builds and packages
+  as part of that job; `.github/workflows/desktop.yml` adds the manual Windows-installer job
+  and the
   Linux E2E/PowerSync jobs (also pending the remote).
 - `.planning/phases/01-foundation/01-VERIFICATION.md` records all evidence, deviations,
   and the human verification checklist.

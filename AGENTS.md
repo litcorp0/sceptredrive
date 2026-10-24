@@ -114,9 +114,12 @@ auth in `api/src/auth/`.
 
 ## Commands
 
-Root scripts will be added in Phase 1 (`bun dev`, `bun lint`, `bun check-types`,
-`bun test`, `bun build`). Until then, each workspace keeps its own scripts:
-`admin/` (Vite/TanStack Start) and `api/` (Hono/tsx).
+From the repository root: `bun dev` (all workspaces), `bun dev:api`, `bun dev:admin`,
+`bun dev:pos`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun test`, `bun build`,
+`bun run brand:check`, plus the `db:*` (migrate, seed, test prepare), `sync:*`
+(init, up, down, logs, config-check), and `*:pos` (build, package, make) scripts.
+`bun test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh
+`docker compose up -d`.
 
 ## Non-negotiables for the POS
 
