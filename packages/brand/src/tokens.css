@@ -7,6 +7,12 @@
  *   white on brand #F26A1B .................. 3.06:1  large text only — never body
  *   brand-ink #C25515 on white .............. 4.56:1  brand as text
  *   muted-ink #5C6470 on canvas ............. 5.53:1
+ *   line-strong #7C8794 on white ............ 3.65:1  interactive boundaries (1.4.11)
+ *   line-strong light on canvas ............. 3.38:1
+ *   line-strong #6B7280 on dark surface ..... 3.11:1
+ *
+ * `--line` is a decorative rule (1.28:1 on white). Anything a user can operate —
+ * an input, a select, a checkbox — uses `--line-strong` instead.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -21,7 +27,8 @@
   --canvas: #f6f6f4;
   --surface: #ffffff;
   --muted-ink: #5c6470;
-  --line: #e4e3df;
+  --line: #e4e3df; /* decorative rule only */
+  --line-strong: #7c8794; /* interactive boundaries: 3.65:1 on white, 3.38:1 on canvas */
 
   /* chrome */
   --topbar: #1b1f23;
@@ -52,7 +59,7 @@
   --destructive: var(--danger);
   --destructive-foreground: #ffffff;
   --border: var(--line);
-  --input: var(--line);
+  --input: var(--line-strong);
   --ring: var(--brand);
 
   /* chart ramp — ordered, distinguishable by lightness as well as hue */
@@ -92,7 +99,8 @@
   --canvas: #1b1f23;
   --surface: #22272c;
   --muted-ink: #a8b0b9;
-  --line: #333a41;
+  --line: #333a41; /* decorative rule only */
+  --line-strong: #6b7280; /* interactive boundaries: 3.11:1 on #22272C */
 
   --topbar: #171b1f;
   --topbar-foreground: #f6f6f4;
@@ -160,6 +168,7 @@
   --color-surface: var(--surface);
   --color-muted-ink: var(--muted-ink);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-topbar: var(--topbar);
   --color-topbar-foreground: var(--topbar-foreground);
   --color-topbar-muted: var(--topbar-muted);

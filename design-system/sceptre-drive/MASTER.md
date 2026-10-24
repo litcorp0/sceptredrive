@@ -48,7 +48,8 @@ purple/indigo "AI startup" accents, emoji as icons, and white text on orange.
 | `--brand-tint` | `#FDEADD` | active nav background, subtle emphasis |
 | `--canvas` | `#F6F6F4` | app background |
 | `--surface` | `#FFFFFF` | cards, popovers, sidebar |
-| `--line` | `#E4E3DF` | 1 px borders and dividers |
+| `--line` | `#E4E3DF` | 1 px decorative borders and dividers (1.28:1 — never an input boundary) |
+| `--line-strong` | `#7C8794` | interactive boundaries: inputs, selects, checkboxes (3.65:1) |
 | `--muted-ink` | `#5C6470` | secondary text |
 | `--topbar` | `#1B1F23` | fascia |
 | `--topbar-foreground` | `#F6F6F4` | fascia text |
@@ -130,7 +131,8 @@ Rules:
   `8+4`, `6+6`, and `3+3+3+3`.
 - **Radii:** `--radius` 10 px; cards 14 px (`radius-xl`); inputs and buttons 8–10 px.
 - **Borders before shadows.** A card is a 1 px `--line` border on white with
-  `--shadow-card` only as a hint. Popovers get `--shadow-pop`.
+  `--shadow-card` only as a hint. Popovers get `--shadow-pop`. Controls that accept input
+  use `--line-strong`, because a decorative rule is not a boundary a user can see.
 - **Admin row height:** 40 px. **POS row height:** 44–56 px.
 - **Admin sidebar:** `15.5rem` expanded, icon-collapsed at `lg`, `Sheet` below.
 - **Topbar:** `3.25rem`, sticky, `z-30`, `print:hidden`.
