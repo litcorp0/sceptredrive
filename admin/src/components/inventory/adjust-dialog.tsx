@@ -23,7 +23,7 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import type { AdjustmentReason } from "#/lib/api-types"
 import { toastApiError } from "#/lib/toast"
-import { type PickedProduct, ProductPicker } from "./product-picker"
+import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 
 const REASONS: { value: AdjustmentReason; label: string }[] = [
 	{ value: "DAMAGE", label: "Damage" },

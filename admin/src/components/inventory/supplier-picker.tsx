@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { type PickedSupplier, SupplierCombobox } from "#/components/suppliers/supplier-combobox"
+import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 

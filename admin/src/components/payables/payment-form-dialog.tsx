@@ -8,7 +8,7 @@ import {
 	allocationDraftInputs,
 	allocationDraftsTotal,
 } from "#/components/payables/allocation-editor"
-import { type PickedSupplier, SupplierCombobox } from "#/components/suppliers/supplier-combobox"
+import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,

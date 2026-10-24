@@ -1,5 +1,5 @@
 import { PlusIcon, XIcon } from "lucide-react"
-import { type PickedProduct, ProductPicker } from "#/components/inventory/product-picker"
+import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import {

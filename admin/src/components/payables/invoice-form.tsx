@@ -12,7 +12,7 @@ import {
 	toInvoiceLineInputs,
 	validateInvoiceLineDraft,
 } from "#/components/payables/invoice-lines-editor"
-import { type PickedSupplier, SupplierCombobox } from "#/components/suppliers/supplier-combobox"
+import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { Input } from "#/components/ui/input"

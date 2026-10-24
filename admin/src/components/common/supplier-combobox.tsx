@@ -17,6 +17,11 @@ export interface PickedSupplier {
 /**
  * Debounced supplier search used by payables filters and forms. Only active
  * suppliers can take new documents, so the list defaults to active rows.
+ *
+ * Lives in `components/common` because three domains use it — suppliers, inventory (receiving)
+ * and payables (invoices and payments). Keeping it in `suppliers/` would make
+ * `inventory -> suppliers` and `payables -> suppliers` module-barrel imports that point back at
+ * them, i.e. a cycle. Do not move it back into a module.
  */
 export function SupplierCombobox({
 	value,

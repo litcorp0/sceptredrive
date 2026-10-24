@@ -17,6 +17,11 @@ export interface PickedProduct {
 /**
  * Debounced product search with a small results list. Cost is loaded from the
  * product detail so receive screens can prefill the unit cost.
+ *
+ * Lives in `components/common` because three domains use it — inventory, suppliers (supplied
+ * products) and payables (invoice lines). Keeping it in `inventory/` would make
+ * `suppliers -> inventory` and `payables -> inventory` barrel imports that point back at them,
+ * i.e. a cycle. Do not move it back into a module.
  */
 export function ProductPicker({
 	value,

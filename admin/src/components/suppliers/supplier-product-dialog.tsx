@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { type PickedProduct, ProductPicker } from "#/components/inventory/product-picker"
+import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
