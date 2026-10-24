@@ -222,3 +222,27 @@ passed with zero failures** (162 + 18 + 24 + 51 checks), the full test suites ar
 the seven success criteria are each backed by a command output, SQL assertion, screenshot,
 or receipt. Remaining items are hardware, signing, Cloud provisioning, and the explicit
 performance decision — none of them block the till.
+
+---
+
+## Post-verification follow-up (2026-10-24)
+
+Two authentication defects were reported after the phase record and fixed:
+
+1. **Backup codes were rejected.** Better Auth issues mixed-case backup codes and compares
+   them with an exact string match; the console uppercased what the operator typed. The
+   console now preserves the case, accepts a pasted code without the dash, and disables
+   autocapitalisation. Backup codes are also hidden during setup: they recover a future
+   sign-in and cannot finish enrolment (only the authenticator code can). Evidence:
+   `verify-two-factor-backup.mjs` **9/9** (throwaway admin → TOTP → browser sign-in with the
+   exact mixed-case code), plus API regression tests (mixed case accepted, uppercased
+   rejected).
+2. **Forced TOTP is now a toggle.** `auth.requireTwoFactor` (default **off**) lives in
+   Settings > Security; the console guards read the public `GET /api/auth/policy`. Turning
+   it on requires the acting administrator to have enrolled, so the toggle cannot lock its
+   owner out. Evidence: `verify-two-factor-policy.mjs` **9/9** and screenshots 11–15.
+   Break-glass for a lost authenticator **and** backup codes:
+   `bun run --filter api two-factor:reset -- --email <address>` (audited).
+
+Suites after the fix: API **360/360**, shared 73/73, desktop 339/339; lint and types clean.
+The requirement is **off** as of 2026-10-24, as requested.

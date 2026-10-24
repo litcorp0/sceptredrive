@@ -771,6 +771,24 @@ verification.
 - **Deliberate test constraint:** the packaged binary refuses localhost API origins, so the
   Electron E2E drives the unpackaged production build (same `app://` renderer/CSP/IPC).
 
+### Post-verification security fix (2026-10-24)
+
+- **Backup codes failed at sign-in** because the console uppercased input while Better Auth
+  issues mixed-case codes and matches exactly. Preserved the case, accept a pasted code
+  without the dash, and hide the backup-code switch during setup (codes recover a future
+  sign-in; only the authenticator code finishes enrolment). `verify-two-factor-backup.mjs`
+  **9/9**: throwaway admin → TOTP enrol → browser sign-in → typed mixed-case backup code →
+  dashboard. API regression `two-factor.test.ts` 3/3.
+- **Forced TOTP is now a toggle.** `auth.requireTwoFactor` (default off) in Settings >
+  Security; the console's two guards read `GET /api/auth/policy`. Turning it on requires the
+  acting admin to be enrolled, so it cannot lock its owner out. `verify-two-factor-policy.mjs`
+  **9/9** (toggle off, refusal without 2FA, forced-setup redirect when on, back to the
+  console when off). Screenshots 11–15 under `evidence/shots/`.
+- **Break-glass CLI:** `bun run --filter api two-factor:reset -- --email <address>` clears the
+  TOTP secret, backup codes, and `two_factor_enabled`, and audits the action. Used on
+  2026-10-24 to clear the admin's pending enrolment in `gikautos_dev`.
+- Suites after the fix: API **360/360**, shared 73/73, desktop 339/339; lint and types clean.
+
 ### Phase 6 planning additions (2026-10-22)
 
 - Phase 6 is **planned only** (9 plans, waves 1–6). Artifacts:
@@ -910,6 +928,10 @@ verification.
 | 2026-10-23 | Plan 09: revocation discovered by the sync layer is surfaced from the session state on the badge and sync screen, because the uploader may stop before it can report `REVOKED`. |
 | 2026-10-23 | Plan 09: "Continue without approval" is a tracked conscious bypass; the sale completes and the server records `CREDIT_OVER_LIMIT`/`CREDIT_HOLD` for review. |
 | 2026-10-23 | Plan 09: the Electron E2E runs the unpackaged production build because a packaged app refuses localhost API origins by design; packaged startup, security, and printing are verified separately. |
+| 2026-10-24 | Backup codes are mixed-case and case-sensitive (Better Auth compares them exactly). The console preserves case, tolerates a pasted code without the dash, and offers backup codes only at sign-in — they cannot finish enrolment. |
+| 2026-10-24 | Forced TOTP for administrators is the global setting `auth.requireTwoFactor` (default **off**), toggled from Settings > Security and read by the console from the public `GET /api/auth/policy`. |
+| 2026-10-24 | The toggle can only be turned on by an admin whose own account has TOTP, so enabling it cannot lock the operator out of Settings. |
+| 2026-10-24 | Break-glass: `bun run --filter api two-factor:reset -- --email <address>` removes an account's TOTP secret and backup codes and audits `auth.two_factor.reset`. |
 
 
 ---
@@ -985,6 +1007,9 @@ verification.
   search/commit performance tuning.
 - Physical hardware for human verification: Windows terminal, ESC/POS printer, keyboard-wedge
   scanner, cash drawer (Phase 6 checklist).
+- **Two-factor requirement is OFF (2026-10-24) per operator.** The admin's pending
+  enrolment was cleared with the break-glass CLI and the toggle defaults off. To turn it on:
+  sign in, set up 2FA from the user menu, then Settings > Security → Require two-factor.
 - Cosmetic: console `favicon.ico` is a 404 (Phase 9 polish).
 
 ---
