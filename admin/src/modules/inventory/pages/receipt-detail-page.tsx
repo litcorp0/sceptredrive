@@ -2,10 +2,6 @@ import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
-// TODO(phase-8/11): payables has not migrated yet, so this badge still lives in
-// `components/payables/`. Plan 11 flips it to `#/modules/payables` — it is the one remaining
-// cross-module import in this module and the reason the dependency graph is `inventory → payables`.
-import { InvoiceStatusBadge } from "#/components/payables/invoice-status-badge"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -19,7 +15,7 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-import { receiptInvoiceOptions } from "#/modules/payables"
+import { InvoiceStatusBadge, receiptInvoiceOptions } from "#/modules/payables"
 import { receiptDetailOptions } from "../api/inventory"
 
 const authenticatedRoute = getRouteApi("/_authenticated")

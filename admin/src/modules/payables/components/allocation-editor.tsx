@@ -12,7 +12,8 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
-import { paymentOutstandingOptions, type SupplierInvoice } from "#/modules/payables"
+import { paymentOutstandingOptions } from "../api/payables"
+import type { SupplierInvoice } from "../types"
 
 /** invoiceId -> GHS amount string as typed by the operator. */
 export type AllocationDraft = Record<string, string>

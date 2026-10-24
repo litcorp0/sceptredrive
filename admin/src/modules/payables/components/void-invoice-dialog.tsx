@@ -20,13 +20,10 @@ import {
 } from "#/components/ui/select"
 import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
-import {
-	payablesKeys,
-	type SupplierInvoiceRow,
-	type SupplierInvoiceVoidReason,
-	voidInvoice,
-} from "#/modules/payables"
 import { supplierKeys } from "#/modules/suppliers"
+import { payablesKeys } from "../api/keys"
+import { voidInvoice } from "../api/payables"
+import type { SupplierInvoiceRow, SupplierInvoiceVoidReason } from "../types"
 
 const VOID_REASONS: Array<{ value: SupplierInvoiceVoidReason; label: string }> = [
 	{ value: "DUPLICATE", label: "Duplicate invoice" },

@@ -21,13 +21,10 @@ import {
 import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import {
-	payablesKeys,
-	type SupplierPaymentDetail,
-	type SupplierPaymentVoidReason,
-	voidPayment,
-} from "#/modules/payables"
 import { supplierKeys } from "#/modules/suppliers"
+import { payablesKeys } from "../api/keys"
+import { voidPayment } from "../api/payables"
+import type { SupplierPaymentDetail, SupplierPaymentVoidReason } from "../types"
 
 const VOID_REASONS: Array<{ value: SupplierPaymentVoidReason; label: string }> = [
 	{ value: "DUPLICATE", label: "Duplicate payment" },

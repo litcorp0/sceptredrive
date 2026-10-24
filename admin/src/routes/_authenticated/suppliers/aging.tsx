@@ -3,10 +3,6 @@ import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
-// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
-// `modules/payables` and flips these imports to `#/modules/payables`.
-import { PayablesAgingTable } from "#/components/payables/aging-table"
-import { PayablesSummaryCards } from "#/components/payables/payables-summary-cards"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
@@ -19,7 +15,12 @@ import {
 } from "#/components/ui/select"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
-import { type AgingBuckets, payablesAgingOptions } from "#/modules/payables"
+import {
+	type AgingBuckets,
+	PayablesAgingTable,
+	PayablesSummaryCards,
+	payablesAgingOptions,
+} from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/aging")({
 	component: PayablesAgingTab,

@@ -50,6 +50,30 @@ export {
 	voidInvoice,
 	voidPayment,
 } from "./api/payables"
+export { PayablesAgingTable } from "./components/aging-table"
+export {
+	type AllocationDraft,
+	AllocationEditor,
+	allocationDraftInputs,
+	allocationDraftsTotal,
+} from "./components/allocation-editor"
+export { InvoiceForm } from "./components/invoice-form"
+export {
+	createInvoiceLineDraft,
+	type InvoiceLineDraft,
+	InvoiceLinesEditor,
+	invoiceLineDraftsSum,
+	invoiceLineDraftTotal,
+	toInvoiceLineInputs,
+	validateInvoiceLineDraft,
+} from "./components/invoice-lines-editor"
+export { InvoiceStatusBadge } from "./components/invoice-status-badge"
+export { PayablesSummaryCards } from "./components/payables-summary-cards"
+export { type InvoicePaymentTarget, PaymentFormDialog } from "./components/payment-form-dialog"
+export { PaymentMethodBadge } from "./components/payment-method-badge"
+export { VoidInvoiceDialog } from "./components/void-invoice-dialog"
+export { VoidPaymentDialog } from "./components/void-payment-dialog"
+export { InvoiceNewPage } from "./pages/invoice-new-page"
 export type {
 	AgingBucketKey,
 	AgingBuckets,

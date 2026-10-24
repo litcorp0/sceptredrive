@@ -3,12 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
-import {
-	type AllocationDraft,
-	AllocationEditor,
-	allocationDraftInputs,
-	allocationDraftsTotal,
-} from "#/components/payables/allocation-editor"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
@@ -32,15 +26,18 @@ import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import {
-	createPayment,
-	type PaymentCreateInput,
-	payablesKeys,
-	type SupplierPaymentMethod,
-} from "#/modules/payables"
 // Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); the
 // payment details it lists are the supplier's own, masked by the API.
 import { supplierDetailOptions, supplierKeys } from "#/modules/suppliers"
+import { payablesKeys } from "../api/keys"
+import { createPayment } from "../api/payables"
+import type { PaymentCreateInput, SupplierPaymentMethod } from "../types"
+import {
+	type AllocationDraft,
+	AllocationEditor,
+	allocationDraftInputs,
+	allocationDraftsTotal,
+} from "./allocation-editor"
 export interface InvoicePaymentTarget {
 	id: string
 	number: string

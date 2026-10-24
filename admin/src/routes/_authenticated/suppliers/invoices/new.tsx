@@ -1,7 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
-// `modules/payables` and flips these imports to `#/modules/payables`.
-import { InvoiceForm } from "#/components/payables/invoice-form"
+import { InvoiceNewPage } from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/new")({
 	validateSearch: (
@@ -10,10 +8,5 @@ export const Route = createFileRoute("/_authenticated/suppliers/invoices/new")({
 		receiptId: typeof search.receiptId === "string" ? search.receiptId : undefined,
 		supplierId: typeof search.supplierId === "string" ? search.supplierId : undefined,
 	}),
-	component: NewInvoicePage,
+	component: InvoiceNewPage,
 })
-
-function NewInvoicePage() {
-	const { receiptId, supplierId } = Route.useSearch()
-	return <InvoiceForm receiptId={receiptId} supplierId={supplierId} />
-}

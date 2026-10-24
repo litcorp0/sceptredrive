@@ -9,7 +9,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { formatGhs } from "#/lib/format"
-import type { AgingBucketKey, AgingBuckets, PayableAgingSupplier } from "#/modules/payables"
+import type { AgingBucketKey, AgingBuckets, PayableAgingSupplier } from "../types"
 
 const BUCKETS: Array<{ key: AgingBucketKey; label: string; short: string }> = [
 	{ key: "current", label: "Not yet due", short: "Current" },

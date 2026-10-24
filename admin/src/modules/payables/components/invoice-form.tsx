@@ -5,14 +5,6 @@ import { addDays, parseISO } from "date-fns"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
-import {
-	createInvoiceLineDraft,
-	type InvoiceLineDraft,
-	InvoiceLinesEditor,
-	invoiceLineDraftsSum,
-	toInvoiceLineInputs,
-	validateInvoiceLineDraft,
-} from "#/components/payables/invoice-lines-editor"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { Input } from "#/components/ui/input"
@@ -32,17 +24,25 @@ import { toastApiError } from "#/lib/toast"
 // A supplier invoice is recorded against a goods receipt, so payables reads inventory's receipt
 // fetchers through its barrel. This is the sanctioned `payables → inventory` edge.
 import { getReceipt, type InventoryReceipt } from "#/modules/inventory"
-import {
-	createInvoice,
-	type InvoiceCreateInput,
-	invoiceSupplierOptions,
-	payablesKeys,
-	receiptPickerOptions,
-	receiptSourceOptions,
-} from "#/modules/payables"
 // Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); it
 // never reaches into the supplier store.
 import { getSupplier, supplierKeys } from "#/modules/suppliers"
+import { payablesKeys } from "../api/keys"
+import {
+	createInvoice,
+	invoiceSupplierOptions,
+	receiptPickerOptions,
+	receiptSourceOptions,
+} from "../api/payables"
+import type { InvoiceCreateInput } from "../types"
+import {
+	createInvoiceLineDraft,
+	type InvoiceLineDraft,
+	InvoiceLinesEditor,
+	invoiceLineDraftsSum,
+	toInvoiceLineInputs,
+	validateInvoiceLineDraft,
+} from "./invoice-lines-editor"
 
 type TaxMode = "STANDARD" | "NONE" | "MANUAL"
 

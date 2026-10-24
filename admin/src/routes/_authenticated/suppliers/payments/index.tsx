@@ -7,10 +7,6 @@ import { Pagination } from "#/components/common/pagination"
 import { StatusBadge } from "#/components/common/status-badge"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { TableMessage } from "#/components/common/table-message"
-// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
-// `modules/payables` and flips these imports to `#/modules/payables`.
-import { PaymentFormDialog } from "#/components/payables/payment-form-dialog"
-import { PaymentMethodBadge } from "#/components/payables/payment-method-badge"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
@@ -33,6 +29,8 @@ import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import {
+	PaymentFormDialog,
+	PaymentMethodBadge,
 	paymentListOptions,
 	type SupplierPaymentMethod,
 	type SupplierPaymentStatus,

@@ -4,11 +4,6 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
 import { useState } from "react"
 import { StatusBadge } from "#/components/common/status-badge"
-// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
-// `modules/payables` and flips these imports to `#/modules/payables`.
-import { InvoiceStatusBadge } from "#/components/payables/invoice-status-badge"
-import { PaymentFormDialog } from "#/components/payables/payment-form-dialog"
-import { VoidInvoiceDialog } from "#/components/payables/void-invoice-dialog"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -22,7 +17,12 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-import { invoiceDetailOptions } from "#/modules/payables"
+import {
+	InvoiceStatusBadge,
+	invoiceDetailOptions,
+	PaymentFormDialog,
+	VoidInvoiceDialog,
+} from "#/modules/payables"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/$invoiceId")({
 	component: InvoiceDetailPage,
