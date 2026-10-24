@@ -66,7 +66,9 @@
     "sync:logs": "docker compose logs -f powersync",
     "sync:config-check": "bun run scripts/check-sync-config.mjs",
     "brand:check": "node scripts/check-brand.mjs",
-    "tokens:check": "node scripts/check-tokens.mjs"
+    "tokens:check": "node scripts/check-tokens.mjs",
+    "modules:check": "node scripts/check-modules.mjs",
+    "modules:check:strict": "node scripts/check-modules.mjs --strict"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

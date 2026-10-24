@@ -54,6 +54,9 @@ jobs:
       - name: Token check
         run: bun run tokens:check
 
+      - name: Modules check
+        run: bun run modules:check:strict
+
       - name: Typecheck
         run: bun run check-types
 
