@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
+// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
+// `modules/payables` and flips these imports to `#/modules/payables`.
 import { InvoiceForm } from "#/components/payables/invoice-form"
 
 export const Route = createFileRoute("/_authenticated/suppliers/invoices/new")({

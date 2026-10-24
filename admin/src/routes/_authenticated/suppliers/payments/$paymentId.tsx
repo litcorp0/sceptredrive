@@ -4,6 +4,8 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
 import { useState } from "react"
 import { StatusBadge } from "#/components/common/status-badge"
+// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
+// `modules/payables` and flips these imports to `#/modules/payables`.
 import { PaymentMethodBadge } from "#/components/payables/payment-method-badge"
 import { VoidPaymentDialog } from "#/components/payables/void-payment-dialog"
 import { Button } from "#/components/ui/button"

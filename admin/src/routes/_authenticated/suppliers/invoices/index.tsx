@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import { Pagination } from "#/components/common/pagination"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { TableMessage } from "#/components/common/table-message"
+// TODO(phase-8/11): payables component — this screen is payables'; Plan 11 moves it into
+// `modules/payables` and flips these imports to `#/modules/payables`.
 import { InvoiceStatusBadge } from "#/components/payables/invoice-status-badge"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
