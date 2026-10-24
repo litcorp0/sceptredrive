@@ -6,6 +6,7 @@ import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { authClient } from "#/lib/auth-client"
+import { getAuthPolicy } from "#/lib/auth-policy"
 import { getSession } from "#/lib/session.functions"
 
 export const Route = createFileRoute("/two-factor")({
@@ -18,7 +19,8 @@ export const Route = createFileRoute("/two-factor")({
 		if (session?.user.twoFactorEnabled === true) {
 			throw redirect({ to: "/" })
 		}
-		return { session }
+		const policy = await getAuthPolicy()
+		return { session, policy }
 	},
 	component: TwoFactorPage,
 })
@@ -26,7 +28,7 @@ export const Route = createFileRoute("/two-factor")({
 type SetupStep = "password" | "scan" | "code"
 
 function TwoFactorPage() {
-	const { session } = Route.useRouteContext()
+	const { session, policy } = Route.useRouteContext()
 	const { redirect: redirectTo } = Route.useSearch()
 	const router = useRouter()
 	const navigate = Route.useNavigate()
@@ -83,10 +85,19 @@ function TwoFactorPage() {
 	}
 
 	function handleCodeChange(value: string) {
-		const normalized = useBackupCode
-			? value.trim().toUpperCase()
-			: value.replace(/\D/g, "").slice(0, 6)
-		setCode(normalized)
+		if (useBackupCode) {
+			// Backup codes are generated with mixed case (`a-zA-Z0-9`, 10 chars,
+			// formatted xxxxx-xxxxx) and verified with an exact string match.
+			// Uppercasing them made every code containing a lowercase letter fail.
+			const cleaned = value.replace(/\s+/g, "")
+			setCode(
+				cleaned.length === 10 && !cleaned.includes("-")
+					? `${cleaned.slice(0, 5)}-${cleaned.slice(5)}`
+					: cleaned,
+			)
+			return
+		}
+		setCode(value.replace(/\D/g, "").slice(0, 6))
 	}
 
 	async function handleVerify(event: FormEvent<HTMLFormElement>) {
@@ -242,7 +253,7 @@ function TwoFactorPage() {
 			title={isSetup ? "Enter the code from your app" : "Two-factor verification"}
 			description={
 				useBackupCode
-					? "Enter one of your saved backup codes."
+					? "Enter one of your saved backup codes. Codes are case-sensitive."
 					: "Enter the 6-digit code from your authenticator app."
 			}
 			footer={
@@ -250,7 +261,11 @@ function TwoFactorPage() {
 					<Link to="/login" className="text-muted-foreground underline-offset-4 hover:underline">
 						Back to sign in
 					</Link>
-				) : undefined
+				) : policy.requireTwoFactor ? undefined : (
+					<Link to="/" className="text-muted-foreground underline-offset-4 hover:underline">
+						Not now — return to the console
+					</Link>
+				)
 			}
 		>
 			<form method="post" onSubmit={handleVerify} className="grid gap-4">
@@ -265,7 +280,10 @@ function TwoFactorPage() {
 						autoComplete="one-time-code"
 						autoFocus
 						required
-						placeholder={useBackupCode ? "XXXXX-XXXXX" : "000000"}
+						placeholder={useBackupCode ? "xxxxx-xxxxx" : "000000"}
+						autoCapitalize="none"
+						autoCorrect="off"
+						spellCheck={false}
 						value={code}
 						onChange={(event) => handleCodeChange(event.target.value)}
 					/>
@@ -287,17 +305,24 @@ function TwoFactorPage() {
 					{submitting ? "Verifying…" : "Verify"}
 				</Button>
 
-				<button
-					type="button"
-					className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-					onClick={() => {
-						setUseBackupCode((value) => !value)
-						setCode("")
-						setError(null)
-					}}
-				>
-					{useBackupCode ? "Use an authenticator code instead" : "Use a backup code instead"}
-				</button>
+				{isSetup ? (
+					<p className="text-xs text-muted-foreground">
+						Backup codes recover a future sign-in; enter the 6-digit code from your app to finish
+						setup.
+					</p>
+				) : (
+					<button
+						type="button"
+						className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+						onClick={() => {
+							setUseBackupCode((value) => !value)
+							setCode("")
+							setError(null)
+						}}
+					>
+						{useBackupCode ? "Use an authenticator code instead" : "Use a backup code instead"}
+					</button>
+				)}
 			</form>
 		</AuthShell>
 	)
