@@ -59,8 +59,6 @@ const DEFERRED_MODULES = { analytics: 9 }
  * Keep this list free of duplicates and a subset of REQUIRED_MODULES — the gate checks that too.
  */
 const PENDING_MODULES = [
-  'auth',
-  'audit',
   'branches',
   'catalog',
   'credit',
@@ -69,7 +67,6 @@ const PENDING_MODULES = [
   'inventory',
   'loyalty',
   'payables',
-  'settings',
   'staff',
   'suppliers',
   'terminals',

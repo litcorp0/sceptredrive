@@ -258,7 +258,8 @@ console.log('\n-- mutations --')
 
   const pendingAt = gateSource.indexOf('const PENDING_MODULES')
   const mutated =
-    gateSource.slice(0, pendingAt) + gateSource.slice(pendingAt).replace(/\n\s+"catalog",/, '')
+    gateSource.slice(0, pendingAt) +
+    gateSource.slice(pendingAt).replace(/\n\s+["']catalog["'],/, '')
   if (mutated === gateSource) throw new Error('mutation 9 could not edit the pending list')
   fs.writeFileSync(GATE, mutated)
   const probe = path.join(ADMIN, 'gate-probe-legacy.ts')
@@ -279,11 +280,13 @@ console.log('\n-- mutations --')
 
 // 10. A duplicated entry in the pending list.
 {
-  const mutated = gateSource.replace(
-    /const PENDING_MODULES = \[\n(\s+)"auth",/,
-    'const PENDING_MODULES = [\n  "auth",\n  "auth",',
-  )
-  if (mutated === gateSource) throw new Error('mutation 10 could not edit the pending list')
+  const at = gateSource.indexOf('const PENDING_MODULES')
+  const block = gateSource.slice(at)
+  const first = /\n(\s+)['"]([a-z]+)['"],/.exec(block)
+  if (!first) throw new Error('mutation 10 could not read the pending list')
+  const mutated =
+    gateSource.slice(0, at) + block.replace(first[0], `${first[0]}\n${first[1]}'${first[2]}',`)
+  if (mutated === gateSource) throw new Error('mutation 10 could not duplicate an entry')
   fs.writeFileSync(GATE, mutated)
   const r = runGate()
   check(
