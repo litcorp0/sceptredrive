@@ -16,10 +16,12 @@ import {
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { Textarea } from "#/components/ui/textarea"
-import { ApiError, api } from "#/lib/api"
-import type { ReceiptCreateInput } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import { createReceipt } from "../api/inventory"
+import { inventoryKeys } from "../api/keys"
+import type { ReceiptCreateInput } from "../types"
 import { SupplierPicker } from "./supplier-picker"
 
 interface ReceiveRow {
@@ -77,13 +79,13 @@ export function ReceiveDialog({
 	)
 
 	const createMutation = useMutation({
-		mutationFn: (input: ReceiptCreateInput) => api.inventory.receipts.create(input),
+		mutationFn: (input: ReceiptCreateInput) => createReceipt(input),
 		onSuccess: async (data) => {
 			toast.success(`Received stock as ${data.receipt.number}`)
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["inventory-stock"] }),
-				queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),
-				queryClient.invalidateQueries({ queryKey: ["inventory-receipts"] }),
+				queryClient.invalidateQueries({ queryKey: inventoryKeys.stock }),
+				queryClient.invalidateQueries({ queryKey: inventoryKeys.movements }),
+				queryClient.invalidateQueries({ queryKey: inventoryKeys.receipts }),
 			])
 			onOpenChange(false)
 		},
