@@ -2,13 +2,13 @@ import { toDateTimeInputValue } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import {
 	type AllocationDraft,
 	AllocationEditor,
 	allocationDraftInputs,
 	allocationDraftsTotal,
 } from "#/components/payables/allocation-editor"
-import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,

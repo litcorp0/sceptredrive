@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
@@ -23,7 +24,6 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import type { AdjustmentReason } from "#/lib/api-types"
 import { toastApiError } from "#/lib/toast"
-import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 
 const REASONS: { value: AdjustmentReason; label: string }[] = [
 	{ value: "DAMAGE", label: "Damage" },

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 import type { PickedSupplier } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import {
@@ -19,7 +20,6 @@ import { ApiError, api } from "#/lib/api"
 import type { ReceiptCreateInput } from "#/lib/api-types"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { type PickedProduct, ProductPicker } from "#/components/common/product-picker"
 import { SupplierPicker } from "./supplier-picker"
 
 interface ReceiveRow {

@@ -4,6 +4,7 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { addDays, parseISO } from "date-fns"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import {
 	createInvoiceLineDraft,
 	type InvoiceLineDraft,
@@ -12,7 +13,6 @@ import {
 	toInvoiceLineInputs,
 	validateInvoiceLineDraft,
 } from "#/components/payables/invoice-lines-editor"
-import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { Input } from "#/components/ui/input"
