@@ -22,9 +22,9 @@ import {
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import type { CreditMethod } from "#/lib/api-types"
-import { CREDIT_METHOD_LABELS } from "#/lib/credit"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
+import { CREDIT_METHOD_LABELS } from "#/modules/credit"
 
 const METHODS: CreditMethod[] = ["CASH", "MOMO", "BANK"]
 

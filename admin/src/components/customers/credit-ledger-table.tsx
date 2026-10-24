@@ -23,8 +23,8 @@ import {
 } from "#/components/ui/table"
 import { api } from "#/lib/api"
 import type { CreditEntryKind } from "#/lib/api-types"
-import { CREDIT_KIND_LABELS, CREDIT_KIND_TONES, signedGhs } from "#/lib/credit"
 import { formatGhs } from "#/lib/format"
+import { CREDIT_KIND_LABELS, CREDIT_KIND_TONES, signedGhs } from "#/modules/credit"
 
 const PAGE_SIZE = 20
 

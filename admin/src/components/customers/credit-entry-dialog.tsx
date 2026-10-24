@@ -22,14 +22,14 @@ import {
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError, api } from "#/lib/api"
 import type { CreditOverrideReason, CreditReasonCode } from "#/lib/api-types"
+import { formatGhs, parseGhsToMinor } from "#/lib/format"
+import { toastApiError } from "#/lib/toast"
 import {
 	CREDIT_KIND_LABELS,
 	CREDIT_OVERRIDE_LABELS,
 	CREDIT_REASON_LABELS,
 	signedGhs,
-} from "#/lib/credit"
-import { formatGhs, parseGhsToMinor } from "#/lib/format"
-import { toastApiError } from "#/lib/toast"
+} from "#/modules/credit"
 
 type EntryKind = "CHARGE" | "REFUND" | "ADJUSTMENT"
 

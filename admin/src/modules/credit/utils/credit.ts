@@ -1,11 +1,11 @@
+import { formatGhs } from "#/lib/format"
 import type {
 	AgingBucketKey,
 	CreditEntryKind,
 	CreditMethod,
 	CreditOverrideReason,
 	CreditReasonCode,
-} from "#/lib/api-types"
-import { formatGhs } from "#/lib/format"
+} from "../types"
 
 export const CREDIT_KIND_LABELS: Record<CreditEntryKind, string> = {
 	CHARGE: "Charge",
