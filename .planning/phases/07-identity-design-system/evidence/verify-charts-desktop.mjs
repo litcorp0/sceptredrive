@@ -12,6 +12,13 @@ const evidenceDir = path.join(import.meta.dirname, 'shots')
 fs.mkdirSync(evidenceDir, { recursive: true })
 
 const WIDTHS = [320, 768, 1024, 1440]
+
+/**
+ * Reduced motion is measured, not string-compared: the global policy caps durations at
+ * `0.01ms`, which the browser serialises as `1e-05s`, not `0s`. Anything at or under this
+ * ceiling is not a perceptible entrance animation; anything above it is.
+ */
+const REDUCED_MOTION_CEILING_MS = 1
 const failures = []
 let checks = 0
 function check(condition, label, detail) {
@@ -103,11 +110,18 @@ for (const width of WIDTHS) {
       )
       if (motion === 'reduce') {
         const animating = await page.evaluate(
-          () =>
+          (ceiling) =>
             Array.from(document.querySelectorAll('[data-slot="chart"] *')).filter((node) => {
               const style = getComputedStyle(node)
-              return style.animationName !== 'none' || style.transitionDuration !== '0s'
+              const ms = (value) =>
+                value.trim().endsWith('ms')
+                  ? Number(value.trim().slice(0, -2))
+                  : Number(value.trim().slice(0, -1)) * 1000
+              const animation = ms(style.animationDuration)
+              const transition = ms(style.transitionDuration)
+              return (style.animationName !== 'none' && animation > ceiling) || transition > ceiling
             }).length,
+          REDUCED_MOTION_CEILING_MS,
         )
         check(animating === 0, `${tag}: no entrance animation`, String(animating))
       }

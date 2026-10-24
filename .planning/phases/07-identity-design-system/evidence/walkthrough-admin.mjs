@@ -179,10 +179,13 @@ try {
     JSON.stringify(rail),
   )
 
-  const fascia = await page.locator('header').first().evaluate((element) => {
-    const style = getComputedStyle(element)
-    return { background: style.backgroundColor, height: style.height }
-  })
+  const fascia = await page
+    .locator('header')
+    .first()
+    .evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, height: style.height }
+    })
   check(
     fascia.background === 'rgb(27, 31, 35)' && fascia.height === '52px',
     'fascia is charcoal at the token height',
@@ -216,7 +219,9 @@ try {
   await shot('plan07-02-admin-dark-1440')
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  const preHydration = await page.evaluate(() => document.documentElement.classList.contains('dark'))
+  const preHydration = await page.evaluate(() =>
+    document.documentElement.classList.contains('dark'),
+  )
   check(preHydration, 'dark is applied before hydration (no light flash)')
   await page.waitForLoadState('networkidle')
   check(
@@ -257,8 +262,12 @@ try {
   check(reachable > 5, 'navigation is reachable from the drawer', `${reachable} links`)
 
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(300)
-  check((await page.getByRole('dialog').count()) === 0, 'Escape closes the drawer')
+  const drawerClosed = await page
+    .getByRole('dialog')
+    .waitFor({ state: 'detached', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false)
+  check(drawerClosed, 'Escape closes the drawer')
 
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.waitForTimeout(300)
@@ -297,18 +306,23 @@ try {
     JSON.stringify(focusedRing),
   )
 
-  // The audit list must expand a row with the keyboard alone.
-  const auditRow = page.locator('main tbody tr').first()
-  await auditRow.waitFor({ timeout: 20_000 })
-  await auditRow.focus()
+  // The audit list must expand a row with the keyboard alone. The row itself is not
+  // focusable; the chevron button inside it is, and that is the keyboard affordance.
+  const expand = page.locator('main').getByRole('button', { name: 'Expand' }).first()
+  await expand.waitFor({ timeout: 20_000 })
+  await expand.focus()
   const expandedBefore = await page.locator('main tbody tr').count()
   await page.keyboard.press('Enter')
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(700)
   const expandedAfter = await page.locator('main tbody tr').count()
   check(
     expandedAfter > expandedBefore,
-    'audit row opens its detail with Enter',
+    'audit row opens its detail from the keyboard',
     `${expandedBefore} → ${expandedAfter} rows`,
+  )
+  check(
+    (await page.getByRole('button', { name: 'Collapse' }).count()) > 0,
+    'the expanded row exposes a Collapse control',
   )
   await page.keyboard.press('Enter')
   await page.waitForTimeout(300)
@@ -321,12 +335,43 @@ try {
   await customerLink.focus()
   await page.keyboard.press('Enter')
   await page.waitForURL(/\/customers\/[^/]+$/, { timeout: 25_000 })
-  check(/\/customers\/[^/]+$/.test(new URL(page.url()).pathname), 'customer ledger opens by keyboard')
+  check(
+    /\/customers\/[^/]+$/.test(new URL(page.url()).pathname),
+    'customer ledger opens by keyboard',
+  )
   const customerId = new URL(page.url()).pathname.split('/').pop()
   await shot('plan07-04-admin-customer-ledger')
 
   // ---------------------------------------------------------------- step 7
   step('7. Dates — one formatter, three screens')
+
+  /*
+   * The claim is a formatting claim: every rendered date is the shared helper's output for
+   * the value it displays. Prove it per screen by formatting the API payload with the same
+   * helper and asserting the DOM string is in that image set. Because all three screens are
+   * checked against the one helper, any instant shown on two of them necessarily renders
+   * identically — which is the property the plan asks for, without depending on the demo
+   * data happening to contain one row shared by all three.
+   */
+
+  // Pick the customer that actually carries credit history, rather than the first row.
+  const customerList = await context.request.get(`${apiUrl}/api/customers?limit=50`)
+  const customers = (await customerList.json()).customers ?? []
+  let creditCustomer = null
+  let creditEntries = []
+  for (const candidate of customers) {
+    const response = await context.request.get(
+      `${apiUrl}/api/credit/entries?customerId=${candidate.id}`,
+    )
+    const entries = (await response.json()).entries ?? []
+    if (entries.length > 0) {
+      creditCustomer = candidate
+      creditEntries = entries
+      break
+    }
+  }
+  check(creditCustomer !== null, 'a customer with credit history exists')
+  const creditCustomerId = creditCustomer?.id
 
   // The audit list.
   await page.goto(`${adminUrl}/audit`, { waitUntil: 'networkidle' })
@@ -339,18 +384,37 @@ try {
     [...auditDates.isoLeaks, ...auditDates.slashLeaks].slice(0, 3).join(', '),
   )
 
-  const auditResponse = await context.request.get(`${apiUrl}/api/audit?limit=5`)
-  const auditBody = await auditResponse.json()
-  const auditExpected = (auditBody.entries ?? []).map((entry) => formatDateTime(entry.createdAt))
+  /*
+   * The audit list renders more rows than one API page, and this walkthrough creates audit
+   * entries as it signs in. Page through the API until it is exhausted, so the image set
+   * covers every row the table can show.
+   */
+  const auditExpected = new Set()
+  let auditOffset = 0
+  let auditTotal = Number.POSITIVE_INFINITY
+  while (auditOffset < auditTotal) {
+    const response = await context.request.get(
+      `${apiUrl}/api/audit?limit=100&offset=${auditOffset}`,
+    )
+    const body = await response.json()
+    const entries = body.entries ?? []
+    auditTotal = typeof body.total === 'number' ? body.total : entries.length
+    for (const entry of entries) auditExpected.add(formatDateTime(entry.createdAt))
+    if (entries.length === 0) break
+    auditOffset += entries.length
+  }
+  const auditUnexpected = auditDates.datetimes.filter((value) => !auditExpected.has(value))
   check(
-    auditExpected.some((value) => auditDates.text.includes(value)),
-    'an audit row renders exactly what formatDateTime produces',
-    auditExpected[0] ?? 'no entries',
+    auditUnexpected.length === 0,
+    'every audit timestamp is exactly a formatDateTime image',
+    auditUnexpected.slice(0, 3).join(', '),
   )
 
-  // The credit ledger.
-  await page.goto(`${adminUrl}/customers/${customerId}`, { waitUntil: 'networkidle' })
-  await page.waitForTimeout(800)
+  // The credit ledger — the "Ledger" tab of the customer.
+  await page.goto(`${adminUrl}/customers/${creditCustomerId}`, { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: 'Ledger' }).click()
+  await page.locator('main tbody tr').first().waitFor({ timeout: 20_000 })
+  await page.waitForTimeout(400)
   const ledgerDates = await readDates()
   check(ledgerDates.datetimes.length > 0, 'credit ledger renders helper-shaped timestamps')
   check(
@@ -359,65 +423,73 @@ try {
     [...ledgerDates.isoLeaks, ...ledgerDates.slashLeaks].slice(0, 3).join(', '),
   )
 
-  const creditResponse = await context.request.get(
-    `${apiUrl}/api/credit/entries?customerId=${customerId}`,
-  )
-  const creditBody = await creditResponse.json()
-  const creditEntries = creditBody.entries ?? []
-  check(creditEntries.length > 0, 'the demo customer has credit history', String(creditEntries.length))
-
-  const sharedInstant = creditEntries[0]?.occurredAt
-  const sharedRendering = sharedInstant ? formatDateTime(sharedInstant) : null
+  const ledgerExpected = new Set(creditEntries.map((entry) => formatDateTime(entry.occurredAt)))
+  const ledgerUnexpected = ledgerDates.datetimes.filter((value) => !ledgerExpected.has(value))
   check(
-    sharedRendering !== null && ledgerDates.text.includes(sharedRendering),
-    'the charge instant renders exactly as formatDateTime formats it',
-    sharedRendering ?? 'no entries',
+    ledgerUnexpected.length === 0,
+    'every credit timestamp is exactly a formatDateTime image',
+    ledgerUnexpected.slice(0, 3).join(', '),
   )
 
-  // The loyalty history.
-  const loyaltyResponse = await context.request.get(
-    `${apiUrl}/api/loyalty/accounts/${customerId}`,
-  )
-  const loyaltyBody = await loyaltyResponse.json()
-  const loyaltyEntries = loyaltyBody.entries ?? []
-  check(loyaltyEntries.length > 0, 'the demo customer has loyalty history', String(loyaltyEntries.length))
-
-  const loyaltyScreen = await context.newPage()
-  await loyaltyScreen.goto(`${adminUrl}/loyalty`, { waitUntil: 'networkidle' })
-  await loyaltyScreen.waitForTimeout(800)
-  const loyaltyText = await loyaltyScreen.locator('main').innerText()
-  const loyaltyDates = loyaltyText.match(HELPER_DATETIME) ?? []
-  check(loyaltyDates.length > 0, 'loyalty history renders helper-shaped timestamps')
+  const chargeRendering = formatDateTime(creditEntries[0].occurredAt)
   check(
-    (loyaltyText.match(ISO_LEAK) ?? []).length === 0 &&
-      (loyaltyText.match(SLASH_LEAK) ?? []).length === 0,
+    ledgerDates.text.includes(chargeRendering),
+    'the seeded charge renders exactly as formatDateTime formats it',
+    chargeRendering,
+  )
+  await shot('plan07-07-admin-credit-ledger')
+
+  // The loyalty history — the "Loyalty" tab of a customer that has points.
+  let loyaltyCustomer = null
+  let loyaltyEntries = []
+  for (const candidate of customers) {
+    const response = await context.request.get(`${apiUrl}/api/loyalty/accounts/${candidate.id}`)
+    const entries = (await response.json()).entries ?? []
+    if (entries.length > 0) {
+      loyaltyCustomer = candidate
+      loyaltyEntries = entries
+      break
+    }
+  }
+  check(loyaltyCustomer !== null, 'a customer with loyalty history exists')
+
+  await page.goto(`${adminUrl}/customers/${loyaltyCustomer.id}`, { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: 'Loyalty' }).click()
+  await page.waitForTimeout(900)
+  const loyaltyDates = await readDates()
+  check(loyaltyDates.datetimes.length > 0, 'loyalty history renders helper-shaped timestamps')
+  check(
+    loyaltyDates.isoLeaks.length === 0 && loyaltyDates.slashLeaks.length === 0,
     'loyalty history leaks no ISO or slash date',
   )
-  await loyaltyScreen.screenshot({
-    path: path.join(evidenceDir, 'plan07-07-admin-loyalty.png'),
-    fullPage: true,
-  })
-  console.log('  shot plan07-07-admin-loyalty.png')
 
-  /**
-   * The identical-instant claim: one instant, one rendering. The credit charge and the
-   * loyalty earn from the same sale share a timestamp to the minute; both screens must
-   * render it with the same characters.
-   */
-  const sharedWithLoyalty = loyaltyEntries
-    .map((entry) => formatDateTime(entry.occurredAt))
-    .find((value) => value === sharedRendering)
+  const loyaltyExpected = new Set(loyaltyEntries.map((entry) => formatDateTime(entry.occurredAt)))
+  const loyaltyUnexpected = loyaltyDates.datetimes.filter((value) => !loyaltyExpected.has(value))
   check(
-    sharedWithLoyalty !== undefined,
-    'the same instant reads identically in the credit ledger and the loyalty history',
-    `${formatDateTime(sharedInstant)} vs ${loyaltyEntries[0]?.occurredAt ?? 'none'}`,
+    loyaltyUnexpected.length === 0,
+    'every loyalty timestamp is exactly a formatDateTime image',
+    loyaltyUnexpected.slice(0, 3).join(', '),
   )
-  await loyaltyScreen.close()
+  await shot('plan07-07-admin-loyalty')
+
+  /*
+   * The three screens are now each proven to render exactly what the one helper produces for
+   * the value they show. That is the property the plan asks for: an instant has one
+   * rendering, because there is one formatter. (No seed row is shared by all three screens —
+   * the credit customer has no loyalty history and vice versa — so the proof is by formatter
+   * identity rather than by a coincidence in the demo data.)
+   */
+  check(
+    [auditUnexpected, ledgerUnexpected, loyaltyUnexpected].every((list) => list.length === 0),
+    'one formatter across the audit list, the credit ledger, and the loyalty history',
+  )
 
   // ---------------------------------------------------------------- step 5
   step('5. Admin, print (customer statement)')
 
-  await page.goto(`${adminUrl}/customers/${customerId}/statement`, { waitUntil: 'networkidle' })
+  await page.goto(`${adminUrl}/customers/${creditCustomerId}/statement`, {
+    waitUntil: 'networkidle',
+  })
   await page.waitForTimeout(1200)
   const statementDates = await readDates()
   check(statementDates.days.length > 0, 'the statement carries helper-shaped dates')
