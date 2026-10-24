@@ -160,7 +160,120 @@
 
 ---
 
-## POS Payments, Returns & Shifts (POS / PAY) — Phase 7
+## Interface Foundation (UIX) — Phases 7, 8, 10
+
+- **UIX-01** — Product identity: the name Sceptre Drive, workspace package scope,
+  desktop app protocol, product name, database and container names, and documentation are
+  consistent; no stale brand string survives outside the documented allowlist. *(Phase 7)*
+- **UIX-02** — One design-token source consumed by both clients: palette, chart ramp,
+  radii, spacing, light and dark themes, defined once in `@sceptre/brand`. *(Phase 7)*
+- **UIX-03** — Self-hosted typography that satisfies the desktop CSP `font-src 'self'`:
+  Space Grotesk (display), Inter (UI), JetBrains Mono (figures, tabular). *(Phase 7)*
+- **UIX-04** — Shared shadcn primitive set in both clients, including `chart` and
+  `sidebar`; no hand-rolled dialog, table, or chart primitives. *(Phase 7)*
+- **UIX-05** — One date and time formatting layer built on `date-fns` and shared by the
+  API, the admin, and the POS. *(Phase 7)*
+- **UIX-06** — Admin module architecture: `modules/<domain>/` with `api`, `components`,
+  `hooks`, `pages`, `types`, `ui`, `utils`; route files only route; cross-module imports go
+  through a module `index.ts` and are enforced by lint. *(Phase 8)*
+- **UIX-07** — Role-aware admin shell: permission-filtered navigation, branch context that
+  managers cannot escape, keyboard-operable mobile drawer, and a skip link. *(Phase 8)*
+- **UIX-08** — Desktop module architecture mirrors the admin with the same seven folders,
+  while the tested data layer (PowerSync, outbox, printing, domain services) stays in
+  `lib/`. *(Phase 10)*
+- **UIX-09** — Desktop chrome and shift home: a landing dashboard answering "how is today
+  going?", selling one action away, correct and fast while offline. *(Phase 10)*
+
+---
+
+## Analytics & Executive Dashboard (ANL / ADM / RPT) — Phase 9
+
+- **ADM-02** — Executive dashboard: sales, transactions, average basket, tax collected,
+  low stock, credit outstanding, supplier payables, loyalty issued/redeemed, sync health,
+  and recent activity — all from reconciled server aggregates.
+- **RPT-01** — Sales report by date/branch/terminal/cashier; totals and tax split.
+- **RPT-02** — Tax report (VAT/NHIL/GETFund) by period and branch.
+- **RPT-03** — Product performance report: quantity, revenue, cost, margin.
+- **ANL-01** — Branch-scoped analytics for managers and organisation-wide analytics with
+  branch comparison for admins, enforced server-side rather than by hiding controls.
+- **ANL-02** — Analytics read models reconcile to the source ledgers, use integer minor
+  units throughout, and are proven by reconciliation tests.
+- **ANL-03** — Period, branch, and granularity are URL-held, and every view exports to CSV
+  with formula-injection escaping.
+
+---
+
+## Procurement & Replenishment (PROC / MGR) — Phase 11
+
+- **PROC-01** — Purchase orders with supplier, lines, quantities, cost prices, and an
+  expected date; editable while draft, immutable once approved.
+- **PROC-02** — Threshold-based approval: POs below the branch limit are approved
+  automatically, at or above it they require an admin decision before they can be sent.
+- **PROC-03** — Goods receipt against a purchase order supporting full, partial, short, and
+  over deliveries, with ordered/received/outstanding visible per line and discrepancies
+  recorded rather than smoothed over.
+- **PROC-04** — Supplier invoice matching against a purchase order, flagging price and
+  quantity variance with both values and never blocking the payable.
+- **PROC-05** — Purchase returns against a received order, settled by a credit note that
+  reduces the supplier balance, with an append-only negative stock movement.
+- **PROC-06** — Minimum and maximum stock per product per branch, with a suggested order
+  quantity derived from sales velocity and supplier lead time, grouped by supplier, and
+  including parts the branch has never stocked.
+- **PROC-07** — Supplier performance: on-time delivery, fill rate, actual versus promised
+  lead time, and last-cost drift.
+- **PROC-08** — Procurement document numbering, audit trail, and reconciliation to stock and
+  payable ledgers.
+- **PROC-09** — The supplier-product link is created automatically on the first receipt of a
+  part, carrying the supplier and last cost; lead time can then be completed by the manager.
+- **PROC-10** — The catalogue cost is derived from receipts and the branch average cost and
+  is read-only; no hand-typed cost figure competes with the ledger.
+- **MGR-01** — A manager can create a supplier.
+- **MGR-02** — A manager can submit a new product with a proposed price and descriptive
+  fields; the product is created when an admin approves it. Archiving and price policy stay
+  with the admin.
+- **MGR-03** — A manager can raise purchase orders and receive goods for their branch.
+- **MGR-04** — A manager can initiate a purchase return and request a stock write-off.
+- **MGR-05** — A manager can request a transfer, a price change, and a credit limit change.
+
+---
+
+## Branch Operations & Approvals (APR / BRN / CC) — Phase 12
+
+- **APR-01** — One approval entity and one inbox spanning purchase orders, transfer
+  requests, stock write-offs, price changes, credit limit changes, and shift variances.
+- **APR-02** — Request, detail, and decide endpoints that record the requester, the decider,
+  a reason code, and the before/after value.
+- **APR-03** — Authority derived from request type and branch scope, with self-approval
+  blocked for every request type.
+- **APR-04** — Decisions are immutable and audited; a rejected request returns the entity to
+  its prior state with no side effects.
+- **APR-05** — Pending approvals appear as a navigation badge and a queue showing type,
+  value, branch, requester, and age.
+- **APR-06** — A decision is never required to complete a sale; trade at the counter is
+  unaffected by a pending approval.
+- **BRN-01** — Transfer request lifecycle: request, approve or reject, dispatch, receive,
+  short-close, with authority based on the source branch type.
+- **BRN-02** — Stock write-off with a reason code, approval, and an append-only negative
+  movement on approval.
+- **BRN-03** — Manager price authority inside a configurable percentage band; a change
+  outside the band becomes a request.
+- **BRN-04** — Shift variance review above a configurable tolerance, with an outcome note
+  and immutable shift figures.
+- **BRN-05** — A manager operations view of their branch queues: approvals, transfers,
+  write-offs, variances, low stock, and over-limit credit.
+- **CC-01** — Count schedules by category, brand, or ABC value class, with a frequency and a
+  next-due date.
+- **CC-02** — Scheduled counts become tasks with a due date and an assignee, reusing the
+  existing count snapshot and posting path unchanged.
+- **CC-03** — Trigger counts raised automatically by a variance above tolerance or by repeated
+  oversell on one product.
+- **CC-04** — Inventory accuracy per branch (matched lines over counted lines), counts
+  completed on time, and variance value per count.
+- **CC-05** — ABC classification derived from stock value and movement, editable by the admin.
+
+---
+
+## POS Payments, Returns & Shifts (POS / PAY) — Phase 13
 
 - **POS-10** — Returns/refunds: look up the original sale, select lines/quantities, reason,
   manager approval, restock; cash refunds work offline, electronic refunds require internet.
@@ -178,17 +291,11 @@
 
 ---
 
-## Admin Operations, Reports & E-VAT (ADM / RPT / PAY / EVAT) — Phase 8
+## Admin Operations & E-VAT (ADM / RPT / PAY / EVAT) — Phase 14
 
-- **ADM-02** — Executive dashboard: sales, transactions, average basket, tax collected,
-  low stock, credit outstanding, supplier payables, loyalty issued/redeemed, sync health,
-  and recent activity.
 - **ADM-07** — POS oversight: sales/returns lists and detail, shifts and variance,
   terminals/devices/enrollment, sync conflicts queue with resolution, receipt reprint.
 - **ADM-08** — Users, roles, settings, feature flags, and audit log viewer.
-- **RPT-01** — Sales report by date/branch/terminal/cashier; totals and tax split.
-- **RPT-02** — Tax report (VAT/NHIL/GETFund) by period and branch.
-- **RPT-03** — Product performance report: quantity, revenue, cost, margin.
 - **RPT-04** — Stock report: on-hand, value at average cost, movements, transfers, counts.
 - **RPT-05** — Credit aging, supplier payables aging, and loyalty liability.
 - **RPT-06** — CSV export and printable statements/reports.
@@ -203,7 +310,7 @@
 
 ---
 
-## Production Hardening & Launch (OPS) — Phase 9
+## Production Hardening & Launch (OPS) — Phase 15
 
 - **OPS-01** — VPS Docker Compose staging and production stacks with Caddy TLS, separate
   databases/volumes/env files, and resource limits.
@@ -235,8 +342,14 @@
 | 4 | CUS-01…06, LOY-01…06, ADM-05 |
 | 5 | SUP-01…05, ADM-06 |
 | 6 | POS-01…09, POS-14, SYNC-01…08 |
-| 7 | POS-10…13, PAY-01…03, PAY-07 |
-| 8 | ADM-02, ADM-07, ADM-08, RPT-01…06, PAY-04…06, EVAT-01…03 |
-| 9 | OPS-01…08 |
+| 7 | UIX-01…05 |
+| 8 | UIX-06, UIX-07 |
+| 9 | ADM-02, RPT-01…03, ANL-01…03 |
+| 10 | UIX-08, UIX-09 |
+| 11 | PROC-01…10, MGR-01…05 |
+| 12 | APR-01…06, BRN-01…05, CC-01…05 |
+| 13 | POS-10…13, PAY-01…03, PAY-07 |
+| 14 | ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03 |
+| 15 | OPS-01…08 |
 
 Every requirement maps to exactly one phase.

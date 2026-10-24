@@ -1,13 +1,24 @@
-# ROADMAP — GikAutos v1
+# ROADMAP — Sceptre Drive v1
+
+> **Renamed 2026-10-24.** The product is **Sceptre Drive** (formerly GikAutos). The code,
+> workspace package scope, app protocol, Docker names, and remaining documents are
+> renamed in **Phase 7**. Historic phase records keep the old name until that sweep.
 
 ## Overview
 
-GikAutos v1 is delivered as nine capability phases, each a coherent, verifiable slice.
-Phases are ordered by dependency: the foundation and catalog must exist before
-inventory; inventory before POS; POS before payments and returns; reporting and
-hardening come last. Only the POS is offline-first; the admin console and API are online.
+Sceptre Drive v1 is delivered as fifteen capability phases, each a coherent, verifiable
+slice. Phases are ordered by dependency: the foundation and catalog must exist before
+inventory; inventory before POS; then the interface foundation; then the operational control
+that lets a manager actually run a branch (procurement, replenishment, approvals); then POS
+payments and the remaining operations; hardening last. Only the POS is offline-first; the
+admin console and API are online.
 
-**Depth:** Comprehensive (9 phases)
+Phases **7–10** were inserted on 2026-10-24 (interface foundation, modules, analytics, POS
+redesign). Phases **11–12** were added the same day after an operational audit (procurement
+and replenishment, branch operations and approvals). The former Phases 7, 8, and 9 became
+**13, 14, and 15**, with the original payment and admin-operations phases moving to 13/14.
+
+**Depth:** Comprehensive (15 phases)
 **Coverage:** 100% of v1 requirements mapped to exactly one phase (`REQUIREMENTS.md`).
 
 ---
@@ -171,12 +182,212 @@ needed.
 
 ---
 
-## Phase 7 — POS Payments, Returns & Shifts
+## Phase 7 — Identity, Design System & Brand Foundation
+
+**Goal:** The product is called Sceptre Drive everywhere it is visible or load-bearing, and
+both clients draw from one design-token source, one typography set, one primitive library,
+and one date formatter — so the admin console and the POS cannot drift apart again.
+
+**Dependencies:** Phase 6
+**Requirements:** UIX-01…05
+
+**Success Criteria**
+1. `grep -rIl gikautos` over the repository returns only the documented allowlist (the
+   placeholder domain constant, applied migration history, and historical phase records).
+2. Admin and desktop both import the same `@sceptre/brand` token file; changing one hex
+   value changes both apps and requires no other edit.
+3. The palette is AA-compliant: charcoal on orange for primary actions, never white on
+   orange; every text/background pair reaches 4.5:1 (3:1 for large text).
+4. Every date and time in both clients is rendered through `date-fns` helpers from
+   `@sceptre/shared`; no bare `toLocaleDateString`/`toLocaleString` remains.
+5. Both apps build and the full suite passes after the rename: API 354, shared 73, desktop
+   339, plus the Electron E2E and packaged shell/print smoke tests.
+
+**Planned scope:** workspace and package-scope rename; desktop protocol host, product name,
+CSP constants, window titles; Docker/compose/database names; `packages/brand` (tokens,
+fonts, chart ramp); self-hosted Space Grotesk / Inter / JetBrains Mono; shadcn `chart`,
+`sidebar`, and supporting primitives in both apps; `date-fns@4` and shared formatting
+helpers; the first pass of the redesigned shell chrome.
+
+---
+
+## Phase 8 — Admin Module Architecture & Shell
+
+**Goal:** Every admin screen is assembled inside a domain module and the route file only
+routes, so a feature can be understood, tested, and changed without reading the router.
+
+**Dependencies:** Phases 1–7
+**Requirements:** UIX-06, UIX-07
+
+**Success Criteria**
+1. `admin/src/modules/` contains every domain, and every module has `api/`, `components/`,
+   `hooks/`, `pages/`, `types/`, `ui/`, and `utils/`.
+2. Every file under `admin/src/routes/` is a thin route: `createFileRoute` plus a single
+   page import, with no page markup.
+3. A module cannot reach into another module's internals — cross-module use goes through
+   the target module's `index.ts`, and Biome's `noRestrictedImports` fails the build
+   otherwise.
+4. The shell is role-aware: navigation is permission-filtered, the branch switcher is
+   locked for managers, the mobile drawer is keyboard-operable, and a skip link reaches
+   the main region first.
+5. No behaviour changes: the existing screens work exactly as before, proven by the suite
+   and a manual pass over each section.
+
+**Planned scope:** `modules/` scaffolding and the import-boundary rule; migration of audit,
+settings, staff, branches, terminals, catalog, inventory, customers, credit, loyalty,
+suppliers, payables, auth, and dashboard one module per commit; rebuilt app shell, sidebar,
+topbar, page header, and empty/loading/error states on the new tokens.
+
+---
+
+## Phase 9 — Analytics, Dashboard & Reporting Read Models
+
+**Goal:** The console shows the truth about the business — real, reconciled, branch-correct
+numbers with charts that answer a manager's question and an owner's question differently.
+
+**Dependencies:** Phases 6–8
+**Requirements:** ADM-02, RPT-01…03, ANL-01…03
+
+**Success Criteria**
+1. Every figure on the dashboard and the analytics page comes from a server aggregate that
+   reconciles to the ledgers; nothing is computed from a paged list endpoint.
+2. A manager sees only their own branch and cannot obtain another branch's numbers by
+   changing a query parameter; an admin sees the organisation with branch comparison.
+3. Period, branch, and granularity live in the URL, so any view can be linked and reloaded.
+4. Charts state their own meaning without a hover: labelled axes, a legend, a summary
+   sentence, and a data-table alternative for every chart.
+5. Period-over-period deltas, tender mix, top products, and tax split are all derived from
+   integer minor units; no floating-point arithmetic touches money.
+6. A demo seed produces a realistic month of sales so the dashboard is reviewable locally.
+
+**Planned scope:** `api/src/modules/analytics/` in the seven-file layout; `analytics.read`
+permission; Zod-validated period/branch/granularity; branch scope enforced server-side;
+overview, sales, product, inventory, credit, loyalty, payables, and tax read models;
+reconciliation tests; CSV export with formula-injection escaping; `seed:demo-sales`; the
+`dashboard` and `analytics` modules with the Till Line, KPI tiles, and Recharts charts.
+
+---
+
+## Phase 10 — Desktop POS Modules, Chrome & Shift Home
+
+**Goal:** The terminal wears the same brand as the console, opens on a shift dashboard that
+answers "how is today going?", and still sells with the network unplugged.
+
+**Dependencies:** Phases 6–9
+**Requirements:** UIX-08, UIX-09
+
+**Success Criteria**
+1. `desktop/src/renderer/modules/` holds every POS domain with the same seven folders, and
+   `routes/` files resolve a hash route to a module page.
+2. A cashier signs in, lands on the shift home, sees today's take, cash in drawer, credit
+   given, items sold, the day's hourly shape, and top sellers — then starts selling in one
+   action.
+3. The home screen and every redesigned screen work with the network unplugged; charts read
+   the local PowerSync database.
+4. The redesign changes nothing about the money rules: the full desktop suite (339), the
+   Electron E2E (51), the offline walkthrough, packaged shell (38), and packaged print (21)
+   all still pass.
+5. Offline is presented as a normal state with an honest sync badge, never as an error, and
+   no counter action is hover-only.
+
+**Planned scope:** `modules/` migration for home, sell, cart, catalog, customers, credit,
+loyalty, tender, shift, sales, receipt, sync, settings, and auth; `components/ui` shadcn
+primitives; redesigned header, product grid, cart, tender, shift, sales, receipt, and sync
+screens; the new `#home` shift dashboard with Recharts over local SQLite; keyboard and
+touch target audit; offline-state copy pass.
+
+---
+
+## Phase 11 — Procurement, Replenishment & Supplier Returns
+
+**Goal:** A manager can decide what to order from the numbers on screen, raise a purchase
+order, get it approved when it matters, receive the goods against what was ordered, send
+back what is wrong, and see which suppliers actually deliver.
+
+**Dependencies:** Phases 3, 5, 10
+**Requirements:** PROC-01…10, MGR-01…05
+
+**Success Criteria**
+1. A manager raises a purchase order with supplier, lines, quantities, cost prices, and an
+   expected date. Below the branch threshold it is approved automatically; at or above it,
+   it waits for the admin and cannot be sent.
+2. Receiving works in full, partial, short, and over deliveries. Each line shows ordered,
+   previously received, received now, and outstanding. A short delivery leaves the order
+   open for a second receipt; an over-delivery needs a reason and is recorded as a
+   discrepancy.
+3. Receiving posts stock movements and average cost through the existing ledger path; no
+   new stock write path is introduced and the ledger stays append-only.
+4. A supplier invoice can be matched to a purchase order. A price or quantity difference is
+   flagged with both values, never silently accepted, and never blocks the payable.
+5. A purchase return against a received order creates a credit note that reduces the
+   supplier balance and posts a negative stock movement. Nothing is edited or deleted.
+6. Every product carries a min and a max per branch. The replenishment screen suggests a
+   quantity from recent sales velocity and the preferred supplier's lead time, groups
+   suggestions by supplier, and raises one purchase order from the selection.
+7. Supplier performance is measurable: on-time delivery, fill rate, actual versus promised
+   lead time, and last-cost drift.
+8. Every state change is audited, numbers reconcile to the ledgers, and the POS is untouched.
+9. A manager submits a new product with a proposed price; the product is created only when an
+   admin approves it, and the catalogue's cost figure is derived from receipts rather than
+   typed by hand.
+10. The first receipt of a part from a supplier creates the supplier-product link with its
+    last cost, so lead time and cost history begin with the first delivery.
+
+**Planned scope:** purchase order and line schema; approvals entity and threshold
+resolution; goods receipt linked to order lines; supplier-product link auto-creation;
+invoice matching and variance flags; purchase returns and supplier credits; min/max per
+branch; velocity and lead-time suggestions; supplier performance read model; permissions for
+manager supplier creation and product submission; derived catalogue cost; console screens for
+ordering, receiving, returns, and replenishment.
+
+---
+
+## Phase 12 — Branch Operations & Approval Workflow
+
+**Goal:** The branch manager can request what the branch needs and the admin can decide,
+with one queue, one audit trail, and no path where stock, price, credit, or cash changes
+without a decision that names the person who made it.
+
+**Dependencies:** Phases 11, 10
+**Requirements:** APR-01…06, BRN-01…05, CC-01…05
+
+**Success Criteria**
+1. A manager requests a transfer; the source branch manager approves branch-to-branch and
+   the admin approves warehouse-to-branch. A rejected request moves no stock.
+2. One approval inbox lists every pending item with type, value, branch, requester, and age;
+   each opens a detail view and can be approved or rejected with a reason. Both decisions
+   are audited with before and after values.
+3. Nobody approves their own request. A manager who raises a request from their own branch
+   has it decided by the admin.
+4. A stock write-off needs a reason code and an approval; on approval a negative movement
+   posts, on rejection nothing changes.
+5. A manager may move a price within ±10% of the current effective branch price; beyond the
+   band a request is raised showing the old and new price, and approval applies the change
+   exactly once.
+6. A manager may propose a credit limit change; the effective limit changes only after the
+   admin approves it.
+7. A shift closed with a variance beyond tolerance is marked for review; a manager or admin
+   records an outcome, and the shift numbers stay immutable.
+8. The manager's console shows their branch queues at a glance: pending approvals, transfer
+   requests, write-offs, shift variances, low stock, and customers over their credit limit.
+9. Counts can be scheduled by category, brand, or value class; the system generates count
+   tasks with a due date and an assignee, raises a spot count when a variance or repeated
+   oversell is detected, and reports inventory accuracy per branch.
+
+**Planned scope:** transfer request lifecycle; approvals extension and unified inbox; stock
+write-off workflow; price band resolution and price change requests; credit limit change
+requests; shift variance review; cycle count scheduling, ABC classification, trigger counts,
+and accuracy reporting; manager operations dashboard; nav badges; permissions for request and
+decide; audit on every decision.
+
+---
+
+## Phase 13 — POS Payments, Returns & Shifts
 
 **Goal:** Online electronic payments (MoMo, card, bank), split tender, returns and refunds,
 credit repayments, and full shift reporting work end to end.
 
-**Dependencies:** Phase 6
+**Dependencies:** Phases 6, 10, 12
 **Requirements:** POS-10…13, PAY-01…03, PAY-07
 
 **Success Criteria**
@@ -194,40 +405,39 @@ returns flow; repayment flow; X/Z reports; drawer reconciliation; receipt reprin
 
 ---
 
-## Phase 8 — Admin Operations, Reports & E-VAT
+## Phase 14 — Admin Operations & E-VAT
 
 **Goal:** The admin console gives a complete operational picture; managers resolve sync
-conflicts; reports reconcile; supplier transfers run through Paystack; E-VAT receipts are
-queued and submitted through an adapter.
+conflicts; supplier transfers run through Paystack; E-VAT receipts are queued and submitted
+through an adapter.
 
-**Dependencies:** Phases 5–7
-**Requirements:** ADM-02, ADM-07, ADM-08, RPT-01…06, PAY-04…06, EVAT-01…03
+**Dependencies:** Phases 5, 13
+**Requirements:** ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03
 
 **Success Criteria**
-1. The dashboard shows real KPIs per branch and period (no hardcoded values); a manager
-   sees only their branch.
-2. Sales, shifts, terminals, and sync conflicts are inspectable; a conflict can be resolved
-   with an audit record.
-3. Reports (sales, tax, product performance, stock, credit aging, payables, loyalty) match
-   the ledgers and export to CSV.
-4. A supplier payment via Paystack (test mode) creates a recipient and transfer, and the
+1. Sales, shifts, terminals, sync conflicts, and devices are inspectable; a conflict can be
+   resolved with an audit record.
+2. Reports (stock, credit aging, payables aging, loyalty liability) match the ledgers and
+   export to CSV or print.
+3. A supplier payment via Paystack (test mode) creates a recipient and transfer, and the
    webhook updates the payment status; manual payments still work.
-5. E-VAT receipts are queued offline, submitted by the mock provider, and retried on failure;
+4. E-VAT receipts are queued offline, submitted by the mock provider, and retried on failure;
    failures are visible.
-6. Users, roles, settings, feature flags, and the audit log are manageable.
+5. Users, roles, settings, feature flags, and the audit log are manageable.
 
-**Planned scope:** dashboard and rollups; POS oversight screens; conflict resolution;
-report queries and CSV/PDF; supplier Paystack transfers + reconciliation; E-VAT adapter and
-receipt contract; audit viewer; settings screens.
+**Planned scope:** POS oversight screens; conflict resolution; stock/aging/liability report
+queries and CSV/PDF; supplier Paystack transfers + reconciliation; E-VAT adapter and
+receipt contract; audit viewer; settings screens. The executive dashboard and sales/tax/
+product reports were delivered in Phase 9.
 
 ---
 
-## Phase 9 — Production Hardening & Launch
+## Phase 15 — Production Hardening & Launch
 
 **Goal:** Staging and production run on the VPS with TLS, backups, monitoring, security
 controls, offline drills, a signed Windows installer, and a signed-off UAT.
 
-**Dependencies:** Phases 1–8
+**Dependencies:** Phases 1–14
 **Requirements:** OPS-01…08
 
 **Success Criteria**
@@ -257,15 +467,26 @@ Phase 1 Foundation
             ├─ Phase 4 Customers/Credit/Loyalty
             │    └─ Phase 5 Suppliers/Payables
             │         └─ Phase 6 POS Offline Core
-            │              └─ Phase 7 POS Payments/Returns
-            │                   └─ Phase 8 Admin/Reports/E-VAT
-            │                        └─ Phase 9 Hardening/Launch
+            │              ├─ Phase 7 Identity/Design System
+            │              │    └─ Phase 8 Admin Modules & Shell
+            │              │         └─ Phase 9 Analytics & Dashboard
+            │              │              └─ Phase 10 Desktop Modules & Shift Home
+            │              │                   ├─ Phase 11 Procurement & Replenishment
+            │              │                   │    └─ Phase 12 Branch Ops & Approvals
+            │              │                   │         └─ Phase 13 POS Payments/Returns
+            │              │                   │              └─ Phase 14 Admin Ops & E-VAT
+            │              │                   │                   └─ Phase 15 Hardening/Launch
             └──────────────────────────────────────┘
 ```
+
+Phases 11–12 depend on Phase 10 only because they are built in the module layout and the
+design system; their business dependencies are Phases 3 and 5. Phase 13 builds on the module
+layout from Phase 10 and the approval machinery from Phase 12 for refund approvals.
 
 ## Milestone Definition
 
 **v1 is done when:** a cashier can run a full shift offline (cash and credit), a manager
-can run their branch and resolve conflicts, the admin can see the whole business, all
-ledgers reconcile, suppliers can be paid, and the system runs in production on the VPS
-with tested backups and monitoring.
+can run their branch and resolve conflicts, order stock, request a transfer, and get a
+decision without leaving the console, the admin can see the whole business in a dashboard and
+analytics view they trust, all ledgers reconcile, suppliers can be paid, and the system runs
+in production on the VPS with tested backups and monitoring.

@@ -1,18 +1,17 @@
-# STATE — GikAutos v1
+# STATE — Sceptre Drive v1
+
+> **Renamed 2026-10-24:** GikAutos → **Sceptre Drive**. Historic sections below keep the
+> old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-23
-**Status:** **Phase 6 (POS Offline Core) complete and verified (9/9 plans).** A fresh
-database plus a real Electron build prove the whole offline story: enrollment, offline
-PINs, shifts, a cash sale with loyalty and a manager-approved discount, ESC/POS printing
-and the drawer, quit and offline relaunch, exactly-once upload, over-limit credit and
-revocation conflicts, and full reconciliation. Evidence:
-`.planning/phases/06-pos-offline-core/01-VERIFICATION.md` + `evidence/`.
-Suites: API 354/354, shared 73/73, desktop 339/339; POS walkthrough 162/162; last-unit
-race 18/18; duplicate upload 24/24; Electron E2E 51/51; packaged shell 38/38; packaged
-print 21/21. Two reconciliation defects and six POS defects were found and fixed during
-verification.
-**Next action:** Plan **Phase 7 (POS Payments, Returns & Shifts)**.
+**Updated:** 2026-10-24
+**Status:** **Phase 6 (POS Offline Core) complete and verified (9/9 plans).** The roadmap
+was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin
+Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were inserted
+ahead of the former Phases 7–9, and a later audit the same day added Phase 11 (Procurement &
+Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases
+13/14/15. Phase 7 is planned (7 plans) but not executed.
+**Next action:** Execute **Phase 7, Plan 01** (workspace and package-scope rename).
 
 ---
 
@@ -27,9 +26,93 @@ verification.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | POS Payments, Returns & Shifts | ⬜ Not started |
-| 8 | Admin Operations, Reports & E-VAT | ⬜ Not started |
-| 9 | Production Hardening & Launch | ⬜ Not started |
+| 7 | Identity, Design System & Brand Foundation | 🔷 Planned (7 plans, not started) |
+| 8 | Admin Module Architecture & Shell | ⬜ Not started |
+| 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
+| 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
+| 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
+| 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
+| 13 | POS Payments, Returns & Shifts | ⬜ Not started |
+| 14 | Admin Operations & E-VAT | ⬜ Not started |
+| 15 | Production Hardening & Launch | ⬜ Not started |
+
+### Phase 7 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Workspace and package-scope rename | ⬜ Not started |
+| 02 | Desktop identity, protocol host, CSP, and copy | ⬜ Not started |
+| 03 | `packages/brand`: tokens, fonts, chart ramp | ⬜ Not started |
+| 04 | shadcn primitives and chart layer in both clients | ⬜ Not started |
+| 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
+| 06 | Shell chrome on the new design system | ⬜ Not started |
+| 07 | Phase verification, evidence, and state update | ⬜ Not started |
+
+### Phase 7 planning notes (2026-10-24)
+
+- Roadmap re-sequenced with operator approval: four interface phases inserted as 7–10;
+  former 7/8/9 renumbered to 13/14/15. Requirement IDs added: UIX-01…09 (interface
+  foundation) and ANL-01…03 (analytics). ADM-02, RPT-01…03 moved to Phase 9; RPT-04…06,
+  ADM-07, ADM-08, PAY-04…06, EVAT-01…03 stay in Phase 14.
+- Brand palette is fixed by the operator: **#1B1F23** (ink) and **#F26A1B** (brand). Primary
+  buttons use **charcoal on orange** (~5.2:1), never white on orange (~3.2:1), which would
+  fail WCAG AA for normal text.
+- Typography is fixed: Space Grotesk (display), Inter (UI), JetBrains Mono (figures),
+  self-hosted via `@fontsource-variable/*` because the desktop CSP is `font-src 'self'`.
+- Module architecture is fixed for both clients: `api/ components/ hooks/ pages/ types/
+  ui/ utils/` per module; admin routes become `createFileRoute` + one page import; desktop
+  keeps PowerSync/outbox/printing/domain services in `lib/`.
+- Analytics is a server-owned read model (`api/src/modules/analytics/`), never client-side
+  aggregation over paged list endpoints. Branch scope uses the existing
+  `assertBranchAccess` / `branchScope` / `resolveBranchFilter` helpers.
+- Domain hosts are deferred: the production API/PowerSync origins stay on the current
+  placeholder until the real domain is bought, centralised behind one `SCEPTRE_DOMAIN`
+  constant in Plan 02 so the swap is a one-line change.
+- Renaming `productName` moves Electron's `userData` directory, so existing development
+  terminals must re-enrol. Nothing is in production; no migration is written.
+
+### Operational gap audit (2026-10-24) → Phases 11 and 12
+
+An audit of the built system against parts-manager duties found real deficiencies:
+
+- **No purchase ordering exists.** Stock can only enter by recording a supplier invoice after
+  delivery; there is no order, no expected delivery, and no way to see what is coming.
+- **Transfers are a self-service pull.** `transfer` starts at `DRAFT` and a manager with
+  `inventory.transfer` can create a pull from any branch or warehouse and dispatch it
+  themselves. No request, no approval, no oversight.
+- **No approval entity exists anywhere.** The only authorisation is the POS PIN override.
+- **Replenishment is a single threshold.** `stock_threshold` has no max, no reorder quantity,
+  and no lead-time or velocity input; a part the branch has never stocked appears in no list.
+- **Purchase returns are impossible.** An invoice can be voided; goods cannot be sent back.
+- **Manager catalogue access is admin-only,** so a new part waits for the admin.
+- **A manager can edit customer credit limits directly** (`credit.profile.manage`), with no
+  second decision.
+
+Operator decisions (locked in `phases/11-…/00-CONTEXT.md` and `phases/12-…/00-CONTEXT.md`):
+
+- Full purchase-order workflow with a **GHS 10,000** default approval threshold per branch.
+- Transfers become **request → approve → dispatch → receive**, with source-based authority
+  (branch→branch by the source manager, warehouse→branch by the admin).
+- Managers may create suppliers, submit products, edit prices within **±10%**, raise POs,
+  receive goods, initiate purchase returns, and request write-offs.
+- A manager's **product submission creates the product only on admin approval**.
+- **Supplier-product links are auto-created on first receipt** with the last cost.
+- Replenishment uses **min/max plus velocity and lead-time suggestions**, including parts
+  never stocked at the branch.
+- One **approval inbox** covers POs, transfer requests, write-offs, price changes, credit
+  limit changes, and shift variances; **no self-approval**, in-app notification only.
+- Purchase returns settle by **credit note** against payables.
+- **Cycle count scheduling** (ABC cadence, generated tasks, trigger counts, accuracy metric)
+  added to Phase 12.
+- **Gross profit only.** `sale_line.unit_cost_minor` already freezes cost at sale time, so
+  margin is historically stable; there is no expense ledger, therefore no net profit or P&L.
+- `product.costPriceMinor` becomes **derived and read-only**; `stock_level.avg_cost_minor` is
+  the current figure and `sale_line.unit_cost_minor` the historical one.
+
+Phase 7's detailed plans still come first: Phase 7 is the only phase with `NN-PLAN.md` files.
+Phases 11 and 12 carry context and a planned-plan list, and get task-level plans when Phase 10
+completes.
+
 
 ### Phase 1 plan progress
 
