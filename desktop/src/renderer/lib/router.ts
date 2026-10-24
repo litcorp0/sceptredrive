@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
  * - `#pos/settings`  terminal + printer settings (manager only)
  * - `#dev/sync`      sync diagnostics
  * - `#dev/print`     printer diagnostics (POS_DIAGNOSTICS=1)
+ * - `#dev/charts`    chart-layer proof with static fixtures
  * - `#spike`         the PowerSync gate panel
  * - otherwise        shell diagnostics (app info + keychain self-test)
  *

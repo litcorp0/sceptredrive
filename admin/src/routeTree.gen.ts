@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as DevChartsRouteImport } from './routes/dev-charts'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -63,6 +64,11 @@ import { Route as AuthenticatedSuppliersPaymentsPaymentIdRouteImport } from './r
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevChartsRoute = DevChartsRouteImport.update({
+  id: '/dev-charts',
+  path: '/dev-charts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -356,6 +362,7 @@ const AuthenticatedSuppliersPaymentsPaymentIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/dev-charts': typeof DevChartsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -407,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/suppliers/payments/': typeof AuthenticatedSuppliersPaymentsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/dev-charts': typeof DevChartsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -454,6 +462,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/dev-charts': typeof DevChartsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -509,6 +518,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dev-charts'
     | '/forgot-password'
     | '/login'
     | '/reset-password'
@@ -560,6 +570,7 @@ export interface FileRouteTypes {
     | '/suppliers/payments/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/dev-charts'
     | '/forgot-password'
     | '/login'
     | '/reset-password'
@@ -606,6 +617,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/dev-charts'
     | '/forgot-password'
     | '/login'
     | '/reset-password'
@@ -660,6 +672,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  DevChartsRoute: typeof DevChartsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -673,6 +686,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev-charts': {
+      id: '/dev-charts'
+      path: '/dev-charts'
+      fullPath: '/dev-charts'
+      preLoaderRoute: typeof DevChartsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -1248,6 +1268,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  DevChartsRoute: DevChartsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
