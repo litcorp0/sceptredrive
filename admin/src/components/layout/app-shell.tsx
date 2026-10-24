@@ -1,51 +1,30 @@
 import { Outlet } from "@tanstack/react-router"
-import { MenuIcon } from "lucide-react"
-import { useState } from "react"
+import type { CSSProperties } from "react"
 import { BranchSwitcher } from "#/components/layout/branch-switcher"
-import { SidebarBrand, SidebarNav } from "#/components/layout/sidebar"
+import { AppSidebar } from "#/components/layout/sidebar"
 import { UserMenu } from "#/components/layout/user-menu"
-import { Button } from "#/components/ui/button"
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "#/components/ui/sheet"
+import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar"
 import type { Session } from "#/lib/auth-client"
 
 export function AppShell({ session }: { session: Session }) {
-	const [mobileOpen, setMobileOpen] = useState(false)
-
 	return (
-		<div className="flex min-h-svh">
-			<aside className="sticky top-0 hidden h-svh w-58 shrink-0 flex-col border-r bg-sidebar lg:flex print:hidden">
-				<SidebarBrand />
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					<SidebarNav role={session.user.role} />
-				</div>
-			</aside>
+		<SidebarProvider style={{ "--sidebar-width": "var(--layout-sidebar-width)" } as CSSProperties}>
+			<AppSidebar role={session.user.role} />
 
 			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur print:hidden">
-					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open menu">
-								<MenuIcon />
-							</Button>
-						</SheetTrigger>
-						<SheetContent side="left" className="w-64 p-0">
-							<SheetTitle className="sr-only">Navigation</SheetTitle>
-							<SidebarBrand />
-							<SidebarNav role={session.user.role} onNavigate={() => setMobileOpen(false)} />
-						</SheetContent>
-					</Sheet>
+				<header className="sticky top-0 z-30 flex h-(--layout-topbar-height) items-center gap-3 bg-topbar px-4 text-topbar-foreground print:hidden">
+					<SidebarTrigger aria-label="Toggle navigation" className="-ml-1" />
 
-					<BranchSwitcher />
-
-					<div className="ml-auto">
+					<div className="ml-auto flex items-center gap-2">
+						<BranchSwitcher />
 						<UserMenu session={session} />
 					</div>
 				</header>
 
-				<main className="min-w-0 flex-1 p-4 md:p-6 print:p-0">
+				<main id="main" tabIndex={-1} className="min-w-0 flex-1 p-4 md:p-6 print:p-0">
 					<Outlet />
 				</main>
 			</div>
-		</div>
+		</SidebarProvider>
 	)
 }
