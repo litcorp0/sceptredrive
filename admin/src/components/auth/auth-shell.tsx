@@ -16,7 +16,7 @@ export function AuthShell({
 			<div className="w-full max-w-sm">
 				<div className="mb-6 flex items-center gap-2.5">
 					<div className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-						GA
+						SD
 					</div>
 					<div>
 						<p className="text-sm font-semibold leading-none">Sceptre Drive</p>

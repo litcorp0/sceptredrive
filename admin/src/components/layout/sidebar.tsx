@@ -90,7 +90,7 @@ export function SidebarBrand() {
 	return (
 		<div className="flex h-14 items-center gap-2.5 border-b px-4">
 			<div className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
-				GA
+				SD
 			</div>
 			<div className="min-w-0">
 				<p className="truncate text-sm font-semibold leading-none">Sceptre Drive</p>
