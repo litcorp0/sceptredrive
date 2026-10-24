@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useCallback, useContext, useMemo, useSta
 import { api } from "#/lib/api"
 import type { Branch } from "#/lib/api-types"
 import type { Session } from "#/lib/auth-client"
+import { SHELL_KEYS } from "#/lib/query-keys"
 
 const STORAGE_KEY = "sceptre-drive.admin.branchId"
 
@@ -24,7 +25,7 @@ export function BranchProvider({ session, children }: { session: Session; childr
 	const canSelectBranch = session.user.role === "ADMIN"
 
 	const { data, isLoading } = useQuery({
-		queryKey: ["branches"],
+		queryKey: SHELL_KEYS.branches,
 		queryFn: () => api.branches.list(),
 	})
 	const branches = useMemo(() => data?.branches ?? [], [data])
