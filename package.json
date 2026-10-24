@@ -63,7 +63,8 @@
     "sync:up": "bun run scripts/prepare-powersync-service.mjs && docker compose --profile sync up -d powersync",
     "sync:down": "docker compose stop powersync",
     "sync:logs": "docker compose logs -f powersync",
-    "sync:config-check": "bun run scripts/check-sync-config.mjs"
+    "sync:config-check": "bun run scripts/check-sync-config.mjs",
+    "brand:check": "node scripts/check-brand.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

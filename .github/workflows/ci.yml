@@ -48,6 +48,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Brand check
+        run: bun run brand:check
+
       - name: Typecheck
         run: bun run check-types
 
