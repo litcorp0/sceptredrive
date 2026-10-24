@@ -59,7 +59,6 @@ const DEFERRED_MODULES = { analytics: 9 }
  * Keep this list free of duplicates and a subset of REQUIRED_MODULES — the gate checks that too.
  */
 const PENDING_MODULES = [
-  'branches',
   'catalog',
   'credit',
   'customers',
@@ -67,7 +66,6 @@ const PENDING_MODULES = [
   'loyalty',
   'payables',
   'suppliers',
-  'terminals',
 ]
 
 /** Folders a module may contain, plus its barrel. */
