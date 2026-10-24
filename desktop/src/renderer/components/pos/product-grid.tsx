@@ -31,11 +31,18 @@ const TAX_LABEL: Record<string, string> = {
   EXEMPT: 'Exempt',
 }
 
+/*
+ * Chip colour never carries the meaning: the label does. A 10 px coloured
+ * label on a 10% tint lands under 4.5:1 (measured `text-warn` on `bg-warn/10`
+ * over `bg-card` at 4.39:1), so the tint stays and the text is `text-foreground`.
+ * `oversold` stays on the warn family and `out` on danger; a transparent border
+ * on every tone keeps the chips the same height once `oversold` draws its own.
+ */
 const TONE_CLASS: Record<StockBadge['tone'], string> = {
-  ok: 'bg-muted text-muted-foreground',
-  low: 'bg-warn/10 text-warn',
-  out: 'bg-danger/10 text-danger',
-  oversold: 'bg-danger/20 text-danger',
+  ok: 'border border-transparent bg-muted text-muted-foreground',
+  low: 'border border-transparent bg-warn/10 text-foreground',
+  out: 'border border-transparent bg-danger/10 text-foreground',
+  oversold: 'border border-warn/30 bg-warn/10 text-foreground',
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
