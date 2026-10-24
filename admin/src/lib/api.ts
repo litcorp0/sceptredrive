@@ -16,10 +16,8 @@ import type {
 	CategoryCreateInput,
 	CategoryTreeNode,
 	CategoryUpdateInput,
-	ChangePasswordInput,
 	CountCreateInput,
 	CountListQuery,
-	CreateStaffResult,
 	CreditEntryCreateInput,
 	CreditEntryListQuery,
 	CreditEntryListResult,
@@ -65,14 +63,6 @@ import type {
 	ReceiptCreateInput,
 	ReceiptListQuery,
 	RepaymentCreateInput,
-	ResetPasswordResult,
-	SetStaffPinInput,
-	SetStaffPinResult,
-	Staff,
-	StaffCreateInput,
-	StaffListQuery,
-	StaffPinStatus,
-	StaffUpdateInput,
 	StatementQuery,
 	StockCount,
 	StockDetail,
@@ -240,27 +230,6 @@ export const api = {
 			apiRequest<{ enrollment: Enrollment }>(`/api/terminals/${id}/enrollment`, {
 				method: "POST",
 			}),
-	},
-
-	staff: {
-		list: (query: StaffListQuery = {}) =>
-			apiRequest<{ staff: Staff[]; total: number }>("/api/staff", { query }),
-		get: (id: string) => apiRequest<{ staff: Staff }>(`/api/staff/${id}`),
-		create: (input: StaffCreateInput) =>
-			apiRequest<CreateStaffResult>("/api/staff", { method: "POST", body: input }),
-		update: (id: string, input: StaffUpdateInput) =>
-			apiRequest<{ staff: Staff }>(`/api/staff/${id}`, { method: "PATCH", body: input }),
-		resetPassword: (id: string) =>
-			apiRequest<ResetPasswordResult>(`/api/staff/${id}/reset-password`, { method: "POST" }),
-		pinStatus: (id: string) => apiRequest<StaffPinStatus>(`/api/staff/${id}/pin-status`),
-		setPin: (id: string, input: SetStaffPinInput) =>
-			apiRequest<SetStaffPinResult>(`/api/staff/${id}/pin`, { method: "POST", body: input }),
-		deactivate: (id: string) =>
-			apiRequest<{ staff: Staff }>(`/api/staff/${id}/deactivate`, { method: "POST" }),
-		reactivate: (id: string) =>
-			apiRequest<{ staff: Staff }>(`/api/staff/${id}/reactivate`, { method: "POST" }),
-		changeOwnPassword: (input: ChangePasswordInput) =>
-			apiRequest<{ ok: true }>("/api/me/password", { method: "POST", body: input }),
 	},
 
 	customers: {

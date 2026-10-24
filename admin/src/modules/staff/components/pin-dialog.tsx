@@ -13,9 +13,10 @@ import {
 } from "#/components/ui/dialog"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
-import { ApiError, api } from "#/lib/api"
-import type { Staff } from "#/lib/api-types"
+import { ApiError } from "#/lib/api"
 import { toastApiError } from "#/lib/toast"
+import { setStaffPin, staffPinStatus } from "../api/staff"
+import type { Staff } from "../types"
 
 /**
  * Sets a temporary POS PIN. The server hashes it (Argon2id), bumps the PIN
@@ -30,11 +31,11 @@ export function PinDialog({ staff, onClose }: { staff: Staff; onClose: () => voi
 
 	const statusQuery = useQuery({
 		queryKey: ["staff-pin", staff.id],
-		queryFn: () => api.staff.pinStatus(staff.id),
+		queryFn: () => staffPinStatus(staff.id),
 	})
 
 	const setPinMutation = useMutation({
-		mutationFn: () => api.staff.setPin(staff.id, { pin }),
+		mutationFn: () => setStaffPin(staff.id, { pin }),
 		onSuccess: async (data) => {
 			toast.success(`Temporary PIN set (version ${data.pinVersion})`, {
 				description: `${staff.name} must change it at the POS on first use.`,

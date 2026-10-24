@@ -5,13 +5,11 @@ import { auditRecentOptions } from "#/modules/audit"
 /**
  * The dashboard's "Recent activity" panel.
  *
- * It sits in `components/common` only for the transition: the fetcher is now `modules/audit`'s,
- * and a route file cannot import a module barrel without failing the thin-route gate. Plan 12
- * moves this file to `modules/dashboard/components`, where `dashboard -> audit` is a normal
- * cross-module import through the barrel.
- *
- * The query key is unchanged from before Phase 8 (`["audit", { scope: "dashboard" }]`, see
+ * It reads the audit module's feed through its barrel — the one cross-module import the dashboard
+ * has. The query key is unchanged from before Phase 8 (`['audit', { scope: 'dashboard' }]`, see
  * `modules/audit/api/keys.ts`), so the panel reads the same cache entry it always did.
+ *
+ * Phase 9 replaces this panel with the real executive dashboard.
  */
 export function RecentActivity() {
 	const auditQuery = useQuery(auditRecentOptions())

@@ -1,5 +1,3 @@
-import type { Role } from "@sceptre/shared"
-
 /**
  * Response and input types mirroring the API contracts in `api/src/modules/*`.
  * Hand-maintained for Phase 1; a shared contracts package can replace this in
@@ -46,36 +44,7 @@ export interface Device {
 	lastSeenAt: string | null
 }
 
-export interface Staff {
-	id: string
-	name: string
-	email: string
-	role: Role
-	branchId: string | null
-	staffId: string | null
-	phone: string | null
-	isActive: boolean
-	mustChangePassword: boolean
-	twoFactorEnabled: boolean
-	pinVersion: number
-	pinMustChange: boolean
-	createdAt: string
-	updatedAt: string
-}
-
-/** PIN metadata from `/api/staff/:id/pin-status`; never includes the hash. */
-export interface StaffPinStatus {
-	hasPin: boolean
-	pinVersion: number
-	pinMustChange: boolean
-	activeBindings: number
-}
-
-export interface SetStaffPinResult {
-	staffId: string
-	pinVersion: number
-}
-
+/** A one-time enrollment code for a terminal. */
 export interface Enrollment {
 	code: string
 	expiresAt: string
@@ -84,17 +53,6 @@ export interface Enrollment {
 export interface SuggestCode {
 	code: string
 	adjusted: boolean
-}
-
-export interface CreateStaffResult {
-	staff: Staff
-	temporaryPassword: string
-	invitationSent: boolean
-}
-
-export interface ResetPasswordResult {
-	temporaryPassword: string
-	invitationSent: boolean
 }
 
 export interface BranchCreateInput {
@@ -125,30 +83,6 @@ export interface TerminalUpdateInput {
 	isActive?: boolean
 }
 
-export interface StaffCreateInput {
-	email: string
-	name: string
-	role: Role
-	branchId?: string | null
-	phone?: string
-}
-
-export interface StaffUpdateInput {
-	name?: string
-	phone?: string
-	role?: Role
-	branchId?: string | null
-}
-
-export interface SetStaffPinInput {
-	pin: string
-}
-
-export interface ChangePasswordInput {
-	currentPassword: string
-	newPassword: string
-}
-
 export type BranchListQuery = {
 	includeInactive?: boolean
 }
@@ -156,15 +90,6 @@ export type BranchListQuery = {
 export type TerminalListQuery = {
 	branchId?: string
 	includeInactive?: boolean
-}
-
-export type StaffListQuery = {
-	role?: Role
-	branchId?: string
-	includeInactive?: boolean
-	search?: string
-	limit?: number
-	offset?: number
 }
 
 export type TaxCategory = "STANDARD" | "ZERO_RATED" | "EXEMPT"
