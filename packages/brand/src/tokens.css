@@ -196,8 +196,15 @@
  * box-shadow, and transform at 150–200 ms; never width or height.
  */
 @layer base {
+  /*
+   * --brand-ink, not --brand: WCAG 2.2 SC 1.4.11 requires 3:1 for a focus indicator.
+   * Measured with the relative-luminance formula, --brand #F26A1B on --canvas is only
+   * 2.83:1 in light mode. --brand-ink gives 4.22:1 on light canvas and 4.56:1 on
+   * white, 7.24:1 on dark canvas and 6.57:1 on dark surface — still the brand orange,
+   * one step darker in light mode and one step lighter in dark mode.
+   */
   :focus-visible {
-    outline: 2px solid var(--brand);
+    outline: 2px solid var(--brand-ink);
     outline-offset: 2px;
   }
 
