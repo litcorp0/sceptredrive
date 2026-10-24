@@ -1,5 +1,6 @@
 import type { PowerSyncDatabase } from '@powersync/web'
 import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
+import { cn } from 'cn'
 import { useCallback, useEffect, useState } from 'react'
 import { ManagerUnlock } from '../components/auth/manager-unlock'
 import { PinPad } from '../components/auth/pin-pad'
@@ -19,7 +20,6 @@ import { startStaffSession } from '../lib/auth/staff-session'
 import { desktopApi, isDesktopAvailable } from '../lib/desktop-api'
 import { lockoutPolicyFor, readCachedConfig } from '../lib/pos-config'
 import { usePos } from '../lib/powersync/provider'
-import { cn } from '../lib/utils'
 
 type Phase = 'loading' | 'select' | 'pin' | 'activate' | 'change'
 

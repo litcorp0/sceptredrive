@@ -90,6 +90,8 @@
       "dependencies": {
         "@maxxuxx/node-printer": "1.6.11",
         "@node-rs/argon2": "catalog:",
+        "cn": "^0.5.0",
+        "recharts": "^3.10.1",
       },
       "devDependencies": {
         "@biomejs/biome": "catalog:",

@@ -1,5 +1,5 @@
+import { cn } from 'cn'
 import { PIN_MAX_LENGTH } from '../../lib/auth/pin'
-import { cn } from '../../lib/utils'
 
 /**
  * Touch PIN pad for the terminal. Large hit targets, digits only, and no
