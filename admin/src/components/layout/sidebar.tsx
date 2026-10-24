@@ -252,7 +252,13 @@ export function AppSidebar({ role }: { role: string }) {
 										<SidebarMenuItem key={item.to}>
 											<SidebarMenuButton
 												asChild
-												tooltip={item.label}
+												/*
+												 * No tooltip in the mobile drawer: the label is already visible, and
+												 * a tooltip opens on keyboard focus, which makes it the first layer
+												 * to receive Escape — so the drawer would need two presses to close.
+												 * The tooltip exists for the icon-collapsed desktop rail.
+												 */
+												tooltip={isMobile ? undefined : item.label}
 												className={cn(
 													"relative text-sidebar-foreground/80 hover:text-sidebar-foreground",
 													// The only brand orange in the sidebar: a 2px rail on the active item.
