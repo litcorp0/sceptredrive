@@ -72,8 +72,8 @@ export function CreditProfileDialog({
 		onSuccess: async () => {
 			toast.success("Credit settings saved")
 			await queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) })
-			// The customers profile key, still owned by `lib/api-types`' caller; Plan 09 moves it
-			// behind `#/modules/customers` and this invalidation imports it from there.
+			// The customers profile key, spelled literally: importing the customers barrel here
+			// would close the customers ↔ credit cycle (that module already imports this one).
 			await queryClient.invalidateQueries({ queryKey: ["customer", customerId] })
 			onOpenChange(false)
 		},

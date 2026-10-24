@@ -6,8 +6,8 @@
  * `components/suppliers/`. The supplier master now lives here; the section layout is a page
  * (`SuppliersLayout`), and each of the three supplier routes renders one page and nothing else
  * (decisions D6, D9 — a move, not a rewrite). The `suppliers/invoices`, `suppliers/payments` and
- * `suppliers/aging` routes are payables screens (route path ≠ module ownership) and stay where
- * they are until Plan 11.
+ * `suppliers/aging` routes are payables screens under a URL that says suppliers (route path ≠
+ * module ownership) and live in `#/modules/payables`.
  *
  * The API keys keep the pre-Phase-8 roots (`["suppliers"]`, `["supplier"]`) byte for byte, because
  * every lifecycle, payment-detail and supplied-product mutation invalidates them by prefix, and
@@ -18,8 +18,10 @@
  * `utils/payment-detail`, the API's masking is never undone, and no account number reaches a log
  * or a query key.
  *
- * The barrel is the only entry point. Payables reads `getSupplier`/`listSuppliers` from here and
- * the shared combobox lives in `components/common` — neither may reach into `components/`.
+ * The barrel is the only entry point. Payables reads `getSupplier`/`supplierDetailOptions` from
+ * here (the invoice and payment forms) and the shared combobox lives in `components/common`;
+ * nothing may reach into `components/`. The reverse read — the supplier list's owed column — is
+ * payables' `supplierBalancesOptions`, also through a barrel.
  */
 
 export { supplierKeys } from "./api/keys"

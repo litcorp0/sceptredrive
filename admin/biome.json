@@ -62,7 +62,8 @@
 									"#/components/catalog/**",
 									"#/components/inventory/**",
 									"#/components/customers/**",
-									"#/components/suppliers/**"
+									"#/components/suppliers/**",
+									"#/components/payables/**"
 								],
 								"message": "That folder has moved into its module. Import #/modules/<name> instead."
 							},

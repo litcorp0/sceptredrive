@@ -3,9 +3,9 @@ import { apiRequest } from "#/lib/api"
 /**
  * The one password fetcher that belongs to the auth domain.
  *
- * The `staff` group in `lib/api.ts` keeps its own copy of `changeOwnPassword` until the staff
- * module lands (Plan 03); this module cannot import `#/lib/api-types`, so the input shape is
- * declared here. Both describe the same `POST /api/me/password` contract.
+ * `POST /api/me/password` changes the signed-in user's own password, so it is auth's contract, not
+ * a staff row: the input shape is declared here and `pages/change-password-page` is its only
+ * caller.
  */
 export interface ChangePasswordInput {
 	currentPassword: string

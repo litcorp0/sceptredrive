@@ -19,9 +19,9 @@
  *
  * Two reads cross the module boundary in each direction, and both are deliberate:
  * this module reads goods receipts and supplier payment details through the `inventory` and
- * `suppliers` barrels, and `inventory`'s receipt screen reads the linked invoice from here.
- * The invoice status badge those screens share lives in `components/common`, so no component is
- * imported across the boundary.
+ * `suppliers` barrels, `inventory`'s receipt screen reads the linked invoice from here, and the
+ * supplier list reads `supplierBalancesOptions` from here. The invoice status badge those screens
+ * share lives in `components/common`, so no component is imported across the boundary.
  *
  * The barrel is the only entry point.
  */
@@ -67,7 +67,6 @@ export {
 	toInvoiceLineInputs,
 	validateInvoiceLineDraft,
 } from "./components/invoice-lines-editor"
-export { InvoiceStatusBadge } from "./components/invoice-status-badge"
 export { PayablesSummaryCards } from "./components/payables-summary-cards"
 export { type InvoicePaymentTarget, PaymentFormDialog } from "./components/payment-form-dialog"
 export { PaymentMethodBadge } from "./components/payment-method-badge"

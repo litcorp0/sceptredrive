@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
 import { useEffect, useState } from "react"
+import { InvoiceStatusBadge } from "#/components/common/invoice-status-badge"
 import { Pagination } from "#/components/common/pagination"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { TableMessage } from "#/components/common/table-message"
@@ -32,7 +33,6 @@ import { hasPermission } from "#/lib/role"
 // suppliers barrel.
 import { supplierDetailOptions } from "#/modules/suppliers"
 import { invoiceListOptions } from "../api/payables"
-import { InvoiceStatusBadge } from "../components/invoice-status-badge"
 import type { SupplierInvoice, SupplierInvoiceStatus } from "../types"
 
 const authenticatedRoute = getRouteApi("/_authenticated")

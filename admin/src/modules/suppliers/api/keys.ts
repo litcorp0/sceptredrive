@@ -9,9 +9,8 @@ import type { SupplierListQuery } from "../types"
  * detail and supplied-product mutation invalidates both explicitly.
  *
  * There are no third and fourth roots here. `["supplier-invoices"]`, `["supplier-payments"]`,
- * `["supplier-balances"]` and the rest of the payables keys belong to the screens under
- * `suppliers/` that Plan 11 moves to `modules/payables`; until then their writers keep spelling
- * those literals inline.
+ * `["supplier-balances"]` and the rest of the payables keys belong to `#/modules/payables`; the
+ * supplier list reads the balance key through that module's `supplierBalancesOptions`.
  */
 export const supplierKeys = {
 	all: ["suppliers"] as const,

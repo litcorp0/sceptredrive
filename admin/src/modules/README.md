@@ -55,8 +55,10 @@ export function staffListOptions(query: StaffListQuery) {
 }
 ```
 
-*Enforced by:* `bun run modules:check` (no `queryKey:` under `pages/` or `components/`), and the
-`noRestrictedImports` ban on `#/lib/api-types`.
+*Enforced by:* `bun run modules:check` (no `queryKey:` under `pages/` or `components/`). The old
+`#/lib/api-types` shape file is gone: every response type lives in the `types/` folder of the module
+that owns the domain, and `#/lib/api.ts` is the transport only (`apiRequest`, `ApiError`,
+`isReauthRequired`) with no domain groups.
 
 **4. Route path ≠ module ownership.** `/suppliers/invoices` is a `payables` page;
 `/customers/aging` is a `credit` page. TanStack derives the URL from the file path, so the route
@@ -64,24 +66,35 @@ file cannot move — only its body can, into the module that owns the domain.
 
 *Enforced by:* `bun run modules:check` (every route is ≤ 25 lines and imports exactly one barrel).
 
-**5. A module may use `#/components/{ui,common,layout}`, `#/lib/*`, `@sceptre/shared`, and its own
-files.** Anything else is a cross-module import and goes through the barrel.
+**5. A module may use the global folders (`components/ui`, `components/common`,
+`components/layout`), anything in `lib`, `@sceptre/shared`, and its own files.** Anything else is a
+cross-module import and goes through the barrel.
 
 *Enforced by:* `admin/biome.json`.
 
 ## The dependency graph
 
 ```
-inventory  → payables      (a goods receipt shows its linked invoice status)
-suppliers  → payables      (the supplier section's tabs)
+inventory  → payables      (a goods receipt shows its linked invoice and its status)
+payables   → inventory     (the invoice form reads goods receipts)
+payables   → suppliers     (the invoice and payment forms read supplier terms and payment details)
+suppliers  → payables      (the supplier list's owed column is a payables balance)
+credit     → payables      (the shared aging bucket vocabulary)
 customers  → credit        (the profile's credit tab)
 customers  → loyalty       (the profile's loyalty tab)
 ```
 
-Everything else is acyclic. The two cross-domain pickers (`supplier-combobox`, `product-picker`)
-live in `components/common` **because** they are used by three domains each; leaving them in
-`suppliers/` and `inventory/` would make `inventory ↔ suppliers` a barrel cycle. Do not move them
-back.
+`inventory ↔ payables` and `suppliers ↔ payables` are the two two-way edges, and both are data, not
+screens: a receipt shows its invoice and an invoice form reads receipts; a supplier list shows what
+is owed and a payment form lists the supplier's destinations. Neither direction imports the other's
+*components* — the shared `invoice-status-badge`, `supplier-combobox` and `product-picker` live in
+`components/common` precisely so no barrel has to re-export a component into a cycle. Every other
+pair is one-way and acyclic.
+
+Those three shared pieces live in `components/common` **because** they are used by more than one
+domain (`supplier-combobox` and `product-picker` by three each, the badge by two). Leaving a picker
+in `suppliers/` and `inventory/` would make `inventory ↔ suppliers` a barrel cycle; leaving the
+badge in `payables/` would make it `inventory ↔ payables`. Do not move them back.
 
 ## Adding a module
 

@@ -2,6 +2,7 @@ import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
+import { InvoiceStatusBadge } from "#/components/common/invoice-status-badge"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -15,7 +16,7 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-import { InvoiceStatusBadge, receiptInvoiceOptions } from "#/modules/payables"
+import { receiptInvoiceOptions } from "#/modules/payables"
 import { receiptDetailOptions } from "../api/inventory"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
