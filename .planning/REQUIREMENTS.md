@@ -281,9 +281,17 @@
   refunds at or above `pos.refundApprovalThresholdMinor` raise a retrospective approval when
   online, or on the next sync when authorised offline.
 - **POS-11** — Electronic tenders online: Paystack MoMo, card, and bank transfer; split
-  tender including cash + electronic; change computed correctly.
+  tender across cash, electronic, and credit in one sale, bounded by the customer's remaining
+  credit limit; change is produced only by cash.
 - **POS-12** — Credit repayment at the POS (cash offline, MoMo/card online) with receipt.
 - **POS-13** — X-report and Z-report, drawer reconciliation, and receipt reprint.
+- **POS-15** — Held carts: a cashier can park several carts per terminal with a required
+  label, serve another customer, and recall any held cart — on any terminal, after a restart,
+  or after a shift change. Recall re-prices against the current catalogue and shows what
+  changed.
+- **POS-16** — Cart void: an uncompleted cart can be abandoned with a reason code, recorded
+  against the shift, cashier, lines, and value, and uploaded like any other POS fact. Voiding
+  never blocks the till and never requires a PIN.
 - **PAY-01** — Paystack charge: MoMo providers `mtn`/`atl`/`vod`, card, and bank transfer;
   amounts in GHS pesewas.
 - **PAY-02** — Webhook and verify are the source of truth: HMAC signature verification,
@@ -351,7 +359,7 @@
 | 10 | UIX-08, UIX-09 |
 | 11 | PROC-01…10, MGR-01…05 |
 | 12 | APR-01…06, BRN-01…05, CC-01…05 |
-| 13 | POS-10…13, PAY-01…03, PAY-07 |
+| 13 | POS-10…13, POS-15, POS-16, PAY-01…03, PAY-07 |
 | 14 | ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03 |
 | 15 | OPS-01…08 |
 

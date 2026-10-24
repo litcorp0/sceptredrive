@@ -32,7 +32,7 @@ Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9 be
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
-| 13 | POS Payments, Returns & Shifts | 🔷 Context locked (9 plans) |
+| 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
@@ -136,6 +136,12 @@ instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEX
   users/settings/audit. Roles stay the fixed three; no custom roles.
 - **Phase 15 stays deferred on purpose:** eight operator inputs are listed in its context;
   nothing in Phases 1–14 depends on them except the one-line domain swap.
+- **Counter workflow added to Phase 13** on operator request: held carts (multiple per
+  terminal, required label, any cashier recalls, survives a restart, re-prices on recall),
+  cart void (reason code, no PIN, uploaded as `CART_VOID`), and split tender that includes
+  credit. Phase 13 grows from 9 to 10 plans; `POS-15` and `POS-16` were added and `POS-11`
+  amended. Holds are local-only by design; a terminal wipe loses them. Void-rate reporting is
+  a Phase 14 oversight addition, not a Phase 9 rewrite.
 
 
 ### Phase 1 plan progress

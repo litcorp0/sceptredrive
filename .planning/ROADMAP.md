@@ -399,9 +399,17 @@ credit repayments, and full shift reporting work end to end.
    raises a retrospective approval, and a MoMo refund completes online through Paystack.
 5. Shift close produces a Z-report whose totals and variance match the local transactions.
 6. A credit repayment at the POS reduces the branch balance and prints a receipt.
+7. A cashier holds three labelled carts, serves a fourth customer, recalls any held cart after
+   restarting the application, and sees a notice where a held line's price changed.
+8. A cart is voided with a reason code; the void is recorded against the shift and cashier and
+   reaches the server without blocking selling.
+9. One sale takes GHS 100 cash, GHS 50 MoMo, and GHS 200 on credit against the remaining
+   limit; change comes only from the cash tender and the credit ledger receives exactly GHS 200.
 
-**Planned scope:** Paystack charge/verify/webhook/refund; mock provider; split tender; POS
-returns flow; repayment flow; X/Z reports; drawer reconciliation; receipt reprint.
+**Planned scope:** Paystack charge/verify/webhook/refund; mock provider; split tender across
+cash, electronic, and credit; POS returns flow; repayment flow; X/Z reports; drawer
+reconciliation; receipt reprint; held carts with labels and recall across restarts; cart void
+with reason codes and outbox upload.
 
 ---
 
