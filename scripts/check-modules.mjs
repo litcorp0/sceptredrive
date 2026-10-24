@@ -385,5 +385,5 @@ if (STRICT && progress.length > 0) {
 
 console.log(
   `\nmodules:check OK — ${migrated.length}/${REQUIRED_MODULES.length} modules migrated` +
-    (STRICT ? '' : ', progress reported above (strict fails on it)'),
+    (STRICT || progress.length === 0 ? '' : ', progress reported above (strict fails on it)'),
 )
