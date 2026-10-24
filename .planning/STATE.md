@@ -135,8 +135,12 @@ became Phases 13/14/15.
   sidebar and header, but the login card carried the same `GA` mark).
 - **Evidence:** `evidence/verify-brand-runtime.mjs` starts a real Chromium against the admin
   dev server and asserts computed typography, the `--brand`/`--canvas`/`--topbar` values,
-  light and dark token flips, and that **no request leaves localhost** — **12/12**. Screens:
-  `evidence/shots/plan03-admin-login-{light,dark}.png`.
+  light and dark token flips, and that **no request leaves localhost** — **12/12**.
+  `evidence/verify-brand-desktop.mjs` does the same inside the real POS renderer (Electron,
+  `app://`, production bundle): typography, `--brand`/`--topbar`/`--canvas`/`--surface`,
+  chart ramp, radius, and no off-machine request — **10/10**. Screens:
+  `evidence/shots/plan03-admin-login-{light,dark}.png`, `evidence/shots/plan03-pos-shell.png`.
+  Both scripts normalise minified CSS (`#fff`, `.625rem`) before comparing.
 - **Open accessibility finding (needs an operator decision before Plan 04):** `--line
   #E4E3DF` on white measures **1.28:1** (1.19:1 on canvas) and `--line #333A41` on the dark
   surface **1.31:1**. That is fine for decorative rules but fails WCAG 2.2 **1.4.11
