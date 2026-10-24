@@ -169,7 +169,7 @@ export function AppSidebar({ role }: { role: string }) {
 				<div className="flex h-(--layout-topbar-height) items-center gap-2.5 px-4 group-data-[collapsible=icon]:px-1.5">
 					<span
 						aria-hidden="true"
-						className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary font-display text-xs font-semibold tracking-normal text-primary-foreground"
+						className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ink font-display text-xs font-semibold tracking-normal text-canvas"
 					>
 						SD
 					</span>
