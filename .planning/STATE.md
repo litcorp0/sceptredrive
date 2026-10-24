@@ -11,7 +11,7 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 7, Plan 04** (shadcn primitives and the chart layer in both clients). The `--line-strong` input-boundary token is in place for Plan 04.
+**Next action:** Execute **Phase 7, Plan 05** (`date-fns` in shared, admin, and desktop).
 
 ---
 
@@ -26,7 +26,7 @@ became Phases 13/14/15.
 | 4 | Customers, Credit & Loyalty | ✅ Complete (8/8 plans, verified) |
 | 5 | Suppliers & Payables | ✅ Complete (7/7 plans, verified) |
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
-| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (3/7 plans) |
+| 7 | Identity, Design System & Brand Foundation | 🔄 In progress (4/7 plans) |
 | 8 | Admin Module Architecture & Shell | ⬜ Not started |
 | 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
@@ -43,7 +43,7 @@ became Phases 13/14/15.
 | 01 | Workspace and package-scope rename | ✅ Complete |
 | 02 | Desktop identity, protocol host, CSP, and copy | ✅ Complete |
 | 03 | `packages/brand`: tokens, fonts, chart ramp | ✅ Complete |
-| 04 | shadcn primitives and chart layer in both clients | ⬜ Not started |
+| 04 | shadcn primitives and chart layer in both clients | ✅ Complete |
 | 05 | `date-fns` in shared, admin, and desktop | ⬜ Not started |
 | 06 | Shell chrome on the new design system | ⬜ Not started |
 | 07 | Phase verification, evidence, and state update | ⬜ Not started |
@@ -150,6 +150,45 @@ became Phases 13/14/15.
   D7's palette is unchanged. Verified in the built CSS and at runtime (resting field border
   `rgb(124,135,148)`; the focused field still carries the brand ring). `MASTER.md` records
   the rule: a decorative rule is not a boundary.
+- **Plan 04 complete** (commits `07594b9`, `be54e77`, `3603774`, `66a9a78`). Admin gained
+  `chart`, `sidebar`, `tooltip`, `toggle-group`, `toggle`, `popover`, `calendar`, `command`,
+  `avatar`, `scroll-area`, `breadcrumb`, `collapsible`, and `empty` from the registry; the
+  desktop gained its first `components/ui` set (19 primitives). `recharts` is pinned to
+  **^3.10.1** in both apps (the registry writes 3.8.0; 3.10.1 is the React 19-supported
+  release). `cn` is the only class helper in both apps and `desktop/src/renderer/lib/utils.ts`
+  is deleted.
+- **shadcn CLI finding (carry into future phases):** CLI 4.22.1 (a) plans to overwrite every
+  existing registry dependency even without `--overwrite`, and (b) appends **16 default
+  oklch/hsl variables** (`--sidebar*`, `--primary`, …) to the app stylesheet, which would
+  have silently overridden the brand tokens. Both were neutralised: the seven existing
+  primitives were moved aside, generated, and restored byte-identical, and the CSS injection
+  was reverted. **Never run `shadcn add` over a live token file without checking the CSS
+  diff.**
+- **Biome findings:** nested configs are inert until they declare `"root": false` (otherwise
+  Biome aborts with "Found a nested root configuration"). The generated primitives violate
+  five recommended rules (`useFocusableInteractive`, `useSemanticElements`,
+  `noDangerouslySetInnerHtml`, `noArrayIndexKey`, `noDocumentCookie`,
+  `useExhaustiveDependencies`), so a scoped `overrides` block turns them off **only** for
+  `components/ui/**`; nothing else is exempted.
+- **Chart proof:** a dev-only gallery renders a two-series revenue area chart, a stacked
+  tender-mix bar chart, a horizontal top-products bar chart, and a sparkline KPI. Admin route
+  is `/dev-charts` (public but `notFound()` outside `import.meta.env.DEV`; the production
+  build answers **404**, verified against `vite preview`). Desktop route is `#dev/charts`,
+  dispatched from `main.tsx` (the plan pointed at `_pos/app.tsx`, which only switches POS
+  sub-routes). Both galleries carry TODO comments for Phases 9/10.
+- **Bugs found by the proof and fixed:** `window.matchMedia` in a `useState` initialiser broke
+  admin SSR ("window is not defined" on every render) — now guarded and SSR-safe; the chart
+  cards lacked `min-w-0`, so the 320 px layout scrolled horizontally (a grid `min-width:auto`
+  overflow); a 48 px Y-axis clipped `100,000`.
+- **Verification:** `evidence/verify-charts-admin.mjs` **61/61** and
+  `evidence/verify-charts-desktop.mjs` **60/60** — four widths (320/768/1024/1440) × light ×
+  dark × reduced-motion: four containers present, no horizontal scroll, no zero-height chart,
+  no animation under `prefers-reduced-motion`, first series `rgb(242,106,27)`, tooltip on
+  hover **and** on keyboard focus, no off-machine request. 48 screenshots under
+  `evidence/shots/plan04-{admin,pos}-*`. Desktop suite still **339/339**; admin production
+  build OK; the import-boundary probe fails with the intended message and the barrel import
+  passes.
+
 ### Operational gap audit (2026-10-24) → Phases 11 and 12
 
 An audit of the built system against parts-manager duties found real deficiencies:
