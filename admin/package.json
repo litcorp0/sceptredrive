@@ -13,7 +13,8 @@
 		"format": "biome format",
 		"lint": "biome lint",
 		"check": "biome check",
-		"check-types": "tsc --noEmit"
+		"check-types": "tsc --noEmit",
+		"test:walkthrough": "node test/walkthrough-sections.mjs"
 	},
 	"dependencies": {
 		"@sceptre/brand": "workspace:*",
