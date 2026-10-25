@@ -467,7 +467,18 @@ export async function getAccountDetail(customerId: string): Promise<LoyaltyAccou
 }
 
 /** The liability headline looks 30 days ahead for near-expiry exposure. */
-const EXPIRING_SOON_DAYS = 30
+export const EXPIRING_SOON_DAYS = 30
+
+/**
+ * Redemption value of a points balance, in integer minor units.
+ *
+ * `pointsPerCedi` points redeem for one cedi, so one point is `100 / pointsPerCedi`
+ * pesewas; the floor keeps the result integer. Exported because the analytics read model
+ * must value the same points with the same rule rather than re-deriving it.
+ */
+export function pointsToValueMinor(points: number, pointsPerCedi: number): number {
+  return Math.floor((points * 100) / pointsPerCedi)
+}
 
 /**
  * Liability report: outstanding points and their redemption value, points
@@ -498,7 +509,7 @@ export async function getLiability(
     asOf: now.toISOString(),
     pointsPerCedi,
     outstandingPoints: totals.points,
-    outstandingValueMinor: Math.floor((totals.points * 100) / pointsPerCedi),
+    outstandingValueMinor: pointsToValueMinor(totals.points, pointsPerCedi),
     expiringSoonPoints,
     activity: {
       from: from?.toISOString() ?? null,
