@@ -275,7 +275,7 @@ try {
 	}
 
 	section("detail screens")
-	const inSection = async (listRoute, pattern, label) => {
+	const inSection = async (listRoute, pattern, label, expected = null) => {
 		await page.goto(`${adminUrl}${listRoute}`, { waitUntil: "networkidle" })
 		await page.locator("main").waitFor()
 		let href = await firstHref(page, pattern)
@@ -318,11 +318,15 @@ try {
 			)
 			return null
 		}
-		await visit(page, href, null)
+		await visit(page, href, expected)
 		return href
 	}
 
-	await inSection("/branches", "^/branches/[^/]+$", "branch detail")
+	// The expected text is not decoration: without it, a detail route that is a child of a layout
+	// with no <Outlet /> renders the *list* page at the detail URL and still passes. That is
+	// exactly what `/branches/$id` did until 2026-10-25, so the branch detail asserts text only
+	// the detail page can produce.
+	await inSection("/branches", "^/branches/[^/]+$", "branch detail", "Updated")
 	await inSection("/catalog/products", "^/catalog/products/(?!new$)[^/]+$", "product detail")
 	await inSection("/inventory/stock", "^/inventory/stock/[^/]+$", "stock detail")
 	await inSection("/inventory/receipts", "^/inventory/receipts/[^/]+$", "receipt detail")
