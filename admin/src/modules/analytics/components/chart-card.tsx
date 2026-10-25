@@ -83,7 +83,12 @@ export function ChartCard({ title, summary, description, children, table }: Char
 				{description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
 				<p className="mt-1 text-xs text-muted-foreground">{summary}</p>
 			</figcaption>
-			<div role="img" aria-label={`${title}. ${summary}`} className="min-w-0">
+			{/*
+			 * `group`, not `img`: the Recharts accessibility layer inside is focusable and
+			 * announces data points, and `role="img"` would hide those descendants from
+			 * assistive technology. The caption names the chart; the data table repeats it.
+			 */}
+			<div role="group" aria-label={`${title}. ${summary}`} className="min-w-0">
 				{children}
 			</div>
 			<details className="mt-3 text-xs">

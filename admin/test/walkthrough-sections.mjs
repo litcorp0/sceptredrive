@@ -354,7 +354,8 @@ try {
 		const problems = await figures.evaluateAll((nodes) =>
 			nodes.map((figure) => {
 				const caption = figure.querySelector("figcaption")?.textContent?.trim() ?? ""
-				const label = figure.querySelector('[role="img"]')?.getAttribute("aria-label") ?? ""
+				const labelled = figure.querySelector('[role="img"], [role="group"][aria-label]')
+				const label = labelled?.getAttribute("aria-label") ?? ""
 				const details = figure.querySelector("details")
 				const table = details?.querySelector("table")
 				const tableCaption = table?.querySelector("caption")?.textContent?.trim() ?? ""
