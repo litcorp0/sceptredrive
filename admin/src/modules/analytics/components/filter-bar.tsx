@@ -47,28 +47,28 @@ export function FilterBar({ search, onChange, branchLabel }: FilterBarProps) {
 				))}
 			</fieldset>
 
-			<div className="flex items-end gap-2">
-				<div className="grid gap-1">
+			<div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+				<div className="grid min-w-0 flex-1 gap-1 sm:flex-none">
 					<Label htmlFor="analytics-from" className="text-xs">
 						From
 					</Label>
 					<Input
 						id="analytics-from"
 						type="date"
-						className="w-40"
+						className="w-full sm:w-40"
 						value={resolved.from}
 						max={resolved.to}
 						onChange={(event) => onChange({ from: event.target.value, offset: undefined })}
 					/>
 				</div>
-				<div className="grid gap-1">
+				<div className="grid min-w-0 flex-1 gap-1 sm:flex-none">
 					<Label htmlFor="analytics-to" className="text-xs">
 						To
 					</Label>
 					<Input
 						id="analytics-to"
 						type="date"
-						className="w-40"
+						className="w-full sm:w-40"
 						value={resolved.to}
 						min={resolved.from}
 						onChange={(event) => onChange({ to: event.target.value, offset: undefined })}

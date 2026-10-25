@@ -62,7 +62,7 @@ export function ProductsTab() {
 
 	if (data.totals.unitsSold === 0) {
 		return (
-			<div className="grid gap-3">
+			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
 					<ExportButton report="products" query={exportQuery} label="Products" />
 				</div>
@@ -87,7 +87,7 @@ export function ProductsTab() {
 	}))
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{formatCount(data.totals.distinctProducts)} products ·{" "}

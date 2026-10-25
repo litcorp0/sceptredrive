@@ -87,7 +87,7 @@ export function PayablesTab() {
 	}))
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{formatGhs(data.totals.invoicedMinor)} invoiced · {formatGhs(data.totals.paidMinor)} paid

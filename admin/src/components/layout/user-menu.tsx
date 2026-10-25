@@ -29,7 +29,7 @@ export function UserMenu({ session }: { session: Session }) {
 					size="sm"
 					className="gap-1.5 text-topbar-foreground hover:bg-white/10 hover:text-topbar-foreground"
 				>
-					<span className="max-w-24 truncate sm:max-w-40">{session.user.name}</span>
+					<span className="hidden max-w-40 truncate sm:inline">{session.user.name}</span>
 					<ChevronDownIcon aria-hidden="true" className="size-3.5 text-topbar-muted" />
 				</Button>
 			</DropdownMenuTrigger>

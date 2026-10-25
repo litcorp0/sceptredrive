@@ -69,7 +69,7 @@ export function SalesTab() {
 
 	if (data.totals.salesCount === 0) {
 		return (
-			<div className="grid gap-3">
+			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
 					<ExportButton report="sales" query={exportQuery} label="Sales" />
 				</div>
@@ -95,7 +95,7 @@ export function SalesTab() {
 	}))
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{formatCount(data.totals.salesCount)} sales · {formatCount(data.totals.itemsSold)} items ·{" "}
@@ -216,7 +216,7 @@ export function SalesTab() {
 				</ChartContainer>
 			</ChartCard>
 
-			<div className="grid gap-4 lg:grid-cols-2">
+			<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 				<BreakdownTable
 					title="By terminal"
 					rows={data.byTerminal}

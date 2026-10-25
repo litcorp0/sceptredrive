@@ -1,11 +1,17 @@
 export type AdjustmentReason = "DAMAGE" | "LOSS" | "FOUND" | "CORRECTION" | "EXPIRED" | "OTHER"
 
+/**
+ * Mirrors `stock_movement_type` in the API. `SALE` arrived with the POS in Phase 6; the
+ * client type was never widened, so a stock detail page with a sale in its history threw on
+ * a missing label. Phase 9's demo month made that certain to happen.
+ */
 export type StockMovementType =
 	| "RECEIPT"
 	| "ADJUSTMENT"
 	| "TRANSFER_OUT"
 	| "TRANSFER_IN"
 	| "COUNT_VARIANCE"
+	| "SALE"
 
 export interface StockRow {
 	productId: string

@@ -68,7 +68,7 @@ export function TaxTab() {
 
 	if (data.totals.salesCount === 0) {
 		return (
-			<div className="grid gap-3">
+			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
 					<ExportButton report="tax" query={query} label="Tax" />
 				</div>
@@ -90,7 +90,7 @@ export function TaxTab() {
 	}))
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					Rates: VAT {formatBasisPoints(data.rates.vatBp)} · NHIL{" "}

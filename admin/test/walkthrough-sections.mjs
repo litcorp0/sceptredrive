@@ -182,6 +182,10 @@ function watch(page) {
 		if (message.type() !== "error") return
 		const text = message.text()
 		if (KNOWN_NOISE.some((pattern) => pattern.test(text))) return
+		// The manager leg's one tolerated 403 (see the response handler) also surfaces as a
+		// browser console error; excuse exactly that URL, not every 403.
+		const source = message.location()?.url ?? ""
+		if (/status of 403/.test(text) && source.endsWith("/api/branches")) return
 		consoleErrors.push(text)
 	})
 	page.on("response", (response) => {

@@ -77,7 +77,7 @@ export function DashboardPage() {
 
 	if (overview.isLoading) {
 		return (
-			<div className="grid gap-5">
+			<div className="grid grid-cols-1 gap-5">
 				<PageHeader title={`Today at ${branchLabel}`} />
 				<PanelState state="loading" label="Dashboard" rows={8} />
 			</div>
@@ -86,7 +86,7 @@ export function DashboardPage() {
 
 	if (overview.isError) {
 		return (
-			<div className="grid gap-5">
+			<div className="grid grid-cols-1 gap-5">
 				<PageHeader title={`Today at ${branchLabel}`} />
 				<PanelState
 					state="error"
@@ -129,7 +129,7 @@ export function DashboardPage() {
 	}))
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<PageHeader
 				title={`Today at ${branchLabel}`}
 				description="Reconciled sales, tax, stock, credit, and loyalty for the selected period. Drill into any figure on Analytics."
@@ -213,7 +213,7 @@ export function DashboardPage() {
 				/>
 			</KpiRow>
 
-			<div className="grid gap-4 lg:grid-cols-2">
+			<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 				<ChartCard
 					title="Take and tax"
 					description="GHS on the vertical axis; every bucket in the period, including days with no trade."

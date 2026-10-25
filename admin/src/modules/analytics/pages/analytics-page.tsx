@@ -52,7 +52,7 @@ export function AnalyticsPage() {
 		: (activeBranch?.name ?? "Your branch")
 
 	return (
-		<div className="grid gap-5">
+		<div className="grid grid-cols-1 gap-5">
 			<PageHeader
 				eyebrow="Insight"
 				title="Analytics"
