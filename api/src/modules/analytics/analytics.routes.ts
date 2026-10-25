@@ -66,6 +66,42 @@ analyticsRoutes.get(
 )
 
 analyticsRoutes.get(
+  '/api/analytics/inventory',
+  requireSession,
+  requirePermission('analytics.read'),
+  analyticsRateLimit,
+  validateAnalyticsQuery,
+  (c) => analyticsController.getInventory(c, c.req.valid('query')),
+)
+
+analyticsRoutes.get(
+  '/api/analytics/credit',
+  requireSession,
+  requirePermission('analytics.read'),
+  analyticsRateLimit,
+  validateAnalyticsQuery,
+  (c) => analyticsController.getCredit(c, c.req.valid('query')),
+)
+
+analyticsRoutes.get(
+  '/api/analytics/loyalty',
+  requireSession,
+  requirePermission('analytics.read'),
+  analyticsRateLimit,
+  validateAnalyticsQuery,
+  (c) => analyticsController.getLoyalty(c, c.req.valid('query')),
+)
+
+analyticsRoutes.get(
+  '/api/analytics/payables',
+  requireSession,
+  requirePermission('analytics.read'),
+  analyticsRateLimit,
+  validateAnalyticsQuery,
+  (c) => analyticsController.getPayables(c, c.req.valid('query')),
+)
+
+analyticsRoutes.get(
   '/api/analytics/sales/export',
   requireSession,
   requirePermission('analytics.read'),
@@ -91,3 +127,19 @@ analyticsRoutes.get(
   validateAnalyticsQuery,
   (c) => analyticsController.exportTax(c, c.req.valid('query')),
 )
+
+for (const exportRoute of [
+  { path: '/api/analytics/inventory/export', handler: analyticsController.exportInventory },
+  { path: '/api/analytics/credit/export', handler: analyticsController.exportCredit },
+  { path: '/api/analytics/loyalty/export', handler: analyticsController.exportLoyalty },
+  { path: '/api/analytics/payables/export', handler: analyticsController.exportPayables },
+] as const) {
+  analyticsRoutes.get(
+    exportRoute.path,
+    requireSession,
+    requirePermission('analytics.read'),
+    exportRateLimit,
+    validateAnalyticsQuery,
+    (c) => exportRoute.handler(c, c.req.valid('query')),
+  )
+}

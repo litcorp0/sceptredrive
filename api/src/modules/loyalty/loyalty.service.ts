@@ -501,7 +501,7 @@ export async function getLiability(
   const [totals, expiringSoonPoints, activityRows, negativeBalances] = await Promise.all([
     sumOutstanding(),
     sumExpiringPoints(now, expiringUntil),
-    branchActivity({ from, to, branchId }),
+    getBranchActivityTotals({ from, to, branchId }),
     listNegativeBalances(branchId),
   ])
 
@@ -515,15 +515,7 @@ export async function getLiability(
       from: from?.toISOString() ?? null,
       to: to?.toISOString() ?? null,
       branchId,
-      rows: activityRows.map((row) => ({
-        ...row,
-        netPoints:
-          row.earnedPoints -
-          row.redeemedPoints -
-          row.clawedBackPoints +
-          row.adjustedPoints -
-          row.expiredPoints,
-      })),
+      rows: activityRows,
     },
     negativeBalances,
   }
@@ -576,4 +568,58 @@ export async function reconcileAccounts(): Promise<LoyaltyReconciliationDivergen
   }
 
   return divergences
+}
+
+/** One read-model helper pair so analytics never re-derives the programme's numbers. */
+
+/**
+ * Outstanding points across every account, i.e. the liability's point side. Exported for
+ * the analytics read model (P9-D10): valuation stays in `pointsToValueMinor`, never in a
+ * second module.
+ */
+export async function sumOutstandingPoints(
+  executor: DbExecutor = db,
+): Promise<{ accounts: number; points: number }> {
+  return sumOutstanding(executor)
+}
+
+/** Remaining points in live lots expiring inside the standard 30-day window. */
+export async function sumExpiringSoonPoints(now: Date, executor: DbExecutor = db): Promise<number> {
+  const until = new Date(now.getTime() + EXPIRING_SOON_DAYS * 86_400_000)
+  return sumExpiringPoints(now, until, executor)
+}
+
+export interface LoyaltyBranchActivityTotalsRow {
+  branchId: string | null
+  earnedPoints: number
+  redeemedPoints: number
+  clawedBackPoints: number
+  adjustedPoints: number
+  expiredPoints: number
+  netPoints: number
+}
+
+/**
+ * Per-branch activity for a range, including the single global expiry row (branch null).
+ * The net formula lives here so the liability report and the analytics tab cannot drift.
+ */
+export async function getBranchActivityTotals(
+  filter: { from: Date | null; to: Date | null; branchId: string | null },
+  executor: DbExecutor = db,
+): Promise<LoyaltyBranchActivityTotalsRow[]> {
+  const activity = await branchActivity(filter, executor)
+  return activity.map((row) => ({
+    branchId: row.branchId,
+    earnedPoints: row.earnedPoints,
+    redeemedPoints: row.redeemedPoints,
+    clawedBackPoints: row.clawedBackPoints,
+    adjustedPoints: row.adjustedPoints,
+    expiredPoints: row.expiredPoints,
+    netPoints:
+      row.earnedPoints -
+      row.redeemedPoints -
+      row.clawedBackPoints +
+      row.adjustedPoints -
+      row.expiredPoints,
+  }))
 }

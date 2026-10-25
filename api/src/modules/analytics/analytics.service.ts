@@ -13,7 +13,14 @@ import { sql } from 'drizzle-orm'
 import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { EXPIRING_SOON_DAYS, pointsToValueMinor } from '../loyalty/loyalty.service.ts'
+import {
+  EXPIRING_SOON_DAYS,
+  getBranchActivityTotals,
+  pointsToValueMinor,
+  sumExpiringSoonPoints,
+  sumOutstandingPoints,
+} from '../loyalty/loyalty.service.ts'
+import { getAgingTotals } from '../payables/payables.service.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
 import * as repository from './analytics.repository.ts'
 import type {
@@ -657,4 +664,396 @@ export async function exportTax(context: ReportContext<AnalyticsQuery>): Promise
   const branchId = report.scope.branchId
   const branchCode = branchId ? await repository.selectBranchCode(db, branchId) : null
   return { filename: exportFilename('tax', branchCode, report.period), csv }
+}
+
+// --- Inventory, credit, loyalty, payables read models ------------------------
+
+const TOP_MOVER_LIMIT = 10
+const TOP_SUPPLIER_LIMIT = 10
+const LOYALTY_EXPIRY_MONTHS_KEY = 'loyalty.expiryMonths' as const
+
+/**
+ * Stock value and movement.
+ *
+ * Every figure is an aggregate over `stock_level` (the projection) and `stock_movement`
+ * (the append-only ledger). Nothing is re-valued in JavaScript: the projection already
+ * carries the average cost the inventory service maintains, and the trend sums the
+ * ledger's own deltas.
+ */
+export async function getInventory(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<import('./analytics.types.ts').InventoryResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const isAdmin = roleOf(user) === 'ADMIN'
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const totals = await repository.selectStockTotals(tx, branchId)
+    const byBranch = isAdmin ? await repository.selectStockByBranch(tx, branchId) : []
+    const flow = await repository.selectStockFlow(tx, window, period.granularity, branchId)
+    const topMovers = await repository.selectTopMovers(tx, window, branchId, TOP_MOVER_LIMIT)
+    const deadStockCount = await repository.selectDeadStockCount(tx, window, branchId)
+    return { totals, byBranch, flow, topMovers, deadStockCount }
+  })
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    totals: result.totals,
+    byBranch: result.byBranch,
+    flow: result.flow,
+    topMovers: result.topMovers,
+    deadStock: result.deadStockCount,
+  }
+}
+
+/**
+ * Credit read model.
+ *
+ * `outstandingMinor` is the stored profile projection; `ledgerBalanceMinor` is the same
+ * customers' append-only ledger. They must agree, so the drift is a first-class field
+ * rather than something a reconciliation screen computes later (P9-D10, append-only rule).
+ *
+ * No customer row enters this payload — only counts, buckets, and branch totals (D15).
+ */
+export async function getCredit(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<import('./analytics.types.ts').CreditResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const isAdmin = roleOf(user) === 'ADMIN'
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const position = await repository.selectCreditPosition(tx, branchId)
+    const ledgerBalanceMinor = await repository.selectCreditLedgerBalance(tx, branchId)
+    const series = await repository.selectCreditSeries(tx, window, period.granularity, branchId)
+    const distribution = await repository.selectCreditDistribution(tx, branchId)
+    const byBranch = isAdmin ? await repository.selectCreditByBranch(tx, branchId) : []
+    return { position, ledgerBalanceMinor, series, distribution, byBranch }
+  })
+
+  const { position } = result
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    totals: {
+      outstandingMinor: position.outstandingMinor,
+      limitMinor: position.limitMinor,
+      utilisationBp: ratioBp(position.outstandingMinor, position.limitMinor),
+      customersWithBalance: position.customersWithBalance,
+      overLimitCount: position.overLimitCount,
+      onHoldCount: position.onHoldCount,
+      overLimitExposureMinor: position.overLimitExposureMinor,
+      ledgerBalanceMinor: result.ledgerBalanceMinor,
+      reconcileDriftMinor: position.outstandingMinor - result.ledgerBalanceMinor,
+    },
+    series: result.series,
+    distribution: result.distribution,
+    byBranch: result.byBranch,
+  }
+}
+
+/**
+ * Loyalty read model.
+ *
+ * Points outstanding are a global account projection, so they are not branch-filtered;
+ * the flow figures are, with the owning service's expiry-row convention. Valuation calls
+ * `pointsToValueMinor` and the activity sums call `getBranchActivityTotals`, so the tab
+ * cannot disagree with `/api/loyalty/liability`.
+ */
+export async function getLoyalty(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<import('./analytics.types.ts').LoyaltyResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const isAdmin = roleOf(user) === 'ADMIN'
+  const now = new Date()
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const totals = await repository.selectLoyaltyTotals(tx, window, branchId)
+    const outstanding = await sumOutstandingPoints(tx)
+    const expiringPoints = await sumExpiringSoonPoints(now, tx)
+    const series = await repository.selectLoyaltySeries(tx, window, period.granularity, branchId)
+    const activity = await getBranchActivityTotals(
+      { from: window.from, to: new Date(window.toExclusive.getTime() - 1), branchId },
+      tx,
+    )
+    const branches = isAdmin ? await repository.selectBranchLabels(tx) : []
+    const pointsPerCedi = await getSettingValue('loyalty.pointsPerCedi', {}, tx)
+    const earnPointsPerCedi = await getSettingValue('loyalty.earnPointsPerCedi', {}, tx)
+    const expiryMonths = await getSettingValue(LOYALTY_EXPIRY_MONTHS_KEY, {}, tx)
+    return {
+      totals,
+      outstandingPoints: outstanding.points,
+      expiringPoints,
+      series,
+      activity,
+      branches,
+      earnRate: { pointsPerCedi, earnPointsPerCedi, expiryMonths },
+    }
+  })
+
+  const branchLabels = new Map(result.branches.map((row) => [row.branchId, row]))
+  // The global expiry row (branch null) stays out of the per-branch list but is still in
+  // the totals above.
+  const byBranch = isAdmin
+    ? result.activity
+        .filter((row): row is typeof row & { branchId: string } => row.branchId !== null)
+        .map((row) => ({
+          branchId: row.branchId,
+          code: branchLabels.get(row.branchId)?.code ?? '',
+          name: branchLabels.get(row.branchId)?.name ?? '',
+          earnedPoints: row.earnedPoints,
+          redeemedPoints: row.redeemedPoints,
+          clawedBackPoints: row.clawedBackPoints,
+          adjustedPoints: row.adjustedPoints,
+          expiredPoints: row.expiredPoints,
+          netPoints: row.netPoints,
+        }))
+    : []
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    totals: {
+      ...result.totals,
+      outstandingPoints: result.outstandingPoints,
+      outstandingValueMinor: pointsToValueMinor(
+        result.outstandingPoints,
+        result.earnRate.pointsPerCedi,
+      ),
+    },
+    expiringSoon: {
+      points: result.expiringPoints,
+      valueMinor: pointsToValueMinor(result.expiringPoints, result.earnRate.pointsPerCedi),
+      days: EXPIRING_SOON_DAYS,
+    },
+    series: result.series,
+    earnRate: result.earnRate,
+    byBranch,
+  }
+}
+
+/**
+ * Payables read model.
+ *
+ * Outstanding and overdue are positions as of today; invoiced and paid are window flows.
+ * The ageing buckets come from `payables.service.getAgingTotals`, which owns the
+ * boundaries, so this tab and `/api/payables/aging` cannot disagree.
+ */
+export async function getPayables(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<import('./analytics.types.ts').PayablesResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const today = accraIsoDay()
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const position = await repository.selectPayablesPosition(tx, branchId, today)
+    const invoicedMinor = await repository.selectInvoicedInWindow(tx, window, branchId)
+    const paidMinor = await repository.selectPaidInWindow(tx, window, branchId)
+    const onAccountMinor = await repository.selectOnAccountTotal(tx, branchId)
+    const series = await repository.selectPayablesSeries(tx, window, period.granularity, branchId)
+    const topSuppliers = await repository.selectTopSuppliersByOutstanding(
+      tx,
+      branchId,
+      today,
+      TOP_SUPPLIER_LIMIT,
+    )
+    const overdueBuckets = await getAgingTotals(branchId, today, tx)
+    return {
+      position,
+      invoicedMinor,
+      paidMinor,
+      onAccountMinor,
+      series,
+      topSuppliers,
+      overdueBuckets,
+    }
+  })
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    overdueBuckets: result.overdueBuckets,
+    totals: {
+      outstandingMinor: result.position.outstandingMinor,
+      paidMinor: result.paidMinor,
+      overdueMinor: result.position.overdueMinor,
+      invoicedMinor: result.invoicedMinor,
+      onAccountMinor: result.onAccountMinor,
+    },
+    series: result.series,
+    topSuppliers: result.topSuppliers,
+  }
+}
+
+// --- Exports for the four state reports --------------------------------------
+
+/**
+ * Every view exports the table it shows (ANL-03/D12). The four state reports export their
+ * breakdown table — branch exposure for inventory and credit, branch activity for loyalty,
+ * supplier balances for payables — with a TOTAL row so the file reconciles to the headline
+ * without the reader adding anything up.
+ *
+ * Money columns stay raw pesewas, named `…_minor`, exactly as in the sales and product
+ * exports.
+ */
+async function exportFilenameFor(
+  report: string,
+  branchId: string | null,
+  period: Period,
+): Promise<string> {
+  const branchCode = branchId ? await repository.selectBranchCode(db, branchId) : null
+  return exportFilename(report, branchCode, period)
+}
+
+export async function exportInventory(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<ExportResult> {
+  const report = await getInventory(context)
+  const rows = report.byBranch.map((row) => ({
+    code: row.code,
+    name: row.name,
+    stockValueMinor: row.stockValueMinor,
+    unitsOnHand: row.unitsOnHand,
+    lowStockCount: row.lowStockCount,
+  }))
+  rows.push({
+    code: 'TOTAL',
+    name: '',
+    stockValueMinor: report.totals.stockValueMinor,
+    unitsOnHand: report.totals.unitsOnHand,
+    lowStockCount: report.totals.lowStockCount,
+  })
+
+  return {
+    filename: await exportFilenameFor('inventory', report.scope.branchId, report.period),
+    csv: toCsv(
+      [
+        { key: 'code', header: 'branch_code' },
+        { key: 'name', header: 'branch_name' },
+        { key: 'stockValueMinor', header: 'stock_value_minor' },
+        { key: 'unitsOnHand', header: 'units_on_hand' },
+        { key: 'lowStockCount', header: 'low_stock_count' },
+      ],
+      rows,
+    ),
+  }
+}
+
+export async function exportCredit(context: ReportContext<AnalyticsQuery>): Promise<ExportResult> {
+  const report = await getCredit(context)
+  const rows = report.byBranch.map((row) => ({
+    code: row.code,
+    name: row.name,
+    outstandingMinor: row.outstandingMinor,
+    limitMinor: row.limitMinor,
+    overLimitCount: row.overLimitCount,
+  }))
+  rows.push({
+    code: 'TOTAL',
+    name: '',
+    outstandingMinor: report.totals.outstandingMinor,
+    limitMinor: report.totals.limitMinor,
+    overLimitCount: report.totals.overLimitCount,
+  })
+
+  return {
+    filename: await exportFilenameFor('credit', report.scope.branchId, report.period),
+    csv: toCsv(
+      [
+        { key: 'code', header: 'branch_code' },
+        { key: 'name', header: 'branch_name' },
+        { key: 'outstandingMinor', header: 'credit_outstanding_minor' },
+        { key: 'limitMinor', header: 'credit_limit_minor' },
+        { key: 'overLimitCount', header: 'over_limit_customers' },
+      ],
+      rows,
+    ),
+  }
+}
+
+export async function exportLoyalty(context: ReportContext<AnalyticsQuery>): Promise<ExportResult> {
+  const report = await getLoyalty(context)
+  const rows = report.byBranch.map((row) => ({
+    code: row.code,
+    name: row.name,
+    earnedPoints: row.earnedPoints,
+    redeemedPoints: row.redeemedPoints,
+    expiredPoints: row.expiredPoints,
+    netPoints: row.netPoints,
+  }))
+  rows.push({
+    code: 'TOTAL',
+    name: '',
+    earnedPoints: report.totals.issuedPoints,
+    redeemedPoints: report.totals.redeemedPoints,
+    expiredPoints: report.totals.expiredPoints,
+    netPoints:
+      report.totals.issuedPoints - report.totals.redeemedPoints - report.totals.expiredPoints,
+  })
+
+  return {
+    filename: await exportFilenameFor('loyalty', report.scope.branchId, report.period),
+    csv: toCsv(
+      [
+        { key: 'code', header: 'branch_code' },
+        { key: 'name', header: 'branch_name' },
+        { key: 'earnedPoints', header: 'earned_points' },
+        { key: 'redeemedPoints', header: 'redeemed_points' },
+        { key: 'expiredPoints', header: 'expired_points' },
+        { key: 'netPoints', header: 'net_points' },
+      ],
+      rows,
+    ),
+  }
+}
+
+export async function exportPayables(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<ExportResult> {
+  const report = await getPayables(context)
+  const rows = report.topSuppliers.map((row) => ({
+    code: row.code,
+    name: row.name,
+    outstandingMinor: row.outstandingMinor,
+    overdueMinor: row.overdueMinor,
+  }))
+  rows.push({
+    code: 'TOTAL',
+    name: '',
+    outstandingMinor: report.totals.outstandingMinor,
+    overdueMinor: report.totals.overdueMinor,
+  })
+
+  return {
+    filename: await exportFilenameFor('payables', report.scope.branchId, report.period),
+    csv: toCsv(
+      [
+        { key: 'code', header: 'supplier_code' },
+        { key: 'name', header: 'supplier_name' },
+        { key: 'outstandingMinor', header: 'outstanding_minor' },
+        { key: 'overdueMinor', header: 'overdue_minor' },
+      ],
+      rows,
+    ),
+  }
 }

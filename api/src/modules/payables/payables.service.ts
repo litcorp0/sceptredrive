@@ -875,6 +875,26 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
 }
 
 /**
+ * Ageing totals only, for read models outside this module (analytics).
+ *
+ * Deliberately built from `selectAgingInvoiceRows` + `payableAging`, not a second SQL
+ * `CASE`: the bucket boundaries must be the ones this service owns. On-account credit is
+ * never netted into the buckets (D9), matching `getAging`.
+ */
+export async function getAgingTotals(
+  branchId: string | null,
+  asOf: string,
+  executor: DbExecutor = db,
+): Promise<AgingBuckets> {
+  const rows = await selectAgingInvoiceRows({ branchId, supplierId: null }, executor)
+  const totals = emptyAgingBuckets()
+  for (const row of rows) {
+    totals[payableAging(row.dueDate, asOf).bucket] += row.outstandingMinor
+  }
+  return totals
+}
+
+/**
  * Read-only invariant check: every invoice's paid amount equals its signed
  * allocations and its status follows from them; every supplier's owed figure
  * (balances query path) equals the suppliers module's independent

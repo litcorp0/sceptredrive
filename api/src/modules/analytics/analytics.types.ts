@@ -298,3 +298,221 @@ export interface TaxResponse {
   driftExplanation: string
   rates: { vatBp: number; nhilBp: number; getfundBp: number; totalBp: number; source: string }
 }
+
+// --- Inventory valuation and movement (ANL-02) ------------------------------
+
+export interface InventoryTotals {
+  /** `Σ quantity_on_hand × avg_cost_minor` over the projection, in minor units. */
+  stockValueMinor: number
+  unitsOnHand: number
+  distinctProducts: number
+  /** At or below a configured threshold. The rule is `inventory.service.toStockRow`'s. */
+  lowStockCount: number
+  outOfStockCount: number
+  /** Rows that have a threshold configured at all, so "low stock" has a denominator. */
+  thresholdCount: number
+}
+
+export interface InventoryBranchRow {
+  branchId: string
+  code: string
+  name: string
+  stockValueMinor: number
+  unitsOnHand: number
+  lowStockCount: number
+}
+
+/**
+ * Stock flow for the window.
+ *
+ * **Bucketed on `stock_movement.created_at`** — the ledger posting time, not the business
+ * date. `stock_movement` has no `occurred_at` column, so a sale synced late lands in the
+ * bucket it was posted in, exactly as the ledger records it.
+ */
+export interface InventoryFlowPoint {
+  bucketStart: string
+  receivedUnits: number
+  soldUnits: number
+  /** `ADJUSTMENT` plus `COUNT_VARIANCE`, signed as stored. */
+  adjustedUnits: number
+  transferredInUnits: number
+  transferredOutUnits: number
+  receivedValueMinor: number
+}
+
+export interface InventoryMover {
+  productId: string
+  sku: string
+  name: string
+  unitsSold: number
+}
+
+export interface InventoryResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  totals: InventoryTotals
+  byBranch: InventoryBranchRow[]
+  flow: InventoryFlowPoint[]
+  topMovers: InventoryMover[]
+  /**
+   * Product/branch rows holding stock with no movement in the window. A count only — the
+   * list is RPT-04 (Phase 14).
+   */
+  deadStock: number
+}
+
+// --- Credit (ANL-02) --------------------------------------------------------
+
+/**
+ * Utilisation buckets, labelled for direct display (D10): the chart legend and the table
+ * both print `label` verbatim. `No limit` covers profiles with a zero limit.
+ */
+export type CreditUtilisationBucket = '0-50%' | '50-80%' | '80-100%' | '>100%' | 'No limit'
+
+export interface CreditTotals {
+  /** `Σ credit_profile.balance_minor` — the stored projection, including customer credit. */
+  outstandingMinor: number
+  limitMinor: number
+  utilisationBp: number | null
+  /** Profiles with a positive balance. Distribution counts add up to this. */
+  customersWithBalance: number
+  overLimitCount: number
+  onHoldCount: number
+  overLimitExposureMinor: number
+  /** `Σ credit_ledger_entry.amount_minor` for the same scope: the append-only cross-check. */
+  ledgerBalanceMinor: number
+  /** `outstandingMinor − ledgerBalanceMinor`. Zero is the normal case; the tests assert it. */
+  reconcileDriftMinor: number
+}
+
+export interface CreditSeriesPoint {
+  bucketStart: string
+  chargesMinor: number
+  repaymentsMinor: number
+  netMinor: number
+}
+
+export interface CreditBucket {
+  label: CreditUtilisationBucket
+  count: number
+  balanceMinor: number
+}
+
+export interface CreditBranchRow {
+  branchId: string
+  code: string
+  name: string
+  outstandingMinor: number
+  limitMinor: number
+  overLimitCount: number
+}
+
+/** No customer id, name, or phone appears anywhere in this payload (D15). */
+export interface CreditResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  totals: CreditTotals
+  series: CreditSeriesPoint[]
+  distribution: CreditBucket[]
+  byBranch: CreditBranchRow[]
+}
+
+// --- Loyalty (ANL-02) -------------------------------------------------------
+
+export interface LoyaltyTotals {
+  issuedPoints: number
+  redeemedPoints: number
+  expiredPoints: number
+  adjustedPoints: number
+  clawedBackPoints: number
+  /** From the loyalty account projection, valued with the owning service's rule. */
+  outstandingPoints: number
+  outstandingValueMinor: number
+}
+
+export interface LoyaltySeriesPoint {
+  bucketStart: string
+  issuedPoints: number
+  redeemedPoints: number
+  expiredPoints: number
+}
+
+/**
+ * Per-branch activity. The global expiry postings carry no branch, so they are not a row
+ * here; they remain part of the headline totals.
+ */
+export interface LoyaltyBranchRow {
+  branchId: string
+  code: string
+  name: string
+  earnedPoints: number
+  redeemedPoints: number
+  clawedBackPoints: number
+  adjustedPoints: number
+  expiredPoints: number
+  netPoints: number
+}
+
+/** The programme's own numbers, so a chart legend never hard-codes them. */
+export interface LoyaltyEarnRate {
+  pointsPerCedi: number
+  earnPointsPerCedi: number
+  expiryMonths: number
+}
+
+export interface LoyaltyResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  totals: LoyaltyTotals
+  expiringSoon: { points: number; valueMinor: number; days: number }
+  series: LoyaltySeriesPoint[]
+  earnRate: LoyaltyEarnRate
+  byBranch: LoyaltyBranchRow[]
+}
+
+// --- Payables (ANL-02) ------------------------------------------------------
+
+export interface PayablesTotals {
+  outstandingMinor: number
+  paidMinor: number
+  overdueMinor: number
+  invoicedMinor: number
+  onAccountMinor: number
+}
+
+export interface PayablesSeriesPoint {
+  bucketStart: string
+  invoicedMinor: number
+  paidMinor: number
+}
+
+export interface PayablesSupplierRow {
+  supplierId: string
+  code: string
+  name: string
+  outstandingMinor: number
+  overdueMinor: number
+}
+
+export interface PayablesResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  /** The ageing buckets as of today (Accra), from the payables service's own rule. */
+  overdueBuckets: AgingBuckets
+  totals: PayablesTotals
+  series: PayablesSeriesPoint[]
+  topSuppliers: PayablesSupplierRow[]
+}
+
+/** Mirrors `payables.types.AgingBuckets` without importing that module's types. */
+export interface AgingBuckets {
+  current: number
+  days1To30: number
+  days31To60: number
+  days61To90: number
+  over90: number
+}

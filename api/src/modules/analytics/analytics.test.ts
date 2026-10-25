@@ -1,5 +1,5 @@
 import { db } from '@sceptre/db'
-import { priceCart } from '@sceptre/shared'
+import { accraIsoDay, priceCart, ratioBp } from '@sceptre/shared'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -15,7 +15,7 @@ import { category, uom } from '../catalog/catalog.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../credit/credit.schema.ts'
 import { customer } from '../customers/customers.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
-import { stockLevel, stockMovement } from '../inventory/inventory.schema.ts'
+import { stockLevel, stockMovement, stockThreshold } from '../inventory/inventory.schema.ts'
 import {
   loyaltyAccount,
   loyaltyLedgerEntry,
@@ -25,6 +25,12 @@ import {
 import { branch } from '../org/branches.schema.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import { device, terminal } from '../org/terminals.schema.ts'
+import {
+  supplierInvoice,
+  supplierInvoiceLine,
+  supplierPayment,
+  supplierPaymentAllocation,
+} from '../payables/payables.schema.ts'
 import {
   cashMovement,
   posStaffBinding,
@@ -37,6 +43,7 @@ import {
 import { applySale, openShift } from '../pos/pos.service.ts'
 import type { SalePayload } from '../pos/pos.types.ts'
 import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { buildTenderMix, foldCategories, resolvePeriod, toWindow } from './analytics.service.ts'
 import type { CategorySlice } from './analytics.types.ts'
@@ -502,6 +509,19 @@ describe.skipIf(!available)('analytics overview', () => {
     expect(mix.find((slice) => slice.method === 'CREDIT')?.amountMinor).toBe(10_000)
   })
 
+  it('reports sync health from terminals, devices, and the sale clock', async () => {
+    // One active terminal in branch A; no device revoked; every fixture sale was
+    // received at the instant it occurred, so both lag figures are zero.
+    const { body } = await overview(adminCookie, { ...PERIOD, branchId: branchA })
+    expect(body.syncHealth).toEqual({
+      activeTerminals: 1,
+      terminalsSeenToday: 0,
+      revokedDevices30d: 0,
+      avgUploadLagMinutes: 0,
+      maxUploadLagMinutes: 0,
+    })
+  })
+
   it('narrows a manager to their own branch and refuses another with 403', async () => {
     const own = await overview(managerCookie, PERIOD)
     expect(own.response.status).toBe(200)
@@ -758,6 +778,27 @@ describe.skipIf(!available)('analytics overview', () => {
     expect(managerCsv).not.toContain(`${suffix}B`)
     expect(managerCsv).toContain(`${suffix}A`)
   })
+
+  it('exports the four state reports with a reconciling TOTAL row', async () => {
+    for (const report of ['inventory', 'credit', 'loyalty', 'payables']) {
+      const response = await get(`/api/analytics/${report}/export`, adminCookie, PERIOD)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('text/csv')
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf])
+      const csv = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
+      expect(csv).toContain('\r\n')
+      expect(csv).toContain('TOTAL')
+      const header = csv.split('\r\n')[0] ?? ''
+      expect(header.length).toBeGreaterThan(0)
+    }
+
+    const forbidden = await get('/api/analytics/credit/export', managerCookie, {
+      ...PERIOD,
+      branchId: branchB,
+    })
+    expect(forbidden.status).toBe(403)
+  })
 })
 
 describe('analytics pure helpers', () => {
@@ -797,5 +838,759 @@ describe('analytics pure helpers', () => {
     expect(folded.reduce((total, slice) => total + slice.revenueBaseMinor, 0)).toBe(
       slices.reduce((total, slice) => total + slice.revenueBaseMinor, 0),
     )
+  })
+})
+
+describe.skipIf(!available)('analytics ledger read models', () => {
+  const suffix = randomToken(4)
+  const createdBranchIds: string[] = []
+  const createdTerminalIds: string[] = []
+  const createdDeviceIds: string[] = []
+  const createdShiftIds: string[] = []
+  const createdSaleIds: string[] = []
+  const createdProductIds: string[] = []
+  const createdCategoryIds: string[] = []
+  const createdUomIds: string[] = []
+  const createdCustomerIds: string[] = []
+  const createdUserIds: string[] = []
+  const createdSupplierIds: string[] = []
+  const createdInvoiceIds: string[] = []
+  const createdPaymentIds: string[] = []
+
+  const CREDIT_PERIOD = { from: '2026-10-01', to: '2026-10-05', granularity: 'day' } as const
+  const CREDIT_CHARGE_MINOR = 10_000
+  const CREDIT_REPAYMENT_MINOR = 4_000
+  const EARN_NET_PAID_MINOR = 50_000
+  const REDEEM_POINTS = 200
+
+  let branchC = ''
+  let branchD = ''
+  let adminCookie = ''
+  let managerCookie = ''
+  let cashierUserId = ''
+  let cashierStaffId = ''
+  let proof: {
+    userId: string
+    staffId: string
+    bindingId: string
+    bindingToken: string
+    pinVersion: number
+  } = { userId: '', staffId: '', bindingId: '', bindingToken: '', pinVersion: 1 }
+  let deviceC: DeviceAuthContext = { deviceId: '', terminalId: '', branchId: '' }
+  let shiftC = ''
+  let productP1 = ''
+  let productP2 = ''
+  let productP3 = ''
+  let creditCustomerId = ''
+  let loyaltyCustomerId = ''
+  let supplierId = ''
+  let invoiceId = ''
+  let invoiceTotalMinorValue = 0
+  let paymentAmountMinorValue = 0
+  const creditCustomerName = `Credit Bucket ${suffix}`
+  const creditCustomerPhone = `+23320${String(Date.now()).slice(-7)}`
+  const loyaltyCustomerName = `Loyalty Flow ${suffix}`
+  const loyaltyCustomerPhone = `+23327${String(Date.now()).slice(-7)}`
+
+  function isoMinus(day: string, days: number): string {
+    return new Date(new Date(`${day}T00:00:00.000Z`).getTime() - days * 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+  }
+
+  async function get(path: string, cookie: string, query: Record<string, string> = {}) {
+    const params = new URLSearchParams(query)
+    return app.request(`${path}?${params.toString()}`, { headers: authedHeaders(cookie) })
+  }
+
+  async function post(path: string, cookie: string, body: unknown) {
+    return app.request(path, {
+      method: 'POST',
+      headers: authedHeaders(cookie),
+      body: JSON.stringify(body),
+    })
+  }
+
+  function payloadFor(input: {
+    receiptNumber: string
+    clientTransactionId: string
+    occurredAt: string
+    lines: Array<{ productId: string; quantity: number; unitPriceMinor: number }>
+    tender: { method: 'CASH' | 'CREDIT'; amountMinor: number }
+    customer?: { id: string; phone: string; name: string } | null
+  }): SalePayload {
+    const lines = input.lines.map((line) => ({
+      ...line,
+      lineDiscountMinor: 0,
+      taxCategory: 'STANDARD' as const,
+    }))
+    const priced = priceCart(lines, { taxMode: 'INCLUSIVE' })
+
+    return {
+      receiptNumber: input.receiptNumber,
+      shiftId: shiftC,
+      cashier: proof,
+      customer: input.customer ?? null,
+      lines,
+      saleDiscount: null,
+      loyalty: null,
+      tenders: [{ method: input.tender.method, amountMinor: input.tender.amountMinor }],
+      totals: {
+        subtotalMinor: priced.subtotalMinor,
+        lineDiscountMinor: priced.lineDiscountMinor,
+        saleDiscountMinor: priced.saleDiscountMinor,
+        loyaltyDiscountMinor: priced.loyaltyDiscountMinor,
+        vatMinor: priced.vatMinor,
+        nhilMinor: priced.nhilMinor,
+        getfundMinor: priced.getfundMinor,
+        taxTotalMinor: priced.taxTotalMinor,
+        totalMinor: priced.totalMinor,
+        changeMinor:
+          input.tender.method === 'CASH'
+            ? Math.max(0, input.tender.amountMinor - priced.totalMinor)
+            : 0,
+      },
+      occurredAt: input.occurredAt,
+      appVersion: 'test',
+    }
+  }
+
+  async function apply(payload: SalePayload) {
+    const saleId = crypto.randomUUID()
+    createdSaleIds.push(saleId)
+    return db.transaction((tx) =>
+      applySale(
+        {
+          clientTransactionId: saleId,
+          device: deviceC,
+          receivedAt: new Date(payload.occurredAt),
+          clockSkewToleranceMinutes: 999_999,
+        },
+        payload,
+        tx,
+      ),
+    )
+  }
+
+  beforeAll(async () => {
+    const branchRows = await db
+      .insert(branch)
+      .values([
+        { code: `${suffix}C`, name: `Read Model C ${suffix}`, type: 'RETAIL', city: 'Accra' },
+        { code: `${suffix}D`, name: `Read Model D ${suffix}`, type: 'RETAIL', city: 'Kumasi' },
+      ])
+      .returning()
+    branchC = branchRows[0]?.id ?? ''
+    branchD = branchRows[1]?.id ?? ''
+    createdBranchIds.push(branchC, branchD)
+
+    const terminalRow = await db
+      .insert(terminal)
+      .values({ branchId: branchC, code: `${suffix}-RC`, name: 'Read Model Counter' })
+      .returning()
+    const terminalId = terminalRow[0]?.id ?? ''
+    createdTerminalIds.push(terminalId)
+
+    const deviceRow = await db
+      .insert(device)
+      .values({
+        terminalId,
+        fingerprint: `read-model-${suffix}`,
+        tokenHash: hashDeviceToken(randomToken(40)),
+        status: 'ACTIVE',
+        enrolledAt: new Date(),
+      })
+      .returning()
+    const deviceId = deviceRow[0]?.id ?? ''
+    createdDeviceIds.push(deviceId)
+    deviceC = { deviceId, terminalId, branchId: branchC }
+
+    const cashier = await createTestUser({ role: 'CASHIER', branchId: branchC })
+    createdUserIds.push(cashier.id)
+    cashierUserId = cashier.id
+    cashierStaffId = `GA-R${suffix.slice(0, 3)}`
+    await db
+      .update(userTable)
+      .set({ staffId: cashierStaffId, pinVersion: 1 })
+      .where(eq(userTable.id, cashier.id))
+
+    const bindingToken = randomToken(40)
+    const bindingRow = await db
+      .insert(posStaffBinding)
+      .values({
+        deviceId,
+        staffUserId: cashier.id,
+        staffStaffId: cashierStaffId,
+        role: 'CASHIER',
+        branchId: branchC,
+        pinVersion: 1,
+        bindingTokenHash: hashDeviceToken(bindingToken),
+        expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      })
+      .returning()
+    proof = {
+      userId: cashier.id,
+      staffId: cashierStaffId,
+      bindingId: bindingRow[0]?.id ?? '',
+      bindingToken,
+      pinVersion: 1,
+    }
+
+    shiftC = crypto.randomUUID()
+    createdShiftIds.push(shiftC)
+    await openShift(deviceC, {
+      shiftId: shiftC,
+      number: `RM-${suffix}-S-20261002-01`,
+      openingFloatMinor: 20_000,
+      cashierUserId,
+      cashierStaffId,
+      occurredAt: '2026-10-02T08:00:00.000Z',
+    })
+
+    const categoryRow = await db
+      .insert(category)
+      .values({ name: `Read Model Category ${suffix}` })
+      .returning()
+    const categoryId = categoryRow[0]?.id ?? ''
+    createdCategoryIds.push(categoryId)
+    const uomRow = await db
+      .insert(uom)
+      .values({ code: `R${suffix}`.slice(0, 8), name: 'Piece' })
+      .returning()
+    const uomId = uomRow[0]?.id ?? ''
+    createdUomIds.push(uomId)
+
+    const productRows = await db
+      .insert(product)
+      .values([
+        {
+          sku: `RM-1-${suffix}`,
+          name: `Read Model Moves ${suffix}`,
+          categoryId,
+          uomId,
+          basePriceMinor: 10_000,
+          taxCategory: 'STANDARD',
+        },
+        {
+          sku: `RM-2-${suffix}`,
+          name: `Read Model Low ${suffix}`,
+          categoryId,
+          uomId,
+          basePriceMinor: 5_000,
+          taxCategory: 'STANDARD',
+        },
+        {
+          sku: `RM-3-${suffix}`,
+          name: `Read Model Dead ${suffix}`,
+          categoryId,
+          uomId,
+          basePriceMinor: 2_000,
+          taxCategory: 'STANDARD',
+        },
+      ])
+      .returning()
+    productP1 = productRows[0]?.id ?? ''
+    productP2 = productRows[1]?.id ?? ''
+    productP3 = productRows[2]?.id ?? ''
+    createdProductIds.push(productP1, productP2, productP3)
+
+    await db.insert(stockLevel).values([
+      { productId: productP1, branchId: branchC, quantityOnHand: 100, avgCostMinor: 6_000 },
+      { productId: productP2, branchId: branchC, quantityOnHand: 100, avgCostMinor: 3_000 },
+      { productId: productP3, branchId: branchC, quantityOnHand: 10, avgCostMinor: 500 },
+    ])
+    // One configured threshold, deliberately above the quantity on hand: exactly one low row.
+    await db
+      .insert(stockThreshold)
+      .values({ productId: productP2, branchId: branchC, threshold: 500, updatedBy: 'test' })
+
+    const creditCustomer = await db
+      .insert(customer)
+      .values({
+        name: creditCustomerName,
+        phone: creditCustomerPhone,
+        createdBranchId: branchC,
+      })
+      .returning()
+    creditCustomerId = creditCustomer[0]?.id ?? ''
+    createdCustomerIds.push(creditCustomerId)
+    await db.insert(creditProfile).values({
+      customerId: creditCustomerId,
+      branchId: branchC,
+      limitMinor: 500_000,
+    })
+
+    const loyaltyCustomer = await db
+      .insert(customer)
+      .values({
+        name: loyaltyCustomerName,
+        phone: loyaltyCustomerPhone,
+        createdBranchId: branchC,
+      })
+      .returning()
+    loyaltyCustomerId = loyaltyCustomer[0]?.id ?? ''
+    createdCustomerIds.push(loyaltyCustomerId)
+    // The POS path bootstraps the loyalty account, but the direct EARN needs it to exist.
+    await db.insert(loyaltyAccount).values({ customerId: loyaltyCustomerId })
+
+    // Two lines for P1 (2 + 1) and one for P2, so the mover order is unambiguous.
+    await apply(
+      payloadFor({
+        receiptNumber: `RM-${suffix}-0001`,
+        clientTransactionId: 'rm-1',
+        occurredAt: '2026-10-02T10:00:00.000Z',
+        lines: [{ productId: productP1, quantity: 2, unitPriceMinor: 10_000 }],
+        tender: { method: 'CASH', amountMinor: 25_000 },
+      }),
+    )
+    await apply(
+      payloadFor({
+        receiptNumber: `RM-${suffix}-0002`,
+        clientTransactionId: 'rm-2',
+        occurredAt: '2026-10-02T11:00:00.000Z',
+        lines: [{ productId: productP1, quantity: 1, unitPriceMinor: 10_000 }],
+        tender: { method: 'CREDIT', amountMinor: CREDIT_CHARGE_MINOR },
+        customer: {
+          id: creditCustomerId,
+          phone: creditCustomerPhone,
+          name: creditCustomerName,
+        },
+      }),
+    )
+    await apply(
+      payloadFor({
+        receiptNumber: `RM-${suffix}-0003`,
+        clientTransactionId: 'rm-3',
+        occurredAt: '2026-10-02T12:00:00.000Z',
+        lines: [{ productId: productP2, quantity: 1, unitPriceMinor: 5_000 }],
+        tender: { method: 'CASH', amountMinor: 5_000 },
+      }),
+    )
+
+    // A count-correction movement, so the flow's adjusted column is exercised.
+    await db.insert(stockMovement).values({
+      productId: productP2,
+      branchId: branchC,
+      type: 'ADJUSTMENT',
+      quantityDelta: 5,
+      unitCostMinor: 3_000,
+      referenceType: 'ADJUSTMENT',
+      reasonCode: 'FOUND',
+      createdBy: 'test',
+    })
+
+    const admin = await createTestUser({ role: 'ADMIN' })
+    createdUserIds.push(admin.id)
+    adminCookie = await signIn(admin.email)
+
+    const manager = await createTestUser({ role: 'MANAGER', branchId: branchC })
+    createdUserIds.push(manager.id)
+    managerCookie = await signIn(manager.email)
+
+    // Credit: one repayment on top of the POS charge.
+    const repayment = await post('/api/credit/repayments', adminCookie, {
+      customerId: creditCustomerId,
+      branchId: branchC,
+      amountMinor: CREDIT_REPAYMENT_MINOR,
+      method: 'CASH',
+      occurredAt: '2026-10-04T09:00:00.000Z',
+    })
+    if (repayment.status !== 201 && repayment.status !== 200) {
+      throw new Error(`credit repayment failed: ${repayment.status} ${await repayment.text()}`)
+    }
+
+    // Loyalty: an EARN and a REDEEM through the owning service's endpoint.
+    const earn = await post('/api/loyalty/entries', adminCookie, {
+      customerId: loyaltyCustomerId,
+      branchId: branchC,
+      kind: 'EARN',
+      netPaidMinor: EARN_NET_PAID_MINOR,
+      occurredAt: '2026-10-03T09:00:00.000Z',
+    })
+    if (earn.status !== 201 && earn.status !== 200) {
+      throw new Error(`loyalty earn failed: ${earn.status} ${await earn.text()}`)
+    }
+    const redeem = await post('/api/loyalty/entries', adminCookie, {
+      customerId: loyaltyCustomerId,
+      branchId: branchC,
+      kind: 'REDEEM',
+      points: REDEEM_POINTS,
+      occurredAt: '2026-10-04T09:30:00.000Z',
+    })
+    if (redeem.status !== 201 && redeem.status !== 200) {
+      throw new Error(`loyalty redeem failed: ${redeem.status} ${await redeem.text()}`)
+    }
+
+    // Payables: an invoice dated ten days ago, part-paid eight days ago, due five days ago.
+    const today = accraIsoDay()
+    const supplierRow = await db
+      .insert(supplier)
+      .values({ code: `SUP-${suffix}`, name: `Read Model Supplier ${suffix}` })
+      .returning()
+    supplierId = supplierRow[0]?.id ?? ''
+    createdSupplierIds.push(supplierId)
+
+    const invoiceResponse = await post('/api/payables/invoices', adminCookie, {
+      supplierId,
+      branchId: branchC,
+      supplierInvoiceNumber: `INV-${suffix}-1`,
+      invoiceDate: isoMinus(today, 10),
+      dueDate: isoMinus(today, 5),
+      lines: [{ description: 'Parts delivery', quantity: 4, unitCostMinor: 5_000 }],
+    })
+    if (invoiceResponse.status !== 201 && invoiceResponse.status !== 200) {
+      throw new Error(`payables invoice failed: ${await invoiceResponse.text()}`)
+    }
+    const invoiceBody = (await invoiceResponse.json()) as {
+      invoice: { invoice: { id: string; totalMinor: number } }
+    }
+    invoiceId = invoiceBody.invoice.invoice.id
+    createdInvoiceIds.push(invoiceId)
+    invoiceTotalMinorValue = invoiceBody.invoice.invoice.totalMinor
+
+    const paymentAmount = Math.floor(invoiceTotalMinorValue / 2)
+    const paymentResponse = await post('/api/payables/payments', adminCookie, {
+      supplierId,
+      branchId: branchC,
+      method: 'BANK',
+      amountMinor: paymentAmount,
+      paidAt: `${isoMinus(today, 8)}T10:00:00.000Z`,
+      allocations: [{ invoiceId, amountMinor: paymentAmount }],
+    })
+    if (paymentResponse.status !== 201 && paymentResponse.status !== 200) {
+      throw new Error(`payables payment failed: ${await paymentResponse.text()}`)
+    }
+    const paymentBody = (await paymentResponse.json()) as {
+      payment: { payment: { id: string } }
+    }
+    createdPaymentIds.push(paymentBody.payment.payment.id)
+    paymentAmountMinorValue = paymentAmount
+  })
+
+  afterAll(async () => {
+    if (createdSaleIds.length > 0) {
+      await db.delete(syncConflict).where(inArray(syncConflict.saleId, createdSaleIds))
+      await db.delete(stockMovement).where(inArray(stockMovement.referenceId, createdSaleIds))
+      await db.delete(saleTender).where(inArray(saleTender.saleId, createdSaleIds))
+      await db.delete(saleLine).where(inArray(saleLine.saleId, createdSaleIds))
+      await db.delete(sale).where(inArray(sale.id, createdSaleIds))
+    }
+    if (createdSupplierIds.length > 0) {
+      if (createdPaymentIds.length > 0) {
+        await db
+          .delete(supplierPaymentAllocation)
+          .where(inArray(supplierPaymentAllocation.paymentId, createdPaymentIds))
+        await db.delete(supplierPayment).where(inArray(supplierPayment.id, createdPaymentIds))
+      }
+      if (createdInvoiceIds.length > 0) {
+        await db
+          .delete(supplierInvoiceLine)
+          .where(inArray(supplierInvoiceLine.invoiceId, createdInvoiceIds))
+        await db.delete(supplierInvoice).where(inArray(supplierInvoice.id, createdInvoiceIds))
+      }
+      await db.delete(supplier).where(inArray(supplier.id, createdSupplierIds))
+    }
+    if (createdShiftIds.length > 0) {
+      await db.delete(cashMovement).where(inArray(cashMovement.shiftId, createdShiftIds))
+      await db.delete(shift).where(inArray(shift.id, createdShiftIds))
+    }
+    if (createdCustomerIds.length > 0) {
+      await db
+        .delete(creditLedgerEntry)
+        .where(inArray(creditLedgerEntry.customerId, createdCustomerIds))
+      await db.delete(creditProfile).where(inArray(creditProfile.customerId, createdCustomerIds))
+      const accounts = await db
+        .select({ id: loyaltyAccount.id })
+        .from(loyaltyAccount)
+        .where(inArray(loyaltyAccount.customerId, createdCustomerIds))
+      const accountIds = accounts.map((account) => account.id)
+      if (accountIds.length > 0) {
+        const lots = await db
+          .select({ id: loyaltyLot.id })
+          .from(loyaltyLot)
+          .where(inArray(loyaltyLot.accountId, accountIds))
+        const lotIds = lots.map((lot) => lot.id)
+        if (lotIds.length > 0) {
+          await db.delete(loyaltyLotConsumption).where(inArray(loyaltyLotConsumption.lotId, lotIds))
+          await db.delete(loyaltyLot).where(inArray(loyaltyLot.id, lotIds))
+        }
+        await db.delete(loyaltyLedgerEntry).where(inArray(loyaltyLedgerEntry.accountId, accountIds))
+        await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.id, accountIds))
+      }
+      await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
+    }
+    if (createdProductIds.length > 0) {
+      await db.delete(stockMovement).where(inArray(stockMovement.productId, createdProductIds))
+      await db.delete(stockLevel).where(inArray(stockLevel.productId, createdProductIds))
+      await db.delete(stockThreshold).where(inArray(stockThreshold.productId, createdProductIds))
+      await db.delete(product).where(inArray(product.id, createdProductIds))
+    }
+    if (createdCategoryIds.length > 0) {
+      await db.delete(category).where(inArray(category.id, createdCategoryIds))
+    }
+    if (createdUomIds.length > 0) {
+      await db.delete(uom).where(inArray(uom.id, createdUomIds))
+    }
+    if (createdDeviceIds.length > 0) {
+      await db.delete(posStaffBinding).where(inArray(posStaffBinding.deviceId, createdDeviceIds))
+      await db.delete(device).where(inArray(device.id, createdDeviceIds))
+    }
+    if (createdTerminalIds.length > 0) {
+      await db.delete(terminal).where(inArray(terminal.id, createdTerminalIds))
+    }
+    if (createdBranchIds.length > 0) {
+      await db.delete(branch).where(inArray(branch.id, createdBranchIds))
+    }
+    for (const id of createdUserIds) await deleteTestUser(id)
+  })
+
+  it('values stock from the projection and reconciles it with the branch split', async () => {
+    const response = await get('/api/analytics/inventory', adminCookie, {
+      ...CREDIT_PERIOD,
+      branchId: branchC,
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+
+    const levels = await db.select().from(stockLevel).where(eq(stockLevel.branchId, branchC))
+    const expectedValue = levels.reduce(
+      (total, row) => total + row.quantityOnHand * row.avgCostMinor,
+      0,
+    )
+    const expectedUnits = levels.reduce((total, row) => total + row.quantityOnHand, 0)
+
+    const totals = body.totals as Record<string, number>
+    expect(totals.stockValueMinor).toBe(expectedValue)
+    expect(totals.unitsOnHand).toBe(expectedUnits)
+    expect(totals.distinctProducts).toBe(3)
+    expect(totals.lowStockCount).toBe(1)
+    expect(totals.thresholdCount).toBe(1)
+    expect(totals.outOfStockCount).toBe(0)
+
+    const allBranches = await get('/api/analytics/inventory', adminCookie, CREDIT_PERIOD)
+    const allBody = (await allBranches.json()) as Record<string, unknown>
+    const byBranch = allBody.byBranch as Array<{ stockValueMinor: number; unitsOnHand: number }>
+    expect(byBranch.reduce((total, row) => total + row.stockValueMinor, 0)).toBe(
+      (allBody.totals as Record<string, number>).stockValueMinor,
+    )
+    expect(byBranch.reduce((total, row) => total + row.unitsOnHand, 0)).toBe(
+      (allBody.totals as Record<string, number>).unitsOnHand,
+    )
+  })
+
+  it('trends stock movements and names the top movers', async () => {
+    const today = accraIsoDay()
+    const from = isoMinus(today, 20)
+    const response = await get('/api/analytics/inventory', adminCookie, {
+      from,
+      to: today,
+      branchId: branchC,
+    })
+    const body = (await response.json()) as Record<string, unknown>
+
+    const movements = await db
+      .select()
+      .from(stockMovement)
+      .where(eq(stockMovement.branchId, branchC))
+    const expectedSold = movements
+      .filter((row) => row.type === 'SALE')
+      .reduce((total, row) => total - row.quantityDelta, 0)
+    const expectedAdjusted = movements
+      .filter((row) => row.type === 'ADJUSTMENT' || row.type === 'COUNT_VARIANCE')
+      .reduce((total, row) => total + row.quantityDelta, 0)
+
+    const flow = body.flow as Array<Record<string, number>>
+    expect(flow).toHaveLength(21)
+    expect(flow.reduce((total, point) => total + Number(point.soldUnits), 0)).toBe(expectedSold)
+    expect(flow.reduce((total, point) => total + Number(point.adjustedUnits), 0)).toBe(
+      expectedAdjusted,
+    )
+    expect(expectedSold).toBe(4)
+    expect(expectedAdjusted).toBe(5)
+
+    const movers = body.topMovers as Array<{ productId: string; unitsSold: number }>
+    expect(movers[0]).toMatchObject({ productId: productP1, unitsSold: 3 })
+    expect(movers[1]).toMatchObject({ productId: productP2, unitsSold: 1 })
+
+    // P3 holds stock and never moved; P1/P2 both did.
+    expect(body.deadStock).toBe(1)
+  })
+
+  it('reconciles credit to the ledger and buckets utilisation in integers', async () => {
+    const response = await get('/api/analytics/credit', adminCookie, {
+      ...CREDIT_PERIOD,
+      branchId: branchC,
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    const totals = body.totals as Record<string, number | null>
+
+    expect(totals.outstandingMinor).toBe(CREDIT_CHARGE_MINOR - CREDIT_REPAYMENT_MINOR)
+    expect(totals.ledgerBalanceMinor).toBe(CREDIT_CHARGE_MINOR - CREDIT_REPAYMENT_MINOR)
+    expect(totals.reconcileDriftMinor).toBe(0)
+    expect(totals.limitMinor).toBe(500_000)
+    expect(totals.utilisationBp).toBe(ratioBp(6_000, 500_000))
+    expect(totals.customersWithBalance).toBe(1)
+    expect(totals.overLimitCount).toBe(0)
+    expect(totals.onHoldCount).toBe(0)
+    expect(totals.overLimitExposureMinor).toBe(0)
+
+    const distribution = body.distribution as Array<{
+      label: string
+      count: number
+      balanceMinor: number
+    }>
+    expect(distribution).toHaveLength(5)
+    expect(distribution.reduce((total, bucket) => total + bucket.count, 0)).toBe(
+      totals.customersWithBalance,
+    )
+    expect(distribution.find((bucket) => bucket.label === '0-50%')).toMatchObject({
+      count: 1,
+      balanceMinor: 6_000,
+    })
+
+    const series = body.series as Array<{
+      bucketStart: string
+      chargesMinor: number
+      repaymentsMinor: number
+      netMinor: number
+    }>
+    expect(series.reduce((total, point) => total + point.chargesMinor, 0)).toBe(CREDIT_CHARGE_MINOR)
+    expect(series.reduce((total, point) => total + point.repaymentsMinor, 0)).toBe(
+      CREDIT_REPAYMENT_MINOR,
+    )
+    expect(series.reduce((total, point) => total + point.netMinor, 0)).toBe(6_000)
+  })
+
+  it('reports loyalty flows and values the liability with the owning rule', async () => {
+    const response = await get('/api/analytics/loyalty', adminCookie, {
+      ...CREDIT_PERIOD,
+      branchId: branchC,
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+
+    const entries = await db
+      .select()
+      .from(loyaltyLedgerEntry)
+      .where(eq(loyaltyLedgerEntry.branchId, branchC))
+    const inWindow = entries.filter(
+      (entry) =>
+        entry.occurredAt >= new Date(`${CREDIT_PERIOD.from}T00:00:00.000Z`) &&
+        entry.occurredAt < new Date('2026-10-06T00:00:00.000Z'),
+    )
+    const expectedIssued = inWindow
+      .filter((entry) => entry.kind === 'EARN')
+      .reduce((total, entry) => total + entry.pointsDelta, 0)
+    const expectedRedeemed = inWindow
+      .filter((entry) => entry.kind === 'REDEEM')
+      .reduce((total, entry) => total - entry.pointsDelta, 0)
+
+    const totals = body.totals as Record<string, number>
+    expect(totals.issuedPoints).toBe(expectedIssued)
+    expect(totals.redeemedPoints).toBe(expectedRedeemed)
+    expect(expectedRedeemed).toBe(REDEEM_POINTS)
+    // 50,000 pesewas at the default 1 point per cedi is 500 points, plus the sale earn.
+    expect(totals.issuedPoints).toBeGreaterThanOrEqual(500)
+
+    expect(body.expiringSoon).toMatchObject({ days: 30 })
+
+    const liability = await get('/api/loyalty/liability', adminCookie, { branchId: branchC })
+    expect(liability.status).toBe(200)
+    const liabilityBody = (await liability.json()) as Record<string, number>
+    expect(totals.outstandingValueMinor).toBe(liabilityBody.outstandingValueMinor)
+    expect(totals.outstandingPoints).toBe(liabilityBody.outstandingPoints)
+
+    const series = body.series as Array<{
+      bucketStart: string
+      issuedPoints: number
+      redeemedPoints: number
+      expiredPoints: number
+    }>
+    expect(series.reduce((total, point) => total + point.issuedPoints, 0)).toBe(expectedIssued)
+    expect(series.reduce((total, point) => total + point.redeemedPoints, 0)).toBe(expectedRedeemed)
+    expect(body.earnRate).toMatchObject({ pointsPerCedi: 100, earnPointsPerCedi: 1 })
+  })
+
+  it('reports payables positions and the same ageing buckets as the payables report', async () => {
+    const today = accraIsoDay()
+    const period = { from: isoMinus(today, 20), to: today }
+    const response = await get('/api/analytics/payables', adminCookie, {
+      ...period,
+      branchId: branchC,
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    const totals = body.totals as Record<string, number>
+
+    expect(totals.invoicedMinor).toBe(invoiceTotalMinorValue)
+    expect(totals.paidMinor).toBe(paymentAmountMinorValue)
+    expect(totals.outstandingMinor).toBe(invoiceTotalMinorValue - paymentAmountMinorValue)
+    expect(totals.overdueMinor).toBe(totals.outstandingMinor)
+    expect(totals.onAccountMinor).toBe(0)
+
+    const buckets = body.overdueBuckets as {
+      current: number
+      days1To30: number
+      days31To60: number
+      days61To90: number
+      over90: number
+    }
+    expect(buckets.days1To30).toBe(totals.outstandingMinor)
+    expect(buckets.current).toBe(0)
+    expect(buckets.days1To30 + buckets.days31To60 + buckets.days61To90 + buckets.over90).toBe(
+      totals.overdueMinor,
+    )
+
+    const aging = await get('/api/payables/aging', adminCookie, { branchId: branchC })
+    expect(aging.status).toBe(200)
+    const agingBody = (await aging.json()) as Record<string, unknown>
+    expect(agingBody.totals).toEqual(buckets)
+    expect(agingBody.totalOutstandingMinor).toBe(totals.outstandingMinor)
+
+    const topSuppliers = body.topSuppliers as Array<Record<string, string | number>>
+    expect(topSuppliers[0]).toMatchObject({
+      supplierId,
+      outstandingMinor: totals.outstandingMinor,
+      overdueMinor: totals.overdueMinor,
+    })
+  })
+
+  it('refuses a manager a foreign branch on every read model', async () => {
+    const paths = [
+      '/api/analytics/inventory',
+      '/api/analytics/credit',
+      '/api/analytics/loyalty',
+      '/api/analytics/payables',
+    ]
+    for (const path of paths) {
+      const foreign = await get(path, managerCookie, {
+        ...CREDIT_PERIOD,
+        branchId: branchD,
+      })
+      expect(foreign.status).toBe(403)
+
+      const own = await get(path, managerCookie, CREDIT_PERIOD)
+      expect(own.status).toBe(200)
+      const ownBody = (await own.json()) as Record<string, unknown>
+      expect((ownBody.scope as Record<string, unknown>).branchId).toBe(branchC)
+      if (path !== '/api/analytics/inventory') continue
+      // Only an admin may compare branches.
+      expect(ownBody.byBranch).toEqual([])
+    }
+  })
+
+  it('carries no customer identity in any read model', async () => {
+    const paths = ['/api/analytics/inventory', '/api/analytics/credit', '/api/analytics/loyalty']
+    for (const path of paths) {
+      const response = await get(path, adminCookie, { ...CREDIT_PERIOD, branchId: branchC })
+      const serialised = JSON.stringify(await response.json())
+      expect(serialised).not.toContain(creditCustomerId)
+      expect(serialised).not.toContain(creditCustomerPhone)
+      expect(serialised).not.toContain(creditCustomerName)
+      expect(serialised).not.toContain(loyaltyCustomerId)
+      expect(serialised).not.toContain(loyaltyCustomerPhone)
+      expect(serialised).not.toContain(loyaltyCustomerName)
+    }
   })
 })

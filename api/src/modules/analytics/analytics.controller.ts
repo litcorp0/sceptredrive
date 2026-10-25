@@ -35,6 +35,26 @@ export async function getTax(c: Context<AppEnv>, query: AnalyticsQuery) {
   return c.json(await analyticsService.getTax({ user, query }))
 }
 
+export async function getInventory(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return c.json(await analyticsService.getInventory({ user, query }))
+}
+
+export async function getCredit(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return c.json(await analyticsService.getCredit({ user, query }))
+}
+
+export async function getLoyalty(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return c.json(await analyticsService.getLoyalty({ user, query }))
+}
+
+export async function getPayables(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return c.json(await analyticsService.getPayables({ user, query }))
+}
+
 function sendCsv(c: Context<AppEnv>, result: { filename: string; csv: string }) {
   c.header('content-type', 'text/csv; charset=utf-8')
   c.header('content-disposition', `attachment; filename="${result.filename}"`)
@@ -55,4 +75,24 @@ export async function exportProducts(c: Context<AppEnv>, query: AnalyticsQuery) 
 export async function exportTax(c: Context<AppEnv>, query: AnalyticsQuery) {
   const user = currentUser(c)
   return sendCsv(c, await analyticsService.exportTax({ user, query }))
+}
+
+export async function exportInventory(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await analyticsService.exportInventory({ user, query }))
+}
+
+export async function exportCredit(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await analyticsService.exportCredit({ user, query }))
+}
+
+export async function exportLoyalty(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await analyticsService.exportLoyalty({ user, query }))
+}
+
+export async function exportPayables(c: Context<AppEnv>, query: AnalyticsQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await analyticsService.exportPayables({ user, query }))
 }

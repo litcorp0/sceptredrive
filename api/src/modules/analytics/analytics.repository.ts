@@ -18,7 +18,19 @@ import type {
   AnalyticsWindow,
   BranchRank,
   CategorySlice,
+  CreditBranchRow,
+  CreditBucket,
+  CreditSeriesPoint,
+  CreditUtilisationBucket,
   Granularity,
+  InventoryBranchRow,
+  InventoryFlowPoint,
+  InventoryMover,
+  InventoryTotals,
+  LoyaltySeriesPoint,
+  LoyaltyTotals,
+  PayablesSeriesPoint,
+  PayablesSupplierRow,
   SeriesPoint,
   SyncHealth,
   TopProduct,
@@ -54,6 +66,24 @@ function scopeClause(column: SQL, scope: AnalyticsBranchScope): SQL {
 /** Half-open window, which keeps `sale_branch_occurred_idx` usable. */
 function windowClause(column: SQL, window: AnalyticsWindow): SQL {
   return sql`${column} >= ${window.from} AND ${column} < ${window.toExclusive}`
+}
+
+/**
+ * Low stock, exactly as `inventory.service.toStockRow` defines it: a configured threshold
+ * at or above the quantity on hand. A zero threshold therefore alerts only at zero, which
+ * is the owning service's semantics — do not "improve" the comparison here.
+ */
+const LOW_STOCK_SQL = sql`st.threshold IS NOT NULL AND sl.quantity_on_hand <= st.threshold`
+
+/**
+ * Loyalty postings are branch-scoped except for expiry, which the daily job writes once
+ * for the whole organisation with a null branch. This mirrors `branchActivity` in
+ * `loyalty.repository.ts`, so the analytics tab and `/api/loyalty/liability` agree.
+ */
+function loyaltyScopeClause(column: SQL, kind: SQL, scope: AnalyticsBranchScope): SQL {
+  return scope
+    ? sql`(${column} = ${scope} OR (${column} IS NULL AND ${kind} = 'EXPIRE'))`
+    : sql`true`
 }
 
 function bucketStep(granularity: Granularity): SQL {
@@ -354,8 +384,7 @@ export async function selectAttention(
       FROM stock_level sl
       JOIN stock_threshold st
         ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
-      WHERE sl.quantity_on_hand <= st.threshold
-        AND st.threshold > 0
+      WHERE ${LOW_STOCK_SQL}
         AND ${scopeClause(sql`sl.branch_id`, scope)}`,
   )
 
@@ -970,4 +999,594 @@ export async function selectBranchCode(
 ): Promise<string | null> {
   const [row] = await rows(executor, sql`SELECT code FROM branch WHERE id = ${branchId} LIMIT 1`)
   return row ? toText(row.code) : null
+}
+
+// --- Inventory ---------------------------------------------------------------
+
+export async function selectStockTotals(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<InventoryTotals> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(sl.quantity_on_hand::bigint * sl.avg_cost_minor), 0)::bigint
+          AS stock_value_minor,
+        COALESCE(SUM(sl.quantity_on_hand), 0)::bigint AS units_on_hand,
+        COUNT(DISTINCT sl.product_id)::bigint AS distinct_products,
+        COUNT(*) FILTER (WHERE ${LOW_STOCK_SQL})::bigint AS low_stock_count,
+        COUNT(*) FILTER (WHERE sl.quantity_on_hand <= 0)::bigint AS out_of_stock_count,
+        COUNT(st.threshold)::bigint AS threshold_count
+      FROM stock_level sl
+      LEFT JOIN stock_threshold st
+        ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
+      WHERE ${scopeClause(sql`sl.branch_id`, scope)}`,
+  )
+
+  return {
+    stockValueMinor: toInt(row?.stock_value_minor),
+    unitsOnHand: toInt(row?.units_on_hand),
+    distinctProducts: toInt(row?.distinct_products),
+    lowStockCount: toInt(row?.low_stock_count),
+    outOfStockCount: toInt(row?.out_of_stock_count),
+    thresholdCount: toInt(row?.threshold_count),
+  }
+}
+
+export async function selectStockByBranch(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<InventoryBranchRow[]> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT b.id, b.code, b.name,
+        COALESCE(SUM(sl.quantity_on_hand::bigint * sl.avg_cost_minor), 0)::bigint
+          AS stock_value_minor,
+        COALESCE(SUM(sl.quantity_on_hand), 0)::bigint AS units_on_hand,
+        COUNT(*) FILTER (WHERE ${LOW_STOCK_SQL})::bigint AS low_stock_count
+      FROM stock_level sl
+      JOIN branch b ON b.id = sl.branch_id
+      LEFT JOIN stock_threshold st
+        ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
+      WHERE ${scopeClause(sql`sl.branch_id`, scope)}
+      GROUP BY b.id, b.code, b.name
+      ORDER BY stock_value_minor DESC, b.code`,
+  )
+
+  return result.map((row) => ({
+    branchId: toText(row.id),
+    code: toText(row.code),
+    name: toText(row.name),
+    stockValueMinor: toInt(row.stock_value_minor),
+    unitsOnHand: toInt(row.units_on_hand),
+    lowStockCount: toInt(row.low_stock_count),
+  }))
+}
+
+/**
+ * Movement trend, gap-filled. Bucketed on `created_at` because `stock_movement` stores no
+ * business date — a sale synced a day late belongs to the day it was posted.
+ */
+export async function selectStockFlow(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  granularity: Granularity,
+  scope: AnalyticsBranchScope,
+): Promise<InventoryFlowPoint[]> {
+  const lastInstant = new Date(window.toExclusive.getTime() - 1)
+  const step = bucketStep(granularity)
+  const result = await rows(
+    executor,
+    sql`
+      SELECT to_char(b.bucket AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS bucket_start,
+        COALESCE(SUM(sm.quantity_delta) FILTER (WHERE sm.type = 'RECEIPT'), 0)::bigint
+          AS received_units,
+        COALESCE(-SUM(sm.quantity_delta) FILTER (WHERE sm.type = 'SALE'), 0)::bigint
+          AS sold_units,
+        COALESCE(
+          SUM(sm.quantity_delta) FILTER (WHERE sm.type IN ('ADJUSTMENT', 'COUNT_VARIANCE')),
+          0
+        )::bigint AS adjusted_units,
+        COALESCE(SUM(sm.quantity_delta) FILTER (WHERE sm.type = 'TRANSFER_IN'), 0)::bigint
+          AS transferred_in_units,
+        COALESCE(-SUM(sm.quantity_delta) FILTER (WHERE sm.type = 'TRANSFER_OUT'), 0)::bigint
+          AS transferred_out_units,
+        COALESCE(
+          SUM(sm.quantity_delta::bigint * sm.unit_cost_minor) FILTER (WHERE sm.type = 'RECEIPT'),
+          0
+        )::bigint AS received_value_minor
+      FROM generate_series(
+        date_trunc(${granularity}, ${window.from}::timestamptz, 'UTC'),
+        date_trunc(${granularity}, ${lastInstant}::timestamptz, 'UTC'),
+        ${step}
+      ) AS b(bucket)
+      LEFT JOIN stock_movement sm
+        ON sm.created_at >= b.bucket
+        AND sm.created_at < b.bucket + ${step}
+        AND ${scopeClause(sql`sm.branch_id`, scope)}
+      GROUP BY b.bucket
+      ORDER BY b.bucket`,
+  )
+
+  return result.map((row) => ({
+    bucketStart: toText(row.bucket_start),
+    receivedUnits: toInt(row.received_units),
+    soldUnits: toInt(row.sold_units),
+    adjustedUnits: toInt(row.adjusted_units),
+    transferredInUnits: toInt(row.transferred_in_units),
+    transferredOutUnits: toInt(row.transferred_out_units),
+    receivedValueMinor: toInt(row.received_value_minor),
+  }))
+}
+
+export async function selectTopMovers(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+  limit: number,
+): Promise<InventoryMover[]> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT sm.product_id, p.sku, p.name,
+        COALESCE(-SUM(sm.quantity_delta), 0)::bigint AS units_sold
+      FROM stock_movement sm
+      JOIN product p ON p.id = sm.product_id
+      WHERE sm.type = 'SALE'
+        AND ${windowClause(sql`sm.created_at`, window)}
+        AND ${scopeClause(sql`sm.branch_id`, scope)}
+      GROUP BY sm.product_id, p.sku, p.name
+      ORDER BY units_sold DESC, p.name
+      LIMIT ${limit}`,
+  )
+
+  return result.map((row) => ({
+    productId: toText(row.product_id),
+    sku: toText(row.sku),
+    name: toText(row.name),
+    unitsSold: toInt(row.units_sold),
+  }))
+}
+
+/** Rows holding stock that did not move in the window. A count only (RPT-04 owns the list). */
+export async function selectDeadStockCount(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<number> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COUNT(*)::bigint AS count
+      FROM stock_level sl
+      WHERE sl.quantity_on_hand > 0
+        AND ${scopeClause(sql`sl.branch_id`, scope)}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stock_movement sm
+          WHERE sm.product_id = sl.product_id
+            AND sm.branch_id = sl.branch_id
+            AND ${windowClause(sql`sm.created_at`, window)}
+        )`,
+  )
+  return toInt(row?.count)
+}
+
+// --- Credit ------------------------------------------------------------------
+
+export interface CreditPosition {
+  outstandingMinor: number
+  limitMinor: number
+  customersWithBalance: number
+  overLimitCount: number
+  onHoldCount: number
+  overLimitExposureMinor: number
+}
+
+export async function selectCreditPosition(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<CreditPosition> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(cp.balance_minor), 0)::bigint AS outstanding_minor,
+        COALESCE(SUM(cp.limit_minor), 0)::bigint AS limit_minor,
+        COUNT(*) FILTER (WHERE cp.balance_minor > 0)::bigint AS customers_with_balance,
+        COUNT(*) FILTER (
+          WHERE cp.limit_minor > 0 AND cp.balance_minor > cp.limit_minor
+        )::bigint AS over_limit_count,
+        COUNT(*) FILTER (WHERE cp.hold)::bigint AS on_hold_count,
+        COALESCE(SUM(GREATEST(cp.balance_minor - cp.limit_minor, 0)), 0)::bigint
+          AS over_limit_exposure_minor
+      FROM credit_profile cp
+      WHERE ${scopeClause(sql`cp.branch_id`, scope)}`,
+  )
+
+  return {
+    outstandingMinor: toInt(row?.outstanding_minor),
+    limitMinor: toInt(row?.limit_minor),
+    customersWithBalance: toInt(row?.customers_with_balance),
+    overLimitCount: toInt(row?.over_limit_count),
+    onHoldCount: toInt(row?.on_hold_count),
+    overLimitExposureMinor: toInt(row?.over_limit_exposure_minor),
+  }
+}
+
+/** The append-only cross-check: the whole ledger for the same scope, signed as stored. */
+export async function selectCreditLedgerBalance(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<number> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(e.amount_minor), 0)::bigint AS ledger_balance_minor
+      FROM credit_ledger_entry e
+      WHERE ${scopeClause(sql`e.branch_id`, scope)}`,
+  )
+  return toInt(row?.ledger_balance_minor)
+}
+
+export async function selectCreditSeries(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  granularity: Granularity,
+  scope: AnalyticsBranchScope,
+): Promise<CreditSeriesPoint[]> {
+  const lastInstant = new Date(window.toExclusive.getTime() - 1)
+  const step = bucketStep(granularity)
+  const result = await rows(
+    executor,
+    sql`
+      SELECT to_char(b.bucket AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS bucket_start,
+        COALESCE(SUM(e.amount_minor) FILTER (WHERE e.kind = 'CHARGE'), 0)::bigint
+          AS charges_minor,
+        COALESCE(-SUM(e.amount_minor) FILTER (WHERE e.kind IN ('REPAYMENT', 'REFUND')), 0)::bigint
+          AS repayments_minor,
+        COALESCE(SUM(e.amount_minor), 0)::bigint AS net_minor
+      FROM generate_series(
+        date_trunc(${granularity}, ${window.from}::timestamptz, 'UTC'),
+        date_trunc(${granularity}, ${lastInstant}::timestamptz, 'UTC'),
+        ${step}
+      ) AS b(bucket)
+      LEFT JOIN credit_ledger_entry e
+        ON e.occurred_at >= b.bucket
+        AND e.occurred_at < b.bucket + ${step}
+        AND ${scopeClause(sql`e.branch_id`, scope)}
+      GROUP BY b.bucket
+      ORDER BY b.bucket`,
+  )
+
+  return result.map((row) => ({
+    bucketStart: toText(row.bucket_start),
+    chargesMinor: toInt(row.charges_minor),
+    repaymentsMinor: toInt(row.repayments_minor),
+    netMinor: toInt(row.net_minor),
+  }))
+}
+
+/**
+ * Utilisation distribution in integer arithmetic: a boundary compares `balance × 10000`
+ * with `limit × boundaryBp`, so 100% is exact and no float appears anywhere.
+ */
+export async function selectCreditDistribution(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<CreditBucket[]> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT CASE
+          WHEN cp.limit_minor = 0 THEN 'No limit'
+          WHEN cp.balance_minor::bigint * 10000 <= cp.limit_minor::bigint * 5000 THEN '0-50%'
+          WHEN cp.balance_minor::bigint * 10000 <= cp.limit_minor::bigint * 8000 THEN '50-80%'
+          WHEN cp.balance_minor::bigint * 10000 <= cp.limit_minor::bigint * 10000 THEN '80-100%'
+          ELSE '>100%'
+        END AS bucket,
+        COUNT(*)::bigint AS count,
+        COALESCE(SUM(cp.balance_minor), 0)::bigint AS balance_minor
+      FROM credit_profile cp
+      WHERE cp.balance_minor > 0
+        AND ${scopeClause(sql`cp.branch_id`, scope)}
+      GROUP BY 1`,
+  )
+
+  const order: CreditUtilisationBucket[] = ['0-50%', '50-80%', '80-100%', '>100%', 'No limit']
+  const found = new Map(result.map((row) => [toText(row.bucket), row]))
+  return order.map((label) => {
+    const row = found.get(label)
+    return { label, count: toInt(row?.count), balanceMinor: toInt(row?.balance_minor) }
+  })
+}
+
+export async function selectCreditByBranch(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<CreditBranchRow[]> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT b.id, b.code, b.name,
+        COALESCE(SUM(cp.balance_minor), 0)::bigint AS outstanding_minor,
+        COALESCE(SUM(cp.limit_minor), 0)::bigint AS limit_minor,
+        COUNT(*) FILTER (
+          WHERE cp.limit_minor > 0 AND cp.balance_minor > cp.limit_minor
+        )::bigint AS over_limit_count
+      FROM credit_profile cp
+      JOIN branch b ON b.id = cp.branch_id
+      WHERE ${scopeClause(sql`cp.branch_id`, scope)}
+      GROUP BY b.id, b.code, b.name
+      ORDER BY outstanding_minor DESC, b.code`,
+  )
+
+  return result.map((row) => ({
+    branchId: toText(row.id),
+    code: toText(row.code),
+    name: toText(row.name),
+    outstandingMinor: toInt(row.outstanding_minor),
+    limitMinor: toInt(row.limit_minor),
+    overLimitCount: toInt(row.over_limit_count),
+  }))
+}
+
+// --- Loyalty -----------------------------------------------------------------
+
+export async function selectLoyaltyTotals(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<Omit<LoyaltyTotals, 'outstandingPoints' | 'outstandingValueMinor'>> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(e.points_delta) FILTER (WHERE e.kind = 'EARN'), 0)::bigint
+          AS issued_points,
+        COALESCE(-SUM(e.points_delta) FILTER (WHERE e.kind = 'REDEEM'), 0)::bigint
+          AS redeemed_points,
+        COALESCE(-SUM(e.points_delta) FILTER (WHERE e.kind = 'EXPIRE'), 0)::bigint
+          AS expired_points,
+        COALESCE(SUM(e.points_delta) FILTER (WHERE e.kind = 'ADJUST'), 0)::bigint
+          AS adjusted_points,
+        COALESCE(-SUM(e.points_delta) FILTER (WHERE e.kind = 'CLAWBACK'), 0)::bigint
+          AS clawed_back_points
+      FROM loyalty_ledger_entry e
+      WHERE ${windowClause(sql`e.occurred_at`, window)}
+        AND ${loyaltyScopeClause(sql`e.branch_id`, sql`e.kind`, scope)}`,
+  )
+
+  return {
+    issuedPoints: toInt(row?.issued_points),
+    redeemedPoints: toInt(row?.redeemed_points),
+    expiredPoints: toInt(row?.expired_points),
+    adjustedPoints: toInt(row?.adjusted_points),
+    clawedBackPoints: toInt(row?.clawed_back_points),
+  }
+}
+
+export async function selectLoyaltySeries(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  granularity: Granularity,
+  scope: AnalyticsBranchScope,
+): Promise<LoyaltySeriesPoint[]> {
+  const lastInstant = new Date(window.toExclusive.getTime() - 1)
+  const step = bucketStep(granularity)
+  const result = await rows(
+    executor,
+    sql`
+      SELECT to_char(b.bucket AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS bucket_start,
+        COALESCE(SUM(e.points_delta) FILTER (WHERE e.kind = 'EARN'), 0)::bigint
+          AS issued_points,
+        COALESCE(-SUM(e.points_delta) FILTER (WHERE e.kind = 'REDEEM'), 0)::bigint
+          AS redeemed_points,
+        COALESCE(-SUM(e.points_delta) FILTER (WHERE e.kind = 'EXPIRE'), 0)::bigint
+          AS expired_points
+      FROM generate_series(
+        date_trunc(${granularity}, ${window.from}::timestamptz, 'UTC'),
+        date_trunc(${granularity}, ${lastInstant}::timestamptz, 'UTC'),
+        ${step}
+      ) AS b(bucket)
+      LEFT JOIN loyalty_ledger_entry e
+        ON e.occurred_at >= b.bucket
+        AND e.occurred_at < b.bucket + ${step}
+        AND ${loyaltyScopeClause(sql`e.branch_id`, sql`e.kind`, scope)}
+      GROUP BY b.bucket
+      ORDER BY b.bucket`,
+  )
+
+  return result.map((row) => ({
+    bucketStart: toText(row.bucket_start),
+    issuedPoints: toInt(row.issued_points),
+    redeemedPoints: toInt(row.redeemed_points),
+    expiredPoints: toInt(row.expired_points),
+  }))
+}
+
+// --- Payables ----------------------------------------------------------------
+
+export async function selectPayablesPosition(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+  todayIso: string,
+): Promise<{ outstandingMinor: number; overdueMinor: number }> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(i.total_minor - i.amount_paid_minor), 0)::bigint AS outstanding_minor,
+        COALESCE(
+          SUM(
+            CASE WHEN i.due_date < ${todayIso}
+              THEN i.total_minor - i.amount_paid_minor ELSE 0 END
+          ),
+          0
+        )::bigint AS overdue_minor
+      FROM supplier_invoice i
+      WHERE i.status IN ('OPEN', 'PARTIAL')
+        AND i.total_minor - i.amount_paid_minor > 0
+        AND ${scopeClause(sql`i.branch_id`, scope)}`,
+  )
+
+  return {
+    outstandingMinor: toInt(row?.outstanding_minor),
+    overdueMinor: toInt(row?.overdue_minor),
+  }
+}
+
+export async function selectInvoicedInWindow(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<number> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(i.total_minor), 0)::bigint AS invoiced_minor
+      FROM supplier_invoice i
+      WHERE i.status <> 'VOID'
+        AND i.invoice_date >= ${window.from}::date
+        AND i.invoice_date < ${window.toExclusive}::date
+        AND ${scopeClause(sql`i.branch_id`, scope)}`,
+  )
+  return toInt(row?.invoiced_minor)
+}
+
+export async function selectPaidInWindow(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<number> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(p.amount_minor), 0)::bigint AS paid_minor
+      FROM supplier_payment p
+      WHERE p.status = 'COMPLETED'
+        AND ${windowClause(sql`p.paid_at`, window)}
+        AND ${scopeClause(sql`p.branch_id`, scope)}`,
+  )
+  return toInt(row?.paid_minor)
+}
+
+/**
+ * Deposit held on suppliers' account: completed payments minus the signed allocation
+ * ledger, the aggregate form of `payables.repository.selectOnAccountBySupplier`.
+ */
+export async function selectOnAccountTotal(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+): Promise<number> {
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT (
+        SELECT COALESCE(SUM(p.amount_minor), 0)::bigint
+        FROM supplier_payment p
+        WHERE p.status = 'COMPLETED'
+          AND ${scopeClause(sql`p.branch_id`, scope)}
+      ) - (
+        SELECT COALESCE(SUM(a.amount_minor), 0)::bigint
+        FROM supplier_payment_allocation a
+        JOIN supplier_payment p ON p.id = a.payment_id
+        WHERE p.status = 'COMPLETED'
+          AND ${scopeClause(sql`p.branch_id`, scope)}
+      ) AS on_account_minor`,
+  )
+  return toInt(row?.on_account_minor)
+}
+
+export async function selectPayablesSeries(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  granularity: Granularity,
+  scope: AnalyticsBranchScope,
+): Promise<PayablesSeriesPoint[]> {
+  const lastInstant = new Date(window.toExclusive.getTime() - 1)
+  const step = bucketStep(granularity)
+  const result = await rows(
+    executor,
+    sql`
+      SELECT to_char(b.bucket AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS bucket_start,
+        COALESCE((
+          SELECT SUM(i.total_minor)
+          FROM supplier_invoice i
+          WHERE i.status <> 'VOID'
+            AND i.invoice_date >= b.bucket::date
+            AND i.invoice_date < (b.bucket + ${step})::date
+            AND ${scopeClause(sql`i.branch_id`, scope)}
+        ), 0)::bigint AS invoiced_minor,
+        COALESCE((
+          SELECT SUM(p.amount_minor)
+          FROM supplier_payment p
+          WHERE p.status = 'COMPLETED'
+            AND p.paid_at >= b.bucket
+            AND p.paid_at < b.bucket + ${step}
+            AND ${scopeClause(sql`p.branch_id`, scope)}
+        ), 0)::bigint AS paid_minor
+      FROM generate_series(
+        date_trunc(${granularity}, ${window.from}::timestamptz, 'UTC'),
+        date_trunc(${granularity}, ${lastInstant}::timestamptz, 'UTC'),
+        ${step}
+      ) AS b(bucket)
+      ORDER BY b.bucket`,
+  )
+
+  return result.map((row) => ({
+    bucketStart: toText(row.bucket_start),
+    invoicedMinor: toInt(row.invoiced_minor),
+    paidMinor: toInt(row.paid_minor),
+  }))
+}
+
+export async function selectTopSuppliersByOutstanding(
+  executor: DbExecutor,
+  scope: AnalyticsBranchScope,
+  todayIso: string,
+  limit: number,
+): Promise<PayablesSupplierRow[]> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT i.supplier_id, s.code, s.name,
+        COALESCE(SUM(i.total_minor - i.amount_paid_minor), 0)::bigint AS outstanding_minor,
+        COALESCE(
+          SUM(
+            CASE WHEN i.due_date < ${todayIso}
+              THEN i.total_minor - i.amount_paid_minor ELSE 0 END
+          ),
+          0
+        )::bigint AS overdue_minor
+      FROM supplier_invoice i
+      JOIN supplier s ON s.id = i.supplier_id
+      WHERE i.status IN ('OPEN', 'PARTIAL')
+        AND i.total_minor - i.amount_paid_minor > 0
+        AND ${scopeClause(sql`i.branch_id`, scope)}
+      GROUP BY i.supplier_id, s.code, s.name
+      ORDER BY outstanding_minor DESC, s.name
+      LIMIT ${limit}`,
+  )
+
+  return result.map((row) => ({
+    supplierId: toText(row.supplier_id),
+    code: toText(row.code),
+    name: toText(row.name),
+    outstandingMinor: toInt(row.outstanding_minor),
+    overdueMinor: toInt(row.overdue_minor),
+  }))
+}
+
+/** Branch labels for read models that aggregate outside `branch` (loyalty activity). */
+export async function selectBranchLabels(
+  executor: DbExecutor,
+): Promise<Array<{ branchId: string; code: string; name: string }>> {
+  const result = await rows(
+    executor,
+    sql`SELECT b.id, b.code, b.name FROM branch b ORDER BY b.code`,
+  )
+  return result.map((row) => ({
+    branchId: toText(row.id),
+    code: toText(row.code),
+    name: toText(row.name),
+  }))
 }
