@@ -1,15 +1,15 @@
+import { ReceiptScreen } from '@/modules/receipt'
+import { SalesScreen } from '@/modules/sales'
+import { SellScreen } from '@/modules/sell'
+import { SettingsScreen } from '@/modules/settings'
+import { SyncScreen } from '@/modules/sync'
+import { TenderScreen } from '@/modules/tender'
 import { useStaffSession } from '../../lib/auth/staff-session'
 import { CartProvider } from '../../lib/cart/cart-store'
 import type { PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosRuntime } from '../../lib/pos-runtime'
 import { usePos } from '../../lib/powersync/provider'
 import { useHashRoute, useRedirect } from '../../lib/router'
-import { ReceiptScreen } from './receipt'
-import { SalesScreen } from './sales'
-import { SellScreen } from './sell'
-import { SettingsScreen } from './settings'
-import { SyncScreen } from './sync'
-import { TenderScreen } from './tender'
 
 /**
  * The POS application shell and its guards (Plan 06 Task 1).
