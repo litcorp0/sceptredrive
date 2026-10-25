@@ -130,27 +130,32 @@ export function ProductSearch({
         <label htmlFor="product-search" className="sr-only">
           Search products
         </label>
-        <input
-          id="product-search"
-          ref={focusRef}
-          data-testid="product-search"
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              onEnter()
-            }
-            if (event.key === 'Escape') {
-              setTerm('')
-            }
-          }}
-          placeholder="Scan a barcode, or search by name or SKU (F2)"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          className="h-12 w-full rounded-lg border border-border bg-background px-4 text-base"
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            id="product-search"
+            ref={focusRef}
+            data-testid="product-search"
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onEnter()
+              }
+              if (event.key === 'Escape') {
+                setTerm('')
+              }
+            }}
+            placeholder="Scan a barcode, or search by name or SKU"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className="h-12 w-full rounded-lg border border-border bg-background pr-14 pl-4 text-base"
+          />
+          <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+            F2
+          </kbd>
+        </div>
         {term ? (
           <Button
             type="button"

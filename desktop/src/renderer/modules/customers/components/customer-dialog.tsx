@@ -168,7 +168,8 @@ export function CustomerDialog({
                       </span>
                       <span className="flex shrink-0 items-center gap-2">
                         {hit.isDraft ? (
-                          <Badge className="border-transparent bg-amber-50 text-[10px] text-foreground">
+                          <Badge className="border-transparent bg-warn/10 text-[10px] text-foreground">
+                            <span aria-hidden="true" className="size-1.5 rounded-full bg-warn" />
                             New — links on sync
                           </Badge>
                         ) : null}

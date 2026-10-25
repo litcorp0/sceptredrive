@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useDialogFocusReturn } from '@/components/common'
+import { StatusNote, useDialogFocusReturn } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -153,9 +153,9 @@ export function LoyaltyRedeemDialog({
               </span>
             </div>
             {quote.valueMinor > quote.appliedMinor && quote.points > 0 ? (
-              <p className="mt-1 text-[11px] text-amber-800">
+              <StatusNote tone="notice" className="mt-1 px-2 py-1 text-[11px]">
                 Only the cart value is applied — the rest is not refunded as change.
-              </p>
+              </StatusNote>
             ) : null}
           </div>
 
@@ -166,9 +166,9 @@ export function LoyaltyRedeemDialog({
           ) : null}
 
           {zeroTotal ? (
-            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <StatusNote tone="ok" className="px-3 py-2 text-sm">
               Fully redeemed: no payment will be due.
-            </p>
+            </StatusNote>
           ) : null}
         </div>
 

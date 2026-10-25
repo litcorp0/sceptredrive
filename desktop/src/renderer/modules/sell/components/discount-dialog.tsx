@@ -1,6 +1,6 @@
 import type { Role } from '@sceptre/shared'
 import { useState } from 'react'
-import { useDialogFocusReturn } from '@/components/common'
+import { StatusNote, useDialogFocusReturn } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -160,19 +160,17 @@ export function DiscountDialog({
             </div>
           </div>
 
-          <p
-            className={
-              needsManager
-                ? 'rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900'
-                : 'text-xs text-muted-foreground'
-            }
-            data-testid="discount-cap-note"
-          >
-            {needsManager
-              ? `Above the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()} — a manager or admin PIN is required.`
-              : `Within the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()}.`}
-            {approvedAlready ? ' Already approved by a manager.' : ''}
-          </p>
+          {needsManager ? (
+            <StatusNote tone="notice" className="px-3 py-2 text-xs" data-testid="discount-cap-note">
+              {`Above the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()} — a manager or admin PIN is required.`}
+              {approvedAlready ? ' Already approved by a manager.' : ''}
+            </StatusNote>
+          ) : (
+            <p className="text-xs text-muted-foreground" data-testid="discount-cap-note">
+              {`Within the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()}.`}
+              {approvedAlready ? ' Already approved by a manager.' : ''}
+            </p>
+          )}
 
           <label htmlFor="discount-reason" className="grid gap-1.5 text-sm font-medium">
             Reason

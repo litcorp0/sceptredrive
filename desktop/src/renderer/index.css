@@ -25,6 +25,21 @@ textarea {
   user-select: text;
 }
 
+/* Product cards on the sell screen grow with the layout. The card and the
+   virtualiser both read this one variable, so the rows the grid reserves and
+   the cards it paints cannot drift apart. 120 px at the 1024 counter, 140 px
+   from 1280; `product-grid.tsx` re-reads it on resize rather than hard-coding
+   a second height. */
+:root {
+  --product-card-height: 120px;
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --product-card-height: 140px;
+  }
+}
+
 /* The generated `components/ui` primitives ship `outline-none` plus
    `ring-ring/50`. The `outline-none` utility sits in the utilities layer, so it
    beats the brand `:focus-visible` rule in `@layer base` and leaves only a

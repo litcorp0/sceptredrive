@@ -33,7 +33,10 @@ export function CatalogBrowser({
   return (
     <>
       <ScanListener onScan={onScan} enabled={scanEnabled} />
-      <section aria-label="Catalog" className="flex min-h-0 flex-col border-r border-border p-4">
+      <section
+        aria-label="Catalog"
+        className="flex h-[60vh] min-h-[420px] min-w-0 flex-col border-border p-4 lg:h-auto lg:min-h-0 lg:border-r"
+      >
         <ProductSearch
           branchId={branchId}
           focusRef={focusRef}

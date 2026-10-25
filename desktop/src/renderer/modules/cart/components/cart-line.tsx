@@ -11,6 +11,10 @@ import { formatGhs } from '@/lib/format'
  * Money comes from the priced line (the shared engine), never from the raw
  * cart row. Quantity is committed on blur/Enter so typing "12" does not
  * dispatch "1" and then "12".
+ *
+ * Every action is a 44 × 44 target (D8). The row stays dense by keeping the
+ * buttons visually the same size and padding the hit area, so a touch till and
+ * a keyboard can both drive it without the line growing past a thumb.
  */
 export function CartLineRow({
   line,
@@ -51,7 +55,9 @@ export function CartLineRow({
       aria-current={selected ? 'true' : undefined}
       onPointerDown={onSelect}
       className={`group rounded-lg border px-3 py-2.5 transition-colors ${
-        selected ? 'border-foreground/40 bg-muted/60' : 'border-border bg-card'
+        selected
+          ? 'border-foreground/60 bg-muted ring-1 ring-foreground/10'
+          : 'border-border bg-card'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -76,7 +82,7 @@ export function CartLineRow({
             {formatGhs(priced.totalMinor)}
           </p>
           {line.lineDiscountMinor > 0 ? (
-            <p className="font-mono text-[11px] text-emerald-700 tabular-nums">
+            <p className="font-mono text-[11px] text-ok tabular-nums">
               −{formatGhs(line.lineDiscountMinor)}
             </p>
           ) : null}
@@ -89,8 +95,9 @@ export function CartLineRow({
             type="button"
             variant="outline"
             aria-label="Decrease quantity"
+            title="Decrease quantity (keyboard −)"
             onClick={() => onQuantity(line.quantity - 1)}
-            className="h-11 w-11 text-lg leading-none"
+            className="h-11 min-w-11 text-lg leading-none"
           >
             −
           </Button>
@@ -114,8 +121,9 @@ export function CartLineRow({
             type="button"
             variant="outline"
             aria-label="Increase quantity"
+            title="Increase quantity (keyboard +)"
             onClick={() => onQuantity(line.quantity + 1)}
-            className="h-11 w-11 text-lg leading-none"
+            className="h-11 min-w-11 text-lg leading-none"
           >
             +
           </Button>
@@ -127,7 +135,8 @@ export function CartLineRow({
             variant="outline"
             size="sm"
             onClick={onDiscount}
-            className="h-11 px-3 text-xs"
+            title="Discount this line"
+            className="h-11 min-w-11 px-3 text-xs"
           >
             Discount
           </Button>
@@ -136,7 +145,7 @@ export function CartLineRow({
             variant="outline"
             size="sm"
             onClick={onRemove}
-            className="h-11 px-3 text-xs text-destructive"
+            className="h-11 min-w-11 px-3 text-xs text-destructive"
             aria-label={`Remove ${line.name}`}
           >
             Remove
