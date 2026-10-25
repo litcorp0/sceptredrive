@@ -11,9 +11,10 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 02** (`modules/` scaffolding and the route → page
-split). Plan 01 is complete: shared day bounds, average basket, the `sale` index, the
-prepared-statement cache, the migration proof, and the shared module gate are all in.
+**Next action:** Execute **Phase 10, Plan 03** (primitives, chrome, and counter ergonomics).
+Plans 01–02 are complete: the shared day window and average basket, the `sale` index, the
+prepared-statement cache, the migration proof, the shared module gate, and the move of every
+counter screen into its module are all in.
 
 ---
 
@@ -31,7 +32,7 @@ prepared-statement cache, the migration proof, and the shared module gate are al
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (1/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (2/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -40,6 +41,18 @@ prepared-statement cache, the migration proof, and the shared module gate are al
 
 ### Phase 10 execution notes (2026-10-25)
 
+- **Plan 02 complete** (commits `e6ceed0`, `8f50757`). Thirteen domains hold the POS screens with
+  the admin's seven folders and a barrel each; every route file now routes. `components/pos/`,
+  `components/auth/`, and `components/shift/` are gone; `lib/**` did not move.
+- **The move is proven by the suite, not by the diff.** Desktop **345/345** with **no test file
+  edited**, `check-types` and lint clean, and the gate reports **13/14** with `home` pending.
+- **Three adjustments the move forced, all recorded in the commit:** `pin-pad` went to
+  `components/common` (the manager-override dialog renders it, so keeping it in `auth` would have
+  made a global import a module barrel — the Phase 8 cycle); the customer and loyalty dialogs are
+  `createPortal`'d from their owning panels, because the panels sit inside the
+  `hidden … lg:block` aside and F4/F6 would otherwise open an invisible dialog at the 1024 px
+  minimum; and `CatalogBrowser` composes search, grid, and scan listener so the sell page imports
+  one barrel per domain.
 - **Plan 01 complete** (commits `b9aeb87`, `574b32b`, `b255615`, `e004b55`, `20d4bf8`,
   `97a51e1`, `1cdf192`). `@sceptre/shared` owns the day window (`accraDayBounds`, `to` from
   calendar parts, never `+86_400_000`), the rollover duration (`msUntilNextAccraDay`, always in
@@ -71,7 +84,7 @@ prepared-statement cache, the migration proof, and the shared module gate are al
 | Plan | Title | Status |
 |---|---|---|
 | 01 | Shared counter maths, local schema indexes, and the desktop module gate | ✅ Complete |
-| 02 | `modules/` scaffolding and the route → page split | ⬜ Not started |
+| 02 | `modules/` scaffolding and the route → page split | ✅ Complete |
 | 03 | Primitives, chrome, and counter ergonomics | ⬜ Not started |
 | 04 | Home data layer — reactive queries and pure aggregation | ⬜ Not started |
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ⬜ Not started |
