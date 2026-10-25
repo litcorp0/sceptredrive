@@ -5,6 +5,7 @@ import { cn } from "cn"
 import {
 	Building2,
 	ChartLine,
+	ClipboardList,
 	Gift,
 	LayoutDashboard,
 	type LucideIcon,
@@ -42,6 +43,7 @@ type NavPath =
 	| "/customers"
 	| "/loyalty"
 	| "/catalog"
+	| "/procurement"
 	| "/inventory"
 	| "/suppliers"
 	| "/audit"
@@ -80,6 +82,12 @@ export const NAV_GROUPS: NavGroup[] = [
 		label: "Operations",
 		items: [
 			{ to: "/catalog", label: "Catalog", icon: Package, permission: "catalog.read" },
+			{
+				to: "/procurement",
+				label: "Procurement",
+				icon: ClipboardList,
+				permission: "procurement.read",
+			},
 			{ to: "/inventory", label: "Inventory", icon: Warehouse, permission: "inventory.read" },
 			{ to: "/suppliers", label: "Suppliers", icon: Truck, permission: "supplier.read" },
 			{ to: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
@@ -140,6 +148,9 @@ const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
 	["payments", "Payments"],
 	["aging", "Aging"],
 	["statement", "Statement"],
+	["orders", "Orders"],
+	["replenishment", "Replenishment"],
+	["submit", "Submit"],
 	["new", "New"],
 	["edit", "Edit"],
 ])
