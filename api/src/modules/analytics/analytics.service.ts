@@ -707,7 +707,7 @@ export async function getInventory(
     byBranch: result.byBranch,
     flow: result.flow,
     topMovers: result.topMovers,
-    deadStock: result.deadStockCount,
+    deadStock: { count: result.deadStockCount },
   }
 }
 

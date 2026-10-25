@@ -357,9 +357,9 @@ export interface InventoryResponse {
   topMovers: InventoryMover[]
   /**
    * Product/branch rows holding stock with no movement in the window. A count only — the
-   * list is RPT-04 (Phase 14).
+   * list belongs to RPT-04 (Phase 14), so the field is an object the tab can grow into.
    */
-  deadStock: number
+  deadStock: { count: number }
 }
 
 // --- Credit (ANL-02) --------------------------------------------------------

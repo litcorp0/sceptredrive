@@ -1413,7 +1413,7 @@ describe.skipIf(!available)('analytics ledger read models', () => {
     expect(movers[1]).toMatchObject({ productId: productP2, unitsSold: 1 })
 
     // P3 holds stock and never moved; P1/P2 both did.
-    expect(body.deadStock).toBe(1)
+    expect(body.deadStock).toEqual({ count: 1 })
   })
 
   it('reconciles credit to the ledger and buckets utilisation in integers', async () => {

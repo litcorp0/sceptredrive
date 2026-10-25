@@ -111,8 +111,6 @@ export interface SeedDemoSalesResult {
 }
 
 interface TerminalContext {
-  branchId: string
-  terminalId: string
   device: DeviceAuthContext
   cashier: { userId: string; staffId: string; pinVersion: number }
   binding: { bindingId: string; bindingToken: string }
@@ -365,8 +363,6 @@ export async function seedDemoSales(
 
       const binding = await ensureBinding(branch.id, demoDevice.id, cashier, result.created)
       terminals.set(terminalCode, {
-        branchId: branch.id,
-        terminalId,
         device: { deviceId: demoDevice.id, terminalId, branchId: branch.id },
         cashier,
         binding,
