@@ -596,6 +596,168 @@ describe.skipIf(!available)('analytics overview', () => {
     })
     expect(body.driftMinor).toEqual({ revenue: -1, tax: 2 })
   })
+
+  async function get(path: string, cookie: string, query: Record<string, string> = {}) {
+    const params = new URLSearchParams(query)
+    return app.request(`${path}?${params.toString()}`, { headers: authedHeaders(cookie) })
+  }
+
+  it('reconciles the sales report with the overview and paginates its rows', async () => {
+    const [overviewResponse, salesResponse] = await Promise.all([
+      overview(adminCookie, PERIOD),
+      get('/api/analytics/sales', adminCookie, { ...PERIOD, limit: '2', offset: '0' }),
+    ])
+    expect(salesResponse.status).toBe(200)
+    const sales = (await salesResponse.json()) as Record<string, unknown>
+    const overviewTotals = overviewResponse.body.totals as Record<string, number>
+
+    expect((sales.totals as Record<string, number>).takeMinor).toBe(overviewTotals.takeMinor)
+    expect((sales.totals as Record<string, number>).salesCount).toBe(3)
+    expect(sales.total).toBe(3)
+    expect((sales.rows as unknown[]).length).toBe(2)
+    expect((sales.byHour as unknown[]).length).toBe(24)
+
+    const series = sales.series as Array<{ takeMinor: number }>
+    expect(series.reduce((total, point) => total + point.takeMinor, 0)).toBe(
+      overviewTotals.takeMinor,
+    )
+
+    const hourTotal = (sales.byHour as Array<{ takeMinor: number }>).reduce(
+      (total, slice) => total + slice.takeMinor,
+      0,
+    )
+    expect(hourTotal).toBe(overviewTotals.takeMinor)
+
+    const secondPage = await get('/api/analytics/sales', adminCookie, {
+      ...PERIOD,
+      limit: '2',
+      offset: '2',
+    })
+    const page2 = (await secondPage.json()) as { rows: unknown[] }
+    expect(page2.rows).toHaveLength(1)
+  })
+
+  it('rejects an unknown sort instead of interpolating it', async () => {
+    const response = await get('/api/analytics/sales', adminCookie, {
+      ...PERIOD,
+      sort: 'drop_table',
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('reconciles product revenue, cost, and margin', async () => {
+    const response = await get('/api/analytics/products', adminCookie, PERIOD)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    const overviewResponse = await overview(adminCookie, PERIOD)
+    const overviewTotals = overviewResponse.body.totals as Record<string, number>
+    const totals = body.totals as {
+      revenueBaseMinor: number
+      costMinor: number
+      grossProfitMinor: number
+      marginBp: number
+    }
+
+    expect(totals.revenueBaseMinor).toBe(overviewTotals.revenueBaseMinor)
+    expect(totals.grossProfitMinor).toBe(totals.revenueBaseMinor - totals.costMinor)
+    expect(totals.marginBp).toBe(
+      Math.round((totals.grossProfitMinor * 10_000) / totals.revenueBaseMinor),
+    )
+
+    const rows = body.rows as Array<{ revenueBaseMinor: number }>
+    const allRevenue = rows.reduce((total, row) => total + row.revenueBaseMinor, 0)
+    expect(allRevenue).toBe(totals.revenueBaseMinor)
+    expect(body.total).toBe(2)
+  })
+
+  it('reports the tax split by category and rates from the shared engine', async () => {
+    const response = await get('/api/analytics/tax', adminCookie, PERIOD)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    const totals = body.totals as {
+      vatMinor: number
+      nhilMinor: number
+      getfundMinor: number
+      totalMinor: number
+      baseMinor: number
+    }
+    const categories = body.byCategory as Array<Record<string, string | number>>
+
+    expect(totals.totalMinor).toBe(totals.vatMinor + totals.nhilMinor + totals.getfundMinor)
+    const categoryBase = categories.reduce((total, row) => total + Number(row.baseMinor), 0)
+    expect(categoryBase).toBe(totals.baseMinor)
+    expect(body.rates).toMatchObject({ vatBp: 1500, nhilBp: 250, getfundBp: 250, totalBp: 2000 })
+    expect(
+      (body.series as Array<{ totalMinor: number }>).reduce(
+        (total, point) => total + point.totalMinor,
+        0,
+      ),
+    ).toBe(totals.totalMinor)
+  })
+
+  it('escapes a formula in an exported product name and scopes the export', async () => {
+    const uomRow = await db
+      .insert(uom)
+      .values({ code: `E${suffix}`.slice(0, 8), name: 'Piece' })
+      .returning()
+    const hostileUomId = uomRow[0]?.id ?? ''
+    createdUomIds.push(hostileUomId)
+    const [hostile] = await db
+      .insert(product)
+      .values({
+        sku: `EVIL-${suffix}`,
+        name: '=HYPERLINK("http://evil")',
+        categoryId: createdCategoryIds[0] ?? '',
+        uomId: hostileUomId,
+        basePriceMinor: 1_000,
+        taxCategory: 'STANDARD',
+      })
+      .returning()
+    const hostileId = hostile?.id ?? ''
+    createdProductIds.push(hostileId)
+    await db
+      .insert(stockLevel)
+      .values({ productId: hostileId, branchId: branchA, quantityOnHand: 10, avgCostMinor: 500 })
+
+    await apply(
+      deviceA,
+      payloadFor({
+        clientTransactionId: 'hostile',
+        shiftId: shiftA,
+        cashier: cashierAProof,
+        occurredAt: '2026-09-20T10:00:00.000Z',
+        lines: [{ productId: hostileId, quantity: 1, unitPriceMinor: 1_000 }],
+        tender: { method: 'CASH', amountMinor: 1_000 },
+      }),
+    )
+
+    const response = await get('/api/analytics/products/export', adminCookie, {
+      from: '2026-09-20',
+      to: '2026-09-20',
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('text/csv')
+    expect(response.headers.get('content-disposition')).toContain('attachment; filename=')
+    // `response.text()` decodes UTF-8 and strips a leading BOM by spec, so inspect the bytes
+    // the spreadsheet will actually receive.
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf])
+    const csv = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
+    expect(csv.startsWith('\uFEFF')).toBe(true)
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil"")"`)
+    expect(csv.includes('\r\n')).toBe(true)
+
+    const foreign = await get('/api/analytics/products/export', managerCookie, {
+      ...PERIOD,
+      branchId: branchB,
+    })
+    expect(foreign.status).toBe(403)
+
+    const managerExport = await get('/api/analytics/sales/export', managerCookie, PERIOD)
+    const managerCsv = await managerExport.text()
+    expect(managerCsv).not.toContain(`${suffix}B`)
+    expect(managerCsv).toContain(`${suffix}A`)
+  })
 })
 
 describe('analytics pure helpers', () => {

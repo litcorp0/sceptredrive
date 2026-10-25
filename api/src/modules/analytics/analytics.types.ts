@@ -165,3 +165,136 @@ export interface AnalyticsWindow {
 
 /** `null` means every branch (admins); otherwise the one branch in scope. */
 export type AnalyticsBranchScope = string | null
+
+// --- Sales report (RPT-01) ---------------------------------------------------
+
+export type SalesSort = 'date' | 'take' | 'count'
+export type SortDirection = 'asc' | 'desc'
+
+export interface ReportQuery extends AnalyticsQuery {
+  sort?: string
+  direction?: SortDirection
+  limit?: number
+  offset?: number
+}
+
+export interface LabelledTotal {
+  id: string | null
+  label: string
+  takeMinor: number
+  salesCount: number
+  taxTotalMinor: number
+}
+
+export interface SalesRow {
+  receiptNumber: string
+  occurredAt: string
+  branchCode: string
+  terminalCode: string
+  cashierStaffId: string
+  cashierName: string
+  itemsSold: number
+  takeMinor: number
+  taxTotalMinor: number
+  changeMinor: number
+}
+
+export interface HourSlice {
+  hour: number
+  takeMinor: number
+  salesCount: number
+}
+
+export interface SalesTotals {
+  takeMinor: number
+  salesCount: number
+  avgBasketMinor: number
+  itemsSold: number
+  changeMinor: number
+  tax: TaxSplit
+}
+
+export interface SalesResponse {
+  currency: 'GHS'
+  period: Period
+  comparison: { from: string; to: string }
+  scope: AnalyticsScopeView
+  totals: SalesTotals
+  deltas: { take: MoneyDelta; salesCount: MoneyDelta; avgBasket: MoneyDelta }
+  series: SeriesPoint[]
+  byBranch: LabelledTotal[]
+  byTerminal: LabelledTotal[]
+  byCashier: LabelledTotal[]
+  byHour: HourSlice[]
+  rows: SalesRow[]
+  total: number
+}
+
+// --- Product performance (RPT-03) -------------------------------------------
+
+export type ProductSort = 'revenue' | 'units' | 'margin'
+
+export interface ProductRow extends TopProduct {
+  salesCount: number
+}
+
+export interface ProductsResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  totals: {
+    revenueBaseMinor: number
+    costMinor: number
+    grossProfitMinor: number
+    marginBp: number | null
+    unitsSold: number
+    distinctProducts: number
+  }
+  top: TopProduct[]
+  concentration: { top5RevenueBp: number | null }
+  byCategory: CategorySlice[]
+  rows: ProductRow[]
+  total: number
+  sort: ProductSort
+  direction: SortDirection
+}
+
+// --- Tax (RPT-02) -----------------------------------------------------------
+
+export interface TaxBucketPoint {
+  bucketStart: string
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  totalMinor: number
+}
+
+export interface TaxCategoryRow {
+  category: string
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  totalMinor: number
+  revenueBaseMinor: number
+  lineTotalMinor: number
+}
+
+export interface TaxBranchRow extends TaxSplit {
+  branchId: string
+  code: string
+  name: string
+}
+
+export interface TaxResponse {
+  currency: 'GHS'
+  period: Period
+  scope: AnalyticsScopeView
+  totals: TaxSplit & { salesCount: number; standardLineTotalMinor: number }
+  byBranch: TaxBranchRow[]
+  byCategory: TaxCategoryRow[]
+  series: TaxBucketPoint[]
+  driftMinor: { revenue: number; tax: number }
+  driftExplanation: string
+  rates: { vatBp: number; nhilBp: number; getfundBp: number; totalBp: number; source: string }
+}

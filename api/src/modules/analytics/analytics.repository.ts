@@ -465,3 +465,509 @@ export async function selectSyncHealth(
     maxUploadLagMinutes: toOptionalInt(lag?.max_minutes),
   }
 }
+
+// --- Sales report (RPT-01) ---------------------------------------------------
+
+export interface SalesRowResult {
+  receiptNumber: string
+  occurredAt: string
+  branchCode: string
+  terminalCode: string
+  cashierStaffId: string
+  cashierName: string
+  itemsSold: number
+  takeMinor: number
+  taxTotalMinor: number
+  changeMinor: number
+}
+
+const SALES_ORDER: Record<string, SQL> = {
+  date: sql`s.occurred_at`,
+  take: sql`s.total_minor`,
+  count: sql`items_sold`,
+}
+
+export async function selectSalesRows(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+  options: { sort: string; direction: 'asc' | 'desc'; limit: number; offset: number },
+): Promise<{ rows: SalesRowResult[]; total: number }> {
+  const order = SALES_ORDER[options.sort] ?? SALES_ORDER.date
+  const direction = options.direction === 'asc' ? sql`asc` : sql`desc`
+  const conditions = sql`${windowClause(sql`s.occurred_at`, window)} AND ${scopeClause(sql`s.branch_id`, scope)}`
+
+  const [countRow] = await rows(
+    executor,
+    sql`SELECT COUNT(*)::bigint AS total FROM sale s WHERE ${conditions}`,
+  )
+
+  const result = await rows(
+    executor,
+    sql`
+      SELECT s.receipt_number,
+        to_char(s.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS occurred_at,
+        b.code AS branch_code,
+        t.code AS terminal_code,
+        s.cashier_staff_id,
+        COALESCE(u.name, s.cashier_staff_id) AS cashier_name,
+        s.total_minor,
+        s.tax_total_minor,
+        s.change_minor,
+        COALESCE((
+          SELECT SUM(l.quantity) FROM sale_line l WHERE l.sale_id = s.id
+        ), 0)::bigint AS items_sold
+      FROM sale s
+      JOIN branch b ON b.id = s.branch_id
+      JOIN terminal t ON t.id = s.terminal_id
+      LEFT JOIN "user" u ON u.id = s.cashier_user_id
+      WHERE ${conditions}
+      ORDER BY ${order} ${direction}, s.id ${direction}
+      LIMIT ${options.limit} OFFSET ${options.offset}`,
+  )
+
+  return {
+    total: toInt(countRow?.total),
+    rows: result.map((row) => ({
+      receiptNumber: toText(row.receipt_number),
+      occurredAt: toText(row.occurred_at),
+      branchCode: toText(row.branch_code),
+      terminalCode: toText(row.terminal_code),
+      cashierStaffId: toText(row.cashier_staff_id),
+      cashierName: toText(row.cashier_name),
+      itemsSold: toInt(row.items_sold),
+      takeMinor: toInt(row.total_minor),
+      taxTotalMinor: toInt(row.tax_total_minor),
+      changeMinor: toInt(row.change_minor),
+    })),
+  }
+}
+
+export async function selectByTerminal(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{ id: string; label: string; takeMinor: number; salesCount: number; taxTotalMinor: number }>
+> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT t.id, t.code || ' · ' || t.name AS label,
+        COALESCE(SUM(s.total_minor), 0)::bigint AS take_minor,
+        COALESCE(SUM(s.tax_total_minor), 0)::bigint AS tax_minor,
+        COUNT(*)::bigint AS sales_count
+      FROM sale s
+      JOIN terminal t ON t.id = s.terminal_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY t.id, t.code, t.name
+      ORDER BY take_minor DESC
+      LIMIT 50`,
+  )
+
+  return result.map((row) => ({
+    id: toText(row.id),
+    label: toText(row.label),
+    takeMinor: toInt(row.take_minor),
+    salesCount: toInt(row.sales_count),
+    taxTotalMinor: toInt(row.tax_minor),
+  }))
+}
+
+export async function selectByCashier(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{ id: string; label: string; takeMinor: number; salesCount: number; taxTotalMinor: number }>
+> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT s.cashier_user_id AS id,
+        COALESCE(max(u.name), max(s.cashier_staff_id)) AS label,
+        COALESCE(SUM(s.total_minor), 0)::bigint AS take_minor,
+        COALESCE(SUM(s.tax_total_minor), 0)::bigint AS tax_minor,
+        COUNT(*)::bigint AS sales_count
+      FROM sale s
+      LEFT JOIN "user" u ON u.id = s.cashier_user_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY s.cashier_user_id
+      ORDER BY take_minor DESC
+      LIMIT 50`,
+  )
+
+  return result.map((row) => ({
+    id: toText(row.id),
+    label: toText(row.label),
+    takeMinor: toInt(row.take_minor),
+    salesCount: toInt(row.sales_count),
+    taxTotalMinor: toInt(row.tax_minor),
+  }))
+}
+
+export async function selectByBranch(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{ id: string; label: string; takeMinor: number; salesCount: number; taxTotalMinor: number }>
+> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT b.id, b.code || ' · ' || b.name AS label,
+        COALESCE(SUM(s.total_minor), 0)::bigint AS take_minor,
+        COALESCE(SUM(s.tax_total_minor), 0)::bigint AS tax_minor,
+        COUNT(*)::bigint AS sales_count
+      FROM sale s
+      JOIN branch b ON b.id = s.branch_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY b.id, b.code, b.name
+      ORDER BY take_minor DESC
+      LIMIT 50`,
+  )
+
+  return result.map((row) => ({
+    id: toText(row.id),
+    label: toText(row.label),
+    takeMinor: toInt(row.take_minor),
+    salesCount: toInt(row.sales_count),
+    taxTotalMinor: toInt(row.tax_minor),
+  }))
+}
+
+export async function selectHourlyTotals(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<Array<{ hour: number; takeMinor: number; salesCount: number }>> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT h.hour,
+        COALESCE(SUM(s.total_minor), 0)::bigint AS take_minor,
+        COUNT(s.id)::bigint AS sales_count
+      FROM generate_series(0, 23) AS h(hour)
+      LEFT JOIN sale s
+        ON EXTRACT(HOUR FROM s.occurred_at AT TIME ZONE 'UTC') = h.hour
+        AND ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY h.hour
+      ORDER BY h.hour`,
+  )
+
+  return result.map((row) => ({
+    hour: toInt(row.hour),
+    takeMinor: toInt(row.take_minor),
+    salesCount: toInt(row.sales_count),
+  }))
+}
+
+// --- Product performance (RPT-03) --------------------------------------------
+
+export interface ProductTotals {
+  revenueBaseMinor: number
+  costMinor: number
+  unitsSold: number
+  distinctProducts: number
+}
+
+export async function selectProductTotals(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+  categoryId?: string,
+): Promise<ProductTotals> {
+  const category = categoryId ? sql`AND p.category_id = ${categoryId}` : sql``
+  const [row] = await rows(
+    executor,
+    sql`
+      SELECT COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_base_minor,
+        COALESCE(SUM(l.unit_cost_minor::bigint * l.quantity), 0)::bigint AS cost_minor,
+        COALESCE(SUM(l.quantity), 0)::bigint AS units_sold,
+        COUNT(DISTINCT l.product_id)::bigint AS distinct_products
+      FROM sale_line l
+      JOIN sale s ON s.id = l.sale_id
+      JOIN product p ON p.id = l.product_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+        ${category}`,
+  )
+
+  return {
+    revenueBaseMinor: toInt(row?.revenue_base_minor),
+    costMinor: toInt(row?.cost_minor),
+    unitsSold: toInt(row?.units_sold),
+    distinctProducts: toInt(row?.distinct_products),
+  }
+}
+
+const PRODUCT_ORDER: Record<string, SQL> = {
+  revenue: sql`revenue_base_minor`,
+  units: sql`quantity`,
+  margin: sql`(COALESCE(SUM(l.base_minor), 0)::numeric - COALESCE(SUM(l.unit_cost_minor::bigint * l.quantity), 0)) / NULLIF(COALESCE(SUM(l.base_minor), 0), 0)`,
+}
+
+export interface ProductRowResult {
+  productId: string
+  sku: string
+  name: string
+  quantity: number
+  revenueBaseMinor: number
+  costMinor: number
+  grossProfitMinor: number
+  marginBp: number | null
+  salesCount: number
+}
+
+export async function selectProductRows(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+  options: {
+    sort: string
+    direction: 'asc' | 'desc'
+    limit: number
+    offset: number
+    categoryId?: string
+  },
+): Promise<{ rows: ProductRowResult[]; total: number }> {
+  const order = PRODUCT_ORDER[options.sort] ?? PRODUCT_ORDER.revenue
+  const direction = options.direction === 'asc' ? sql`asc` : sql`desc`
+  const category = options.categoryId ? sql`AND p.category_id = ${options.categoryId}` : sql``
+  const conditions = sql`
+    ${windowClause(sql`s.occurred_at`, window)}
+    AND ${scopeClause(sql`s.branch_id`, scope)}
+    ${category}`
+
+  const [countRow] = await rows(
+    executor,
+    sql`
+      SELECT COUNT(DISTINCT l.product_id)::bigint AS total
+      FROM sale_line l
+      JOIN sale s ON s.id = l.sale_id
+      JOIN product p ON p.id = l.product_id
+      WHERE ${conditions}`,
+  )
+
+  const result = await rows(
+    executor,
+    sql`
+      SELECT l.product_id,
+        min(l.sku) AS sku,
+        min(l.name) AS name,
+        COALESCE(SUM(l.quantity), 0)::bigint AS quantity,
+        COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_base_minor,
+        COALESCE(SUM(l.unit_cost_minor::bigint * l.quantity), 0)::bigint AS cost_minor,
+        COUNT(DISTINCT l.sale_id)::bigint AS sales_count
+      FROM sale_line l
+      JOIN sale s ON s.id = l.sale_id
+      JOIN product p ON p.id = l.product_id
+      WHERE ${conditions}
+      GROUP BY l.product_id
+      ORDER BY ${order} ${direction}, revenue_base_minor DESC
+      LIMIT ${options.limit} OFFSET ${options.offset}`,
+  )
+
+  return {
+    total: toInt(countRow?.total),
+    rows: result.map((row) => {
+      const revenueBaseMinor = toInt(row.revenue_base_minor)
+      const costMinor = toInt(row.cost_minor)
+      const grossProfitMinor = revenueBaseMinor - costMinor
+      return {
+        productId: toText(row.product_id),
+        sku: toText(row.sku),
+        name: toText(row.name),
+        quantity: toInt(row.quantity),
+        revenueBaseMinor,
+        costMinor,
+        grossProfitMinor,
+        marginBp:
+          revenueBaseMinor === 0
+            ? null
+            : Math.round((grossProfitMinor * 10_000) / revenueBaseMinor),
+        salesCount: toInt(row.sales_count),
+      }
+    }),
+  }
+}
+
+/** Revenue held by the five best sellers, for the concentration line. */
+export async function selectTopFiveRevenue(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<{ totalMinor: number; top5Minor: number }> {
+  const [row] = await rows(
+    executor,
+    sql`
+      WITH per_product AS (
+        SELECT l.product_id, COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_minor
+        FROM sale_line l
+        JOIN sale s ON s.id = l.sale_id
+        WHERE ${windowClause(sql`s.occurred_at`, window)}
+          AND ${scopeClause(sql`s.branch_id`, scope)}
+        GROUP BY l.product_id
+      )
+      SELECT COALESCE((SELECT SUM(revenue_minor) FROM per_product), 0)::bigint AS total_minor,
+        COALESCE((
+          SELECT SUM(revenue_minor)
+          FROM (SELECT revenue_minor FROM per_product ORDER BY revenue_minor DESC LIMIT 5) top
+        ), 0)::bigint AS top5_minor`,
+  )
+
+  return { totalMinor: toInt(row?.total_minor), top5Minor: toInt(row?.top5_minor) }
+}
+
+// --- Tax (RPT-02) ------------------------------------------------------------
+
+export async function selectTaxByBranch(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{
+    branchId: string
+    code: string
+    name: string
+    baseMinor: number
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    totalMinor: number
+  }>
+> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT b.id, b.code, b.name,
+        COALESCE(SUM(s.total_minor - s.tax_total_minor), 0)::bigint AS base_minor,
+        COALESCE(SUM(s.vat_minor), 0)::bigint AS vat_minor,
+        COALESCE(SUM(s.nhil_minor), 0)::bigint AS nhil_minor,
+        COALESCE(SUM(s.getfund_minor), 0)::bigint AS getfund_minor,
+        COALESCE(SUM(s.tax_total_minor), 0)::bigint AS total_minor
+      FROM sale s
+      JOIN branch b ON b.id = s.branch_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY b.id, b.code, b.name
+      ORDER BY total_minor DESC`,
+  )
+
+  return result.map((row) => ({
+    branchId: toText(row.id),
+    code: toText(row.code),
+    name: toText(row.name),
+    baseMinor: toInt(row.base_minor),
+    vatMinor: toInt(row.vat_minor),
+    nhilMinor: toInt(row.nhil_minor),
+    getfundMinor: toInt(row.getfund_minor),
+    totalMinor: toInt(row.total_minor),
+  }))
+}
+
+export async function selectTaxByCategory(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{
+    category: string
+    baseMinor: number
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    totalMinor: number
+    revenueBaseMinor: number
+    lineTotalMinor: number
+  }>
+> {
+  const result = await rows(
+    executor,
+    sql`
+      SELECT l.tax_category::text AS category,
+        COALESCE(SUM(l.base_minor), 0)::bigint AS base_minor,
+        COALESCE(SUM(l.vat_minor), 0)::bigint AS vat_minor,
+        COALESCE(SUM(l.nhil_minor), 0)::bigint AS nhil_minor,
+        COALESCE(SUM(l.getfund_minor), 0)::bigint AS getfund_minor,
+        COALESCE(SUM(l.tax_total_minor), 0)::bigint AS tax_minor,
+        COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_base_minor,
+        COALESCE(SUM(l.total_minor), 0)::bigint AS line_total_minor
+      FROM sale_line l
+      JOIN sale s ON s.id = l.sale_id
+      WHERE ${windowClause(sql`s.occurred_at`, window)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY l.tax_category
+      ORDER BY base_minor DESC`,
+  )
+
+  return result.map((row) => ({
+    category: toText(row.category),
+    baseMinor: toInt(row.base_minor),
+    vatMinor: toInt(row.vat_minor),
+    nhilMinor: toInt(row.nhil_minor),
+    getfundMinor: toInt(row.getfund_minor),
+    totalMinor: toInt(row.tax_minor),
+    revenueBaseMinor: toInt(row.revenue_base_minor),
+    lineTotalMinor: toInt(row.line_total_minor),
+  }))
+}
+
+export async function selectTaxSeries(
+  executor: DbExecutor,
+  window: AnalyticsWindow,
+  granularity: Granularity,
+  scope: AnalyticsBranchScope,
+): Promise<
+  Array<{
+    bucketStart: string
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    totalMinor: number
+  }>
+> {
+  const lastInstant = new Date(window.toExclusive.getTime() - 1)
+  const result = await rows(
+    executor,
+    sql`
+      SELECT to_char(b.bucket AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS bucket_start,
+        COALESCE(SUM(s.vat_minor), 0)::bigint AS vat_minor,
+        COALESCE(SUM(s.nhil_minor), 0)::bigint AS nhil_minor,
+        COALESCE(SUM(s.getfund_minor), 0)::bigint AS getfund_minor,
+        COALESCE(SUM(s.tax_total_minor), 0)::bigint AS total_minor
+      FROM generate_series(
+        date_trunc(${granularity}, ${window.from}::timestamptz, 'UTC'),
+        date_trunc(${granularity}, ${lastInstant}::timestamptz, 'UTC'),
+        ${bucketStep(granularity)}
+      ) AS b(bucket)
+      LEFT JOIN sale s
+        ON s.occurred_at >= b.bucket
+        AND s.occurred_at < b.bucket + ${bucketStep(granularity)}
+        AND ${scopeClause(sql`s.branch_id`, scope)}
+      GROUP BY b.bucket
+      ORDER BY b.bucket`,
+  )
+
+  return result.map((row) => ({
+    bucketStart: toText(row.bucket_start),
+    vatMinor: toInt(row.vat_minor),
+    nhilMinor: toInt(row.nhil_minor),
+    getfundMinor: toInt(row.getfund_minor),
+    totalMinor: toInt(row.total_minor),
+  }))
+}
+
+/** Branch code for an export filename. */
+export async function selectBranchCode(
+  executor: DbExecutor,
+  branchId: string,
+): Promise<string | null> {
+  const [row] = await rows(executor, sql`SELECT code FROM branch WHERE id = ${branchId} LIMIT 1`)
+  return row ? toText(row.code) : null
+}

@@ -1,5 +1,14 @@
 import { db } from '@sceptre/db'
-import { accraIsoDay, deltaBp, ratioBp } from '@sceptre/shared'
+import {
+  accraIsoDay,
+  deltaBp,
+  GETFUND_RATE_BP,
+  NHIL_RATE_BP,
+  ratioBp,
+  STANDARD_TAX_RATE_BP,
+  toCsv,
+  VAT_RATE_BP,
+} from '@sceptre/shared'
 import { sql } from 'drizzle-orm'
 import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ValidationError } from '../../http/errors.ts'
@@ -305,4 +314,347 @@ export const invariants = {
   seriesCount: (points: SeriesPoint[]) => sumSeries(points, 'salesCount'),
   tenderTotal: (mix: TenderSlice[]) => mix.reduce((total, slice) => total + slice.amountMinor, 0),
   expiringWindowDays: EXPIRING_SOON_DAYS,
+}
+
+// --- Reports ----------------------------------------------------------------
+
+export interface ReportContext<Q extends AnalyticsQuery> {
+  user: SessionUser
+  query: Q
+}
+
+function scopeView(branchId: string | null) {
+  return { branchId, allBranches: branchId === null }
+}
+
+/** Runs `fn` in the same read-only snapshot every report uses. */
+async function inSnapshot<T>(
+  fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+): Promise<T> {
+  return db.transaction(fn, {
+    isolationLevel: SNAPSHOT_OPTIONS.isolationLevel,
+    accessMode: SNAPSHOT_OPTIONS.accessMode,
+  })
+}
+
+export async function getSales(
+  context: ReportContext<
+    AnalyticsQuery & {
+      sort?: string
+      direction?: 'asc' | 'desc'
+      limit?: number
+      offset?: number
+    }
+  >,
+): Promise<import('./analytics.types.ts').SalesResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period, comparison } = resolvePeriod(query)
+  const window = toWindow(period)
+  const previousWindow = toWindow(comparison)
+  const isAdmin = roleOf(user) === 'ADMIN'
+  const sort = query.sort ?? 'date'
+  const direction = query.direction ?? 'desc'
+  const limit = Math.min(query.limit ?? 20, 50)
+  const offset = query.offset ?? 0
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const header = await repository.selectHeaderTotals(tx, window, branchId)
+    const lines = await repository.selectLineTotals(tx, window, branchId)
+    const previousHeader = await repository.selectHeaderTotals(tx, previousWindow, branchId)
+    const series = await repository.selectSeries(tx, window, period.granularity, branchId)
+    const byTerminal = await repository.selectByTerminal(tx, window, branchId)
+    const byCashier = await repository.selectByCashier(tx, window, branchId)
+    const byBranch = isAdmin ? await repository.selectByBranch(tx, window, branchId) : []
+    const byHour = await repository.selectHourlyTotals(tx, window, branchId)
+    const page = await repository.selectSalesRows(tx, window, branchId, {
+      sort,
+      direction,
+      limit,
+      offset,
+    })
+    return { header, lines, previousHeader, series, byTerminal, byCashier, byBranch, byHour, page }
+  })
+
+  const avgBasketMinor =
+    result.header.salesCount === 0
+      ? 0
+      : Math.round(result.header.takeMinor / result.header.salesCount)
+  const previousAvgBasket =
+    result.previousHeader.salesCount === 0
+      ? 0
+      : Math.round(result.previousHeader.takeMinor / result.previousHeader.salesCount)
+
+  return {
+    currency: 'GHS',
+    period,
+    comparison: { from: comparison.from, to: comparison.to },
+    scope: scopeView(branchId),
+    totals: {
+      takeMinor: result.header.takeMinor,
+      salesCount: result.header.salesCount,
+      avgBasketMinor,
+      itemsSold: result.lines.itemsSold,
+      changeMinor: result.header.changeMinor,
+      tax: {
+        baseMinor: result.header.takeMinor - result.header.taxTotalMinor,
+        vatMinor: result.header.vatMinor,
+        nhilMinor: result.header.nhilMinor,
+        getfundMinor: result.header.getfundMinor,
+        totalMinor: result.header.taxTotalMinor,
+      },
+    },
+    deltas: {
+      take: moneyDelta(result.header.takeMinor, result.previousHeader.takeMinor),
+      salesCount: moneyDelta(result.header.salesCount, result.previousHeader.salesCount),
+      avgBasket: moneyDelta(avgBasketMinor, previousAvgBasket),
+    },
+    series: result.series,
+    byBranch: result.byBranch,
+    byTerminal: result.byTerminal,
+    byCashier: result.byCashier,
+    byHour: result.byHour,
+    rows: result.page.rows,
+    total: result.page.total,
+  }
+}
+
+export async function getProducts(
+  context: ReportContext<
+    AnalyticsQuery & {
+      sort?: string
+      direction?: 'asc' | 'desc'
+      limit?: number
+      offset?: number
+      categoryId?: string
+    }
+  >,
+): Promise<import('./analytics.types.ts').ProductsResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const sort = query.sort ?? 'revenue'
+  const direction = query.direction ?? 'desc'
+  const limit = Math.min(query.limit ?? 20, 50)
+  const offset = query.offset ?? 0
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const totals = await repository.selectProductTotals(tx, window, branchId, query.categoryId)
+    const top = await repository.selectTopProducts(tx, window, branchId, 10)
+    const concentration = await repository.selectTopFiveRevenue(tx, window, branchId)
+    const categories = await repository.selectCategoryTotals(tx, window, branchId)
+    const page = await repository.selectProductRows(tx, window, branchId, {
+      sort,
+      direction,
+      limit,
+      offset,
+      categoryId: query.categoryId,
+    })
+    return { totals, top, concentration, categories, page }
+  })
+
+  const grossProfitMinor = result.totals.revenueBaseMinor - result.totals.costMinor
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    totals: {
+      revenueBaseMinor: result.totals.revenueBaseMinor,
+      costMinor: result.totals.costMinor,
+      grossProfitMinor,
+      marginBp: ratioBp(grossProfitMinor, result.totals.revenueBaseMinor),
+      unitsSold: result.totals.unitsSold,
+      distinctProducts: result.totals.distinctProducts,
+    },
+    top: result.top,
+    concentration: {
+      top5RevenueBp: ratioBp(result.concentration.top5Minor, result.concentration.totalMinor),
+    },
+    byCategory: foldCategories(result.categories),
+    rows: result.page.rows,
+    total: result.page.total,
+    sort: sort as import('./analytics.types.ts').ProductSort,
+    direction,
+  }
+}
+
+export async function getTax(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<import('./analytics.types.ts').TaxResponse> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+  const isAdmin = roleOf(user) === 'ADMIN'
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const header = await repository.selectHeaderTotals(tx, window, branchId)
+    const lines = await repository.selectLineTotals(tx, window, branchId)
+    const byBranch = isAdmin ? await repository.selectTaxByBranch(tx, window, branchId) : []
+    const byCategory = await repository.selectTaxByCategory(tx, window, branchId)
+    const series = await repository.selectTaxSeries(tx, window, period.granularity, branchId)
+    return { header, lines, byBranch, byCategory, series }
+  })
+
+  const standard = result.byCategory.find((row) => row.category === 'STANDARD')
+
+  return {
+    currency: 'GHS',
+    period,
+    scope: scopeView(branchId),
+    totals: {
+      baseMinor: result.header.takeMinor - result.header.taxTotalMinor,
+      vatMinor: result.header.vatMinor,
+      nhilMinor: result.header.nhilMinor,
+      getfundMinor: result.header.getfundMinor,
+      totalMinor: result.header.taxTotalMinor,
+      salesCount: result.header.salesCount,
+      standardLineTotalMinor: standard?.lineTotalMinor ?? 0,
+    },
+    byBranch: result.byBranch,
+    byCategory: result.byCategory,
+    series: result.series,
+    driftMinor: {
+      revenue:
+        result.header.takeMinor - result.header.taxTotalMinor - result.lines.revenueBaseMinor,
+      tax: result.header.taxTotalMinor - result.lines.taxTotalMinor,
+    },
+    driftExplanation:
+      'Header totals are the charged amounts; line totals are the server recomputation. They differ only for sales stored with TOTAL_MISMATCH.',
+    rates: {
+      vatBp: VAT_RATE_BP,
+      nhilBp: NHIL_RATE_BP,
+      getfundBp: GETFUND_RATE_BP,
+      totalBp: STANDARD_TAX_RATE_BP,
+      source: 'packages/shared/src/tax.ts',
+    },
+  }
+}
+
+// --- CSV exports -------------------------------------------------------------
+
+/** A runaway export would exhaust memory before it printed anything useful. */
+const MAX_EXPORT_ROWS = 50_000
+
+function exportFilename(report: string, branchCode: string | null, period: Period): string {
+  const scope = branchCode ?? 'all-branches'
+  return `sceptre-${report}-${scope.toLowerCase()}-${period.from}-${period.to}.csv`
+}
+
+export interface ExportResult {
+  filename: string
+  csv: string
+}
+
+export async function exportSales(context: ReportContext<AnalyticsQuery>): Promise<ExportResult> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const page = await repository.selectSalesRows(tx, window, branchId, {
+      sort: 'date',
+      direction: 'desc',
+      limit: MAX_EXPORT_ROWS,
+      offset: 0,
+    })
+    const branchCode = branchId ? await repository.selectBranchCode(tx, branchId) : null
+    return { page, branchCode }
+  })
+
+  const csv = toCsv(
+    [
+      { key: 'receiptNumber', header: 'receipt_number' },
+      { key: 'occurredAt', header: 'occurred_at' },
+      { key: 'branchCode', header: 'branch_code' },
+      { key: 'terminalCode', header: 'terminal_code' },
+      { key: 'cashierStaffId', header: 'cashier_staff_id' },
+      { key: 'cashierName', header: 'cashier_name' },
+      { key: 'itemsSold', header: 'items_sold' },
+      { key: 'takeMinor', header: 'take_minor' },
+      { key: 'taxTotalMinor', header: 'tax_minor' },
+      { key: 'changeMinor', header: 'change_minor' },
+    ],
+    result.page.rows,
+  )
+
+  return { filename: exportFilename('sales', result.branchCode, period), csv }
+}
+
+export async function exportProducts(
+  context: ReportContext<AnalyticsQuery>,
+): Promise<ExportResult> {
+  const { user, query } = context
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const { period } = resolvePeriod(query)
+  const window = toWindow(period)
+
+  const result = await inSnapshot(async (tx) => {
+    await tx.execute(STATEMENT_TIMEOUT_SQL)
+    const page = await repository.selectProductRows(tx, window, branchId, {
+      sort: 'revenue',
+      direction: 'desc',
+      limit: MAX_EXPORT_ROWS,
+      offset: 0,
+    })
+    const branchCode = branchId ? await repository.selectBranchCode(tx, branchId) : null
+    return { page, branchCode }
+  })
+
+  const csv = toCsv(
+    [
+      { key: 'sku', header: 'sku' },
+      { key: 'name', header: 'name' },
+      { key: 'quantity', header: 'units_sold' },
+      { key: 'revenueBaseMinor', header: 'revenue_base_minor' },
+      { key: 'costMinor', header: 'cost_minor' },
+      { key: 'grossProfitMinor', header: 'gross_profit_minor' },
+      { key: 'marginBp', header: 'margin_bp' },
+    ],
+    result.page.rows,
+  )
+
+  return { filename: exportFilename('products', result.branchCode, period), csv }
+}
+
+export async function exportTax(context: ReportContext<AnalyticsQuery>): Promise<ExportResult> {
+  const report = await getTax(context)
+  const rows = [
+    ...report.series.map((point) => ({
+      bucketStart: point.bucketStart,
+      vatMinor: point.vatMinor,
+      nhilMinor: point.nhilMinor,
+      getfundMinor: point.getfundMinor,
+      totalMinor: point.totalMinor,
+    })),
+    {
+      bucketStart: 'TOTAL',
+      vatMinor: report.totals.vatMinor,
+      nhilMinor: report.totals.nhilMinor,
+      getfundMinor: report.totals.getfundMinor,
+      totalMinor: report.totals.totalMinor,
+    },
+  ]
+
+  const csv = toCsv(
+    [
+      { key: 'bucketStart', header: 'bucket_start' },
+      { key: 'vatMinor', header: 'vat_minor' },
+      { key: 'nhilMinor', header: 'nhil_minor' },
+      { key: 'getfundMinor', header: 'getfund_minor' },
+      { key: 'totalMinor', header: 'tax_minor' },
+    ],
+    rows,
+  )
+
+  const branchId = report.scope.branchId
+  const branchCode = branchId ? await repository.selectBranchCode(db, branchId) : null
+  return { filename: exportFilename('tax', branchCode, report.period), csv }
 }

@@ -55,14 +55,18 @@ export function csvCell(value: string | number | null | undefined): string {
  * A complete CSV document: header row, one row per record, CRLF line endings, optional
  * UTF-8 BOM. No trailing blank line.
  */
-export function toCsv<T extends Record<string, string | number | null>>(
+export function toCsv<T extends object>(
   columns: ReadonlyArray<CsvColumn<T>>,
   rows: ReadonlyArray<T>,
   options: { bom?: boolean } = {},
 ): string {
   const lines = [columns.map((column) => csvCell(column.header)).join(',')]
   for (const row of rows) {
-    lines.push(columns.map((column) => csvCell(row[column.key])).join(','))
+    lines.push(
+      columns
+        .map((column) => csvCell(row[column.key] as string | number | null | undefined))
+        .join(','),
+    )
   }
   const body = lines.join('\r\n')
   return options.bom === false ? body : `\uFEFF${body}`
