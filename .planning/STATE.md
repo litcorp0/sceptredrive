@@ -11,9 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 01** (Shared counter maths, local schema indexes, and
-the desktop module gate). Phase 10 is planned: ten plans plus a locked-context amendment set in
-`phases/10-desktop-pos-redesign/`.
+**Next action:** Execute **Phase 10, Plan 02** (`modules/` scaffolding and the route → page
+split). Plan 01 is complete: shared day bounds, average basket, the `sale` index, the
+prepared-statement cache, the migration proof, and the shared module gate are all in.
 
 ---
 
@@ -31,18 +31,46 @@ the desktop module gate). Phase 10 is planned: ten plans plus a locked-context a
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔷 Planned (10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (1/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
+### Phase 10 execution notes (2026-10-25)
+
+- **Plan 01 complete** (commits `b9aeb87`, `574b32b`, `b255615`, `e004b55`, `20d4bf8`,
+  `97a51e1`, `1cdf192`). `@sceptre/shared` owns the day window (`accraDayBounds`, `to` from
+  calendar parts, never `+86_400_000`), the rollover duration (`msUntilNextAccraDay`, always in
+  `(0, 86_400_000]`, derived from the same boundary so the timer and the query cannot disagree),
+  and the one money division (`averageBasketMinor`). `sale` is indexed on
+  `(terminal_id, occurred_at)` and the database opens with a 64-statement cache.
+- **Numbers.** shared **127 → 149**, desktop **339 → 345**, API **394** unchanged. Admin module
+  gate mutation proof **20/20** after the engine extraction, and the admin gate's output is
+  byte-identical in both modes. The new desktop gate reports **0/14** modules and eight
+  unmigrated routes; `--strict` exits 1, so CI takes it from Plan 05.
+- **The migration is proven, not assumed.** `desktop/test/e2e/schema-migration.mjs` **15/15** in
+  Electron against real WASM SQLite: a database written with the previous schema, holding an open
+  shift, two sales with lines and tenders, a cash movement and three pending outbox rows, reopens
+  with the new schema intact, and the home day-window query plans through
+  `ps_data_local__sale__sale_terminal_occurred`.
+- **Three findings the plan could not have known.** A vitest case cannot run the migration — the
+  desktop suite mocks `@powersync/web` and an in-memory VFS cannot survive a close/reopen, so the
+  proof lives in the Electron harness and vitest keeps the fast schema assertions.
+  `Schema.props` cannot rebuild the previous schema (it stores `ResolvedTable`s), so the proof
+  uses `Schema.tables`. And PowerSync names a local index `ps_data_local__<table>__<declared>`,
+  so any future note that says the index is literally called `sale_terminal_occurred` in SQLite
+  is wrong.
+- **Carry-forward to Phase 13:** `averageBasketMinor` throws on a negative take, where the inline
+  expression it replaced returned a negative figure. Nothing reaches it today, but a refund-heavy
+  day could make a day's take negative; that phase must decide clamp-vs-separate-figure.
+
 ### Phase 10 plan progress
 
 | Plan | Title | Status |
 |---|---|---|
-| 01 | Shared counter maths, local schema indexes, and the desktop module gate | ⬜ Not started |
+| 01 | Shared counter maths, local schema indexes, and the desktop module gate | ✅ Complete |
 | 02 | `modules/` scaffolding and the route → page split | ⬜ Not started |
 | 03 | Primitives, chrome, and counter ergonomics | ⬜ Not started |
 | 04 | Home data layer — reactive queries and pure aggregation | ⬜ Not started |
