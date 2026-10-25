@@ -88,6 +88,16 @@ For each screen:
 - one screenshot per screen at 1024 × 768 into
   `.planning/phases/10-desktop-pos-redesign/evidence/shots/`.
 
+Two assertions that must be written to be able to fail (both were mis-specified during planning):
+
+- **A clamped product name needs an unclamped clone.** `scrollHeight <= clientHeight` on a
+  `-webkit-line-clamp` element is always true — the clamp sets both to the clamped height. Clone
+  the element, drop the clamp, and assert its required height fits the allowed line count.
+- **A target's box is not its hit area.** Measure the element that owns the pointer handler; where
+  a dense row pads the hit area with a `::after` overlay or extra padding, the box that matters is
+  the padded one. Assert on what the browser hit-tests (`document.elementFromPoint` at the box's
+  corners), not only on `getBoundingClientRect()`.
+
 ### 5. Keyboard path (≈8 checks)
 
 From the home screen, with no pointer: `Tab` reaches Start selling → `Enter` → the search field is

@@ -51,8 +51,10 @@ After:
   `text-foreground`.
 
 The fix is proven, not eyeballed: Plan 09's audit renders the longest product name in the demo
-catalogue and asserts `scrollHeight <= clientHeight + 1` on the name element and that the price
-is inside the card's box at 1024 × 768.
+catalogue and asserts that an **unclamped clone** of the name element needs no more lines than the
+clamp allows, and that the price is inside the card's box at 1024 × 768. *(`scrollHeight <=
+clientHeight` is vacuous on a `-webkit-line-clamp` element — the clamp sets both to the clamped
+height, so it always passes. The clone comparison is the assertion that can actually fail.)*
 
 ### 2. Cart
 
