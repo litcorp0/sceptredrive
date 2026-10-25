@@ -31,9 +31,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { averageBasketMinor } from '@sceptre/shared'
 import { Client } from 'pg'
 import { _electron as electron } from 'playwright'
-import { averageBasketMinor } from '@sceptre/shared'
 
 const repo = path.resolve(import.meta.dirname, '..', '..', '..')
 const desktopDir = path.join(repo, 'desktop')
@@ -203,9 +203,8 @@ const terminal = (
 ).body?.terminal
 if (!terminal) fatal('the API did not create a terminal')
 
-const enrollmentCode = (
-  await api(`/api/terminals/${terminal.id}/enrollment`, { method: 'POST' })
-).body?.enrollment?.code
+const enrollmentCode = (await api(`/api/terminals/${terminal.id}/enrollment`, { method: 'POST' }))
+  .body?.enrollment?.code
 if (!enrollmentCode) fatal('the API did not issue an enrolment code')
 
 await api(`/api/staff/${managerRow.id}/pin`, {
@@ -263,16 +262,13 @@ async function goto(hash) {
 }
 
 async function setViewport(width, height) {
-  await app.evaluate(({ BrowserWindow }, size) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height)
-  }, { width, height })
+  await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height)
+    },
+    { width, height },
+  )
   await page.waitForTimeout(250)
-}
-
-async function pressDigits(pin) {
-  for (const digit of pin) {
-    await page.getByRole('button', { name: `Digit ${digit}`, exact: true }).click()
-  }
 }
 
 async function text(testId) {
@@ -309,11 +305,7 @@ await launch()
 await page.waitForLoadState('domcontentloaded')
 
 await page.locator('#enrollment-code').waitFor({ timeout: 60_000 })
-check(
-  true,
-  'a fresh install opens the enrolment form, not the diagnostics shell',
-  page.url(),
-)
+check(true, 'a fresh install opens the enrolment form, not the diagnostics shell', page.url())
 check(
   !(await page.getByTestId('shell-ready').count()),
   'the diagnostics shell is not on the first screen',
@@ -341,8 +333,7 @@ await page.locator('#staff-identity').fill(managerRow.staff_id)
 // Typed on the number row, not clicked: a till has a keyboard as well as a screen.
 await page.locator('[data-testid="pin-input"]').focus()
 await page.keyboard.type(MANAGER_TEMP_PIN)
-const pinProgress =
-  (await page.locator('[data-testid="pin-progress"]').textContent())?.trim() ?? ''
+const pinProgress = (await page.locator('[data-testid="pin-progress"]').textContent())?.trim() ?? ''
 const pinType = await page.locator('[data-testid="pin-input"]').getAttribute('type')
 check(
   pinProgress.startsWith(`${MANAGER_TEMP_PIN.length} of`) && pinType === 'password',
@@ -415,11 +406,7 @@ check(
 )
 // Exact, then one +2 000 note: the drawer takes GH₵95.00 for a GH₵75.00 sale.
 await page.getByTestId('exact-cash').click()
-await page
-  .locator('[data-testid="cash-keypad"] button')
-  .filter({ hasText: /^\+/ })
-  .nth(0)
-  .click()
+await page.locator('[data-testid="cash-keypad"] button').filter({ hasText: /^\+/ }).nth(0).click()
 check(
   digits(await text('change-due')) === plain(2_000) &&
     (await page.getByTestId('change-due').getAttribute('data-state')) === 'change',
@@ -488,8 +475,7 @@ const expectedItems =
   BASKETS.cashWithChange.quantity + BASKETS.exactCash.quantity + BASKETS.credit.quantity
 const expectedCashTendered = BASKETS.cashWithChange.tenderedMinor + BASKETS.exactCash.tenderedMinor
 const expectedChange = BASKETS.cashWithChange.tenderedMinor - BASKETS.cashWithChange.totalMinor
-const expectedCash =
-  OPENING_FLOAT_MINOR + expectedCashTendered - expectedChange
+const expectedCash = OPENING_FLOAT_MINOR + expectedCashTendered - expectedChange
 const expectedBasket = averageBasketMinor(expectedTake, 3)
 
 await goto('#home')
@@ -636,10 +622,7 @@ const MEASURE = (ceiling) => {
     const style = getComputedStyle(node)
     const animation = ms(style.animationDuration)
     const transition = ms(style.transitionDuration)
-    return (
-      (style.animationName !== 'none' && animation > ceiling) ||
-      transition > ceiling
-    )
+    return (style.animationName !== 'none' && animation > ceiling) || transition > ceiling
   }).length
 
   return {
@@ -741,7 +724,7 @@ while (hops < 40 && !onStart) {
 check(onStart, 'Tab reaches Start selling', `${hops} presses`)
 const startRing = await focusRing()
 check(
-  startRing !== null && startRing.outline.startsWith('solid') && !startRing.outline.includes('0px'),
+  startRing?.outline.startsWith('solid') && !startRing.outline.includes('0px'),
   'the focused action shows a visible ring',
   JSON.stringify(startRing),
 )
@@ -760,10 +743,7 @@ check(true, 'typing a SKU and pressing Enter adds the line')
 
 await page.keyboard.press('F9')
 await page.getByTestId('tender-total').waitFor({ timeout: 30_000 })
-check(
-  (await page.evaluate(() => window.location.hash)) === '#pos/tender',
-  'F9 moves to tender',
-)
+check((await page.evaluate(() => window.location.hash)) === '#pos/tender', 'F9 moves to tender')
 
 // The number row types the amount: 12 000 for the GIK-00004 line.
 await page.keyboard.type('12000')
@@ -973,7 +953,7 @@ console.log(`  BUNDLE ${main.name} ${main.bytes} bytes · ${js.length} chunks ·
 fs.mkdirSync(evidenceDir, { recursive: true })
 fs.writeFileSync(
   path.join(evidenceDir, 'bundle.json'),
-  JSON.stringify({ recordedAt: new Date().toISOString(), main, chunks: js.length, totalBytes }, null, 2),
+  `${JSON.stringify({ recordedAt: new Date().toISOString(), main, chunks: js.length, totalBytes }, null, 2)}\n`,
 )
 passed += 1
 check(main.bytes > 0, 'the renderer bundle size is recorded for Plan 10')
