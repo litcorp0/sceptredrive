@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   accraDay,
+  accraIsoDay,
   formatAccraDateTime,
   formatBucket,
   formatCount,
@@ -146,6 +147,36 @@ describe('accraDay', () => {
 
   it('is independent of the host timezone offset', () => {
     expect(accraDay(Date.parse('2026-12-31T23:30:00.000Z'))).toBe('20261231')
+  })
+})
+
+describe('accraIsoDay', () => {
+  it('is the UTC calendar day, which is the Accra day all year', () => {
+    expect(accraIsoDay(new Date('2026-10-24T00:00:00.000Z'))).toBe('2026-10-24')
+    expect(accraIsoDay(new Date('2026-10-24T23:59:59.999Z'))).toBe('2026-10-24')
+    expect(accraIsoDay(new Date('2026-10-25T00:00:00.000Z'))).toBe('2026-10-25')
+  })
+
+  it('returns an ISO date string unchanged, so a round-trip cannot shift a day', () => {
+    expect(accraIsoDay('2026-10-24')).toBe('2026-10-24')
+    expect(accraIsoDay('2028-02-29')).toBe('2028-02-29')
+  })
+
+  it('accepts an ISO timestamp and reduces it to the Accra day', () => {
+    expect(accraIsoDay('2026-10-24T23:30:00.000Z')).toBe('2026-10-24')
+  })
+
+  it('renders a dash for an unparseable value', () => {
+    expect(accraIsoDay('not-a-date')).toBe(INVALID_DATE)
+  })
+
+  it('feeds formatBucket a date-only string without shifting the day', () => {
+    // date-fns parses a date-only string as local midnight and formats it back locally, so
+    // the calendar day survives in any host timezone. The server sends `YYYY-MM-DD`
+    // precisely so no browser has to convert a timestamp.
+    expect(formatBucket('2026-10-24', 'day')).toBe('24 Oct')
+    expect(formatBucket('2026-10-24', 'month')).toBe('Oct 2026')
+    expect(formatBucket('2026-10-24', 'week')).toBe('Wk 43')
   })
 })
 

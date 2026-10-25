@@ -162,6 +162,24 @@ export function accraDay(now: Date | number = new Date()): string {
 }
 
 /**
+ * `2026-10-24` — the Accra calendar day as an ISO date.
+ *
+ * This is the day boundary every report uses. Africa/Accra is UTC+0 all year, so the UTC
+ * calendar day *is* the Accra day; reading it from UTC parts keeps a server in another zone
+ * from reporting a sale on the wrong day. A value that is already a `YYYY-MM-DD` string is
+ * returned unchanged, so a round-trip through a query parameter cannot shift it.
+ */
+export function accraIsoDay(value: DateInput = new Date()): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const date = parse(value)
+  if (!date) return INVALID_DATE
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
  * `23 Oct 2026 10:15` — the printed sale timestamp on a receipt.
  *
  * Explicit UTC (= Africa/Accra) on purpose: paper is a hardware contract, and a terminal
