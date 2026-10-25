@@ -69,7 +69,7 @@
     "brand:check": "node scripts/check-brand.mjs",
     "tokens:check": "node scripts/check-tokens.mjs",
     "modules:check": "node scripts/check-modules.mjs",
-    "modules:check:strict": "node scripts/check-modules.mjs --strict",
+    "modules:check:strict": "node scripts/check-modules.mjs --strict && node scripts/check-desktop-modules.mjs --strict",
     "modules:check:pos": "node scripts/check-desktop-modules.mjs",
     "modules:check:pos:strict": "node scripts/check-desktop-modules.mjs --strict"
   },

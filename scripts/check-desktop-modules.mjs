@@ -27,7 +27,7 @@ const MODULES = path.join(RENDERER, 'modules')
 
 const STRICT = process.argv.includes('--strict')
 
-/** D1's fourteen POS domains. `home` arrives in Plan 04/05; the rest in Plan 02. */
+/** D1's fourteen POS domains. All fourteen exist from Plan 05. */
 const REQUIRED_MODULES = [
   'auth',
   'cart',
@@ -45,13 +45,12 @@ const REQUIRED_MODULES = [
   'tender',
 ]
 
-/** Names still to migrate. Each plan deletes its own entry. */
-const PENDING_MODULES = ['home']
+/** Names still to migrate. Each plan deletes its own entry; the list is empty from Plan 05. */
+const PENDING_MODULES = []
 
 /** Route files that legitimately keep their body. */
 const ROUTE_EXEMPTIONS = {
   '_pos/app.tsx': 'the POS shell: the five route guards are behaviour, not markup',
-  '_pos/dev-charts.tsx': 'Phase 7 chart gallery, retired in Plan 05',
   '_pos/dev-sync.tsx': 'sync diagnostics, not a counter screen',
   '_pos/dev-print.tsx': 'printer diagnostics, gated behind POS_DIAGNOSTICS',
 }
