@@ -11,10 +11,10 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 03** (primitives, chrome, and counter ergonomics).
-Plans 01–02 are complete: the shared day window and average basket, the `sale` index, the
-prepared-statement cache, the migration proof, the shared module gate, and the move of every
-counter screen into its module are all in.
+**Next action:** Execute **Phase 10, Plan 04** (home data layer: reactive queries and pure
+aggregation). Plans 01–03 are complete: the shared day window and average basket, the `sale`
+index, the prepared-statement cache, the migration proof, the module gate, the move of every
+counter screen into its module, and the primitives/chrome pass.
 
 ---
 
@@ -32,7 +32,7 @@ counter screen into its module are all in.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (2/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (3/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -41,6 +41,25 @@ counter screen into its module are all in.
 
 ### Phase 10 execution notes (2026-10-25)
 
+- **Plan 03 complete** (commits `765fce3`, `28e4fa8`, `732de9c`). Registry `empty` and `spinner`
+  added with the Phase 7 ritual — every existing primitive moved aside and restored byte-identical
+  — and this CLI run injected no palette variables at all. The hand-written `Modal` is gone: eight
+  dialogs (not seven) use `Dialog`, which brings a real focus trap the old shell never had.
+- **Radix does not restore focus when a dialog has no `DialogTrigger`,** and every POS dialog opens
+  from state, so focus landed on `<body>` on all nine instances. `useDialogFocusReturn` captures the
+  opener and restores it through `onCloseAutoFocus`; the lane drove all nine at 1024×768 and checked
+  Escape, backdrop tap, focus return, the 90vh clamp and the wide/narrow widths (**76/76 + 4/4**).
+- **Two gate hazards found here.** `tokens:check` and `brand:check` read every `git ls-files` path,
+  so a deleted-but-unstaged file makes them throw `ENOENT` — stage before gating, or the verify pass
+  reports a false failure. And `bun run --filter desktop build` aborts in Forge's package-manager
+  probe under Bun (`npm version "undefined"`) before it compiles anything; Forge's documented
+  `~/.skip-forge-system-check` is the escape hatch, and the existing `npm_config_user_agent`
+  override is the supported one for CI.
+- **Two money inputs seeded their value with `(minor / 100).toFixed(2)`** (discount and cash-count
+  dialogs). Both now use `formatMinorPlain`; `grep toFixed` over the renderer is empty.
+- **The unprinted-receipt SQL moved into `modules/sales`** as `useUnprintedCount()`, consumed by the
+  header today and the home strip in Plan 04. `SyncBadge` deliberately keeps its own conflicts query:
+  it must stay byte-identical in state machine and labels, so extracting it was not this plan's job.
 - **Plan 02 complete** (commits `e6ceed0`, `8f50757`). Thirteen domains hold the POS screens with
   the admin's seven folders and a barrel each; every route file now routes. `components/pos/`,
   `components/auth/`, and `components/shift/` are gone; `lib/**` did not move.
@@ -85,7 +104,7 @@ counter screen into its module are all in.
 |---|---|---|
 | 01 | Shared counter maths, local schema indexes, and the desktop module gate | ✅ Complete |
 | 02 | `modules/` scaffolding and the route → page split | ✅ Complete |
-| 03 | Primitives, chrome, and counter ergonomics | ⬜ Not started |
+| 03 | Primitives, chrome, and counter ergonomics | ✅ Complete |
 | 04 | Home data layer — reactive queries and pure aggregation | ⬜ Not started |
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ⬜ Not started |
 | 06 | Sell module — catalog, cart, and the counter panels | ⬜ Not started |
