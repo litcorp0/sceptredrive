@@ -11,10 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 05** (the home screen, `#home`, and the `dev-charts`
-retirement). Plans 01–04 are complete: the shared day window and average basket, the `sale` index,
-the prepared-statement cache, the migration proof, the module gate, the move of every counter
-screen into its module, the primitives/chrome pass, and the home data layer with its tests.
+**Next action:** Execute **Phase 10, Plan 06** (sell module: catalog, cart, and the counter
+panels). Plans 01–05 are complete, including the `#home` landing screen; all fourteen modules are
+migrated and the strict gate covers both clients.
 
 ---
 
@@ -32,7 +31,7 @@ screen into its module, the primitives/chrome pass, and the home data layer with
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (4/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (5/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -41,6 +40,27 @@ screen into its module, the primitives/chrome pass, and the home data layer with
 
 ### Phase 10 execution notes (2026-10-25)
 
+- **Plan 05 complete** (commits `7a125b7`, `08f53f3`). `#home` is the landing after sign-in and
+  after opening a shift; the five route gates are unchanged. Desktop **371 → 384**. All fourteen
+  modules are migrated, `modules:check:strict` now covers both clients (which is what `ci.yml`
+  already invokes), and Phase 8's mutation proof still rejects **20/20**.
+- **The bundle went down, not up.** 1,266,835 → **1,242,949** bytes (349,210 → 359,460 gzip against
+  the *planning* baseline), because retiring `dev-charts` more than paid for the home chart. D11's
+  250 KB budget was never in danger.
+- **Opening a shift lands on home.** The plan only named the button's hash line; the lane flagged
+  that `handleOpen` left the cashier on `#shift` until they pressed it, which contradicts the
+  roadmap's "opens on a shift dashboard". The controller added the redirect — the one place this
+  phase changed behaviour the plan had not specified.
+- **The plan's assumption about E2E landing assertions was wrong.** `desktop/test/e2e/**` never
+  asserted a landing screen; it asserts the `app://` origin, CSP, bridge, and diagnostics. Nothing
+  was replaced, deleted, or loosened. The historical landing checks live in Phase 6's evidence
+  files, which stay as written.
+- **Pre-existing defect, found and left:** `desktop/test/e2e/sync-smoke.mjs:213` navigates to `#pos`
+  and waits for a `pos-shell` test id that no longer exists in the source. Fixing it needs a
+  signed-in fixture, so it trades one broken wait for another; recorded for the audit.
+- **Not proven yet, by design:** the figures against a hand count, the drawer-vs-day windows,
+  offline correctness, relaunch, the 1024×768 layout, chart keyboard access, and F2's focus handoff
+  in Electron. All of it is Plan 09's counter audit — named there rather than assumed here.
 - **Plan 04 complete** (commits `b50dbde`, `d83bd69`). `modules/home` holds every day-bounded
   query, the pure arithmetic, and the midnight rollover; no screen yet. Desktop **345 → 371**.
 - **`dayWindow` anchors the day to UTC before building the bounds.** A bare date string parses as
@@ -121,7 +141,7 @@ screen into its module, the primitives/chrome pass, and the home data layer with
 | 02 | `modules/` scaffolding and the route → page split | ✅ Complete |
 | 03 | Primitives, chrome, and counter ergonomics | ✅ Complete |
 | 04 | Home data layer — reactive queries and pure aggregation | ✅ Complete |
-| 05 | Home screen, `#home`, and `dev-charts` retirement | ⬜ Not started |
+| 05 | Home screen, `#home`, and `dev-charts` retirement | ✅ Complete |
 | 06 | Sell module — catalog, cart, and the counter panels | ⬜ Not started |
 | 07 | Tender and receipt modules | ⬜ Not started |
 | 08 | Shift, login, settings, sales, and sync modules | ⬜ Not started |
