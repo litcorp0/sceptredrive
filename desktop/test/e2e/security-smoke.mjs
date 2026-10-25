@@ -126,6 +126,13 @@ async function checkProductionRenderer() {
   })
   page.on('pageerror', (error) => cspViolations.push(`pageerror: ${error.message}`))
 
+  // The terminal boots into sign-in (Phase 10 Plan 08: a first install must ask for an
+  // enrolment code). The diagnostics shell this file proves lives on `#diagnostics`, so it is
+  // entered deliberately rather than by falling through an empty hash.
+  await page.waitForLoadState('domcontentloaded')
+  await page.evaluate(() => {
+    window.location.hash = '#diagnostics'
+  })
   await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
 
   check(page.url().startsWith('app://sceptre-drive/'), 'renderer loads from app://', page.url())
@@ -359,6 +366,11 @@ async function checkPackagedBinary() {
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 30_000 })
     const context = browser.contexts()[0]
     const page = context.pages()[0] ?? (await context.waitForEvent('page', { timeout: 20_000 }))
+    // Same reason as the unpackaged leg: the shell is a named route now, not the landing.
+    await page.waitForLoadState('domcontentloaded')
+    await page.evaluate(() => {
+      window.location.hash = '#diagnostics'
+    })
     await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
     check(
       page.url().startsWith('app://sceptre-drive/'),

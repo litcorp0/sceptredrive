@@ -60,6 +60,40 @@ export function currentHash(): string {
   return window.location.hash
 }
 
+/**
+ * Which top-level screen a hash route mounts (Plan 08).
+ *
+ * This is the outer switch, before any provider or guard: it decides whether the renderer
+ * shows the till, the shift screen, a diagnostics surface, or enrolment.
+ *
+ * **An empty or unknown hash is sign-in, not the shell.** A freshly installed terminal boots
+ * with no hash, and it must ask for an enrolment code — the diagnostics screen is a developer
+ * surface that a shop must never see first. It stays reachable, deliberately, at `#diagnostics`.
+ */
+export type TopLevelScreen =
+  | 'login'
+  | 'shift'
+  | 'home'
+  | 'pos'
+  | 'diagnostics'
+  | 'spike'
+  | 'dev-sync'
+  | 'dev-print'
+
+export function topLevelScreen(route: HashRoute): TopLevelScreen {
+  if (route.path === 'spike') return 'spike'
+  if (route.path === 'diagnostics') return 'diagnostics'
+  if (route.path === 'dev') {
+    if (route.segments[1] === 'print') return 'dev-print'
+    if (route.segments[1] === 'sync') return 'dev-sync'
+    return 'diagnostics'
+  }
+  if (route.path === 'shift') return 'shift'
+  if (route.path === 'home') return 'home'
+  if (route.path === 'pos') return 'pos'
+  return 'login'
+}
+
 /** Re-renders on hash changes; the value is parsed on every render. */
 export function useHashRoute(): HashRoute {
   const [hash, setHash] = useState(currentHash)

@@ -2,7 +2,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { PosProvider } from './lib/powersync/provider'
-import { parseHash } from './lib/router'
+import { parseHash, topLevelScreen } from './lib/router'
 import { PosRoutes } from './routes/_pos/app'
 import { DevPrintRoute } from './routes/_pos/dev-print'
 import { DevSyncRoute } from './routes/_pos/dev-sync'
@@ -19,14 +19,20 @@ if (!container) {
 /**
  * Minimal hash routing.
  *
+ * - *(empty or unknown)* sign-in, which renders enrolment on a terminal with no credential
  * - `#login`         PIN sign-in (offline-capable) and staff authorization
  * - `#shift`         open/close the shift, cash in/out
  * - `#home`          this terminal's day: take, drawer, credit, tax, hourly shape, top five
  * - `#pos`           POS app shell: selling (`#pos`), tender (`#pos/tender`),
  *                    settings (`#pos/settings`)
  * - `#dev/sync`      sync diagnostics: counts, session, status
+ * - `#dev/print`     printer diagnostics (`POS_DIAGNOSTICS=1`)
  * - `#spike`         the Phase 6 PowerSync gate (kept for verification)
- * - otherwise        shell diagnostics (app info + keychain self-test)
+ * - `#diagnostics`   shell diagnostics: app info + keychain self-test (support only)
+ *
+ * A first install used to fall through to the diagnostics shell. It now falls through to
+ * sign-in, because a shop receiving a new terminal must see an enrolment field, not a
+ * developer screen (Phase 10 Plan 08).
  */
 function Root() {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -37,45 +43,43 @@ function Root() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  const route = parseHash(hash)
+  const screen = topLevelScreen(parseHash(hash))
 
-  if (route.path === 'spike') return <SpikePanel />
-
-  if (route.path === 'login') {
-    return (
-      <PosProvider>
-        <LoginRoute />
-      </PosProvider>
-    )
+  switch (screen) {
+    case 'spike':
+      return <SpikePanel />
+    case 'diagnostics':
+      return <App />
+    case 'dev-print':
+      return <DevPrintRoute />
+    case 'dev-sync':
+      return (
+        <PosProvider>
+          <DevSyncRoute />
+        </PosProvider>
+      )
+    case 'shift':
+      return (
+        <PosProvider>
+          <ShiftRoute />
+        </PosProvider>
+      )
+    // `#home` and `#pos` mount the same provider and the same guard ladder (P10-D6); the route
+    // decides which page renders inside it.
+    case 'home':
+    case 'pos':
+      return (
+        <PosProvider>
+          <PosRoutes />
+        </PosProvider>
+      )
+    default:
+      return (
+        <PosProvider>
+          <LoginRoute />
+        </PosProvider>
+      )
   }
-
-  if (route.path === 'shift') {
-    return (
-      <PosProvider>
-        <ShiftRoute />
-      </PosProvider>
-    )
-  }
-
-  // `#home` and `#pos` mount the same provider and the same guard ladder (P10-D6); the route
-  // decides which page renders inside it.
-  if (route.path === 'home') {
-    return (
-      <PosProvider>
-        <PosRoutes />
-      </PosProvider>
-    )
-  }
-
-  if (route.path === 'pos' || (route.path === 'dev' && route.segments[1] === 'sync')) {
-    return <PosProvider>{route.path === 'dev' ? <DevSyncRoute /> : <PosRoutes />}</PosProvider>
-  }
-
-  if (route.path === 'dev' && route.segments[1] === 'print') {
-    return <DevPrintRoute />
-  }
-
-  return <App />
 }
 
 createRoot(container).render(

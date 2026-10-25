@@ -142,6 +142,11 @@ page.on('console', (message) => {
 })
 
 try {
+  // A first install now opens sign-in (Phase 10 Plan 08); the shell is on `#diagnostics`.
+  await page.waitForLoadState('domcontentloaded')
+  await page.evaluate(() => {
+    window.location.hash = '#diagnostics'
+  })
   await page.getByTestId('shell-ready').waitFor({ timeout: 30_000 })
 
   const stored = await page.evaluate(

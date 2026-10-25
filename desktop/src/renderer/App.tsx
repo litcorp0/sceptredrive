@@ -72,6 +72,10 @@ export function App() {
         <h1 className="mt-1 text-2xl font-semibold" data-testid="shell-ready">
           Desktop shell ready
         </h1>
+        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+          Diagnostics for support and packaging checks. This is not the till: the terminal opens on
+          sign-in, and an unenrolled one asks for an enrolment code.
+        </p>
       </header>
 
       {bridgeError ? (
