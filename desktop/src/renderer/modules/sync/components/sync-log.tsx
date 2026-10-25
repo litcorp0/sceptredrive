@@ -1,5 +1,9 @@
 import { useQuery } from '@powersync/react'
 import { formatDateTime, formatRelative } from '@sceptre/shared'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Skeleton } from '@/components/ui/skeleton'
 import { navigate } from '@/lib/router'
 
 /**
@@ -22,12 +26,21 @@ export interface OutboxLogRow {
   receipt_number: string | null
 }
 
-const STATE_STYLES: Record<string, string> = {
-  pending: 'bg-muted text-muted-foreground',
-  in_flight: 'bg-sky-50 text-sky-800',
-  acked: 'bg-emerald-50 text-emerald-800',
-  conflict: 'bg-amber-50 text-amber-900',
-  dead_letter: 'bg-red-50 text-red-700',
+/* The tint and the dot carry the state; the label stays `text-foreground`. */
+const STATE_TINT: Record<string, string> = {
+  pending: 'bg-muted',
+  in_flight: 'bg-sky-50',
+  acked: 'bg-emerald-50',
+  conflict: 'bg-amber-50',
+  dead_letter: 'bg-red-50',
+}
+
+const STATE_DOT: Record<string, string> = {
+  pending: 'bg-topbar-muted',
+  in_flight: 'bg-info',
+  acked: 'bg-ok',
+  conflict: 'bg-warn',
+  dead_letter: 'bg-danger',
 }
 
 export function SyncLog({
@@ -47,13 +60,25 @@ export function SyncLog({
   )
 
   if (isLoading && !data?.length) {
-    return <p className="text-sm text-muted-foreground">Loading the outbox…</p>
+    return (
+      <div className="grid gap-2">
+        <span className="sr-only">Loading the outbox…</span>
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-11 w-full" />
+      </div>
+    )
   }
   if (!data?.length) {
     return (
-      <p className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-        The outbox is empty. Completed sales appear here until the server acknowledges them.
-      </p>
+      <Empty className="border border-border bg-card">
+        <EmptyHeader>
+          <EmptyTitle>The outbox is empty.</EmptyTitle>
+          <EmptyDescription>
+            Completed sales appear here until the server acknowledges them.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -76,32 +101,41 @@ export function SyncLog({
             <tr key={row.id} className="border-t border-border" data-testid="outbox-row">
               <td className="px-3 py-2">
                 {row.receipt_number ? (
-                  <button
+                  <Button
                     type="button"
-                    className="font-mono text-xs underline-offset-2 hover:underline"
+                    variant="link"
                     onClick={() => navigate(`pos/receipt/${row.id}`)}
+                    className="-mx-2 h-11 px-2 font-mono text-xs"
                   >
                     {row.receipt_number}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="font-mono text-xs">{row.type}</span>
                 )}
               </td>
-              <td className="px-3 py-2 font-mono text-xs">{formatDateTime(row.occurred_at)}</td>
-              <td className="px-3 py-2 font-mono text-xs">{row.attempts}</td>
+              <td className="px-3 py-2 font-mono text-xs tabular-nums">
+                {formatDateTime(row.occurred_at)}
+              </td>
+              <td className="px-3 py-2 font-mono text-xs tabular-nums">{row.attempts}</td>
               <td className="px-3 py-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    STATE_STYLES[row.status] ?? ''
+                <Badge
+                  className={`gap-1.5 border-transparent text-[11px] ${
+                    STATE_TINT[row.status] ?? ''
                   }`}
                   data-testid="outbox-state"
                   data-state={row.status}
                 >
+                  <span
+                    aria-hidden="true"
+                    className={`size-1.5 shrink-0 rounded-full ${
+                      STATE_DOT[row.status] ?? 'bg-topbar-muted'
+                    }`}
+                  />
                   {row.status.replace('_', ' ')}
-                </span>
+                </Badge>
               </td>
               <td
-                className="px-3 py-2 font-mono text-xs"
+                className="px-3 py-2 font-mono text-xs tabular-nums"
                 title={row.next_attempt_at ? formatDateTime(row.next_attempt_at) : undefined}
               >
                 {row.next_attempt_at ? formatRelative(row.next_attempt_at) : '—'}
@@ -118,14 +152,16 @@ export function SyncLog({
               </td>
               <td className="px-3 py-2 text-right">
                 {canRetry && row.status === 'dead_letter' ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => void onRetry(row.id)}
-                    className="rounded border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                    className="h-11 px-3 text-xs"
                     data-testid="retry-dead-letter"
                   >
                     Retry
-                  </button>
+                  </Button>
                 ) : null}
               </td>
             </tr>

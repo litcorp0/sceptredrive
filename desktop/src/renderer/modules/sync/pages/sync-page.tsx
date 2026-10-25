@@ -1,6 +1,8 @@
 import { useQuery } from '@powersync/react'
 import { useEffect, useState } from 'react'
+import { ScreenHeader } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Button } from '@/components/ui/button'
 import { httpSyncClient } from '@/lib/api/sync-client'
 import type { StaffSession } from '@/lib/auth/staff-session'
 import { posRuntimeConfig } from '@/lib/config'
@@ -133,33 +135,36 @@ export function SyncScreen({
       />
 
       <main className="mx-auto max-w-5xl p-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold">Sync</h1>
-            <p className="text-sm text-muted-foreground">
+        <ScreenHeader
+          title="Sync"
+          description={
+            <>
               {identity.branchName} · {identity.terminalCode} · app {posRuntimeConfig.appVersion}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void syncNowClicked()}
-              disabled={busy || upload.draining}
-              className="h-9 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-              data-testid="sync-now"
-            >
-              {busy || upload.draining ? 'Syncing…' : 'Sync now'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('pos')}
-              className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
-              data-testid="back-to-selling"
-            >
-              Back to selling
-            </button>
-          </div>
-        </div>
+            </>
+          }
+          actions={
+            <>
+              <Button
+                type="button"
+                onClick={() => void syncNowClicked()}
+                disabled={busy || upload.draining}
+                className="h-11"
+                data-testid="sync-now"
+              >
+                {busy || upload.draining ? 'Syncing…' : 'Sync now'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos')}
+                className="h-11"
+                data-testid="back-to-selling"
+              >
+                Back to selling
+              </Button>
+            </>
+          }
+        />
 
         {upload.pauseReason || sessionState === 'revoked' ? (
           <p
@@ -231,14 +236,15 @@ export function SyncScreen({
         <section className="mt-6">
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold">Conflicts</h2>
-            <button
+            <Button
               type="button"
+              variant="link"
               onClick={() => void pullConflicts()}
-              className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+              className="h-11 px-2 text-xs text-muted-foreground"
               data-testid="refresh-conflicts"
             >
               Refresh
-            </button>
+            </Button>
           </div>
           {conflictError ? <p className="mb-2 text-xs text-amber-800">{conflictError}</p> : null}
           <ConflictList />

@@ -1,5 +1,7 @@
 import type { PricedLine } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { CartLine as CartLineModel } from '@/lib/cart/types'
 import { formatGhs } from '@/lib/format'
 
@@ -59,22 +61,22 @@ export function CartLineRow({
           </p>
           <p className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span className="font-mono">{line.sku}</span>
-            <span className="rounded bg-muted px-1.5 py-0.5 font-medium">
+            <Badge variant="secondary" className="px-1.5 text-[10px]">
               {line.taxCategory === 'STANDARD'
                 ? 'VAT'
                 : line.taxCategory === 'ZERO_RATED'
                   ? 'Zero-rated'
                   : 'Exempt'}
-            </span>
-            <span className="font-mono">{formatGhs(line.unitPriceMinor)} ea</span>
+            </Badge>
+            <span className="font-mono tabular-nums">{formatGhs(line.unitPriceMinor)} ea</span>
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-mono text-sm font-semibold" data-testid="cart-line-total">
+          <p className="font-mono text-sm font-semibold tabular-nums" data-testid="cart-line-total">
             {formatGhs(priced.totalMinor)}
           </p>
           {line.lineDiscountMinor > 0 ? (
-            <p className="font-mono text-[11px] text-emerald-700">
+            <p className="font-mono text-[11px] text-emerald-700 tabular-nums">
               −{formatGhs(line.lineDiscountMinor)}
             </p>
           ) : null}
@@ -83,14 +85,15 @@ export function CartLineRow({
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
-          <button
+          <Button
             type="button"
+            variant="outline"
             aria-label="Decrease quantity"
             onClick={() => onQuantity(line.quantity - 1)}
-            className="h-9 w-9 rounded-md border border-border text-lg leading-none hover:bg-muted"
+            className="h-11 w-11 text-lg leading-none"
           >
             −
-          </button>
+          </Button>
           <input
             aria-label={`Quantity for ${line.name}`}
             data-testid="cart-line-qty"
@@ -105,34 +108,39 @@ export function CartLineRow({
                 event.currentTarget.blur()
               }
             }}
-            className="h-9 w-12 rounded-md border border-border bg-background text-center font-mono text-sm"
+            className="h-11 w-12 rounded-md border border-border bg-background text-center font-mono text-sm tabular-nums"
           />
-          <button
+          <Button
             type="button"
+            variant="outline"
             aria-label="Increase quantity"
             onClick={() => onQuantity(line.quantity + 1)}
-            className="h-9 w-9 rounded-md border border-border text-lg leading-none hover:bg-muted"
+            className="h-11 w-11 text-lg leading-none"
           >
             +
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={onDiscount}
-            className="h-9 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-muted"
+            className="h-11 px-3 text-xs"
           >
             Discount
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={onRemove}
-            className="h-9 rounded-md border border-border px-2.5 text-xs font-medium text-destructive hover:bg-destructive/5"
+            className="h-11 px-3 text-xs text-destructive"
             aria-label={`Remove ${line.name}`}
           >
             Remove
-          </button>
+          </Button>
         </div>
       </div>
 

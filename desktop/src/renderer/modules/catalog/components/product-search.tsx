@@ -1,5 +1,6 @@
 import { useQuery } from '@powersync/react'
 import { type RefObject, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import type { SellableProduct } from '@/lib/cart/types'
 import { availableQuantity, indexByProduct, toSellableProduct } from '@/lib/catalog/pricing'
 import {
@@ -151,16 +152,17 @@ export function ProductSearch({
           className="h-12 w-full rounded-lg border border-border bg-background px-4 text-base"
         />
         {term ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => {
               setTerm('')
               focusRef.current?.focus()
             }}
-            className="h-12 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
+            className="h-12 px-3 text-sm"
           >
             Clear
-          </button>
+          </Button>
         ) : null}
       </div>
 

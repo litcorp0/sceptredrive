@@ -46,3 +46,14 @@ textarea {
   /* Neutralise only the registry ring; keep elevation and aria-invalid cues. */
   --tw-ring-shadow: 0 0 #0000;
 }
+
+/* The registry dialog's close control is a bare 16 px icon (`absolute top-4
+   right-4`). D8 gives every control a 44 px hit area, so the box is padded here
+   rather than in the generated file, which stays byte-identical to the registry. */
+[data-slot="dialog-close"] {
+  display: inline-flex;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+}

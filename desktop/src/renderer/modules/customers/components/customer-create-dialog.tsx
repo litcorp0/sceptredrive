@@ -1,6 +1,15 @@
 import { formatGhanaPhone, normalizeGhanaPhone } from '@sceptre/shared'
 import { type FormEvent, useState } from 'react'
-import { Modal } from '@/components/common'
+import { useDialogFocusReturn } from '@/components/common'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { CUSTOMER_NAME_MAX, createCustomerDraft } from '@/lib/customers/create-draft'
 import type { CustomerHit } from '@/lib/customers/search'
 import { usePosDatabase } from '@/lib/powersync/provider'
@@ -20,6 +29,7 @@ export function CustomerCreateDialog({
   onClose: () => void
   onCreated: (customer: CustomerHit) => void
 }) {
+  const focusReturn = useDialogFocusReturn()
   const db = usePosDatabase()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -67,123 +77,140 @@ export function CustomerCreateDialog({
     }
   }
 
+  const close = (open: boolean) => {
+    if (!open) onClose()
+  }
+
   if (alreadyExists) {
     return (
-      <Modal
-        title="Customer already exists"
-        description="This phone number is already on the till."
-        onClose={onClose}
-        testId="customer-exists"
-        footer={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-10 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onCreated(alreadyExists)
-                onClose()
-              }}
-              className="h-10 flex-1 rounded-md bg-primary text-sm font-semibold text-primary-foreground"
-              data-testid="use-existing-customer"
-            >
-              Use {alreadyExists.name}
-            </button>
+      <Dialog open onOpenChange={close}>
+        <DialogContent
+          {...focusReturn}
+          data-testid="customer-exists"
+          className="flex max-h-[90vh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+        >
+          <DialogHeader className="border-b border-border px-5 py-4 pr-16">
+            <DialogTitle className="text-base">Customer already exists</DialogTitle>
+            <DialogDescription>This phone number is already on the till.</DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{alreadyExists.name}</span> ·{' '}
+              {formatGhanaPhone(alreadyExists.phone)}
+              {alreadyExists.isDraft ? ' (created on this terminal, not synced yet)' : ''}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Select the existing customer instead of creating a second identity for one phone
+              number.
+            </p>
           </div>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{alreadyExists.name}</span> ·{' '}
-          {formatGhanaPhone(alreadyExists.phone)}
-          {alreadyExists.isDraft ? ' (created on this terminal, not synced yet)' : ''}
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Select the existing customer instead of creating a second identity for one phone number.
-        </p>
-      </Modal>
+
+          <DialogFooter className="border-t border-border px-5 py-3">
+            <div className="flex w-full gap-2">
+              <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  onCreated(alreadyExists)
+                  onClose()
+                }}
+                className="h-11 flex-1"
+                data-testid="use-existing-customer"
+              >
+                Use {alreadyExists.name}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     )
   }
 
   return (
-    <Modal
-      title="New customer"
-      description="Saved on this terminal now and linked to the server when the sale syncs."
-      onClose={onClose}
-      testId="customer-create-dialog"
-      footer={
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            form="customer-create-form"
-            disabled={busy || phoneInvalid || !name.trim()}
-            className="h-10 flex-1 rounded-md bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50"
-            data-testid="save-customer"
-          >
-            {busy ? 'Saving…' : 'Create customer'}
-          </button>
+    <Dialog open onOpenChange={close}>
+      <DialogContent
+        {...focusReturn}
+        data-testid="customer-create-dialog"
+        className="flex max-h-[90vh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <DialogHeader className="border-b border-border px-5 py-4 pr-16">
+          <DialogTitle className="text-base">New customer</DialogTitle>
+          <DialogDescription>
+            Saved on this terminal now and linked to the server when the sale syncs.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <form id="customer-create-form" onSubmit={submit} className="grid gap-4">
+            <label htmlFor="customer-name" className="grid gap-1.5 text-sm font-medium">
+              Name
+              <input
+                id="customer-name"
+                data-autofocus
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                maxLength={CUSTOMER_NAME_MAX}
+                className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+                placeholder="Akosua Mensah"
+              />
+            </label>
+
+            <label htmlFor="customer-phone" className="grid gap-1.5 text-sm font-medium">
+              Phone
+              <input
+                id="customer-phone"
+                inputMode="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                className={`h-11 rounded-md border bg-background px-3 text-sm ${
+                  phoneInvalid ? 'border-destructive' : 'border-border'
+                }`}
+                placeholder="024 123 4567"
+                aria-invalid={phoneInvalid}
+                aria-describedby={phoneInvalid ? 'customer-phone-error' : 'customer-phone-hint'}
+              />
+            </label>
+
+            {phoneInvalid ? (
+              <p id="customer-phone-error" role="alert" className="text-sm text-destructive">
+                Not a valid Ghana number. Use 0XXXXXXXXX or +233XXXXXXXXX.
+              </p>
+            ) : (
+              <p id="customer-phone-hint" className="text-xs text-muted-foreground">
+                {normalized
+                  ? `Will be saved as ${normalized}`
+                  : 'A phone number is required for credit and loyalty.'}
+              </p>
+            )}
+
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </form>
         </div>
-      }
-    >
-      <form id="customer-create-form" onSubmit={submit} className="grid gap-4">
-        <label htmlFor="customer-name" className="grid gap-1.5 text-sm font-medium">
-          Name
-          <input
-            id="customer-name"
-            data-autofocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={CUSTOMER_NAME_MAX}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
-            placeholder="Akosua Mensah"
-          />
-        </label>
 
-        <label htmlFor="customer-phone" className="grid gap-1.5 text-sm font-medium">
-          Phone
-          <input
-            id="customer-phone"
-            inputMode="tel"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            className={`h-11 rounded-md border bg-background px-3 text-sm ${
-              phoneInvalid ? 'border-destructive' : 'border-border'
-            }`}
-            placeholder="024 123 4567"
-            aria-invalid={phoneInvalid}
-            aria-describedby={phoneInvalid ? 'customer-phone-error' : 'customer-phone-hint'}
-          />
-        </label>
-
-        {phoneInvalid ? (
-          <p id="customer-phone-error" role="alert" className="text-sm text-destructive">
-            Not a valid Ghana number. Use 0XXXXXXXXX or +233XXXXXXXXX.
-          </p>
-        ) : (
-          <p id="customer-phone-hint" className="text-xs text-muted-foreground">
-            {normalized
-              ? `Will be saved as ${normalized}`
-              : 'A phone number is required for credit and loyalty.'}
-          </p>
-        )}
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-      </form>
-    </Modal>
+        <DialogFooter className="border-t border-border px-5 py-3">
+          <div className="flex w-full gap-2">
+            <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="customer-create-form"
+              disabled={busy || phoneInvalid || !name.trim()}
+              className="h-11 flex-1"
+              data-testid="save-customer"
+            >
+              {busy ? 'Saving…' : 'Create customer'}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

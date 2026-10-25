@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { formatGhs } from '@/lib/format'
 
 /**
@@ -34,14 +35,14 @@ export function CashKeypad({
       <div className="rounded-lg border border-border bg-card px-4 py-3">
         <div className="flex items-baseline justify-between">
           <span className="text-xs text-muted-foreground">Cash received</span>
-          <span className="font-mono text-2xl font-semibold" data-testid="tendered">
+          <span className="font-mono text-2xl font-semibold tabular-nums" data-testid="tendered">
             {formatGhs(tenderedMinor)}
           </span>
         </div>
         <div className="mt-1 flex items-baseline justify-between">
           <span className="text-xs text-muted-foreground">Change due</span>
           <span
-            className={`font-mono text-lg font-semibold ${short ? 'text-amber-700' : 'text-emerald-700'}`}
+            className={`font-mono text-lg font-semibold tabular-nums ${short ? 'text-amber-700' : 'text-emerald-700'}`}
             data-testid="change-due"
           >
             {short ? `Short ${formatGhs(totalMinor - tenderedMinor)}` : formatGhs(change)}
@@ -50,61 +51,67 @@ export function CashKeypad({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() => onChange(totalMinor)}
-          className="h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
+          className="h-11"
           data-testid="exact-cash"
         >
           Exact
-        </button>
+        </Button>
         {QUICK_NOTES_MINOR.map((note) => (
-          <button
+          <Button
             key={note}
             type="button"
+            variant="outline"
             onClick={() => onChange(tenderedMinor + note)}
-            className="h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
+            className="h-11 font-mono tabular-nums"
           >
             +{formatGhs(note)}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-          <button
+          <Button
             key={digit}
             type="button"
+            variant="outline"
             onClick={() => press(digit)}
-            className="h-12 rounded-lg border border-border bg-card text-lg font-semibold hover:bg-muted"
+            className="h-12 bg-card text-lg font-semibold"
             aria-label={`Digit ${digit}`}
           >
             {digit}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() => onChange(0)}
-          className="h-12 rounded-lg border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted"
+          className="h-12 bg-card text-xs text-muted-foreground"
         >
           Clear
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           onClick={() => press('0')}
-          className="h-12 rounded-lg border border-border bg-card text-lg font-semibold hover:bg-muted"
+          className="h-12 bg-card text-lg font-semibold"
           aria-label="Digit 0"
         >
           0
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           onClick={() => onChange(Math.floor(tenderedMinor / 10))}
-          className="h-12 rounded-lg border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted"
+          className="h-12 bg-card text-xs text-muted-foreground"
           aria-label="Backspace"
         >
           Back
-        </button>
+        </Button>
       </div>
     </div>
   )

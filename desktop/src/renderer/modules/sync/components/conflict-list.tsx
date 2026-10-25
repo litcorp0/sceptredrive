@@ -1,5 +1,9 @@
 import { useQuery } from '@powersync/react'
 import { formatDateTime } from '@sceptre/shared'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Skeleton } from '@/components/ui/skeleton'
 import { navigate } from '@/lib/router'
 
 /**
@@ -25,10 +29,17 @@ export interface ConflictRow {
   resolved_at: string | null
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  HIGH: 'bg-red-50 text-red-700',
-  MEDIUM: 'bg-amber-50 text-amber-900',
-  LOW: 'bg-muted text-muted-foreground',
+/* The tint and the dot carry the severity; the label stays `text-foreground`. */
+const SEVERITY_TINT: Record<string, string> = {
+  HIGH: 'bg-red-50',
+  MEDIUM: 'bg-amber-50',
+  LOW: 'bg-muted',
+}
+
+const SEVERITY_DOT: Record<string, string> = {
+  HIGH: 'bg-danger',
+  MEDIUM: 'bg-warn',
+  LOW: 'bg-topbar-muted',
 }
 
 function pretty(details: string): string {
@@ -49,14 +60,25 @@ export function ConflictList() {
   )
 
   if (isLoading && !data?.length) {
-    return <p className="text-sm text-muted-foreground">Loading conflicts…</p>
+    return (
+      <div className="grid gap-2">
+        <span className="sr-only">Loading conflicts…</span>
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-11 w-full" />
+      </div>
+    )
   }
   if (!data?.length) {
     return (
-      <p className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-        No conflicts. Oversells, credit overrides, price drift, and loyalty issues would appear here
-        after a sync.
-      </p>
+      <Empty className="border border-border bg-card">
+        <EmptyHeader>
+          <EmptyTitle>No conflicts.</EmptyTitle>
+          <EmptyDescription>
+            Oversells, credit overrides, price drift, and loyalty issues would appear here after a
+            sync.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -65,14 +87,20 @@ export function ConflictList() {
       {data.map((conflict) => (
         <li key={conflict.id} className="rounded-lg border border-border bg-card">
           <details className="group">
-            <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-sm">
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  SEVERITY_STYLES[conflict.severity] ?? ''
+            <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-sm">
+              <Badge
+                className={`gap-1.5 border-transparent text-[11px] font-semibold ${
+                  SEVERITY_TINT[conflict.severity] ?? ''
                 }`}
               >
+                <span
+                  aria-hidden="true"
+                  className={`size-1.5 shrink-0 rounded-full ${
+                    SEVERITY_DOT[conflict.severity] ?? 'bg-topbar-muted'
+                  }`}
+                />
                 {conflict.severity}
-              </span>
+              </Badge>
               <span className="font-medium">{conflict.type.replaceAll('_', ' ')}</span>
               {conflict.sale_receipt_number ? (
                 <span className="font-mono text-xs text-muted-foreground">
@@ -83,7 +111,7 @@ export function ConflictList() {
                   {conflict.shift_number}
                 </span>
               ) : null}
-              <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+              <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
                 {formatDateTime(conflict.created_at)} · {conflict.status}
               </span>
             </summary>
@@ -97,13 +125,15 @@ export function ConflictList() {
               </pre>
               <div className="flex gap-2">
                 {conflict.sale_id ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => navigate(`pos/receipt/${conflict.sale_id}`)}
-                    className="rounded border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                    className="h-11 px-3 text-xs"
                   >
                     Open receipt
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </div>

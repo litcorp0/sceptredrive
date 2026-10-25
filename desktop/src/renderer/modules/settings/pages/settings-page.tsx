@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { ScreenHeader } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { PosConfigSnapshot } from '@/lib/api/types'
 import { endStaffSession, type StaffSession } from '@/lib/auth/staff-session'
 import { posRuntimeConfig } from '@/lib/config'
@@ -147,35 +150,40 @@ export function SettingsScreen({
       />
 
       <main className="mx-auto max-w-4xl p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Terminal settings</h1>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('pos/sales')}
-              className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
-              data-testid="open-sales"
-            >
-              Today's sales
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('pos/sync')}
-              className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
-              data-testid="open-sync"
-            >
-              Sync status
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('pos')}
-              className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
-              data-testid="back-to-selling"
-            >
-              Back to selling
-            </button>
-          </div>
-        </div>
+        <ScreenHeader
+          title="Terminal settings"
+          actions={
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos/sales')}
+                className="h-11"
+                data-testid="open-sales"
+              >
+                Today's sales
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos/sync')}
+                className="h-11"
+                data-testid="open-sync"
+              >
+                Sync status
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos')}
+                className="h-11"
+                data-testid="back-to-selling"
+              >
+                Back to selling
+              </Button>
+            </>
+          }
+        />
 
         <div className="grid gap-4 md:grid-cols-2">
           <Section title="Terminal">
@@ -228,13 +236,17 @@ export function SettingsScreen({
 
           <Section title="Receipt printer (this terminal)">
             {!printer ? (
-              <p className="text-sm text-muted-foreground">Loading printer settings…</p>
+              <div className="grid gap-2">
+                <span className="sr-only">Loading printer settings…</span>
+                <Skeleton className="h-11 w-full" />
+                <Skeleton className="h-11 w-full" />
+              </div>
             ) : (
               <div className="grid gap-3 text-sm">
                 <label className="grid gap-1">
                   <span className="text-xs text-muted-foreground">Driver</span>
                   <select
-                    className="h-9 rounded-md border border-border bg-background px-2"
+                    className="h-11 rounded-md border border-border bg-background px-2"
                     value={printer.driver}
                     onChange={(event) =>
                       updatePrinter({ driver: event.target.value as PrinterSettings['driver'] })
@@ -253,7 +265,7 @@ export function SettingsScreen({
                   <label className="grid gap-1">
                     <span className="text-xs text-muted-foreground">Printer name</span>
                     <input
-                      className="h-9 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                      className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
                       value={printer.printerName}
                       onChange={(event) => updatePrinter({ printerName: event.target.value })}
                       list="printer-names"
@@ -273,7 +285,7 @@ export function SettingsScreen({
                     <label className="grid gap-1">
                       <span className="text-xs text-muted-foreground">Host</span>
                       <input
-                        className="h-9 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                        className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
                         value={printer.printerHost}
                         onChange={(event) => updatePrinter({ printerHost: event.target.value })}
                         placeholder="192.168.1.50"
@@ -283,7 +295,7 @@ export function SettingsScreen({
                     <label className="grid gap-1">
                       <span className="text-xs text-muted-foreground">Port</span>
                       <input
-                        className="h-9 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                        className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
                         type="number"
                         min={1}
                         max={65535}
@@ -301,7 +313,7 @@ export function SettingsScreen({
                   <label className="grid gap-1">
                     <span className="text-xs text-muted-foreground">Drawer pin</span>
                     <select
-                      className="h-9 rounded-md border border-border bg-background px-2"
+                      className="h-11 rounded-md border border-border bg-background px-2"
                       value={printer.drawerPin}
                       onChange={(event) =>
                         updatePrinter({
@@ -317,7 +329,7 @@ export function SettingsScreen({
                   <label className="grid gap-1">
                     <span className="text-xs text-muted-foreground">Copies</span>
                     <input
-                      className="h-9 rounded-md border border-border bg-background px-2"
+                      className="h-11 rounded-md border border-border bg-background px-2"
                       type="number"
                       min={1}
                       max={3}
@@ -332,7 +344,7 @@ export function SettingsScreen({
                   <label className="grid gap-1">
                     <span className="text-xs text-muted-foreground">Character set</span>
                     <select
-                      className="h-9 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                      className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
                       value={printer.encoding}
                       onChange={(event) =>
                         updatePrinter({
@@ -351,7 +363,7 @@ export function SettingsScreen({
                   <label className="grid gap-1">
                     <span className="text-xs text-muted-foreground">Cedi symbol</span>
                     <select
-                      className="h-9 rounded-md border border-border bg-background px-2"
+                      className="h-11 rounded-md border border-border bg-background px-2"
                       value={printer.currencySymbol}
                       onChange={(event) =>
                         updatePrinter({
@@ -378,35 +390,37 @@ export function SettingsScreen({
                 ) : null}
 
                 <div className="grid grid-cols-2 gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => void savePrinter()}
                     disabled={printerBusy || Boolean(printerProblem)}
-                    className="h-9 rounded-md bg-primary text-xs font-semibold text-primary-foreground disabled:opacity-40"
+                    className="h-11 text-xs"
                     data-testid="save-printer"
                   >
                     Save printer
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={() => void testPrint()}
                     disabled={printerBusy || Boolean(printerProblem)}
-                    className="h-9 rounded-md border border-border text-xs font-medium hover:bg-muted disabled:opacity-40"
+                    className="h-11 text-xs"
                     data-testid="test-print"
                   >
                     Test print
-                  </button>
+                  </Button>
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => void refreshPrinters()}
                   disabled={printerBusy}
-                  className="h-9 rounded-md border border-border text-xs font-medium hover:bg-muted disabled:opacity-40"
+                  className="h-11 text-xs"
                   data-testid="list-printers"
                 >
                   Find printers
-                </button>
+                </Button>
 
                 <p className="text-[11px] text-muted-foreground">
                   Cash sales append a drawer kick to the receipt. A failed print never voids the

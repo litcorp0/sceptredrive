@@ -1,4 +1,13 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { BindingError, type LocalStaffBinding } from '../../lib/auth/bindings'
 import type { LockoutPolicy } from '../../lib/auth/pin'
 import type { CartOverrideProof } from '../../lib/cart/types'
@@ -11,8 +20,8 @@ import {
   reasonCodesFor,
 } from '../../lib/overrides/override-service'
 import { usePosDatabase } from '../../lib/powersync/provider'
-import { Modal } from './modal'
 import { PinPad } from './pin-pad'
+import { useDialogFocusReturn } from './use-dialog-focus-return'
 
 /**
  * Manager approval dialog (Plan 06 Tasks 5 and 6).
@@ -54,6 +63,7 @@ export function ManagerOverrideDialog({
   /** Credit over-limit only: sell anyway and let the server raise a conflict. */
   onBypass?: () => void
 }) {
+  const focusReturn = useDialogFocusReturn()
   const db = usePosDatabase()
   const [approvers, setApprovers] = useState<LocalStaffBinding[]>([])
   const [approverId, setApproverId] = useState('')
@@ -113,123 +123,132 @@ export function ManagerOverrideDialog({
   }
 
   return (
-    <Modal
-      title={title}
-      description={description}
-      onClose={onClose}
-      testId="override-dialog"
-      footer={
-        <div className="grid gap-2">
-          {onBypass ? (
-            <button
-              type="button"
-              onClick={() => {
-                onBypass()
-                onClose()
-              }}
-              className="h-10 w-full rounded-md border border-amber-300 bg-amber-50 text-sm font-medium text-amber-900 hover:bg-amber-100"
-              data-testid="continue-without-approval"
-            >
-              Continue without approval
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 w-full rounded-md border border-border text-sm font-medium hover:bg-muted"
-          >
-            Cancel
-          </button>
-        </div>
-      }
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
     >
-      <div className="grid gap-3">
-        {typeof amountMinor === 'number' ? (
-          <div className="flex items-baseline justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-            <span className="text-muted-foreground">Amount</span>
-            <span className="font-mono font-semibold">{formatGhs(amountMinor)}</span>
+      <DialogContent
+        {...focusReturn}
+        data-testid="override-dialog"
+        className="flex max-h-[90vh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <DialogHeader className="border-b border-border px-5 py-4 pr-16">
+          <DialogTitle className="text-base">{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 py-4">
+          {typeof amountMinor === 'number' ? (
+            <div className="flex items-baseline justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Amount</span>
+              <span className="font-mono font-semibold tabular-nums">{formatGhs(amountMinor)}</span>
+            </div>
+          ) : null}
+
+          {typeof overByMinor === 'number' && overByMinor > 0 ? (
+            <div
+              className="flex items-baseline justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              data-testid="over-by"
+            >
+              <span>Over the limit by</span>
+              <span className="font-mono font-semibold tabular-nums">{formatGhs(overByMinor)}</span>
+            </div>
+          ) : null}
+
+          <label htmlFor="override-approver" className="grid gap-1.5 text-sm font-medium">
+            Approver
+            <select
+              id="override-approver"
+              value={approverId}
+              onChange={(event) => setApproverId(event.target.value)}
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+              data-testid="override-approver"
+            >
+              {approvers.length === 0 ? <option value="">No manager authorized here</option> : null}
+              {approvers.map((approver) => (
+                <option key={approver.bindingId} value={approver.bindingId}>
+                  {approver.name} ({approver.role})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="override-reason" className="grid gap-1.5 text-sm font-medium">
+            Reason
+            <select
+              id="override-reason"
+              value={reasonCode}
+              onChange={(event) => setReasonCode(event.target.value)}
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+            >
+              {reasonCodesFor(permission).map((code) => (
+                <option key={code} value={code}>
+                  {REASON_LABELS[code] ?? code}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="override-note" className="grid gap-1.5 text-sm font-medium">
+            Note (optional)
+            <input
+              id="override-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={200}
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+              placeholder="Why this is allowed"
+            />
+          </label>
+
+          {approvers.length === 0 ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              No manager is authorized on this terminal. Authorize one online, then try again.
+            </p>
+          ) : (
+            <PinPad
+              value={pin}
+              onChange={setPin}
+              onSubmit={() => {
+                void submit()
+              }}
+              busy={busy}
+              disabled={!approverId}
+              submitLabel="Approve"
+            />
+          )}
+
+          {error ? (
+            <p role="alert" className="text-sm text-destructive" data-testid="override-error">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <DialogFooter className="border-t border-border px-5 py-3">
+          <div className="grid w-full gap-2">
+            {onBypass ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  onBypass()
+                  onClose()
+                }}
+                className="h-11 w-full border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                data-testid="continue-without-approval"
+              >
+                Continue without approval
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={onClose} className="h-11 w-full">
+              Cancel
+            </Button>
           </div>
-        ) : null}
-
-        {typeof overByMinor === 'number' && overByMinor > 0 ? (
-          <div
-            className="flex items-baseline justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-            data-testid="over-by"
-          >
-            <span>Over the limit by</span>
-            <span className="font-mono font-semibold">{formatGhs(overByMinor)}</span>
-          </div>
-        ) : null}
-
-        <label htmlFor="override-approver" className="grid gap-1.5 text-sm font-medium">
-          Approver
-          <select
-            id="override-approver"
-            value={approverId}
-            onChange={(event) => setApproverId(event.target.value)}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
-            data-testid="override-approver"
-          >
-            {approvers.length === 0 ? <option value="">No manager authorized here</option> : null}
-            {approvers.map((approver) => (
-              <option key={approver.bindingId} value={approver.bindingId}>
-                {approver.name} ({approver.role})
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label htmlFor="override-reason" className="grid gap-1.5 text-sm font-medium">
-          Reason
-          <select
-            id="override-reason"
-            value={reasonCode}
-            onChange={(event) => setReasonCode(event.target.value)}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
-          >
-            {reasonCodesFor(permission).map((code) => (
-              <option key={code} value={code}>
-                {REASON_LABELS[code] ?? code}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label htmlFor="override-note" className="grid gap-1.5 text-sm font-medium">
-          Note (optional)
-          <input
-            id="override-note"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            maxLength={200}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
-            placeholder="Why this is allowed"
-          />
-        </label>
-
-        {approvers.length === 0 ? (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            No manager is authorized on this terminal. Authorize one online, then try again.
-          </p>
-        ) : (
-          <PinPad
-            value={pin}
-            onChange={setPin}
-            onSubmit={() => {
-              void submit()
-            }}
-            busy={busy}
-            disabled={!approverId}
-            submitLabel="Approve"
-          />
-        )}
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive" data-testid="override-error">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </Modal>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

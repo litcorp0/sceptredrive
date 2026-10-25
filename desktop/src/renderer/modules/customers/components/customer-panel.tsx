@@ -1,6 +1,7 @@
 import { formatGhanaPhone } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { CartCustomer } from '@/lib/cart/types'
 import { creditHeadroom, creditUsed } from '@/lib/credit/headroom'
 import type { CustomerContext } from '@/lib/customers/context'
@@ -18,9 +19,9 @@ import { CustomerDialog } from './customer-dialog'
  *
  * The panel owns its two dialogs (P10-D11): "find" and "create" are one flow —
  * create is only reachable from find — so the surface costs the sell page a
- * single `open` flag instead of two dialogs and their state. They are portalled
- * because the rail is hidden below `lg`: on a minimum-width window F4 must still
- * open the dialog, exactly as it did when the page rendered them.
+ * single `open` flag instead of two dialogs and their state. The dialogs portal
+ * themselves to the body (`DialogContent`), so the rail being hidden below `lg`
+ * does not stop F4 from opening them.
  */
 export function CustomerPanel({
   customer,
@@ -62,14 +63,16 @@ export function CustomerPanel({
             Customer
           </h2>
           {customer ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClear}
-              className="rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+              className="h-11 px-2 text-[11px] text-muted-foreground"
               data-testid="clear-customer"
             >
               Walk-in
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -82,12 +85,12 @@ export function CustomerPanel({
               {customer.phone ? formatGhanaPhone(customer.phone) : '—'}
             </p>
             {customer.isDraft ? (
-              <p
-                className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+              <Badge
+                className="mt-1 border-transparent bg-amber-50 text-[10px] text-foreground"
                 data-testid="customer-draft-note"
               >
                 New customer — will link on sync
-              </p>
+              </Badge>
             ) : null}
           </div>
         ) : (
@@ -96,14 +99,15 @@ export function CustomerPanel({
           </p>
         )}
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onFind}
-          className="mt-2 h-9 w-full rounded-md border border-border text-xs font-medium hover:bg-muted"
+          className="mt-2 h-11 w-full text-xs"
           data-testid="find-customer"
         >
           {customer ? 'Change customer' : 'Find or create'} <span className="opacity-60">F4</span>
-        </button>
+        </Button>
 
         {customer && !customer.isDraft ? (
           <div className="mt-3 grid gap-1 border-t border-border pt-2 text-xs">
@@ -118,7 +122,7 @@ export function CustomerPanel({
                   On hold
                 </span>
               ) : (
-                <span className="font-mono" data-testid="credit-headroom">
+                <span className="font-mono tabular-nums" data-testid="credit-headroom">
                   {formatGhs(creditHeadroom(credit))}
                 </span>
               )}
@@ -133,7 +137,7 @@ export function CustomerPanel({
 
             <div className="mt-1 flex items-baseline justify-between">
               <span className="text-muted-foreground">Loyalty</span>
-              <span className="font-mono" data-testid="loyalty-balance">
+              <span className="font-mono tabular-nums" data-testid="loyalty-balance">
                 {loyalty.availablePoints} pts
               </span>
             </div>
@@ -152,27 +156,24 @@ export function CustomerPanel({
         ) : null}
       </section>
 
-      {open
-        ? createPortal(
-            creating ? (
-              <CustomerCreateDialog
-                onClose={close}
-                onCreated={(hit) => {
-                  onSelect(hit)
-                  close()
-                }}
-              />
-            ) : (
-              <CustomerDialog
-                current={customer}
-                onClose={close}
-                onSelect={onSelect}
-                onCreate={() => setCreating(true)}
-              />
-            ),
-            document.body,
-          )
-        : null}
+      {open ? (
+        creating ? (
+          <CustomerCreateDialog
+            onClose={close}
+            onCreated={(hit) => {
+              onSelect(hit)
+              close()
+            }}
+          />
+        ) : (
+          <CustomerDialog
+            current={customer}
+            onClose={close}
+            onSelect={onSelect}
+            onCreate={() => setCreating(true)}
+          />
+        )
+      ) : null}
     </>
   )
 }

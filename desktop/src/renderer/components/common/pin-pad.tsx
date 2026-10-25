@@ -1,4 +1,5 @@
 import { cn } from 'cn'
+import { Button } from '@/components/ui/button'
 import { PIN_MAX_LENGTH } from '../../lib/auth/pin'
 
 /**
@@ -49,53 +50,57 @@ export function PinPad({
 
       <div className="grid grid-cols-3 gap-2">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-          <button
+          <Button
             key={digit}
             type="button"
+            variant="outline"
             onClick={() => press(digit)}
             disabled={disabled || busy}
-            className="h-16 rounded-lg border border-border bg-card text-2xl font-semibold hover:bg-muted disabled:opacity-50"
+            className="h-16 rounded-lg bg-card text-2xl font-semibold"
             aria-label={`Digit ${digit}`}
           >
             {digit}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() => onChange('')}
           disabled={disabled || busy}
-          className="h-16 rounded-lg border border-border bg-card text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+          className="h-16 rounded-lg bg-card text-sm text-muted-foreground"
         >
           Clear
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           onClick={() => press('0')}
           disabled={disabled || busy}
-          className="h-16 rounded-lg border border-border bg-card text-2xl font-semibold hover:bg-muted disabled:opacity-50"
+          className="h-16 rounded-lg bg-card text-2xl font-semibold"
           aria-label="Digit 0"
         >
           0
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           onClick={() => onChange(value.slice(0, -1))}
           disabled={disabled || busy}
-          className="h-16 rounded-lg border border-border bg-card text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+          className="h-16 rounded-lg bg-card text-sm text-muted-foreground"
           aria-label="Backspace"
         >
           Back
-        </button>
+        </Button>
       </div>
 
-      <button
+      <Button
         type="button"
         onClick={onSubmit}
         disabled={!canSubmit}
-        className="h-14 rounded-lg bg-primary text-base font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        className="h-14 rounded-lg text-base"
       >
         {busy ? 'Checking…' : submitLabel}
-      </button>
+      </Button>
     </div>
   )
 }

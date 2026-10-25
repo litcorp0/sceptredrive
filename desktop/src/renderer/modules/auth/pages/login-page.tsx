@@ -3,6 +3,7 @@ import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
 import { cn } from 'cn'
 import { useCallback, useEffect, useState } from 'react'
 import { PinPad } from '@/components/common'
+import { Button } from '@/components/ui/button'
 import { redeemEnrollment } from '@/lib/api/client'
 import {
   activateBinding,
@@ -224,33 +225,35 @@ export function LoginRoute() {
                   </li>
                 ))}
               </ul>
-              <button
+              <Button
                 type="button"
+                variant="link"
                 onClick={() => {
                   setPin('')
                   setError(null)
                   setPhase('activate')
                 }}
-                className="mt-4 text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+                className="mt-2 h-11 px-0 text-sm text-muted-foreground"
               >
                 Authorize another staff member
-              </button>
+              </Button>
             </div>
           ) : null}
 
           {phase === 'pin' && selected ? (
             <div>
-              <button
+              <Button
                 type="button"
+                variant="link"
                 onClick={() => {
                   setPhase('select')
                   setPin('')
                   setError(null)
                 }}
-                className="mb-4 text-sm text-muted-foreground hover:underline"
+                className="mb-2 h-11 px-0 text-sm text-muted-foreground"
               >
                 ← Back
-              </button>
+              </Button>
               <h2 className="text-lg font-semibold">Hello, {selected.name}</h2>
               <p className="mt-1 mb-4 text-sm text-muted-foreground">
                 Enter your {policy.maxAttempts}-attempt PIN. It works without a network.
@@ -378,13 +381,14 @@ function ActivateForm({
   return (
     <div>
       {onCancel ? (
-        <button
+        <Button
           type="button"
+          variant="link"
           onClick={onCancel}
-          className="mb-4 text-sm text-muted-foreground hover:underline"
+          className="mb-2 h-11 px-0 text-sm text-muted-foreground"
         >
           ← Back
-        </button>
+        </Button>
       ) : null}
       <h2 className="text-lg font-semibold">Authorize this terminal</h2>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -507,21 +511,12 @@ function ChangePinForm({
       />
 
       <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-11 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-        >
+        <Button type="button" variant="outline" onClick={onCancel} className="h-11 flex-1">
           {binding.pinMustChange ? 'Use temporary PIN' : 'Not now'}
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy}
-          className="h-11 flex-[2] rounded-md bg-primary text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-        >
+        </Button>
+        <Button type="button" onClick={submit} disabled={busy} className="h-11 flex-[2]">
           {busy ? 'Saving…' : 'Save PIN'}
-        </button>
+        </Button>
       </div>
 
       {error ? (
@@ -615,14 +610,9 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={enroll}
-          disabled={busy}
-          className="mt-4 h-12 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50"
-        >
+        <Button type="button" onClick={enroll} disabled={busy} className="mt-4 h-12 w-full">
           {busy ? 'Enrolling…' : 'Enrol terminal'}
-        </button>
+        </Button>
         <p className="mt-3 text-xs text-muted-foreground">
           Enrolment needs the network once. After that, cash and credit sales work offline.
         </p>

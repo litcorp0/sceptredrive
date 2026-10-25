@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { ScreenHeader } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { StaffSession } from '@/lib/auth/staff-session'
 import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
 import { usePos } from '@/lib/powersync/provider'
@@ -20,11 +24,19 @@ import { ReceiptView } from '../components/receipt-view'
  * committed sale.
  */
 
-const STATUS_STYLES: Record<PrintStatus, string> = {
-  PENDING: 'bg-muted text-muted-foreground',
-  PRINTING: 'bg-sky-50 text-sky-800',
-  PRINTED: 'bg-emerald-50 text-emerald-800',
-  FAILED: 'bg-amber-50 text-amber-900',
+/* The tint and the dot carry the print state; the label stays `text-foreground`. */
+const STATUS_TINT: Record<PrintStatus, string> = {
+  PENDING: 'bg-muted',
+  PRINTING: 'bg-sky-50',
+  PRINTED: 'bg-emerald-50',
+  FAILED: 'bg-amber-50',
+}
+
+const STATUS_DOT: Record<PrintStatus, string> = {
+  PENDING: 'bg-topbar-muted',
+  PRINTING: 'bg-info',
+  PRINTED: 'bg-ok',
+  FAILED: 'bg-warn',
 }
 
 export function ReceiptScreen({
@@ -172,28 +184,45 @@ export function ReceiptScreen({
           ) : model ? (
             <ReceiptView model={model} />
           ) : (
-            <p className="text-sm text-muted-foreground">Loading receipt…</p>
+            <div className="grid gap-2">
+              <span className="sr-only">Loading receipt…</span>
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
           )}
         </div>
 
         <aside className="grid content-start gap-3">
           <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-sm font-semibold">Receipt</h1>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[printStatus]}`}
-                data-testid="print-status"
-                data-status={printStatus}
-              >
-                {printStatus === 'PRINTING' ? 'Printing…' : printStatus.toLowerCase()}
-              </span>
-            </div>
-            <p className="mt-2 font-mono text-xs" data-testid="receipt-number">
-              {model?.header.receiptNumber ?? saleId}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              The sale is recorded on this terminal. Printing never blocks the next sale.
-            </p>
+            <ScreenHeader
+              className="mb-0"
+              title="Receipt"
+              badge={
+                <Badge
+                  className={`gap-1.5 border-transparent text-[11px] ${STATUS_TINT[printStatus]}`}
+                  data-testid="print-status"
+                  data-status={printStatus}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[printStatus]}`}
+                  />
+                  {printStatus === 'PRINTING' ? 'Printing…' : printStatus.toLowerCase()}
+                </Badge>
+              }
+              description={
+                <span
+                  className="mt-1 block font-mono text-xs text-foreground tabular-nums"
+                  data-testid="receipt-number"
+                >
+                  {model?.header.receiptNumber ?? saleId}
+                </span>
+              }
+            >
+              <p className="mt-1 text-xs text-muted-foreground">
+                The sale is recorded on this terminal. Printing never blocks the next sale.
+              </p>
+            </ScreenHeader>
           </div>
 
           {message ? (
@@ -211,45 +240,48 @@ export function ReceiptScreen({
             </div>
           ) : null}
 
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => void runPrint(true)}
             disabled={busy}
-            className="h-11 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-40"
+            className="h-11"
             data-testid="print-again"
           >
             {busy ? 'Working…' : 'Print again'}
-          </button>
+          </Button>
 
           {isCash ? (
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => void openDrawer()}
               disabled={busy}
-              className="h-10 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-40"
+              className="h-11"
               data-testid="open-drawer"
             >
               Open drawer
-            </button>
+            </Button>
           ) : null}
 
-          <button
+          <Button
             type="button"
             onClick={() => navigate('pos')}
-            className="h-12 rounded-md bg-primary text-sm font-semibold text-primary-foreground"
+            className="h-14 text-sm"
             data-testid="new-sale"
           >
             New sale
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => navigate('pos/sales')}
-            className="h-10 rounded-md border border-border text-sm font-medium hover:bg-muted"
+            className="h-11"
             data-testid="todays-sales"
           >
             Today's sales
-          </button>
+          </Button>
 
           {settings?.driver === 'fake' ? (
             <p className="text-[11px] text-muted-foreground">

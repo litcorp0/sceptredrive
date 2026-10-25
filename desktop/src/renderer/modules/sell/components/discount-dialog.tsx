@@ -1,6 +1,15 @@
 import type { Role } from '@sceptre/shared'
 import { useState } from 'react'
-import { Modal } from '@/components/common'
+import { useDialogFocusReturn } from '@/components/common'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import type { CartDiscount } from '@/lib/cart/types'
 import { DISCOUNT_REASON_CODES, type DiscountReasonCode } from '@/lib/cart/types'
 import {
@@ -11,7 +20,7 @@ import {
   discountAmountFromInput,
   formatPercent,
 } from '@/lib/discounts/discount-service'
-import { formatGhs } from '@/lib/format'
+import { formatGhs, formatMinorPlain } from '@/lib/format'
 
 /**
  * Line or sale discount (F8).
@@ -41,8 +50,11 @@ export function DiscountDialog({
   onClose: () => void
   onSubmit: (discount: CartDiscount | null) => void
 }) {
+  const focusReturn = useDialogFocusReturn()
   const [mode, setMode] = useState<DiscountInputMode>('AMOUNT')
-  const [raw, setRaw] = useState(existing ? (existing.amountMinor / 100).toFixed(2) : '')
+  // Integer pesewas in, integer pesewas out: an editable amount is seeded from
+  // `formatMinorPlain`, never from a `toFixed` round-trip.
+  const [raw, setRaw] = useState(existing ? formatMinorPlain(existing.amountMinor) : '')
   const [reasonCode, setReasonCode] = useState<DiscountReasonCode>(existing?.reasonCode ?? 'STAFF')
   const [note, setNote] = useState(existing?.note ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -72,156 +84,162 @@ export function DiscountDialog({
   }
 
   return (
-    <Modal
-      title={title}
-      description={description}
-      onClose={onClose}
-      testId="discount-dialog"
-      footer={
-        <div className="flex gap-2">
-          {existing ? (
-            <button
-              type="button"
-              onClick={() => {
-                onSubmit(null)
-                onClose()
-              }}
-              className="h-10 flex-1 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/5"
-              data-testid="remove-discount"
-            >
-              Remove
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={amountMinor === null}
-            className="h-10 flex-[2] rounded-md bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50"
-            data-testid="apply-discount"
-          >
-            {needsManager ? 'Apply — needs a manager' : 'Apply discount'}
-          </button>
-        </div>
-      }
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
     >
-      <div className="grid gap-4">
-        <div className="grid grid-cols-2 gap-2">
-          {(['AMOUNT', 'PERCENT'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={mode === option}
-              onClick={() => {
-                if (option !== mode) {
-                  setRaw('')
-                  setMode(option)
-                  setError(null)
+      <DialogContent
+        {...focusReturn}
+        data-testid="discount-dialog"
+        className="flex max-h-[90vh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <DialogHeader className="border-b border-border px-5 py-4 pr-16">
+          <DialogTitle className="text-base">{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-5 py-4">
+          <div className="grid grid-cols-2 gap-2">
+            {(['AMOUNT', 'PERCENT'] as const).map((option) => (
+              <Button
+                key={option}
+                type="button"
+                variant={mode === option ? 'secondary' : 'outline'}
+                aria-pressed={mode === option}
+                onClick={() => {
+                  if (option !== mode) {
+                    setRaw('')
+                    setMode(option)
+                    setError(null)
+                  }
+                }}
+                className="h-11"
+              >
+                {option === 'AMOUNT' ? 'Amount (GHS)' : 'Percent'}
+              </Button>
+            ))}
+          </div>
+
+          <label htmlFor="discount-input" className="grid gap-1.5 text-sm font-medium">
+            {mode === 'AMOUNT' ? 'Amount off' : 'Percent off'}
+            <input
+              id="discount-input"
+              data-autofocus
+              inputMode={mode === 'AMOUNT' ? 'decimal' : 'numeric'}
+              value={raw}
+              onChange={(event) => {
+                setRaw(event.target.value)
+                setError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  submit()
                 }
               }}
-              className={`h-9 rounded-md border text-sm font-medium ${
-                mode === option
-                  ? 'border-foreground/40 bg-muted'
-                  : 'border-border hover:bg-muted/60'
-              }`}
-            >
-              {option === 'AMOUNT' ? 'Amount (GHS)' : 'Percent'}
-            </button>
-          ))}
-        </div>
+              placeholder={mode === 'AMOUNT' ? '10.00' : '10'}
+              className="h-11 rounded-md border border-border bg-background px-3 font-mono text-base tabular-nums"
+              data-testid="discount-input"
+            />
+          </label>
 
-        <label htmlFor="discount-input" className="grid gap-1.5 text-sm font-medium">
-          {mode === 'AMOUNT' ? 'Amount off' : 'Percent off'}
-          <input
-            id="discount-input"
-            data-autofocus
-            inputMode={mode === 'AMOUNT' ? 'decimal' : 'numeric'}
-            value={raw}
-            onChange={(event) => {
-              setRaw(event.target.value)
-              setError(null)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                submit()
-              }
-            }}
-            placeholder={mode === 'AMOUNT' ? '10.00' : '10'}
-            className="h-11 rounded-md border border-border bg-background px-3 font-mono text-base"
-            data-testid="discount-input"
-          />
-        </label>
-
-        <div className="grid gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          <div className="flex items-baseline justify-between">
-            <span className="text-muted-foreground">Applies</span>
-            <span className="font-mono" data-testid="discount-amount">
-              {amountMinor === null ? '—' : formatGhs(amountMinor)}
-            </span>
+          <div className="grid gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <div className="flex items-baseline justify-between">
+              <span className="text-muted-foreground">Applies</span>
+              <span className="font-mono tabular-nums" data-testid="discount-amount">
+                {amountMinor === null ? '—' : formatGhs(amountMinor)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="text-muted-foreground">Of base {formatGhs(baseMinor)}</span>
+              <span className="font-mono tabular-nums" data-testid="discount-percent">
+                {formatPercent(percent)}
+              </span>
+            </div>
           </div>
-          <div className="flex items-baseline justify-between text-xs">
-            <span className="text-muted-foreground">Of base {formatGhs(baseMinor)}</span>
-            <span className="font-mono" data-testid="discount-percent">
-              {formatPercent(percent)}
-            </span>
-          </div>
-        </div>
 
-        <p
-          className={
-            needsManager
-              ? 'rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900'
-              : 'text-xs text-muted-foreground'
-          }
-          data-testid="discount-cap-note"
-        >
-          {needsManager
-            ? `Above the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()} — a manager or admin PIN is required.`
-            : `Within the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()}.`}
-          {approvedAlready ? ' Already approved by a manager.' : ''}
-        </p>
-
-        <label htmlFor="discount-reason" className="grid gap-1.5 text-sm font-medium">
-          Reason
-          <select
-            id="discount-reason"
-            value={reasonCode}
-            onChange={(event) => setReasonCode(event.target.value as DiscountReasonCode)}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+          <p
+            className={
+              needsManager
+                ? 'rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900'
+                : 'text-xs text-muted-foreground'
+            }
+            data-testid="discount-cap-note"
           >
-            {DISCOUNT_REASON_CODES.map((code) => (
-              <option key={code} value={code}>
-                {DISCOUNT_REASON_LABELS[code]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label htmlFor="discount-note" className="grid gap-1.5 text-sm font-medium">
-          Note (optional)
-          <input
-            id="discount-note"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            maxLength={200}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm"
-            placeholder="Why this is discounted"
-          />
-        </label>
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
+            {needsManager
+              ? `Above the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()} — a manager or admin PIN is required.`
+              : `Within the ${formatPercent(capPercent)} cap for ${role === 'CASHIER' ? 'a cashier' : role.toLowerCase()}.`}
+            {approvedAlready ? ' Already approved by a manager.' : ''}
           </p>
-        ) : null}
-      </div>
-    </Modal>
+
+          <label htmlFor="discount-reason" className="grid gap-1.5 text-sm font-medium">
+            Reason
+            <select
+              id="discount-reason"
+              value={reasonCode}
+              onChange={(event) => setReasonCode(event.target.value as DiscountReasonCode)}
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+            >
+              {DISCOUNT_REASON_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {DISCOUNT_REASON_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="discount-note" className="grid gap-1.5 text-sm font-medium">
+            Note (optional)
+            <input
+              id="discount-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={200}
+              className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+              placeholder="Why this is discounted"
+            />
+          </label>
+
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <DialogFooter className="border-t border-border px-5 py-3">
+          <div className="flex w-full gap-2">
+            {existing ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  onSubmit(null)
+                  onClose()
+                }}
+                className="h-11 flex-1 text-destructive"
+                data-testid="remove-discount"
+              >
+                Remove
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={submit}
+              disabled={amountMinor === null}
+              className="h-11 flex-[2]"
+              data-testid="apply-discount"
+            >
+              {needsManager ? 'Apply — needs a manager' : 'Apply discount'}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

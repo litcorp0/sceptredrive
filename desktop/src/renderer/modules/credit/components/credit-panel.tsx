@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import type { CartCustomer, CartOverrideProof } from '@/lib/cart/types'
 import {
   CREDIT_DECISION_MESSAGES,
@@ -50,7 +51,7 @@ export function CreditPanel({
         <div className="grid gap-2 text-xs" data-testid="credit-panel">
           <div className="flex items-baseline justify-between">
             <span className="text-muted-foreground">Available</span>
-            <span className="font-mono font-semibold" data-testid="credit-available">
+            <span className="font-mono font-semibold tabular-nums" data-testid="credit-available">
               {formatGhs(creditHeadroom(credit))}
             </span>
           </div>
@@ -83,24 +84,26 @@ export function CreditPanel({
                   {override.note ? `${override.note} · ` : ''}
                   The debt is still recorded.
                 </p>
-                <button
+                <Button
                   type="button"
+                  variant="link"
                   onClick={onClearApproval}
-                  className="mt-1 rounded px-1 py-0.5 text-[10px] font-medium text-emerald-900 underline"
+                  className="mt-1 h-11 px-1 text-[10px] text-emerald-900"
                 >
                   Remove approval
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="grid gap-1">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={onRequestApproval}
-                  className="h-9 w-full rounded-md border border-border text-xs font-medium hover:bg-muted"
+                  className="h-11 w-full text-xs"
                   data-testid="request-credit-approval"
                 >
                   Ask a manager
-                </button>
+                </Button>
                 <p className="text-[10px] text-muted-foreground">
                   Over by {formatGhs(overLimitMinor(credit, totalMinor))}. The sale can still
                   complete without approval — the server records the conflict.

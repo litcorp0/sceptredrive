@@ -1,5 +1,14 @@
 import { formatDateTime, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
+import { ScreenHeader } from '@/components/common'
+import { Button } from '@/components/ui/button'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { endStaffSession, useStaffSession } from '@/lib/auth/staff-session'
 import { formatGhs } from '@/lib/format'
 import { usePos } from '@/lib/powersync/provider'
@@ -19,7 +28,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className="mt-1 font-mono text-xl font-semibold">{value}</p>
+      <p className="mt-1 font-mono text-xl font-semibold tabular-nums">{value}</p>
     </div>
   )
 }
@@ -52,15 +61,15 @@ export function ShiftRoute() {
       <main className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="text-center">
           <p className="text-sm text-muted-foreground">Sign in with a PIN to open a shift.</p>
-          <button
+          <Button
             type="button"
             onClick={() => {
               window.location.hash = '#login'
             }}
-            className="mt-4 h-11 rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground"
+            className="mt-4 h-11 px-6"
           >
             Go to sign-in
-          </button>
+          </Button>
         </div>
       </main>
     )
@@ -114,8 +123,9 @@ export function ShiftRoute() {
               {staff.staffId} · {staff.role}
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => {
               if (shift) {
                 setError('Close the shift before signing out')
@@ -124,10 +134,10 @@ export function ShiftRoute() {
               endStaffSession()
               window.location.hash = '#login'
             }}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            className="h-11 px-3 text-xs"
           >
             Sign out
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -156,65 +166,72 @@ export function ShiftRoute() {
         ) : null}
 
         {!shift ? (
-          <section className="rounded-xl border border-border bg-card p-8 text-center">
-            <h1 className="text-xl font-semibold">No open shift</h1>
-            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-              Count the float in the drawer and open the shift. Cash sales, change, and cash
-              movements are tracked against it until you close.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setError(null)
-                setDialog('open')
-              }}
-              className="mt-6 h-12 rounded-lg bg-primary px-8 text-sm font-semibold text-primary-foreground"
-            >
-              Open shift
-            </button>
-          </section>
+          <Empty className="rounded-xl border border-border bg-card">
+            <EmptyHeader>
+              <EmptyTitle>
+                <h1 className="text-xl font-semibold">No open shift</h1>
+              </EmptyTitle>
+              <EmptyDescription>
+                Count the float in the drawer and open the shift. Cash sales, change, and cash
+                movements are tracked against it until you close.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                type="button"
+                onClick={() => {
+                  setError(null)
+                  setDialog('open')
+                }}
+                className="h-14 px-8 text-sm"
+              >
+                Open shift
+              </Button>
+            </EmptyContent>
+          </Empty>
         ) : (
           <>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h1 className="text-xl font-semibold">Shift {shift.number}</h1>
-                <p className="text-sm text-muted-foreground">
-                  Opened {formatDateTime(shift.openedAt)} by {staff.name}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.hash = '#pos'
-                  }}
-                  className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
-                >
-                  Start selling
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDialog('cash-in')}
-                  className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
-                >
-                  Cash in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDialog('cash-out')}
-                  className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
-                >
-                  Cash out
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDialog('close')}
-                  className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground"
-                >
-                  Close shift
-                </button>
-              </div>
-            </div>
+            <ScreenHeader
+              title={`Shift ${shift.number}`}
+              description={`Opened ${formatDateTime(shift.openedAt)} by ${staff.name}`}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      window.location.hash = '#pos'
+                    }}
+                    className="h-11"
+                  >
+                    Start selling
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDialog('cash-in')}
+                    className="h-11"
+                  >
+                    Cash in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDialog('cash-out')}
+                    className="h-11"
+                  >
+                    Cash out
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setDialog('close')}
+                    className="h-14 px-6 text-sm"
+                  >
+                    Close shift
+                  </Button>
+                </>
+              }
+            />
 
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Opening float" value={formatGhs(shift.openingFloatMinor)} />
@@ -249,7 +266,7 @@ export function ShiftRoute() {
                           {movement.type === 'CASH_IN' ? 'Cash in' : 'Cash out'}
                         </td>
                         <td className="px-4 py-2">{movement.reason}</td>
-                        <td className="px-4 py-2 text-right font-mono">
+                        <td className="px-4 py-2 text-right font-mono tabular-nums">
                           {movement.type === 'CASH_IN' ? '+' : '−'}
                           {formatGhs(movement.amountMinor)}
                         </td>

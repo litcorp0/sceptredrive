@@ -1,6 +1,11 @@
 import { accraDay, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
+import { ScreenHeader } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { StaffSession } from '@/lib/auth/staff-session'
 import { formatGhs } from '@/lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
@@ -21,11 +26,22 @@ import {
  * what a cashier or manager needs at the counter, offline.
  */
 
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: 'bg-muted text-muted-foreground',
-  PRINTING: 'bg-sky-50 text-sky-800',
-  PRINTED: 'bg-emerald-50 text-emerald-800',
-  FAILED: 'bg-amber-50 text-amber-900',
+/*
+ * The tint and the dot carry the print state; the label stays `text-foreground`
+ * so a 11 px chip keeps its contrast (Phase 7's rule).
+ */
+const STATUS_TINT: Record<string, string> = {
+  PENDING: 'bg-muted',
+  PRINTING: 'bg-sky-50',
+  PRINTED: 'bg-emerald-50',
+  FAILED: 'bg-amber-50',
+}
+
+const STATUS_DOT: Record<string, string> = {
+  PENDING: 'bg-topbar-muted',
+  PRINTING: 'bg-info',
+  PRINTED: 'bg-ok',
+  FAILED: 'bg-warn',
 }
 
 function dayBounds(now = new Date()): { from: string; to: string; label: string } {
@@ -100,37 +116,48 @@ export function SalesScreen({
       />
 
       <main className="mx-auto max-w-5xl p-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold">Today's sales</h1>
-            <p className="text-sm text-muted-foreground">
+        <ScreenHeader
+          title="Today's sales"
+          description={
+            <>
               {bounds.label} · {rows.length} sale{rows.length === 1 ? '' : 's'} on{' '}
               {identity.terminalCode}
               {pending > 0 ? ` · ${pending} not printed` : ''}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
+            </>
+          }
+          actions={
+            <Button
               type="button"
+              variant="outline"
               onClick={() => navigate('pos')}
-              className="h-9 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
+              className="h-11"
               data-testid="back-to-selling"
             >
               Back to selling
-            </button>
-          </div>
-        </div>
+            </Button>
+          }
+        />
 
         {error ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : loading ? (
-          <p className="text-sm text-muted-foreground">Loading today's sales…</p>
+          <div className="grid gap-2">
+            <span className="sr-only">Loading today's sales…</span>
+            <Skeleton className="h-11 w-full" />
+            <Skeleton className="h-11 w-full" />
+            <Skeleton className="h-11 w-full" />
+          </div>
         ) : rows.length === 0 ? (
-          <p className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-            No sales yet today. Completed sales appear here and survive a restart.
-          </p>
+          <Empty className="border border-border bg-card">
+            <EmptyHeader>
+              <EmptyTitle>No sales yet today.</EmptyTitle>
+              <EmptyDescription>
+                Completed sales appear here and survive a restart.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
@@ -152,29 +179,39 @@ export function SalesScreen({
                     data-testid="sale-row"
                   >
                     <td className="px-3 py-2 font-mono text-xs">{sale.receiptNumber}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{formatTime(sale.occurredAt)}</td>
+                    <td className="px-3 py-2 font-mono text-xs tabular-nums">
+                      {formatTime(sale.occurredAt)}
+                    </td>
                     <td className="px-3 py-2 text-xs">{tender?.method ?? 'NONE'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-xs">
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
                       {formatGhs(sale.totalMinor)}
                     </td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          STATUS_STYLES[sale.printStatus] ?? ''
+                      <Badge
+                        className={`gap-1.5 border-transparent text-[11px] ${
+                          STATUS_TINT[sale.printStatus] ?? ''
                         }`}
                       >
+                        <span
+                          aria-hidden="true"
+                          className={`size-1.5 shrink-0 rounded-full ${
+                            STATUS_DOT[sale.printStatus] ?? 'bg-topbar-muted'
+                          }`}
+                        />
                         {sale.printStatus.toLowerCase()}
                         {sale.reprintCount > 0 ? ` · ${sale.reprintCount}x` : ''}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => navigate(`pos/receipt/${sale.id}`)}
-                        className="rounded border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                        className="h-11 px-3 text-xs"
                       >
                         Open
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}

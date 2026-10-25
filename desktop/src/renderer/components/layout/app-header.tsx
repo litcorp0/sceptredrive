@@ -1,4 +1,6 @@
-import { useQuery } from '@powersync/react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { useUnprintedCount } from '@/modules/sales'
 import type { StaffSession } from '../../lib/auth/staff-session'
 import { formatGhs } from '../../lib/format'
 import type { OpenShiftSummary, PosIdentityRow } from '../../lib/pos-runtime'
@@ -17,7 +19,11 @@ import { SyncBadge } from './sync-badge'
  * that visually separates chrome from the selling surface. The POS has no theme
  * toggle, so the light-mode semantic tokens are too dark to read as text here —
  * they carry the small status dot instead and the label stays in
- * `--topbar-foreground`. Every control is at least 44×44 px for a touch till.
+ * `--topbar-foreground`. Every control is at least 44×44 px for a touch till,
+ * and the strip's height comes from `--layout-topbar-height`.
+ *
+ * The unprinted-receipt count is a module query (`useUnprintedCount`), not SQL in
+ * the chrome: Plan 04's home strip shows the same number.
  */
 export function AppHeader({
   identity,
@@ -34,11 +40,7 @@ export function AppHeader({
   onSettings?: (() => void) | undefined
   lockNote?: string | null
 }) {
-  const unprinted = useQuery<{ count: number }>(
-    `SELECT COUNT(*) AS count FROM sale
-      WHERE print_status IN ('PENDING', 'FAILED', 'PRINTING')`,
-  )
-  const unprintedCount = unprinted.data?.[0]?.count ?? 0
+  const unprintedCount = useUnprintedCount()
 
   return (
     <header className="flex h-(--layout-topbar-height) shrink-0 items-center justify-between gap-4 bg-topbar px-5 text-topbar-foreground">
@@ -54,13 +56,14 @@ export function AppHeader({
             {identity?.terminalCode ?? 'Terminal not configured'}
             {shift ? (
               <span className="ml-2 font-normal text-topbar-muted">
-                Shift {shift.number} · float {formatGhs(shift.openingFloatMinor)}
+                Shift {shift.number} · float{' '}
+                <span className="font-mono tabular-nums">{formatGhs(shift.openingFloatMinor)}</span>
               </span>
             ) : (
-              <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-0.5 align-middle text-xs font-medium text-topbar-foreground">
+              <Badge className="ml-2 border-transparent bg-white/10 align-middle text-xs text-topbar-foreground">
                 <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-warn" />
                 No open shift
-              </span>
+              </Badge>
             )}
           </p>
         </div>
@@ -70,16 +73,17 @@ export function AppHeader({
         <div className="flex items-center gap-2 text-xs" data-testid="sync-cluster">
           <SyncBadge />
           {unprintedCount > 0 ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => navigate('pos/sales')}
               data-testid="unprinted-count"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-medium text-topbar-foreground transition-colors hover:bg-white/15"
+              className="h-11 gap-1.5 rounded-full bg-white/10 px-3 text-xs text-topbar-foreground hover:bg-white/15 hover:text-topbar-foreground"
               title="Receipts that still need printing"
             >
               <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-warn" />
-              {unprintedCount} to print
-            </button>
+              <span className="font-mono tabular-nums">{unprintedCount}</span> to print
+            </Button>
           ) : null}
         </div>
 
@@ -90,31 +94,33 @@ export function AppHeader({
           >
             {staff.name}
           </p>
-          <p className="font-mono text-[11px] leading-tight text-topbar-muted">
+          <p className="font-mono text-[11px] leading-tight text-topbar-muted tabular-nums">
             {staff.staffId} · {staff.role}
           </p>
         </div>
 
         {onSettings ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={onSettings}
-            className="h-11 min-h-11 min-w-11 rounded-md border border-white/40 px-3 text-xs font-medium text-topbar-foreground transition-colors hover:bg-white/10"
+            className="h-11 min-w-11 border border-white/40 px-3 text-xs text-topbar-foreground hover:bg-white/10 hover:text-topbar-foreground"
             data-testid="open-settings"
           >
             Settings
-          </button>
+          </Button>
         ) : null}
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={onLock}
-          className="h-11 min-h-11 min-w-11 rounded-md border border-white/40 px-3 text-xs font-medium text-topbar-foreground transition-colors hover:bg-white/10"
+          className="h-11 min-w-11 border border-white/40 px-3 text-xs text-topbar-foreground hover:bg-white/10 hover:text-topbar-foreground"
           data-testid="lock-terminal"
           title={lockNote ?? 'Sign out of this terminal'}
         >
           Lock
-        </button>
+        </Button>
       </div>
     </header>
   )

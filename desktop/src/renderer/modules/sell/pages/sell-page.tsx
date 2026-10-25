@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ManagerOverrideDialog, Modal } from '@/components/common'
+import { ManagerOverrideDialog, useDialogFocusReturn } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { PosConfigSnapshot } from '@/lib/api/types'
 import { endStaffSession, type StaffSession } from '@/lib/auth/staff-session'
 import { useCart } from '@/lib/cart/cart-store'
@@ -267,13 +277,14 @@ export function SellScreen({
       {notice ? (
         <output className="flex items-center justify-between gap-4 border-b border-amber-300 bg-amber-50 px-5 py-2 text-sm text-amber-900">
           <span>{notice}</span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setNotice(null)}
-            className="rounded px-2 py-0.5 text-xs font-medium hover:bg-amber-100"
+            className="h-11 px-2 text-xs hover:bg-amber-100"
           >
             Dismiss
-          </button>
+          </Button>
         </output>
       ) : null}
 
@@ -303,20 +314,27 @@ export function SellScreen({
               <span className="font-normal text-muted-foreground">{totals.itemCount} items</span>
             </h1>
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setConfirmClear(true)}
                 disabled={state.lines.length === 0}
-                className="h-8 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
+                className="h-11 px-3"
               >
                 Clear
-              </button>
+              </Button>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {status === 'loading' ? (
-              <p className="p-4 text-sm text-muted-foreground">Restoring the cart…</p>
+              <div className="grid gap-2 p-1">
+                <span className="sr-only">Restoring the cart…</span>
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
             ) : state.lines.length === 0 ? (
               <div className="flex h-full items-center justify-center p-6 text-center">
                 <p className="text-sm text-muted-foreground">
@@ -347,16 +365,16 @@ export function SellScreen({
 
           <div className="border-t border-border p-4">
             <CartTotalsPanel totals={totals} />
-            <button
+            <Button
               type="button"
               onClick={goTender}
               disabled={state.lines.length === 0}
-              className="mt-3 h-14 w-full rounded-lg bg-primary text-base font-semibold text-primary-foreground disabled:opacity-40"
+              className="mt-3 h-14 w-full text-base"
               data-testid="pay-button"
             >
               Pay {formatGhs(totals.priced.totalMinor)}{' '}
-              <span className="ml-1 text-xs font-normal opacity-70">F9</span>
-            </button>
+              <span className="ml-1 font-mono text-xs font-normal tabular-nums opacity-70">F9</span>
+            </Button>
           </div>
         </section>
 
@@ -467,41 +485,83 @@ export function SellScreen({
       ) : null}
 
       {confirmClear ? (
-        <Modal
-          title="Clear the sale?"
-          description="The cart and its draft will be discarded."
+        <ClearCartDialog
+          itemCount={totals.itemCount}
+          totalMinor={totals.priced.totalMinor}
           onClose={() => setConfirmClear(false)}
-          testId="clear-cart-dialog"
-          footer={
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmClear(false)}
-                className="h-10 flex-1 rounded-md border border-border text-sm font-medium hover:bg-muted"
-              >
-                Keep cart
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  clear()
-                  setSelectedLineId(null)
-                  setConfirmClear(false)
-                }}
-                className="h-10 flex-1 rounded-md bg-destructive text-sm font-semibold text-destructive-foreground"
-                data-testid="confirm-clear"
-              >
-                Clear sale
-              </button>
-            </div>
-          }
-        >
-          <p className="text-sm text-muted-foreground">
-            {totals.itemCount} item{totals.itemCount === 1 ? '' : 's'} worth{' '}
-            {formatGhs(totals.priced.totalMinor)} will be removed.
-          </p>
-        </Modal>
+          onConfirm={() => {
+            clear()
+            setSelectedLineId(null)
+            setConfirmClear(false)
+          }}
+        />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The clear-the-sale confirmation.
+ *
+ * Its own component so `useDialogFocusReturn` captures the Clear button when the
+ * dialog mounts, not the selling page when it first rendered. `Dialog` has no
+ * trigger here — the flag above owns the open state — so the hook is what
+ * returns focus.
+ */
+function ClearCartDialog({
+  itemCount,
+  totalMinor,
+  onClose,
+  onConfirm,
+}: {
+  itemCount: number
+  totalMinor: number
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const focusReturn = useDialogFocusReturn()
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent
+        {...focusReturn}
+        data-testid="clear-cart-dialog"
+        className="flex max-h-[90vh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <DialogHeader className="border-b border-border px-5 py-4 pr-16">
+          <DialogTitle className="text-base">Clear the sale?</DialogTitle>
+          <DialogDescription>The cart and its draft will be discarded.</DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <p className="text-sm text-muted-foreground">
+            {itemCount} item{itemCount === 1 ? '' : 's'} worth {formatGhs(totalMinor)} will be
+            removed.
+          </p>
+        </div>
+
+        <DialogFooter className="border-t border-border px-5 py-3">
+          <div className="flex w-full gap-2">
+            <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
+              Keep cart
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onConfirm}
+              className="h-11 flex-1"
+              data-testid="confirm-clear"
+            >
+              Clear sale
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

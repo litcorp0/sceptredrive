@@ -24,7 +24,7 @@ function Row({
       className={`flex items-baseline justify-between gap-3 text-sm ${muted ? 'text-muted-foreground' : ''}`}
     >
       <span>{label}</span>
-      <span className="font-mono" data-testid={testId}>
+      <span className="font-mono tabular-nums" data-testid={testId}>
         {negative && value > 0 ? '−' : ''}
         {formatGhs(value)}
       </span>
@@ -39,7 +39,7 @@ export function CartTotalsPanel({ totals }: { totals: CartTotals }) {
     <section aria-label="Sale totals" className="grid gap-1.5" data-testid="cart-totals">
       <div className="flex items-baseline justify-between text-sm text-muted-foreground">
         <span>Items</span>
-        <span className="font-mono" data-testid="totals-item-count">
+        <span className="font-mono tabular-nums" data-testid="totals-item-count">
           {totals.itemCount}
         </span>
       </div>
@@ -74,7 +74,7 @@ export function CartTotalsPanel({ totals }: { totals: CartTotals }) {
 
       <div className="mt-1 flex items-baseline justify-between border-t border-border pt-2">
         <span className="text-sm font-semibold">Total</span>
-        <span className="font-display text-xl font-bold tabular-nums" data-testid="totals-total">
+        <span className="font-mono text-xl font-bold tabular-nums" data-testid="totals-total">
           {formatGhs(priced.totalMinor)}
         </span>
       </div>

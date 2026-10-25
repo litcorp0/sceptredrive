@@ -1,5 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { type ReactNode, useMemo, useRef } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import type { SellableProduct } from '@/lib/cart/types'
 import {
   displayPriceMinor,
@@ -81,21 +83,17 @@ function ProductCard({
     >
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 text-sm leading-tight font-medium">{row.name}</span>
-        <span className="shrink-0 font-mono text-sm font-semibold">
+        <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">
           {price === null ? '—' : formatGhs(price)}
         </span>
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-mono text-[11px] text-muted-foreground">{row.sku}</span>
         <span className="flex items-center gap-1">
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <Badge variant="secondary" className="px-1.5 text-[10px] text-muted-foreground">
             {TAX_LABEL[row.tax_category] ?? row.tax_category}
-          </span>
-          <span
-            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TONE_CLASS[badge.tone]}`}
-          >
-            {badge.label}
-          </span>
+          </Badge>
+          <Badge className={`px-1.5 text-[10px] ${TONE_CLASS[badge.tone]}`}>{badge.label}</Badge>
         </span>
       </div>
     </button>
@@ -129,9 +127,11 @@ export function ProductGrid({
 
   if (rows.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        {empty}
-      </div>
+      <Empty className="h-full border border-dashed border-border">
+        <EmptyHeader>
+          <EmptyTitle className="text-sm font-normal text-muted-foreground">{empty}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     )
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ManagerOverrideDialog } from '@/components/common'
 import { AppHeader } from '@/components/layout'
+import { Button } from '@/components/ui/button'
 import type { PosConfigSnapshot } from '@/lib/api/types'
 import { getBinding, type LocalStaffBinding } from '@/lib/auth/bindings'
 import type { StaffSession } from '@/lib/auth/staff-session'
@@ -194,13 +195,14 @@ export function TenderScreen({
           className="border-b border-destructive/40 bg-destructive/5 px-5 py-2 text-sm text-destructive"
         >
           {error}
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setError(null)}
-            className="ml-3 rounded px-1.5 py-0.5 text-xs font-medium hover:bg-destructive/10"
+            className="ml-3 h-11 px-2 text-xs hover:bg-destructive/10"
           >
             Dismiss
-          </button>
+          </Button>
         </output>
       ) : null}
 
@@ -216,7 +218,7 @@ export function TenderScreen({
             </div>
             <div className="text-right">
               <p className="text-xs text-muted-foreground uppercase">Total due</p>
-              <p className="font-mono text-3xl font-bold" data-testid="tender-total">
+              <p className="font-mono text-3xl font-bold tabular-nums" data-testid="tender-total">
                 {formatGhs(totalMinor)}
               </p>
             </div>
@@ -224,34 +226,28 @@ export function TenderScreen({
 
           <fieldset className="mb-4 grid grid-cols-2 gap-2">
             <legend className="sr-only">Payment method</legend>
-            <button
+            <Button
               type="button"
+              variant={method === 'CASH' ? 'secondary' : 'outline'}
               onClick={() => setMethod('CASH')}
               aria-pressed={method === 'CASH'}
-              className={`h-12 rounded-lg border text-sm font-semibold ${
-                method === 'CASH'
-                  ? 'border-foreground/40 bg-muted'
-                  : 'border-border hover:bg-muted/60'
-              }`}
+              className="h-12 text-sm font-semibold"
               data-testid="method-cash"
             >
               Cash
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant={method === 'CREDIT' ? 'secondary' : 'outline'}
               onClick={() => setMethod('CREDIT')}
               disabled={!state.customer}
               aria-pressed={method === 'CREDIT'}
               title={state.customer ? undefined : 'A credit sale needs a customer'}
-              className={`h-12 rounded-lg border text-sm font-semibold disabled:opacity-40 ${
-                method === 'CREDIT'
-                  ? 'border-foreground/40 bg-muted'
-                  : 'border-border hover:bg-muted/60'
-              }`}
+              className="h-12 text-sm font-semibold"
               data-testid="method-credit"
             >
               Credit
-            </button>
+            </Button>
           </fieldset>
 
           {zeroTotal ? (
@@ -263,7 +259,7 @@ export function TenderScreen({
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-muted-foreground">Credit available</span>
-                  <span className="font-mono text-lg font-semibold">
+                  <span className="font-mono text-lg font-semibold tabular-nums">
                     {formatGhs(creditHeadroom(customerContext.credit))}
                   </span>
                 </div>
@@ -287,23 +283,25 @@ export function TenderScreen({
                     <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-900">
                       Approved by {state.creditOverride.approverStaffId} ·{' '}
                       {state.creditOverride.reasonCode}
-                      <button
+                      <Button
                         type="button"
+                        variant="link"
                         onClick={() => dispatch({ type: 'setCreditOverride', override: null })}
-                        className="ml-2 underline"
+                        className="ml-1 h-11 px-2 text-xs text-emerald-900"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ) : (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => setShowOverride(true)}
-                      className="mt-2 h-10 w-full rounded-md border border-border text-sm font-medium hover:bg-muted"
+                      className="mt-2 h-11 w-full"
                       data-testid="tender-request-approval"
                     >
                       Ask a manager
-                    </button>
+                    </Button>
                   )
                 ) : null}
               </div>
@@ -321,7 +319,7 @@ export function TenderScreen({
             <div className="mt-3 grid gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
               <div className="flex items-baseline justify-between">
                 <span className="text-muted-foreground">Receipt</span>
-                <span className="font-mono" data-testid="tender-receipt">
+                <span className="font-mono tabular-nums" data-testid="tender-receipt">
                   {receiptNumber || '—'}
                 </span>
               </div>
@@ -333,24 +331,25 @@ export function TenderScreen({
           </div>
 
           <div className="grid gap-2 border-t border-border p-4">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => navigate('pos')}
-              className="h-11 rounded-md border border-border text-sm font-medium hover:bg-muted"
+              className="h-11"
               data-testid="back-to-cart"
             >
               Back to cart
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={complete}
               disabled={!ready || completing}
-              className="h-14 rounded-lg bg-primary text-base font-semibold text-primary-foreground disabled:opacity-40"
+              className="h-14 text-base"
               data-testid="complete-sale"
             >
               {completing ? 'Recording sale…' : 'Complete sale'}{' '}
-              <span className="ml-1 text-xs font-normal opacity-70">F9</span>
-            </button>
+              <span className="ml-1 font-mono text-xs font-normal tabular-nums opacity-70">F9</span>
+            </Button>
             {cashShort ? (
               <p className="text-center text-xs text-amber-700">
                 Cash received is {formatGhs(totalMinor - tendered)} short of the total.

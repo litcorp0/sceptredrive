@@ -69,3 +69,10 @@ exempt route files. None of them is a counter screen.
 (Phase 7 deleted `lib/utils.ts`). Rewrite that one import line after any `shadcn add`, and diff
 `src/renderer/index.css` — the CLI appends 16 palette variables that would override
 `@sceptre/brand`.
+
+`bunx shadcn@latest add` also plans to overwrite every existing primitive even without
+`--overwrite`, so the ritual is: move `components/ui/*.tsx` aside **outside the tree**, generate,
+restore them byte-identical (`git status` must show only the new files), then diff
+`src/renderer/index.css` and revert any injected `--primary`, `--sidebar*`, oklch, or hsl block.
+Finally run `bunx biome check --write` on the new files: the registry emits double quotes and
+`bun run --filter desktop lint` fails on formatting alone.

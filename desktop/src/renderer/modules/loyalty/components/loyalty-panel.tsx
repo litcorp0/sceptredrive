@@ -1,4 +1,4 @@
-import { createPortal } from 'react-dom'
+import { Button } from '@/components/ui/button'
 import type { PosLoyaltyConfig } from '@/lib/api/types'
 import type { CartTotals } from '@/lib/cart/totals'
 import type { CartCustomer } from '@/lib/cart/types'
@@ -16,8 +16,8 @@ import { LoyaltyRedeemDialog } from './loyalty-redeem-dialog'
  *
  * The panel owns the redeem dialog (P10-D11), so the sell page sees one
  * component and one `open` flag. The cart preview stays a callback: the panel
- * must not learn how the cart is priced. The dialog is portalled because the rail
- * is hidden below `lg`, and F6 must still open it there.
+ * must not learn how the cart is priced. The dialog portals itself to the body,
+ * so the rail being hidden below `lg` does not stop F6 from opening it.
  */
 export function LoyaltyPanel({
   customer,
@@ -65,14 +65,17 @@ export function LoyaltyPanel({
           <div className="grid gap-2 text-xs" data-testid="loyalty-panel">
             <div className="flex items-baseline justify-between">
               <span className="text-muted-foreground">Points available</span>
-              <span className="font-mono font-semibold" data-testid="loyalty-available">
+              <span
+                className="font-mono font-semibold tabular-nums"
+                data-testid="loyalty-available"
+              >
                 {loyalty.availablePoints}
               </span>
             </div>
 
             <div className="flex items-baseline justify-between">
               <span className="text-muted-foreground">This sale earns</span>
-              <span className="font-mono" data-testid="loyalty-earn-preview">
+              <span className="font-mono tabular-nums" data-testid="loyalty-earn-preview">
                 {totals.earnPreviewPoints > 0 ? `${totals.earnPreviewPoints} pts` : '0 points'}
               </span>
             </div>
@@ -84,29 +87,32 @@ export function LoyaltyPanel({
               >
                 <div className="flex items-baseline justify-between">
                   <span className="font-medium text-emerald-900">{redeemPoints} pts redeemed</span>
-                  <span className="font-mono text-emerald-900">
+                  <span className="font-mono text-emerald-900 tabular-nums">
                     −{formatGhs(totals.loyaltyDiscountMinor)}
                   </span>
                 </div>
                 <p className="mt-0.5 text-[10px] text-emerald-800">
                   Pre-tax discount · {config.minimumRedeemPoints} pt minimum
                 </p>
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="sm"
                   onClick={onClear}
-                  className="mt-1 rounded px-1 py-0.5 text-[10px] font-medium text-emerald-900 underline"
+                  className="h-11 px-1 text-[10px] text-emerald-900"
                   data-testid="clear-redemption"
                 >
                   Remove redemption
-                </button>
+                </Button>
               </div>
             ) : null}
 
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={onRedeem}
               disabled={!canRedeem}
-              className="h-9 w-full rounded-md border border-border text-xs font-medium hover:bg-muted disabled:opacity-40"
+              className="h-11 w-full text-xs"
               data-testid="redeem-points"
               title={
                 canRedeem
@@ -115,7 +121,7 @@ export function LoyaltyPanel({
               }
             >
               Redeem points <span className="opacity-60">F6</span>
-            </button>
+            </Button>
 
             {!canRedeem && loyalty.availablePoints > 0 ? (
               <p className="text-[10px] text-muted-foreground">
@@ -128,21 +134,18 @@ export function LoyaltyPanel({
         )}
       </section>
 
-      {open
-        ? createPortal(
-            <LoyaltyRedeemDialog
-              loyalty={loyalty}
-              config={config}
-              cartNetMinor={totals.priced.netMinor}
-              cartTotalMinor={totals.priced.totalMinor}
-              currentPoints={redeemPoints}
-              preview={onPreview}
-              onClose={onClose}
-              onConfirm={onConfirm}
-            />,
-            document.body,
-          )
-        : null}
+      {open ? (
+        <LoyaltyRedeemDialog
+          loyalty={loyalty}
+          config={config}
+          cartNetMinor={totals.priced.netMinor}
+          cartTotalMinor={totals.priced.totalMinor}
+          currentPoints={redeemPoints}
+          preview={onPreview}
+          onClose={onClose}
+          onConfirm={onConfirm}
+        />
+      ) : null}
     </>
   )
 }
