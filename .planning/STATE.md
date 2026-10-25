@@ -11,9 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 07** (tender and receipt modules). Plans 01–06 are
-complete, including the `#home` landing screen and the selling screen's redesign; all fourteen
-modules are migrated and the strict gate covers both clients.
+**Next action:** Execute **Phase 10, Plan 08** (shift, login, settings, sales, and sync modules).
+Plans 01–07 are complete; all fourteen modules are migrated, the strict gate covers both clients,
+and the tender and receipt screens now read at counter distance.
 
 ---
 
@@ -31,7 +31,7 @@ modules are migrated and the strict gate covers both clients.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (6/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (7/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -39,6 +39,53 @@ modules are migrated and the strict gate covers both clients.
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
 ### Phase 10 execution notes (2026-10-25)
+
+- **Plan 07 complete** (commits `c93457e`, `8baf7f0`). The tender screen now reads change at
+  counter distance and the receipt is the paper. Desktop **384** unchanged, no test edited.
+- **Two commits, not four, and the reason is structural.** The plan's fourth commit
+  ("semantic colour tokens replace the raw palette") has no independent diff: every raw class
+  in these two modules sat on a control the first three commits were already restyling, so it
+  is folded in rather than staged as a fourth pass over files it had just rewritten.
+- **The plan's `Exact` claim was stale**, exactly like Plan 06's "24–28 px" one: `Exact` was
+  already `h-11` (44 px) from Plan 03, not `h-10`. The keypad keys were already 48 px. What
+  actually changed is the method pair (12 px taller and now a segmented control) and the
+  credit panel.
+- **The total did not move into the money block.** The plan's structure diagram puts Total,
+  Received, and Change in one stack; the keypad's `Total due` row would have been the second
+  copy of a figure the totals rail already shows. Total stays in the screen header as muted
+  context (`text-lg`, `text-muted-foreground`) and the keypad holds the two figures a cashier
+  touches. Reading order is unchanged: Total → Received → Change.
+- **`data-testid="tender-total"` stays outside the cash branch on purpose.** Plan 06's perf
+  evidence waits on that id before clicking `exact-cash`; moving it into the keypad would have
+  made it absent in the credit and zero-total branches.
+- **Radix `ToggleGroup type="single"` reports `''` when the pressed item is pressed again** —
+  documented under "Ensuring there is always a value". Unhandled, clicking the already-selected
+  *Cash* would clear the method, `ready` would read as if no method were chosen, and `F9` would
+  complete with a `TenderMethod` that is not in the union. The empty value is now ignored.
+- **The selected state is non-colour on purpose.** A check icon in a reserved 16 px box, a 2 px
+  border, and a `font-bold` label: three signals that survive colour blindness (WCAG 2.2
+  SC 1.4.1). The icon's box is reserved in both states so choosing a method cannot shift the
+  label sideways.
+- **The receipt's surface moved from `bg-white text-black` to `--card`/`--card-foreground`.**
+  Byte-identical in the POS's light-only theme (P10-D8) and it removes the last raw palette
+  from the module. `role="article"` on the `Card` keeps the accessible name the `<article>`
+  element carried; `Card` alone renders a `div`, where `aria-label` would be inert.
+- **The print badge keeps the word "Printed".** `data-status` still carries the machine value,
+  but labels are now `Not printed yet` / `Printing…` / `Printed` / `Did not print` — and the
+  Phase 6 evidence files select that chip with `/Printed/i`, so the word is load-bearing.
+- **The 44/48/56 px claim was checked in the compiled stylesheet, not assumed.** The renderer
+  builds (`bunx vite build --config vite.renderer.config.mts`, **1,266.69 kB**) and the emitted
+  CSS carries `h-11`→2.75rem, `h-12`→3rem, `h-14`→3.5rem, plus every new semantic utility
+  (`data-[state=on]:border-2`, `border-foreground`, `bg-ok/10`, `bg-warn/10`, `bg-info/10`,
+  `size-1.5`, `font-display`). A misspelt class would have compiled to nothing.
+- **Gates.** Desktop **384/384** (45 files, none edited), API **394**, `check-types` 6/6, lint
+  exit 0 (24 pre-existing warnings), `brand:check` over 869 tracked files, `tokens:check`,
+  `modules:check:pos` 14/14. `grep -E "amber-|emerald-|sky-|red-|zinc-|neutral-|bg-white|text-black"`
+  over both modules returns nothing.
+- **Not proven here, by design:** the live 1024 × 768 pass with a real printer and a cash drawer.
+  It needs an enrolled terminal, and it is Plan 09's counter audit — which also owns the width,
+  keyboard, reduced-motion, and offline-copy matrix. No figure was checked against a hand count
+  or a paper receipt yet.
 
 - **Plan 06 complete** (commits `fd289f9`, `196209c`). The product card is content-sized with a
   three-line name, its height owned by `--product-card-height` in `index.css` and read by the
@@ -162,7 +209,7 @@ modules are migrated and the strict gate covers both clients.
 | 04 | Home data layer — reactive queries and pure aggregation | ✅ Complete |
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ✅ Complete |
 | 06 | Sell module — catalog, cart, and the counter panels | ✅ Complete |
-| 07 | Tender and receipt modules | ⬜ Not started |
+| 07 | Tender and receipt modules | ✅ Complete |
 | 08 | Shift, login, settings, sales, and sync modules | ⬜ Not started |
 | 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ⬜ Not started |
 | 10 | Verification, evidence, and state update | ⬜ Not started |
