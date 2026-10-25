@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ManagerOverrideDialog } from '@/components/common'
+import { ManagerOverrideDialog, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import type { PosConfigSnapshot } from '@/lib/api/types'
@@ -12,6 +12,7 @@ import {
   creditDecision,
   creditHeadroom,
   creditNeedsApproval,
+  creditUsed,
   overLimitMinor,
 } from '@/lib/credit/headroom'
 import { useCustomerContext } from '@/lib/customers/context'
@@ -25,7 +26,7 @@ import { peekReceiptNumber } from '@/lib/sale/document-sequence'
 import type { TenderMethod } from '@/lib/sale/sale-draft'
 import { usePosShortcuts } from '@/lib/shortcuts'
 import { CartTotalsPanel } from '@/modules/cart'
-import { CashKeypad, NoPaymentDue } from '../components/tender-panel'
+import { CashKeypad, NoPaymentDue, TenderMethodToggle } from '../components/tender-panel'
 
 /**
  * Tender screen (Plan 06 Task 7).
@@ -38,6 +39,12 @@ import { CashKeypad, NoPaymentDue } from '../components/tender-panel'
  * A credit sale that needs a manager opens the override dialog instead of
  * silently completing — and that dialog always offers "continue without
  * approval", so the till never blocks (D17).
+ *
+ * Plan 07 of Phase 10 retuned it for counter distance: the total became muted
+ * context so the change is the largest figure on the screen, the method pair
+ * became a 44 px segmented control whose selected state survives colour
+ * blindness, and the credit panel now states the limit, what is already owed,
+ * and what is left — the three numbers a cashier is asked about.
  */
 export function TenderScreen({
   identity,
@@ -190,26 +197,29 @@ export function TenderScreen({
       />
 
       {error ? (
-        <output
+        <StatusNote
+          tone="danger"
           role="alert"
-          className="border-b border-destructive/40 bg-destructive/5 px-5 py-2 text-sm text-destructive"
+          className="rounded-none border-x-0 border-t-0 px-5 py-1.5 text-sm"
+          action={
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setError(null)}
+              className="h-11 min-w-11 px-2 text-xs text-foreground hover:bg-foreground/5"
+            >
+              Dismiss
+            </Button>
+          }
         >
           {error}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setError(null)}
-            className="ml-3 h-11 px-2 text-xs hover:bg-destructive/10"
-          >
-            Dismiss
-          </Button>
-        </output>
+        </StatusNote>
       ) : null}
 
       <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-label="Payment" className="min-h-0 overflow-y-auto p-5">
-          <div className="mb-4 flex items-end justify-between">
-            <div>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold">Tender</h1>
               <p className="text-sm text-muted-foreground">
                 {totals.itemCount} item{totals.itemCount === 1 ? '' : 's'} ·{' '}
@@ -218,37 +228,25 @@ export function TenderScreen({
             </div>
             <div className="text-right">
               <p className="text-xs text-muted-foreground uppercase">Total due</p>
-              <p className="font-mono text-3xl font-bold tabular-nums" data-testid="tender-total">
+              <p
+                className="font-mono text-lg text-muted-foreground tabular-nums"
+                data-testid="tender-total"
+              >
                 {formatGhs(totalMinor)}
               </p>
             </div>
           </div>
 
-          <fieldset className="mb-4 grid grid-cols-2 gap-2">
-            <legend className="sr-only">Payment method</legend>
-            <Button
-              type="button"
-              variant={method === 'CASH' ? 'secondary' : 'outline'}
-              onClick={() => setMethod('CASH')}
-              aria-pressed={method === 'CASH'}
-              className="h-12 text-sm font-semibold"
-              data-testid="method-cash"
-            >
-              Cash
-            </Button>
-            <Button
-              type="button"
-              variant={method === 'CREDIT' ? 'secondary' : 'outline'}
-              onClick={() => setMethod('CREDIT')}
-              disabled={!state.customer}
-              aria-pressed={method === 'CREDIT'}
-              title={state.customer ? undefined : 'A credit sale needs a customer'}
-              className="h-12 text-sm font-semibold"
-              data-testid="method-credit"
-            >
-              Credit
-            </Button>
-          </fieldset>
+          <TenderMethodToggle
+            method={method}
+            onChange={setMethod}
+            creditDisabled={!state.customer}
+          />
+          {state.customer ? null : (
+            <p className="mb-4 text-xs text-muted-foreground">
+              A credit sale needs a customer. Choose one on the sale screen.
+            </p>
+          )}
 
           {zeroTotal ? (
             <NoPaymentDue />
@@ -257,18 +255,33 @@ export function TenderScreen({
           ) : (
             <div className="grid gap-3" data-testid="credit-tender">
               <div className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-muted-foreground">Credit available</span>
-                  <span className="font-mono text-lg font-semibold tabular-nums">
-                    {formatGhs(creditHeadroom(customerContext.credit))}
-                  </span>
-                </div>
-                <p
-                  className={`mt-2 rounded px-2 py-1 text-xs font-medium ${
-                    decision === 'OK'
-                      ? 'bg-emerald-50 text-emerald-800'
-                      : 'bg-amber-50 text-amber-900'
-                  }`}
+                <dl className="grid gap-1">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-xs text-muted-foreground">Credit limit</dt>
+                    <dd className="font-mono text-sm tabular-nums">
+                      {formatGhs(customerContext.credit.limitMinor)}
+                    </dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-xs text-muted-foreground">Owed at this branch</dt>
+                    <dd className="font-mono text-sm tabular-nums">
+                      {formatGhs(creditUsed(customerContext.credit))}
+                    </dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-4 border-t border-border pt-1">
+                    <dt className="text-xs font-medium text-muted-foreground">Available</dt>
+                    <dd
+                      className="font-mono text-lg font-semibold tabular-nums"
+                      data-testid="credit-available"
+                    >
+                      {formatGhs(creditHeadroom(customerContext.credit))}
+                    </dd>
+                  </div>
+                </dl>
+
+                <StatusNote
+                  tone={decision === 'OK' ? 'ok' : 'notice'}
+                  className="mt-2"
                   data-testid="credit-tender-decision"
                   data-decision={decision}
                 >
@@ -276,22 +289,23 @@ export function TenderScreen({
                   {decision === 'OVER_LIMIT'
                     ? ` — over by ${formatGhs(overLimitMinor(customerContext.credit, totalMinor))}`
                     : ''}
-                </p>
+                  {decision !== 'OK' ? ' A manager can approve it.' : ''}
+                </StatusNote>
 
                 {decision !== 'OK' ? (
                   state.creditOverride ? (
-                    <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-900">
+                    <StatusNote tone="ok" className="mt-2">
                       Approved by {state.creditOverride.approverStaffId} ·{' '}
                       {state.creditOverride.reasonCode}
                       <Button
                         type="button"
                         variant="link"
                         onClick={() => dispatch({ type: 'setCreditOverride', override: null })}
-                        className="ml-1 h-11 px-2 text-xs text-emerald-900"
+                        className="ml-1 h-11 px-2 text-xs text-foreground"
                       >
                         Remove
                       </Button>
-                    </div>
+                    </StatusNote>
                   ) : (
                     <Button
                       type="button"
@@ -351,9 +365,9 @@ export function TenderScreen({
               <span className="ml-1 font-mono text-xs font-normal tabular-nums opacity-70">F9</span>
             </Button>
             {cashShort ? (
-              <p className="text-center text-xs text-amber-700">
+              <StatusNote tone="notice" role="status">
                 Cash received is {formatGhs(totalMinor - tendered)} short of the total.
-              </p>
+              </StatusNote>
             ) : null}
           </div>
         </aside>
