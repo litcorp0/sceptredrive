@@ -66,12 +66,18 @@ enrolment code field.
 - Manager unlock is a separate `Dialog` (Plan 03) and never blocks a sale in progress — it is
   reached from the override dialog, not on top of a completed tender.
 - Forced PIN change keeps `pinMustChange` semantics exactly; the temp-PIN banner stays.
+  *(Correction after execution: there is no temp-PIN banner anywhere in the renderer — the only
+  trace was a comment claiming one exists. The comment now says what actually happens, that
+  `pinMustChange` stays set so the next sign-in asks again. Nothing was removed.)*
 - Every string stays in the operator's voice: "Enter your PIN", not "Authentication required".
 
 ### 3. Shift
 
 - Float, expected cash, variance as three tabular figures; variance colours carry a word
   ("Over GHS 12.00" / "Short GHS 4.00") so it is not colour-only.
+  *(Correction after execution: variance cannot exist until the drawer is counted, so while the
+  shift is open the third figure reads "—" with the caption "Known when you count the drawer".
+  A zero would have said the drawer balanced.)*
 - Open and close dialogs are `Dialog`s with a money input seeded by `formatMinorPlain` (fixed in
   Plan 03) and parsed by `parseGhsToMinor`; a non-numeric value is rejected inline, not on
   submit.
@@ -85,6 +91,9 @@ enrolment code field.
 
 - Two `Card` sections: terminal (identity, read-only) and printer (target, copies, charset,
   cedi glyph, drawer pin) — the same `device_setting` keys, unchanged.
+  *(Correction after execution: the selling-policy, loyalty, and PIN rows are labelled groups
+  inside the identity card rather than deleted. Read literally, "two sections" would have removed
+  the discount caps and lockout policy a manager reads on the till.)*
 - Manager-only, exactly as today (`staff.role === 'CASHIER'` cannot reach it).
 - A printer self-test button and its result line, with the outcome in words rather than a
   colour.
@@ -100,6 +109,8 @@ enrolment code field.
 - Empty state becomes `Empty`: *"No sales yet today."* plus what appears here and that it
   survives a restart (the existing, useful sentence).
 - An unprinted older receipt is still listed, because a printer problem must never hide a sale.
+  *(Correction after execution: this needed no code. `listSalesBetween` already carries
+  `OR print_status IN ('PENDING','FAILED','PRINTING')`; only the screen's copy understated it.)*
 
 ### 6. Sync
 
@@ -130,6 +141,9 @@ bun run modules:check
 bun run --filter desktop test:e2e            # shell + packaged
 grep -rn "amber-\|emerald-\|sky-\|red-\|zinc-" desktop/src/renderer/modules \
   desktop/src/renderer/components/layout desktop/src/renderer/components/common   # expect nothing
+
+# Note: that pattern also matches 'stored-token' in desktop-api.test.ts ('red-' inside
+# 'stored-'). A gate needs a class-shaped pattern, not a substring.
 ```
 
 (The `routes/**` files are thin re-exports after Plan 02, so they carry no classes and are not

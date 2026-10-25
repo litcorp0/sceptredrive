@@ -11,9 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 08** (shift, login, settings, sales, and sync modules).
-Plans 01–07 are complete; all fourteen modules are migrated, the strict gate covers both clients,
-and the tender and receipt screens now read at counter distance.
+**Next action:** Execute **Phase 10, Plan 09** (counter audit — widths, keyboard, reduced motion,
+offline copy). Plans 01–08 are complete; all fourteen modules are migrated, the strict gate covers
+both clients, and a first install now opens enrolment.
 
 ---
 
@@ -31,7 +31,7 @@ and the tender and receipt screens now read at counter distance.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (7/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (8/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -39,6 +39,66 @@ and the tender and receipt screens now read at counter distance.
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
 ### Phase 10 execution notes (2026-10-25)
+
+- **Plan 08 complete** (commits `9f4ba3d`, `697a116`, `2abeb6a`, `2443876`, `7194351`,
+  `e498bae`, `36b6043`). Seven commits, one per task, as the plan listed them. Desktop
+  **387 → 401** (three new test files: routing, lockout copy, variance); no existing assertion
+  edited. API 394, shared 149 unchanged.
+- **A first install now opens enrolment, and it was proven on a real fresh install.** The outer
+  switch moved into `topLevelScreen(parseHash(hash))` so it is testable without a database or an
+  Electron window: empty, `#`, `#/`, and an unknown hash all resolve to sign-in. A one-off
+  Playwright run against the built app with a brand-new `userData` directory reported **9/9** —
+  the enrolment field is visible, the heading says what it is for, no keychain or version text
+  reaches a cashier, `#diagnostics` still opens the shell (which now says it is not the till),
+  `#spike` still renders, and `#typo` returns to enrolment rather than to the shell. The script
+  lives outside the repo because it needs a packaged build; Plan 09's audit owns that matrix.
+- **The landed fix cost two E2E edits, and both are deliberate.** `security-smoke.mjs` (two
+  legs) and `sync-smoke.mjs` waited for `shell-ready`, which is now a named route. They enter
+  `#diagnostics` explicitly, after `waitForLoadState('domcontentloaded')`, and the packaged shell
+  smoke still passes **38/38** — including "no CSP violations in the console", which is the
+  assertion that proves booting into the sign-in screen does not break the policy.
+- **`sync-smoke` remains broken for its own pre-existing reason** (`pos-shell`, recorded in Phase
+  6/Plan 05). This plan did not make it worse and did not fix it — fixing it needs a signed-in
+  fixture, which is the audit's job. It also means `sync-smoke` was **not** run to green here.
+- **The desktop vitest had no `@` alias, so the first module `utils/` file with a value import
+  could not be tested at all.** `desktop/vitest.config.mts` gained the alias. Every existing test
+  passed only because they are relative-only by accident.
+- **Three plan premises were wrong and are recorded rather than implemented.** (a) "the temp-PIN
+  banner stays" — there is no banner, anywhere; the only trace is a comment claiming one exists.
+  The comment now says what actually happens: `pinMustChange` stays set, so the next sign-in asks
+  again. (b) "Two `Card` sections: terminal and printer" — taking it literally would have deleted
+  the discount caps, loyalty rates, and lockout policy a manager reads on the till, so they are
+  labelled groups *inside* the identity card; two cards, nothing lost. (c) "An unprinted older
+  receipt is still listed" needed no code: `listSalesBetween` already carries
+  `OR print_status IN ('PENDING','FAILED','PRINTING')`, so the behaviour existed and only the
+  copy understated it.
+- **The variance tile is honest while the shift is open.** Variance cannot exist before the
+  drawer is counted, so the third figure reads "—" with the caption *Known when you count the
+  drawer* rather than a zero that would say the drawer balanced. The real figure appears in the
+  close summary and in the close dialog, both in words.
+- **Words beat colour in three places this plan.** `varianceWords` ("Over GH₵12.00" / "Short
+  GH₵4.00" / "Exact") is a pure `utils/` function with four cases; a conflict is only styled as a
+  problem at `HIGH`, and it says "High — needs review"; the settings self-test says "Test print
+  sent" or "The test print did not go through. <reason>". The previous versions encoded all three
+  in a hue.
+- **The PIN pad gained a hidden field, not a second control.** The number row types, Backspace
+  edits, Enter submits, and every keypad button hands focus back. The field is
+  `type="password"` so the value never reaches the accessibility tree, and a live region announces
+  "3 of 6 digits entered". `lockoutMessage` names the remaining minutes, including "1 minute" and
+  a partly elapsed one rounded up.
+- **The sweep is empty and the grep is a trap.** `grep -E "amber-|emerald-|sky-|red-|zinc-"` over
+  `modules/**`, `components/{layout,common}/**`, and the two route files returns nothing;
+  `#dev/sync`, `#dev/print`, `#spike`, and `#diagnostics` keep raw classes as the plan allows.
+  **The pattern also matches `'stored-token'`** in `desktop-api.test.ts` (`red-` inside
+  `stored-`), so a future gate must use a class-shaped pattern rather than a substring.
+- **Gates.** Desktop **401/401** (48 files), shared **149**, API **394**, `check-types` 6/6, lint
+  exit 0 (24 pre-existing warnings), `brand:check` over 875 tracked files, `tokens:check`,
+  `modules:check:strict` 14/14 both clients, packaged shell E2E **38/38** after a real
+  `electron-forge package` (the Forge package-manager probe still needs
+  `npm_config_user_agent="npm/11.16.0 node/v24.18.0 linux x64"`).
+- **Not proven here:** the PIN pad's number-row/Tab path and the lockout sentence against a real
+  lock, because both need an enrolled terminal with a staff binding; the six screens' 1024 × 768
+  layout and the reduced-motion pass. All of it is Plan 09's counter audit.
 
 - **Plan 07 complete** (commits `c93457e`, `8baf7f0`, `ee0cbd8`). The tender screen now reads
   change at counter distance and the receipt is the paper. Desktop **387** (was 384; three new
@@ -239,7 +299,7 @@ and the tender and receipt screens now read at counter distance.
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ✅ Complete |
 | 06 | Sell module — catalog, cart, and the counter panels | ✅ Complete |
 | 07 | Tender and receipt modules | ✅ Complete |
-| 08 | Shift, login, settings, sales, and sync modules | ⬜ Not started |
+| 08 | Shift, login, settings, sales, and sync modules | ✅ Complete |
 | 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ⬜ Not started |
 | 10 | Verification, evidence, and state update | ⬜ Not started |
 
