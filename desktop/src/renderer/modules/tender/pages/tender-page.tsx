@@ -27,6 +27,7 @@ import type { TenderMethod } from '@/lib/sale/sale-draft'
 import { usePosShortcuts } from '@/lib/shortcuts'
 import { CartTotalsPanel } from '@/modules/cart'
 import { CashKeypad, NoPaymentDue, TenderMethodToggle } from '../components/tender-panel'
+import { appendPesewaDigit, removePesewaDigit } from '../utils/pesewa'
 
 /**
  * Tender screen (Plan 06 Task 7).
@@ -115,8 +116,14 @@ export function TenderScreen({
     amountMinor: totalMinor,
   })
 
+  // The local read of the credit profile is asynchronous. Until it answers, "no account here"
+  // and "not looked yet" are indistinguishable, and acting on the first would offer a manager
+  // override to a customer who has a limit (Plan 09's audit found exactly that).
+  const creditChecking = method === 'CREDIT' && customerContext.creditLoading
+
   const cashShort = method === 'CASH' && !zeroTotal && tendered < totalMinor
-  const ready = Boolean(binding) && Boolean(shift) && Boolean(receiptNumber) && !cashShort
+  const ready =
+    Boolean(binding) && Boolean(shift) && Boolean(receiptNumber) && !cashShort && !creditChecking
 
   function complete() {
     if (completing) return
@@ -126,6 +133,10 @@ export function TenderScreen({
     }
     if (!binding) {
       setError('This terminal has no staff binding; sign in again')
+      return
+    }
+    if (creditChecking) {
+      setError('Still checking this customer’s credit account. Press Complete again.')
       return
     }
     if (
@@ -178,8 +189,30 @@ export function TenderScreen({
       })
   }
 
+  /*
+   * The number row types the amount. A till has a keyboard as well as a screen, and until Plan
+   * 09's audit the cashier had to Tab to the on-screen keys to enter cash. The digit model is
+   * the keypad's own (`appendPesewaDigit`), so typing and tapping cannot disagree, and the
+   * shortcut layer already ignores printable keys while a field has focus.
+   */
+  const cashEntry = method === 'CASH' && !zeroTotal
+  const digitHandlers = Object.fromEntries(
+    [...'0123456789'].map((digit) => [
+      digit,
+      () => {
+        if (!cashEntry) return
+        setTendered((current) => appendPesewaDigit(current, digit))
+      },
+    ]),
+  )
+
   usePosShortcuts(
     {
+      ...digitHandlers,
+      Backspace: () => {
+        if (!cashEntry) return
+        setTendered((current) => removePesewaDigit(current))
+      },
       F9: complete,
       Escape: () => navigate('pos'),
     },
@@ -279,18 +312,24 @@ export function TenderScreen({
                   </div>
                 </dl>
 
-                <StatusNote
-                  tone={decision === 'OK' ? 'ok' : 'notice'}
-                  className="mt-2"
-                  data-testid="credit-tender-decision"
-                  data-decision={decision}
-                >
-                  {CREDIT_DECISION_MESSAGES[decision]}
-                  {decision === 'OVER_LIMIT'
-                    ? ` — over by ${formatGhs(overLimitMinor(customerContext.credit, totalMinor))}`
-                    : ''}
-                  {decision !== 'OK' ? ' A manager can approve it.' : ''}
-                </StatusNote>
+                {creditChecking ? (
+                  <StatusNote tone="info" role="status" className="mt-2">
+                    Checking this customer’s credit account…
+                  </StatusNote>
+                ) : (
+                  <StatusNote
+                    tone={decision === 'OK' ? 'ok' : 'notice'}
+                    className="mt-2"
+                    data-testid="credit-tender-decision"
+                    data-decision={decision}
+                  >
+                    {CREDIT_DECISION_MESSAGES[decision]}
+                    {decision === 'OVER_LIMIT'
+                      ? ` — over by ${formatGhs(overLimitMinor(customerContext.credit, totalMinor))}`
+                      : ''}
+                    {decision !== 'OK' ? ' A manager can approve it.' : ''}
+                  </StatusNote>
+                )}
 
                 {decision !== 'OK' ? (
                   state.creditOverride ? (

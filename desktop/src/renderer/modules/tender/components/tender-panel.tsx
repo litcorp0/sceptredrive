@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatGhs } from '@/lib/format'
 import type { TenderMethod } from '@/lib/sale/sale-draft'
+import { appendPesewaDigit, removePesewaDigit } from '../utils/pesewa'
 import { nextTenderMethod } from '../utils/tender-method'
 
 /**
@@ -35,15 +36,8 @@ export function CashKeypad({
   tenderedMinor: number
   onChange: (minor: number) => void
 }) {
-  const digits = String(tenderedMinor)
   const change = tenderedMinor > totalMinor ? tenderedMinor - totalMinor : 0
   const short = tenderedMinor < totalMinor
-
-  function press(digit: string) {
-    const next = `${digits}${digit}`.replace(/^0+(?=\d)/, '')
-    if (next.length > 9) return
-    onChange(Number(next))
-  }
 
   return (
     <div className="grid gap-3" data-testid="cash-keypad">
@@ -109,7 +103,7 @@ export function CashKeypad({
             key={digit}
             type="button"
             variant="outline"
-            onClick={() => press(digit)}
+            onClick={() => onChange(appendPesewaDigit(tenderedMinor, digit))}
             className="h-12 bg-card text-lg font-semibold"
             aria-label={`Digit ${digit}`}
           >
@@ -127,7 +121,7 @@ export function CashKeypad({
         <Button
           type="button"
           variant="outline"
-          onClick={() => press('0')}
+          onClick={() => onChange(appendPesewaDigit(tenderedMinor, '0'))}
           className="h-12 bg-card text-lg font-semibold"
           aria-label="Digit 0"
         >
@@ -136,7 +130,7 @@ export function CashKeypad({
         <Button
           type="button"
           variant="outline"
-          onClick={() => onChange(Math.floor(tenderedMinor / 10))}
+          onClick={() => onChange(removePesewaDigit(tenderedMinor))}
           className="h-12 bg-card text-xs text-muted-foreground"
           aria-label="Backspace"
         >
