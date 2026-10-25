@@ -46,22 +46,7 @@ const REQUIRED_MODULES = [
 ]
 
 /** Names still to migrate. Each plan deletes its own entry. */
-const PENDING_MODULES = [
-  'auth',
-  'cart',
-  'catalog',
-  'credit',
-  'customers',
-  'home',
-  'loyalty',
-  'receipt',
-  'sales',
-  'sell',
-  'settings',
-  'shift',
-  'sync',
-  'tender',
-]
+const PENDING_MODULES = ['home']
 
 /** Route files that legitimately keep their body. */
 const ROUTE_EXEMPTIONS = {
