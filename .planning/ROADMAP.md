@@ -155,7 +155,7 @@ Evidence: `.planning/phases/06-pos-offline-core/01-VERIFICATION.md` and
 `phases/06-pos-offline-core/evidence/` (walkthrough 162/162, race 18/18, duplicate 24/24,
 Electron E2E 51/51, shell 38/38, print 21/21; API 354, shared 73, desktop 339).
 Development/CI use the self-hosted PowerSync Docker service; staging/production use
-PowerSync Cloud (Phase 9 setup gate).
+PowerSync Cloud (decided in Phase 15, production hardening).
 
 **Success Criteria**
 1. With the network unplugged, a cashier completes cash sales, prints receipts, and stock

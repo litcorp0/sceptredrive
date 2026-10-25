@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 8 Plan 13 — walk every console section on the migrated tree.
+ * Phase 9 Plan 08 — walk every console section, including the new analytics surface.
  *
  * The admin package has no unit tests, so "no behaviour change" has to be shown by opening each
  * screen in a real browser and proving it rendered its own data instead of an error, an empty
@@ -25,7 +25,7 @@ const evidenceDir = process.env.EVIDENCE_DIR
 	? path.resolve(process.env.EVIDENCE_DIR)
 	: path.resolve(
 			import.meta.dirname,
-			"../../.planning/phases/08-admin-modules-shell/evidence/shots",
+			"../../.planning/phases/09-analytics-dashboard/evidence/shots",
 		)
 const totpFile = process.env.TOTP_FILE ?? "/tmp/opencode/admin-totp.json"
 const managerPasswordFile =
@@ -132,7 +132,8 @@ async function signIn(page, email, password) {
 
 /** Text that must appear in `main`, or null when rendering alone is the assertion. */
 const SECTIONS = [
-	["/", "Welcome back"],
+	["/", "Today at"],
+	["/analytics", "Analytics"],
 	["/branches", "Branches"],
 	["/terminals", "Terminals"],
 	["/staff", "Staff"],
@@ -330,9 +331,66 @@ try {
 
 	await page.goto(`${adminUrl}/`, { waitUntil: "networkidle" })
 	await page.screenshot({
-		path: path.join(evidenceDir, "plan08-admin-dashboard.png"),
+		path: path.join(evidenceDir, "plan09-admin-dashboard.png"),
 		fullPage: true,
 	})
+
+	section("analytics charts and export")
+	const analyticsRoutes = [
+		"/analytics?tab=sales",
+		"/analytics?tab=products",
+		"/analytics?tab=inventory",
+		"/analytics?tab=credit",
+		"/analytics?tab=loyalty",
+		"/analytics?tab=payables",
+		"/analytics?tab=tax&granularity=month",
+	]
+	for (const route of analyticsRoutes) {
+		await visit(page, route, null)
+		const figures = page.locator("main figure")
+		const figureCount = await figures.count()
+		check(figureCount > 0, `${route} renders at least one chart`, `${figureCount} figures`)
+
+		const problems = await figures.evaluateAll((nodes) =>
+			nodes.map((figure) => {
+				const caption = figure.querySelector("figcaption")?.textContent?.trim() ?? ""
+				const label = figure.querySelector('[role="img"]')?.getAttribute("aria-label") ?? ""
+				const details = figure.querySelector("details")
+				const table = details?.querySelector("table")
+				const tableCaption = table?.querySelector("caption")?.textContent?.trim() ?? ""
+				const axisLabels = figure.querySelectorAll("svg text").length
+				return {
+					missingCaption: caption.length === 0,
+					missingLabel: label.length === 0,
+					missingDetails: !details,
+					missingTable: !table,
+					missingTableCaption: tableCaption.length === 0,
+					noAxisLabels: axisLabels === 0,
+				}
+			}),
+		)
+		const bad = problems.find((problem) => Object.values(problem).some(Boolean))
+		check(
+			!bad,
+			`${route}: every chart has a caption, an aria-label, axes, and a data table`,
+			bad ? JSON.stringify(bad) : undefined,
+		)
+	}
+
+	// The default Sales export must produce a real, escaped, CRLF CSV with a BOM.
+	await page.goto(`${adminUrl}/analytics?tab=sales`, { waitUntil: "networkidle" })
+	const csvPath = path.join(evidenceDir, "plan09-sales-export.csv")
+	const [download] = await Promise.all([
+		page.waitForEvent("download", { timeout: 20_000 }),
+		page.getByRole("button", { name: /Export CSV/i }).first().click(),
+	])
+	await download.saveAs(csvPath)
+	const csvText = fs.readFileSync(csvPath, "utf8")
+	check(csvText.startsWith("\uFEFF"), "sales CSV starts with a UTF-8 BOM")
+	check(csvText.includes("receipt_number"), "sales CSV carries the expected header row")
+	check(csvText.includes("\r\n"), "sales CSV uses CRLF line endings")
+	check(csvText.split("\r\n").length > 1, "sales CSV carries at least one data row")
+	fs.rmSync(csvPath, { force: true })
 
 	section("manager role boundary")
 	const managerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
@@ -381,6 +439,8 @@ try {
 
 	for (const route of [
 		"/",
+		"/analytics",
+		"/analytics?tab=payables",
 		"/inventory/stock",
 		"/customers",
 		"/customers/aging",
@@ -394,7 +454,26 @@ try {
 		check(!broken, `manager can open ${route}`, broken ? `page contains ${broken}` : undefined)
 	}
 
-	// A branch id smuggled into the query string must not change what a manager sees.
+	// A branch id smuggled into the query string must not change what a manager sees, on a
+	// list screen or on analytics, where the client drops it before it reaches the API.
+	const analyticsBefore = await managerPage.goto(`${adminUrl}/analytics`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	const analyticsBaseline = await managerPage.locator("main").innerText()
+	await managerPage.goto(
+		`${adminUrl}/analytics?branchId=00000000-0000-0000-0000-000000000000`,
+		{ waitUntil: "networkidle" },
+	)
+	await managerPage.locator("main").waitFor()
+	const analyticsAfter = await managerPage.locator("main").innerText()
+	check(
+		analyticsBaseline.length > 0 &&
+			analyticsAfter.replace(/\s+/g, " ") === analyticsBaseline.replace(/\s+/g, " "),
+		"a foreign branchId does not change a manager\'s analytics view",
+	)
+	check(analyticsBefore !== null, "manager analytics navigated")
+
 	const before = await managerPage.locator("main").innerText()
 	await managerPage.goto(
 		`${adminUrl}/customers/aging?branchId=00000000-0000-0000-0000-000000000000`,
@@ -415,6 +494,121 @@ try {
 	check(!/Administrator/.test(staffText), "manager staff list hides global admin accounts")
 
 	await managerContext.close()
+
+	section("analytics responsive matrix")
+	const WIDTHS = [320, 768, 1024, 1440]
+	for (const width of WIDTHS) {
+		for (const theme of ["light", "dark"]) {
+			for (const motion of ["no-preference", "reduce"]) {
+				await page.setViewportSize({ width, height: 900 })
+				await page.emulateMedia({ reducedMotion: motion })
+				await page.goto(`${adminUrl}/analytics?tab=sales`, { waitUntil: "networkidle" })
+				await page.waitForSelector('[data-slot="chart"]', { timeout: 20_000 })
+				await page.evaluate(() => document.fonts.ready)
+				if (theme === "dark") {
+					await page.evaluate(() => document.documentElement.classList.add("dark"))
+				}
+				await page.waitForTimeout(250)
+
+				const geometry = await page.evaluate(() => {
+					const charts = Array.from(document.querySelectorAll('[data-slot="chart"]'))
+					return {
+						viewport: window.innerWidth,
+						scrollWidth: document.documentElement.scrollWidth,
+						heights: charts.map((chart) => Math.round(chart.getBoundingClientRect().height)),
+						count: charts.length,
+					}
+				})
+				const tag = `${width}px ${theme} ${motion}`
+				check(geometry.count >= 2, `${tag}: charts rendered`, String(geometry.count))
+				check(
+					geometry.scrollWidth <= geometry.viewport + 1,
+					`${tag}: no horizontal scroll`,
+					`${geometry.scrollWidth} > ${geometry.viewport}`,
+				)
+				check(
+					geometry.heights.every((height) => height >= 80),
+					`${tag}: no zero-height chart`,
+					geometry.heights.join(", "),
+				)
+
+				if (motion === "reduce") {
+					const animating = await page.evaluate((ceiling) => {
+						const nodes = Array.from(document.querySelectorAll('[data-slot="chart"] *'))
+						const toMs = (value) =>
+							value.trim().endsWith("ms")
+								? Number(value.trim().slice(0, -2))
+								: Number(value.trim().slice(0, -1)) * 1000
+						return nodes.filter((node) => {
+							const style = getComputedStyle(node)
+							const animation =
+								style.animationName !== "none" ? toMs(style.animationDuration) : 0
+							return animation > ceiling || toMs(style.transitionDuration) > ceiling
+						}).length
+					}, 1)
+					check(animating === 0, `${tag}: no entrance animation`, String(animating))
+				}
+
+				if (width === 1440) {
+					await page.screenshot({
+						path: path.join(evidenceDir, `plan09-analytics-${width}-${theme}-${motion}.png`),
+						fullPage: false,
+					})
+				}
+			}
+		}
+	}
+
+	await page.setViewportSize({ width: 1280, height: 900 })
+	await page.emulateMedia({ reducedMotion: "no-preference" })
+	await page.goto(`${adminUrl}/analytics?tab=sales`, { waitUntil: "networkidle" })
+	await page.waitForSelector('[data-slot="chart"]', { timeout: 20_000 })
+	await page.waitForTimeout(300)
+
+	const series = await page.evaluate(() => {
+		const chart = document.querySelector('[data-slot="chart"]')
+		const area = chart?.querySelector(".recharts-area-area")
+		const figure = chart?.closest("figure")
+		return {
+			fill: area ? getComputedStyle(area).fill : "",
+			background: figure ? getComputedStyle(figure).backgroundColor : "",
+		}
+	})
+	function luminance(rgb) {
+		const parts = rgb.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0]
+		const [r, g, b] = parts.map((part) => {
+			const channel = part / 255
+			return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+		})
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b
+	}
+	const ratio = (() => {
+		if (!series.fill || !series.background) return 0
+		const [lighter, darker] = [luminance(series.fill), luminance(series.background)].sort(
+			(a, b) => b - a,
+		)
+		return (lighter + 0.05) / (darker + 0.05)
+	})()
+	check(
+		series.fill === "rgb(242, 106, 27)",
+		"first analytics series takes the brand orange",
+		series.fill,
+	)
+	check(ratio >= 3, "first series clears 3:1 against its panel (SC 1.4.11)", ratio.toFixed(2))
+
+	// Park the pointer away from the chart: Recharts keyboard navigation is inert while the
+	// pointer rests over a chart (recharts#7905), so hovering first would fake a failure.
+	await page.mouse.move(2, 2)
+	await page.waitForTimeout(150)
+	const focusable = page.locator('[data-slot="chart"] [tabindex="0"]').first()
+	await focusable.focus()
+	await page.keyboard.press("ArrowRight")
+	await page.waitForTimeout(250)
+	const keyboardTooltip = await page.evaluate(() => {
+		const wrapper = document.querySelector('[data-slot="chart"] .recharts-tooltip-wrapper')
+		return wrapper ? (wrapper.textContent ?? "").trim() : ""
+	})
+	check(keyboardTooltip.length > 0, "chart is readable by keyboard arrow keys", keyboardTooltip.slice(0, 60))
 
 	section("console hygiene")
 	check(

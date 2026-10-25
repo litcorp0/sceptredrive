@@ -64,6 +64,10 @@ infra/         Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 15)
 .planning/     GSD project memory (this is the source of truth for scope)
 ```
 
+> **Test command (2026-10-25):** always write `bun run test`. Bare `bun test` resolves to
+> Bun's builtin runner, which ignores the workspace `test` scripts and runs every test file
+> with the wrong setup.
+
 > **Renamed 2026-10-24:** the product, workspace scope, and infrastructure were renamed to
 > **Sceptre Drive** (`@sceptre/*`). The dev database is `sceptre_drive`, the desktop origin
 > is `app://sceptre-drive`, and the code sweep is complete. The rename moved Electron's
@@ -150,10 +154,10 @@ money, credit, stock, loyalty, permissions, or production still stops and asks.
 ## Commands
 
 From the repository root: `bun dev` (all workspaces), `bun dev:api`, `bun dev:admin`,
-`bun dev:pos`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun test`, `bun build`,
+`bun dev:pos`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun run test`, `bun build`,
 `bun run brand:check`, plus the `db:*` (migrate, seed, test prepare), `sync:*`
 (init, up, down, logs, config-check), and `*:pos` (build, package, make) scripts.
-`bun test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh
+`bun run test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh
 `docker compose up -d`.
 
 ## Non-negotiables for the POS
