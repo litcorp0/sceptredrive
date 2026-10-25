@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { posConnector } from '../../lib/powersync/connector'
 import { usePos } from '../../lib/powersync/provider'
 import { SYNCED_TABLES, type SyncedTable } from '../../lib/powersync/schema'
+import type { SchemaMigrationReport } from '../../lib/powersync/schema-migration'
+import { resolveDatabaseKey } from '../../lib/powersync/spike'
 import { useSyncStatus } from '../../lib/powersync/status'
 
 /**
@@ -57,6 +59,80 @@ function CountRow({ table, label, value }: { table: SyncedTable; label: string; 
         {value ?? 0}
       </span>
     </div>
+  )
+}
+
+/**
+ * P10-D15 — the local schema change, proven on a database that already holds
+ * sales, from inside the real renderer.
+ *
+ * It lives on the diagnostics page rather than a screen of its own so
+ * `desktop/test/e2e/schema-migration.mjs` can drive it through the real
+ * `app://` renderer, worker, and VFS (`#spike` is the same pattern). It opens
+ * its own throw-away database file, so the terminal's database is never touched.
+ */
+function SchemaMigrationProof() {
+  const [report, setReport] = useState<SchemaMigrationReport | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+
+  const run = async () => {
+    setRunning(true)
+    setError(null)
+    try {
+      // Loaded on demand: the proof's fixtures and previous schema have no place
+      // in the bundle a till loads to sell.
+      const { runSchemaMigrationProof } = await import('../../lib/powersync/schema-migration')
+      const encryptionKey = await resolveDatabaseKey()
+      setReport(await runSchemaMigrationProof({ encryptionKey }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-lg border border-border p-5" data-testid="schema-migration">
+      <h2 className="mb-1 text-sm font-semibold">Local schema migration</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Opens a database with the previous schema, writes a day of trading into it, reopens it with
+        the schema this build ships, and checks that every sale, line, tender, cash movement, and
+        pending upload still reads and that the home query plans through the new index.
+      </p>
+      <button
+        type="button"
+        data-testid="run-schema-migration"
+        disabled={running}
+        className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        onClick={() => {
+          void run()
+        }}
+      >
+        {running ? 'Running…' : 'Run schema migration proof'}
+      </button>
+      {error ? (
+        <p data-testid="schema-migration-error" className="mt-3 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {report ? (
+        <>
+          <p
+            data-testid="schema-migration-ok"
+            className={`mt-3 text-sm font-semibold ${report.ok ? 'text-emerald-600' : 'text-destructive'}`}
+          >
+            {report.ok ? 'OK' : 'FAIL'}
+          </p>
+          <pre
+            data-testid="schema-migration-report"
+            className="mt-2 max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs"
+          >
+            {JSON.stringify(report, null, 2)}
+          </pre>
+        </>
+      ) : null}
+    </section>
   )
 }
 
@@ -184,6 +260,8 @@ function DevSyncPanel({ database }: { database: PowerSyncDatabase }) {
           </div>
         </section>
       </div>
+
+      <SchemaMigrationProof />
     </main>
   )
 }
