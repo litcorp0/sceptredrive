@@ -2,7 +2,7 @@ import type { PowerSyncDatabase } from '@powersync/web'
 import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
 import { cn } from 'cn'
 import { useCallback, useEffect, useState } from 'react'
-import { PinPad } from '@/components/common'
+import { PinPad, StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import { redeemEnrollment } from '@/lib/api/client'
 import {
@@ -21,6 +21,7 @@ import { desktopApi, isDesktopAvailable } from '@/lib/desktop-api'
 import { lockoutPolicyFor, readCachedConfig } from '@/lib/pos-config'
 import { usePos } from '@/lib/powersync/provider'
 import { ManagerUnlock } from '../components/manager-unlock'
+import { lockoutMessage } from '../utils/lockout-copy'
 
 type Phase = 'loading' | 'select' | 'pin' | 'activate' | 'change'
 
@@ -123,7 +124,7 @@ export function LoginRoute() {
     }
     if (signInError.code === 'LOCKED' && selected) {
       setLockedTarget(selected)
-      setError('Too many wrong PINs. A manager can unlock this terminal.')
+      setError(lockoutMessage(signInError.lockedUntil))
       return
     }
     if (signInError.code === 'INVALID') {
@@ -160,33 +161,35 @@ export function LoginRoute() {
 
   return (
     <main className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-1/3 flex-col justify-between bg-zinc-900 p-8 text-zinc-50 lg:flex">
+      <aside className="hidden w-1/3 flex-col justify-between bg-topbar p-8 text-topbar-foreground lg:flex">
         <div>
-          <p className="text-xs font-medium tracking-widest text-zinc-400 uppercase">
+          <p className="text-xs font-medium tracking-widest text-topbar-muted uppercase">
             Sceptre Drive POS
           </p>
-          <h1 className="mt-3 text-2xl font-semibold">Terminal sign-in</h1>
-          <p className="mt-2 text-sm text-zinc-400">
+          <h1 className="mt-3 font-display text-2xl font-semibold">Terminal sign-in</h1>
+          <p className="mt-2 text-sm text-topbar-muted">
             PINs work offline. Stock, credit, and sales sync when the connection returns.
           </p>
         </div>
         <dl className="space-y-2 text-sm">
-          <div className="flex justify-between gap-4 border-b border-zinc-700 pb-2">
-            <dt className="text-zinc-400">Branch</dt>
+          <div className="flex justify-between gap-4 border-b border-white/15 pb-2">
+            <dt className="text-topbar-muted">Branch</dt>
             <dd className="font-mono">{identity?.branch ?? session?.branch.code ?? '—'}</dd>
           </div>
-          <div className="flex justify-between gap-4 border-b border-zinc-700 pb-2">
-            <dt className="text-zinc-400">Terminal</dt>
+          <div className="flex justify-between gap-4 border-b border-white/15 pb-2">
+            <dt className="text-topbar-muted">Terminal</dt>
             <dd className="font-mono">{identity?.terminal ?? session?.terminal.code ?? '—'}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-zinc-400">Device</dt>
-            <dd
-              className={cn(
-                'font-medium',
-                sessionState === 'active' ? 'text-emerald-400' : 'text-amber-400',
-              )}
-            >
+            <dt className="text-topbar-muted">Device</dt>
+            <dd className="flex items-center gap-2 font-medium">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  sessionState === 'active' ? 'bg-ok' : 'bg-warn',
+                )}
+              />
               {sessionState === 'active' ? 'Enrolled' : 'Offline'}
             </dd>
           </div>
@@ -256,7 +259,7 @@ export function LoginRoute() {
               </Button>
               <h2 className="text-lg font-semibold">Hello, {selected.name}</h2>
               <p className="mt-1 mb-4 text-sm text-muted-foreground">
-                Enter your {policy.maxAttempts}-attempt PIN. It works without a network.
+                Enter your PIN. It works without a network.
               </p>
               <PinPad value={pin} onChange={setPin} onSubmit={signIn} busy={busy} />
             </div>
@@ -269,8 +272,8 @@ export function LoginRoute() {
               currentPin={pendingChange.currentPin}
               onCancel={() => {
                 if (pendingChange.binding.pinMustChange) {
-                  // Offline fallback: the temporary PIN still sells, but the
-                  // badge stays Temporary and the POS asks again next sign-in.
+                  // Offline fallback: the temporary PIN still sells. `pinMustChange` stays set
+                  // on the binding, so the POS asks again at the next sign-in.
                   startStaffSession(pendingChange.binding)
                   goHome()
                   return
@@ -306,12 +309,9 @@ export function LoginRoute() {
           ) : null}
 
           {error ? (
-            <p
-              role="alert"
-              className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
+            <StatusNote tone="danger" role="alert" className="mt-4">
               {error}
-            </p>
+            </StatusNote>
           ) : null}
 
           {lockedTarget && db ? (
@@ -418,12 +418,9 @@ function ActivateForm({
       />
 
       {error ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-        >
+        <StatusNote tone="danger" role="alert" className="mt-3">
           {error}
-        </p>
+        </StatusNote>
       ) : null}
     </div>
   )
@@ -520,12 +517,9 @@ function ChangePinForm({
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-        >
+        <StatusNote tone="danger" role="alert" className="mt-3">
           {error}
-        </p>
+        </StatusNote>
       ) : null}
     </div>
   )
@@ -602,12 +596,9 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
         />
 
         {error ? (
-          <p
-            role="alert"
-            className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          >
+          <StatusNote tone="danger" role="alert" className="mt-3">
             {error}
-          </p>
+          </StatusNote>
         ) : null}
 
         <Button type="button" onClick={enroll} disabled={busy} className="mt-4 h-12 w-full">

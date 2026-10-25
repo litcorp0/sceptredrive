@@ -1,6 +1,6 @@
 import type { PowerSyncDatabase } from '@powersync/web'
 import { useEffect, useState } from 'react'
-import { PinPad, useDialogFocusReturn } from '@/components/common'
+import { PinPad, StatusNote, useDialogFocusReturn } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -100,9 +100,9 @@ export function ManagerUnlock({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {managers.length === 0 ? (
-            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <StatusNote tone="notice">
               No manager is authorized on this terminal. Authorize one online, then try again.
-            </p>
+            </StatusNote>
           ) : (
             <>
               <label htmlFor="unlock-manager" className="block text-sm font-medium">
@@ -134,9 +134,9 @@ export function ManagerUnlock({
           )}
 
           {error ? (
-            <p role="alert" className="mt-3 text-sm text-destructive">
+            <StatusNote tone="danger" role="alert" className="mt-3">
               {error}
-            </p>
+            </StatusNote>
           ) : null}
         </div>
 
