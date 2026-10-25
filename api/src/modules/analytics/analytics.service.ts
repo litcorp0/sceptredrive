@@ -1,6 +1,7 @@
 import { db } from '@sceptre/db'
 import {
   accraIsoDay,
+  averageBasketMinor,
   deltaBp,
   GETFUND_RATE_BP,
   NHIL_RATE_BP,
@@ -253,12 +254,11 @@ export async function getOverview({ user, query }: OverviewContext): Promise<Ove
   const previousGrossProfitMinor = previousLines.revenueBaseMinor - previousLines.costMinor
   const marginBp = ratioBp(grossProfitMinor, lines.revenueBaseMinor)
   const previousMarginBp = ratioBp(previousGrossProfitMinor, previousLines.revenueBaseMinor)
-  const avgBasketMinor =
-    header.salesCount === 0 ? 0 : Math.round(header.takeMinor / header.salesCount)
-  const previousAvgBasketMinor =
-    previousHeader.salesCount === 0
-      ? 0
-      : Math.round(previousHeader.takeMinor / previousHeader.salesCount)
+  const avgBasketMinor = averageBasketMinor(header.takeMinor, header.salesCount)
+  const previousAvgBasketMinor = averageBasketMinor(
+    previousHeader.takeMinor,
+    previousHeader.salesCount,
+  )
 
   const tenderMix = buildTenderMix(header.takeMinor, tender.creditMinor, tender.electronic)
 
@@ -384,14 +384,11 @@ export async function getSales(
     return { header, lines, previousHeader, series, byTerminal, byCashier, byBranch, byHour, page }
   })
 
-  const avgBasketMinor =
-    result.header.salesCount === 0
-      ? 0
-      : Math.round(result.header.takeMinor / result.header.salesCount)
-  const previousAvgBasket =
-    result.previousHeader.salesCount === 0
-      ? 0
-      : Math.round(result.previousHeader.takeMinor / result.previousHeader.salesCount)
+  const avgBasketMinor = averageBasketMinor(result.header.takeMinor, result.header.salesCount)
+  const previousAvgBasket = averageBasketMinor(
+    result.previousHeader.takeMinor,
+    result.previousHeader.salesCount,
+  )
 
   return {
     currency: 'GHS',
