@@ -31,6 +31,9 @@ import { formatGhs } from "#/lib/format"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+// A manager's product proposal is decided in the procurement approval queue; the catalogue shows
+// the queue here because this is where the product will appear.
+import { PendingProductSubmissions } from "#/modules/procurement"
 import { brandListOptions, categoryListOptions } from "../api/catalog"
 import { catalogKeys } from "../api/keys"
 import { archiveProduct, productListOptions, reactivateProduct } from "../api/products"
@@ -45,8 +48,12 @@ export function ProductsPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const { activeBranchId } = useBranch()
 	const queryClient = useQueryClient()
-	const canCreate = hasPermission(session.user.role, "catalog.create")
-	const canArchive = hasPermission(session.user.role, "catalog.archive")
+	const role = session.user.role
+	const canCreate = hasPermission(role, "catalog.create")
+	// Managers do not hold `catalog.create`; their route is a proposal the admin decides.
+	const canSubmit = !canCreate && hasPermission(role, "procurement.create")
+	const canApprove = hasPermission(role, "procurement.approve")
+	const canArchive = hasPermission(role, "catalog.archive")
 
 	const [search, setSearch] = useState("")
 	const [categoryId, setCategoryId] = useState<string>(ALL)
@@ -177,12 +184,27 @@ export function ProductsPage() {
 				{canCreate ? (
 					<Button size="sm" asChild className="ml-auto">
 						<Link to="/catalog/products/new">
-							<PlusIcon className="size-4" />
+							<PlusIcon className="size-4" aria-hidden="true" />
 							New product
+						</Link>
+					</Button>
+				) : canSubmit ? (
+					<Button size="sm" asChild className="ml-auto">
+						<Link to="/catalog/products/submit">
+							<PlusIcon className="size-4" aria-hidden="true" />
+							Submit a product
 						</Link>
 					</Button>
 				) : null}
 			</div>
+
+			{canApprove ? (
+				<PendingProductSubmissions
+					onDecided={() => {
+						void queryClient.invalidateQueries({ queryKey: catalogKeys.products })
+					}}
+				/>
+			) : null}
 
 			<div className="rounded-lg border bg-card">
 				<Table>

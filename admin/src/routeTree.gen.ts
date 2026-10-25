@@ -47,6 +47,7 @@ import { Route as AuthenticatedSuppliersAgingRouteImport } from './routes/_authe
 import { Route as AuthenticatedCatalogProductsIndexRouteImport } from './routes/_authenticated/catalog/products/index'
 import { Route as AuthenticatedCatalogProductsIdRouteImport } from './routes/_authenticated/catalog/products.$id'
 import { Route as AuthenticatedCatalogProductsNewRouteImport } from './routes/_authenticated/catalog/products.new'
+import { Route as AuthenticatedCatalogProductsSubmitRouteImport } from './routes/_authenticated/catalog/products/submit'
 import { Route as AuthenticatedCustomersIdIndexRouteImport } from './routes/_authenticated/customers/$id/index'
 import { Route as AuthenticatedCustomersIdStatementRouteImport } from './routes/_authenticated/customers/$id.statement'
 import { Route as AuthenticatedInventoryCountsIndexRouteImport } from './routes/_authenticated/inventory/counts/index'
@@ -282,6 +283,12 @@ const AuthenticatedCatalogProductsNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedCatalogProductsRoute,
   } as any)
+const AuthenticatedCatalogProductsSubmitRoute =
+  AuthenticatedCatalogProductsSubmitRouteImport.update({
+    id: '/submit',
+    path: '/submit',
+    getParentRoute: () => AuthenticatedCatalogProductsRoute,
+  } as any)
 const AuthenticatedCustomersIdIndexRoute =
   AuthenticatedCustomersIdIndexRouteImport.update({
     id: '/',
@@ -440,6 +447,7 @@ export interface FileRoutesByFullPath {
   '/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/catalog/products/submit': typeof AuthenticatedCatalogProductsSubmitRoute
   '/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
@@ -490,6 +498,7 @@ export interface FileRoutesByTo {
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/catalog/products/submit': typeof AuthenticatedCatalogProductsSubmitRoute
   '/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
@@ -551,6 +560,7 @@ export interface FileRoutesById {
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/catalog/products/$id': typeof AuthenticatedCatalogProductsIdRoute
   '/_authenticated/catalog/products/new': typeof AuthenticatedCatalogProductsNewRoute
+  '/_authenticated/catalog/products/submit': typeof AuthenticatedCatalogProductsSubmitRoute
   '/_authenticated/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/_authenticated/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/_authenticated/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
@@ -612,6 +622,7 @@ export interface FileRouteTypes {
     | '/suppliers/'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/catalog/products/submit'
     | '/customers/$id/statement'
     | '/inventory/counts/$countId'
     | '/inventory/counts/new'
@@ -662,6 +673,7 @@ export interface FileRouteTypes {
     | '/suppliers'
     | '/catalog/products/$id'
     | '/catalog/products/new'
+    | '/catalog/products/submit'
     | '/customers/$id/statement'
     | '/inventory/counts/$countId'
     | '/inventory/counts/new'
@@ -722,6 +734,7 @@ export interface FileRouteTypes {
     | '/_authenticated/suppliers/'
     | '/_authenticated/catalog/products/$id'
     | '/_authenticated/catalog/products/new'
+    | '/_authenticated/catalog/products/submit'
     | '/_authenticated/customers/$id/statement'
     | '/_authenticated/inventory/counts/$countId'
     | '/_authenticated/inventory/counts/new'
@@ -1021,6 +1034,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCatalogProductsNewRouteImport
       parentRoute: typeof AuthenticatedCatalogProductsRoute
     }
+    '/_authenticated/catalog/products/submit': {
+      id: '/_authenticated/catalog/products/submit'
+      path: '/submit'
+      fullPath: '/catalog/products/submit'
+      preLoaderRoute: typeof AuthenticatedCatalogProductsSubmitRouteImport
+      parentRoute: typeof AuthenticatedCatalogProductsRoute
+    }
     '/_authenticated/customers/$id/': {
       id: '/_authenticated/customers/$id/'
       path: '/'
@@ -1183,6 +1203,7 @@ const AuthenticatedBranchesRouteRouteWithChildren =
 interface AuthenticatedCatalogProductsRouteChildren {
   AuthenticatedCatalogProductsIdRoute: typeof AuthenticatedCatalogProductsIdRoute
   AuthenticatedCatalogProductsNewRoute: typeof AuthenticatedCatalogProductsNewRoute
+  AuthenticatedCatalogProductsSubmitRoute: typeof AuthenticatedCatalogProductsSubmitRoute
   AuthenticatedCatalogProductsIndexRoute: typeof AuthenticatedCatalogProductsIndexRoute
 }
 
@@ -1190,6 +1211,8 @@ const AuthenticatedCatalogProductsRouteChildren: AuthenticatedCatalogProductsRou
   {
     AuthenticatedCatalogProductsIdRoute: AuthenticatedCatalogProductsIdRoute,
     AuthenticatedCatalogProductsNewRoute: AuthenticatedCatalogProductsNewRoute,
+    AuthenticatedCatalogProductsSubmitRoute:
+      AuthenticatedCatalogProductsSubmitRoute,
     AuthenticatedCatalogProductsIndexRoute:
       AuthenticatedCatalogProductsIndexRoute,
   }

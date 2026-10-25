@@ -82,14 +82,19 @@ suppliers  → payables      (the supplier list's owed column is a payables bala
 credit     → payables      (the shared aging bucket vocabulary)
 customers  → credit        (the profile's credit tab)
 customers  → loyalty       (the profile's loyalty tab)
+catalog    ↔ procurement   (the product list shows the pending product-submission queue; a
+                            manager's submission form reads the catalogue's categories, units
+                            and brands)
 ```
 
-`inventory ↔ payables` and `suppliers ↔ payables` are the two two-way edges, and both are data, not
-screens: a receipt shows its invoice and an invoice form reads receipts; a supplier list shows what
-is owed and a payment form lists the supplier's destinations. Neither direction imports the other's
-*components* — the shared `invoice-status-badge`, `supplier-combobox` and `product-picker` live in
-`components/common` precisely so no barrel has to re-export a component into a cycle. Every other
-pair is one-way and acyclic.
+`inventory ↔ payables`, `suppliers ↔ payables` and `catalog ↔ procurement` are the three two-way
+edges. The first two are data, not screens: a receipt shows its invoice and an invoice form reads
+receipts; a supplier list shows what is owed and a payment form lists the supplier's destinations.
+Neither direction imports the other's *components* — the shared `invoice-status-badge`,
+`supplier-combobox` and `product-picker` live in `components/common` precisely so no barrel has to
+re-export a component into a cycle. `catalog ↔ procurement` is the product decision: the catalogue's
+product list renders the pending `PRODUCT_CREATE` queue that procurement owns, and the submission
+page reads reference data the catalogue owns. Every other pair is one-way and acyclic.
 
 Those three shared pieces live in `components/common` **because** they are used by more than one
 domain (`supplier-combobox` and `product-picker` by three each, the badge by two). Leaving a picker

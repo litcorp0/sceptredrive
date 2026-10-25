@@ -324,3 +324,24 @@ export interface ApprovalDecisionInput {
 	reasonCode?: ApprovalReasonCode
 	note?: string
 }
+
+/**
+ * A manager's product proposal. It is not a product: the row exists only if an admin approves the
+ * `PRODUCT_CREATE` request this body creates (P11-D7).
+ */
+export interface ProductSubmissionInput {
+	name: string
+	categoryId: string
+	uomId: string
+	brandId?: string
+	description?: string
+	proposedBasePriceMinor: number
+	barcode?: string
+	supplierId?: string
+	note?: string
+}
+
+export interface ProductSubmissionResult {
+	approvalId: string
+	status: "PENDING"
+}

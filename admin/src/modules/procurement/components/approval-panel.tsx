@@ -25,24 +25,12 @@ import { toastApiError } from "#/lib/toast"
 import { approvalKeys, orderKeys } from "../api/keys"
 import { approvalDetailOptions, decideApproval } from "../api/approvals"
 import type { OrderDetail } from "../types"
-
-const REASON_LABELS: Record<ApprovalReasonCode, string> = {
-	OVER_THRESHOLD: "Over the threshold",
-	PRICE_TOO_HIGH: "Price too high",
-	OUT_OF_POLICY: "Out of policy",
-	INCOMPLETE: "Incomplete",
-	DUPLICATE: "Duplicate",
-	OTHER: "Other",
-}
+import { APPROVAL_REASON_LABELS, approvalReasonLabel } from "../utils/approval"
 
 const THRESHOLD_SOURCE: Record<OrderDetail["threshold"]["source"], string> = {
 	branch: "branch limit",
 	global: "global limit",
 	default: "default limit",
-}
-
-function reasonLabel(code: ApprovalReasonCode | null): string {
-	return code ? REASON_LABELS[code] : "no reason recorded"
 }
 
 /**
@@ -150,7 +138,7 @@ export function ApprovalPanel({ detail, role }: { detail: OrderDetail; role: str
 											<SelectContent>
 												{APPROVAL_REASON_CODES.map((code) => (
 													<SelectItem key={code} value={code}>
-														{REASON_LABELS[code]}
+														{APPROVAL_REASON_LABELS[code]}
 													</SelectItem>
 												))}
 											</SelectContent>
@@ -219,7 +207,7 @@ export function ApprovalPanel({ detail, role }: { detail: OrderDetail; role: str
 					<p className="text-muted-foreground">
 						Rejected by {approval.decidedBy ?? "an administrator"}
 						{approval.decidedAt ? ` on ${formatDay(approval.decidedAt)}` : ""} —{" "}
-						{reasonLabel(approval.decisionReasonCode)}.
+						{approvalReasonLabel(approval.decisionReasonCode)}.
 					</p>
 				) : (
 					<p className="text-muted-foreground">The requester withdrew this request.</p>

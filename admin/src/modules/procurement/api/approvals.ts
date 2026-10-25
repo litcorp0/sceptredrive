@@ -6,6 +6,8 @@ import type {
 	ApprovalListQuery,
 	ApprovalListResult,
 	ApprovalRow,
+	ProductSubmissionInput,
+	ProductSubmissionResult,
 } from "../types"
 import { approvalKeys } from "./keys"
 
@@ -50,5 +52,19 @@ export function decideApproval(id: string, input: ApprovalDecisionInput) {
 export function withdrawApproval(id: string) {
 	return apiRequest<{ approval: ApprovalRow }>(`/api/approvals/${id}/withdraw`, {
 		method: "POST",
+	})
+}
+
+/**
+ * `POST /api/products/submissions` — the manager's half of a `PRODUCT_CREATE` decision.
+ *
+ * The body is a proposal, not a product: the API inserts nothing and answers with the approval it
+ * queued. An admin is refused here on purpose (the product screen is theirs), and the server
+ * enforces that rather than this form.
+ */
+export function submitProductProposal(input: ProductSubmissionInput) {
+	return apiRequest<ProductSubmissionResult>("/api/products/submissions", {
+		method: "POST",
+		body: input,
 	})
 }
