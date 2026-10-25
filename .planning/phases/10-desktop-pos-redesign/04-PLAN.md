@@ -210,8 +210,10 @@ fake-timer case asserting the returned day flips once.
 - `homeSummary` with no sales yields take 0, count 0, average **0**, and the UI contract for
   zero ("—") is asserted at the type/flag level here, so the screen cannot invent it later;
 - a day with one `GHS 150.00` sale and one `GHS 95.00` sale yields take `24500` and average
-  `12250` — the same fixture value the API test uses for `avgBasketMinor`
-  (`analytics.test.ts:462-463`), so a divergence between the two clients fails a test.
+  `12250`; and the API's own fixture (`45_000` over three sales → `15_000`,
+  `analytics.test.ts:462-463`) is pinned here too, so the two clients cannot round a basket
+  differently. *(The first figure is `packages/shared/src/money.test.ts`'s case, not the API's —
+  plan text corrected after execution.)*
 
 `utils/attention.test.ts`: zero counts produce `[]`; each item carries the route a cashier can
 actually reach; `HIGH` conflicts raise the tone to `danger`; every item's count is a safe
@@ -250,5 +252,6 @@ renders yet, so no screenshot changes.
 - The hour bucket is UTC (= Accra) by construction, and a test fails if a non-zero offset is
   ever introduced.
 - `useAccraDay` flips the day at the boundary under fake timers.
-- Nothing outside `modules/home` changed — Plan 03 already moved the unprinted count, and this
-  plan only imports it.
+- Nothing outside `modules/home` changed, with one deliberate exception: the conflict-count SQL
+  moves into `modules/sync/api/queries.ts` as `useOpenConflictCounts()`, because restating it in
+  `home` would be the duplication §7 forbids and deep-importing it would fail the gate.
