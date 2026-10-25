@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ScreenHeader } from '@/components/common'
+import { ScreenHeader, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,21 +22,33 @@ import { ReceiptView } from '../components/receipt-view'
  * shows every printer failure non-blockingly with Retry, and offers the drawer
  * by hand when the receipt could not be printed. Nothing here can affect the
  * committed sale.
+ *
+ * Phase 10 Plan 07 made the print state honest: the tint and the dot carry the
+ * colour, the word carries the meaning, and a FAILED receipt promotes **Print
+ * again** to the primary action while saying in plain words that the sale is
+ * saved. A printer problem is never presented as a sale problem.
  */
 
 /* The tint and the dot carry the print state; the label stays `text-foreground`. */
 const STATUS_TINT: Record<PrintStatus, string> = {
   PENDING: 'bg-muted',
-  PRINTING: 'bg-sky-50',
-  PRINTED: 'bg-emerald-50',
-  FAILED: 'bg-amber-50',
+  PRINTING: 'bg-info/10',
+  PRINTED: 'bg-ok/10',
+  FAILED: 'bg-warn/10',
 }
 
 const STATUS_DOT: Record<PrintStatus, string> = {
-  PENDING: 'bg-topbar-muted',
+  PENDING: 'bg-muted-foreground',
   PRINTING: 'bg-info',
   PRINTED: 'bg-ok',
   FAILED: 'bg-warn',
+}
+
+const STATUS_LABEL: Record<PrintStatus, string> = {
+  PENDING: 'Not printed yet',
+  PRINTING: 'Printing…',
+  PRINTED: 'Printed',
+  FAILED: 'Did not print',
 }
 
 export function ReceiptScreen({
@@ -165,6 +177,8 @@ export function ReceiptScreen({
     setBusy(false)
   }
 
+  const failed = printStatus === 'FAILED'
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppHeader
@@ -178,9 +192,9 @@ export function ReceiptScreen({
       <main className="mx-auto grid max-w-5xl gap-6 p-6 md:grid-cols-[minmax(0,1fr)_320px]">
         <div>
           {loadError ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <StatusNote tone="danger" role="alert" className="text-sm">
               {loadError}
-            </p>
+            </StatusNote>
           ) : model ? (
             <ReceiptView model={model} />
           ) : (
@@ -199,7 +213,7 @@ export function ReceiptScreen({
               title="Receipt"
               badge={
                 <Badge
-                  className={`gap-1.5 border-transparent text-[11px] ${STATUS_TINT[printStatus]}`}
+                  className={`gap-1.5 border-transparent text-[11px] text-foreground ${STATUS_TINT[printStatus]}`}
                   data-testid="print-status"
                   data-status={printStatus}
                 >
@@ -207,7 +221,7 @@ export function ReceiptScreen({
                     aria-hidden="true"
                     className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[printStatus]}`}
                   />
-                  {printStatus === 'PRINTING' ? 'Printing…' : printStatus.toLowerCase()}
+                  {STATUS_LABEL[printStatus]}
                 </Badge>
               }
               description={
@@ -226,23 +240,23 @@ export function ReceiptScreen({
           </div>
 
           {message ? (
-            <output
-              className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs"
-              data-testid="print-message"
-            >
+            <StatusNote tone="info" role="status" data-testid="print-message">
               {message}
-            </output>
+            </StatusNote>
           ) : null}
 
-          {printStatus === 'FAILED' ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              The receipt did not print. The sale is safe — retry when the printer is ready.
-            </div>
+          {failed ? (
+            <StatusNote tone="notice" role="status">
+              <p className="font-semibold text-foreground">The receipt did not print.</p>
+              <p className="mt-0.5">
+                The sale is saved and nothing is lost. Check the printer, then print it again.
+              </p>
+            </StatusNote>
           ) : null}
 
           <Button
             type="button"
-            variant="outline"
+            variant={failed ? 'default' : 'outline'}
             onClick={() => void runPrint(true)}
             disabled={busy}
             className="h-11"
@@ -266,7 +280,7 @@ export function ReceiptScreen({
 
           <Button
             type="button"
-            onClick={() => navigate('pos')}
+            onClick={() => navigate('home')}
             className="h-14 text-sm"
             data-testid="new-sale"
           >
