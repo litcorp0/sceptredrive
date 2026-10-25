@@ -32,6 +32,7 @@ const STRICT = process.argv.includes('--strict')
 
 /** The fourteen modules this phase migrates (D1's fifteen minus `analytics`). */
 const REQUIRED_MODULES = [
+  'analytics',
   'auth',
   'audit',
   'branches',
@@ -52,7 +53,7 @@ const REQUIRED_MODULES = [
  * Modules that exist as a name but are filled by a later phase. A deferred module, if the
  * directory exists at all, must be an empty barrel.
  */
-const DEFERRED_MODULES = { analytics: 9 }
+const DEFERRED_MODULES = {}
 
 /**
  * Names still to migrate. Each plan deletes its own entry; `--strict` fails while any remain.

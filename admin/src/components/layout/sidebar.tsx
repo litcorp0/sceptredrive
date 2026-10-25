@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
 	Building2,
+	ChartLine,
 	Gift,
 	LayoutDashboard,
 	type LucideIcon,
@@ -34,6 +35,7 @@ import { toRole } from "#/lib/role"
 /** Route paths the console shell links to. Presentation only — no new routes. */
 type NavPath =
 	| "/"
+	| "/analytics"
 	| "/branches"
 	| "/terminals"
 	| "/staff"
@@ -64,7 +66,15 @@ interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
 	{
 		label: "Overview",
-		items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }],
+		items: [
+			{ to: "/", label: "Dashboard", icon: LayoutDashboard },
+			{
+				to: "/analytics",
+				label: "Analytics",
+				icon: ChartLine,
+				permission: "analytics.read",
+			},
+		],
 	},
 	{
 		label: "Operations",

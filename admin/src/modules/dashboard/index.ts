@@ -5,6 +5,12 @@
  * the executive dashboard and adds `analytics`, so treat everything except the barrel as
  * temporary.
  */
+
+/** The dashboard shares the analytics period contract so the two pages cannot disagree. */
+export {
+	dashboardSearchDefaults,
+	dashboardSearchSchema,
+} from "#/modules/analytics"
 export { RecentActivity } from "./components/recent-activity"
 export { StatCard } from "./components/stat-card"
 export { DashboardPage } from "./pages/dashboard-page"

@@ -1,3 +1,4 @@
+import { useNavigate, useRouterState } from "@tanstack/react-router"
 import {
 	Select,
 	SelectContent,
@@ -14,6 +15,31 @@ import { useBranch } from "#/lib/branch-context"
  */
 export function BranchSwitcher() {
 	const { branches, activeBranchId, activeBranch, setActiveBranchId, canSelectBranch } = useBranch()
+	const navigate = useNavigate()
+	const pathname = useRouterState({ select: (state) => state.location.pathname })
+
+	/**
+	 * Keep the URL and the shell switcher in step on the two pages where branch is a search
+	 * param (P9-D4). Anywhere else the switch only changes the provider, so a filter a user
+	 * typed on a list page is not silently rewritten.
+	 */
+	function applyBranch(value: string) {
+		const id = value === "all" ? null : value
+		setActiveBranchId(id)
+		if (pathname === "/analytics") {
+			void navigate({
+				to: "/analytics",
+				search: (prev) => ({ ...prev, branchId: id ?? undefined }),
+				replace: true,
+			})
+		} else if (pathname === "/") {
+			void navigate({
+				to: "/",
+				search: (prev) => ({ ...prev, branchId: id ?? undefined }),
+				replace: true,
+			})
+		}
+	}
 
 	if (!canSelectBranch) {
 		return (
@@ -26,10 +52,7 @@ export function BranchSwitcher() {
 	}
 
 	return (
-		<Select
-			value={activeBranchId ?? "all"}
-			onValueChange={(value) => setActiveBranchId(value === "all" ? null : value)}
-		>
+		<Select value={activeBranchId ?? "all"} onValueChange={applyBranch}>
 			<SelectTrigger
 				size="sm"
 				className="w-32 border-topbar-muted/50 bg-transparent text-topbar-foreground hover:bg-white/10 focus-visible:border-topbar-muted/50 sm:w-52 [&_svg]:text-topbar-muted"
