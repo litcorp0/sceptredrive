@@ -83,9 +83,31 @@ if (data.NODE_ENV === 'production') {
   }
 }
 
+/**
+ * Origins that only exist while developing: the admin console, the desktop
+ * renderer's Vite server, and an unpackaged Electron build. Production must list
+ * its own (`CORS_ORIGINS` is required there, above).
+ *
+ * These are added rather than left to the operator because the failure mode is
+ * invisible: the browser sends `OPTIONS`, the API answers 204, and no POST is
+ * ever made — the API log shows a healthy preflight and the terminal simply does
+ * nothing.
+ */
+const DEV_CORS_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4000',
+  'app://sceptre-drive',
+] as const
+
+const corsOrigins =
+  data.NODE_ENV === 'production'
+    ? csv(data.CORS_ORIGINS)
+    : [...new Set([...csv(data.CORS_ORIGINS), ...DEV_CORS_ORIGINS])]
+
 export const env = {
   ...data,
-  corsOrigins: csv(data.CORS_ORIGINS),
+  corsOrigins,
   trustedOrigins: csv(data.BETTER_AUTH_TRUSTED_ORIGINS),
 } as const
 

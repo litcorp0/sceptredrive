@@ -102,6 +102,8 @@ beforeAll(async () => {
     .insert(category)
     .values({ name: `Order category ${suffix}` })
     .returning({ id: category.id })
+  const categoryId = categoryRow?.id ?? ''
+  const uomId = unit?.id ?? ''
 
   const [supplierRow] = await db
     .insert(supplier)
@@ -115,16 +117,16 @@ beforeAll(async () => {
       {
         sku: `OPA${suffix.slice(-5)}`,
         name: `Order product A ${suffix}`,
-        categoryId: categoryRow?.id,
-        uomId: unit?.id,
+        categoryId,
+        uomId,
         basePriceMinor: 10_000,
         costPriceMinor: 0,
       },
       {
         sku: `OPB${suffix.slice(-5)}`,
         name: `Order product B ${suffix}`,
-        categoryId: categoryRow?.id,
-        uomId: unit?.id,
+        categoryId,
+        uomId,
         basePriceMinor: 20_000,
         costPriceMinor: 0,
       },
