@@ -11,10 +11,10 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 04** (home data layer: reactive queries and pure
-aggregation). Plans 01–03 are complete: the shared day window and average basket, the `sale`
-index, the prepared-statement cache, the migration proof, the module gate, the move of every
-counter screen into its module, and the primitives/chrome pass.
+**Next action:** Execute **Phase 10, Plan 05** (the home screen, `#home`, and the `dev-charts`
+retirement). Plans 01–04 are complete: the shared day window and average basket, the `sale` index,
+the prepared-statement cache, the migration proof, the module gate, the move of every counter
+screen into its module, the primitives/chrome pass, and the home data layer with its tests.
 
 ---
 
@@ -32,7 +32,7 @@ counter screen into its module, and the primitives/chrome pass.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (3/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (4/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -41,6 +41,21 @@ counter screen into its module, and the primitives/chrome pass.
 
 ### Phase 10 execution notes (2026-10-25)
 
+- **Plan 04 complete** (commits `b50dbde`, `d83bd69`). `modules/home` holds every day-bounded
+  query, the pure arithmetic, and the midnight rollover; no screen yet. Desktop **345 → 371**.
+- **`dayWindow` anchors the day to UTC before building the bounds.** A bare date string parses as
+  *local* midnight, so on a laptop whose clock sits in another zone the window slid by the offset —
+  a till would report a different day than the receipt numbers it printed. The helper the plan did
+  not call for is the one that makes the timezone claim true.
+- **Expected cash is re-read through `db.onChange`, not watched.** It is a service call, not one
+  statement, so `useQuery` cannot express it; the SDK's documented path for "several queries that
+  must run together" is `onChange` with the same 250 ms throttle and an explicit table list.
+- **The conflict-count SQL moved into `modules/sync`** as `useOpenConflictCounts()`. The plan's
+  "nothing outside `modules/home` changes" could not survive its own no-duplication rule.
+- **The SQL itself is not proven yet, deliberately.** The vitest suite mocks the SDK and the
+  migration harness writes `shift.status = 'open'` where the runtime writes `'OPEN'`, so asserting
+  the seven statements there would have proved a fixture. Plan 09's counter audit drives real sales
+  through the real app and checks the figures; that is where this gets proven.
 - **Plan 03 complete** (commits `765fce3`, `28e4fa8`, `732de9c`). Registry `empty` and `spinner`
   added with the Phase 7 ritual — every existing primitive moved aside and restored byte-identical
   — and this CLI run injected no palette variables at all. The hand-written `Modal` is gone: eight
@@ -105,7 +120,7 @@ counter screen into its module, and the primitives/chrome pass.
 | 01 | Shared counter maths, local schema indexes, and the desktop module gate | ✅ Complete |
 | 02 | `modules/` scaffolding and the route → page split | ✅ Complete |
 | 03 | Primitives, chrome, and counter ergonomics | ✅ Complete |
-| 04 | Home data layer — reactive queries and pure aggregation | ⬜ Not started |
+| 04 | Home data layer — reactive queries and pure aggregation | ✅ Complete |
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ⬜ Not started |
 | 06 | Sell module — catalog, cart, and the counter panels | ⬜ Not started |
 | 07 | Tender and receipt modules | ⬜ Not started |
