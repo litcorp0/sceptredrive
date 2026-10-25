@@ -66,7 +66,7 @@ export function SalesScreen({
 }) {
   const { db } = usePos()
   const [rows, setRows] = useState<Row[]>([])
-  const [day, setDay] = useState(() => accraDayBounds().day)
+  const [range, setRange] = useState(() => accraDayBounds())
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -84,7 +84,7 @@ export function SalesScreen({
           })),
         )
         if (cancelled) return
-        setDay(range.day)
+        setRange(range)
         setRows(withTenders)
         setError(null)
       } catch (loadError) {
@@ -100,8 +100,16 @@ export function SalesScreen({
     }
   }, [db, identity.terminalId])
 
+  // `listSalesBetween` also returns older sales that still need printing, so the headline
+  // figures are computed over today's window only. Counting a stale receipt from yesterday into
+  // a figure captioned "today" is the kind of quiet wrongness a manager cross-checks a Z-report
+  // against.
+  const today = rows.filter(
+    (row) => row.sale.occurredAt >= range.from && row.sale.occurredAt < range.to,
+  )
+  const older = rows.length - today.length
   const pending = rows.filter((row) => row.sale.printStatus !== 'PRINTED').length
-  const totalMinor = rows.reduce((sum, row) => sum + row.sale.totalMinor, 0)
+  const totalMinor = today.reduce((sum, row) => sum + row.sale.totalMinor, 0)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -118,7 +126,8 @@ export function SalesScreen({
           title="Today's sales"
           description={
             <>
-              {day} · {rows.length} sale{rows.length === 1 ? '' : 's'} on {identity.terminalCode}
+              {range.day} · {today.length} sale{today.length === 1 ? '' : 's'} on{' '}
+              {identity.terminalCode}
               {pending > 0 ? ` · ${pending} not printed` : ''}
             </>
           }
@@ -159,12 +168,19 @@ export function SalesScreen({
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
               <caption className="border-b border-border px-3 py-2 text-left text-xs text-muted-foreground">
-                Today on {identity.terminalCode} · {rows.length} sale
-                {rows.length === 1 ? '' : 's'} ·{' '}
-                <span className="font-mono text-foreground tabular-nums">
-                  {formatGhs(totalMinor)}
-                </span>{' '}
+                Today on {identity.terminalCode} · {today.length} sale
+                {today.length === 1 ? '' : 's'} ·{' '}
+                {today.length > 0 ? (
+                  <span className="font-mono text-foreground tabular-nums">
+                    {formatGhs(totalMinor)}
+                  </span>
+                ) : (
+                  'nothing'
+                )}{' '}
                 taken
+                {older > 0
+                  ? ` · ${older} earlier receipt${older === 1 ? '' : 's'} still to print`
+                  : ''}
               </caption>
               <thead className="bg-muted/40 text-left text-xs text-muted-foreground uppercase">
                 <tr>

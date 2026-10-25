@@ -16,6 +16,17 @@ import { PIN_MAX_LENGTH } from '../../lib/auth/pin'
  * The count is announced; the digits are not. `type="password"` keeps the value
  * out of the accessibility tree, and the live region says how many digits are
  * entered — which is what a cashier needs to know and nothing an onlooker does.
+ *
+ * Three details that are easy to get wrong, and were:
+ *
+ * - **`readOnly`, not `disabled`, while a check is running.** A disabled control
+ *   loses focus to `<body>`, so after one wrong PIN the number row stopped
+ *   working until the cashier clicked a key. `readOnly` keeps focus and refuses
+ *   the keystroke.
+ * - **Autofocus is opt-in.** On the activation screen the first field is the
+ *   staff code, and an unconditionally focused digit field swallowed it.
+ * - **The dot display shows focus.** The field itself is `sr-only`, so without a
+ *   ring on the box that wraps it there is no visible focus position at all.
  */
 export function PinPad({
   value,
@@ -26,6 +37,7 @@ export function PinPad({
   submitLabel = 'Sign in',
   busy = false,
   label = 'PIN',
+  autoFocus = false,
 }: {
   value: string
   onChange: (next: string) => void
@@ -36,16 +48,23 @@ export function PinPad({
   busy?: boolean
   /** Accessible name for the hidden field. */
   label?: string
+  /** Focus the field on mount. Only where the PIN is the first thing to type. */
+  autoFocus?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const inputId = useId()
   const canSubmit = value.length >= 4 && !disabled && !busy
 
-  // Focus on mount so the number row works without touching the screen first.
+  // Focus on mount when asked, and restore it after a check finishes if it has
+  // gone nowhere: a request that ends with focus on `<body>` leaves a keyboard
+  // cashier with a dead number row until they tap a key. Never steal focus from
+  // another field — on the activation screen the staff code comes first.
   useEffect(() => {
     if (disabled) return
-    inputRef.current?.focus()
-  }, [disabled])
+    const active = document.activeElement
+    const focusLost = !active || active === document.body
+    if (autoFocus || focusLost) inputRef.current?.focus()
+  }, [disabled, busy, autoFocus])
 
   function press(digit: string) {
     if (value.length >= maxLength) return
@@ -55,7 +74,15 @@ export function PinPad({
 
   return (
     <div className="flex flex-col gap-4">
-      <label htmlFor={inputId} className="block cursor-text">
+      {/*
+       * The ring is an arbitrary property, not `outline-2`: that utility reads
+       * `--tw-outline-style`, which is `none` in this stylesheet, and a focus ring that does not
+       * draw is worse than none. This is the same declaration the global focus rule uses.
+       */}
+      <label
+        htmlFor={inputId}
+        className="block cursor-text rounded-lg focus-within:[outline:2px_solid_var(--brand-ink)] focus-within:[outline-offset:2px]"
+      >
         <span className="sr-only">{label}</span>
         <span
           aria-hidden="true"
@@ -72,27 +99,32 @@ export function PinPad({
             />
           ))}
         </span>
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          enterKeyHint="done"
+          maxLength={maxLength}
+          value={value}
+          onChange={(event) => {
+            if (busy) return
+            onChange(event.target.value.replace(/\D/g, '').slice(0, maxLength))
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            if (canSubmit) onSubmit()
+          }}
+          // `readOnly` rather than `disabled`: a disabled field drops focus and the
+          // number row stops working until the cashier taps a key.
+          readOnly={busy}
+          disabled={disabled}
+          className="sr-only"
+          data-testid="pin-input"
+        />
       </label>
-
-      <input
-        ref={inputRef}
-        id={inputId}
-        type="password"
-        inputMode="numeric"
-        autoComplete="current-password"
-        enterKeyHint="done"
-        maxLength={maxLength}
-        value={value}
-        onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, maxLength))}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter') return
-          event.preventDefault()
-          if (canSubmit) onSubmit()
-        }}
-        disabled={disabled || busy}
-        className="sr-only"
-        data-testid="pin-input"
-      />
 
       <p className="sr-only" aria-live="polite" data-testid="pin-progress">
         {value.length === 0
@@ -122,7 +154,7 @@ export function PinPad({
             inputRef.current?.focus()
           }}
           disabled={disabled || busy}
-          className="h-16 rounded-lg bg-card text-sm text-muted-foreground"
+          className="h-16 min-w-16 rounded-lg bg-card text-sm text-muted-foreground"
         >
           Clear
         </Button>
@@ -144,7 +176,7 @@ export function PinPad({
             inputRef.current?.focus()
           }}
           disabled={disabled || busy}
-          className="h-16 rounded-lg bg-card text-sm text-muted-foreground"
+          className="h-16 min-w-16 rounded-lg bg-card text-sm text-muted-foreground"
           aria-label="Backspace"
         >
           Back

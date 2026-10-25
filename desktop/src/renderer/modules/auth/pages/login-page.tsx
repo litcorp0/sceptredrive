@@ -261,7 +261,7 @@ export function LoginRoute() {
               <p className="mt-1 mb-4 text-sm text-muted-foreground">
                 Enter your PIN. It works without a network.
               </p>
-              <PinPad value={pin} onChange={setPin} onSubmit={signIn} busy={busy} />
+              <PinPad value={pin} onChange={setPin} onSubmit={signIn} busy={busy} autoFocus />
             </div>
           ) : null}
 
@@ -409,6 +409,7 @@ function ActivateForm({
       />
 
       <p className="mt-4 mb-2 text-sm font-medium">PIN</p>
+      {/* No autofocus: the staff code above is the first thing to type. */}
       <PinPad
         value={pin}
         onChange={setPin}

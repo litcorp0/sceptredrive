@@ -128,6 +128,7 @@ export function ManagerUnlock({
                   onSubmit={submit}
                   busy={busy}
                   submitLabel="Unlock"
+                  autoFocus
                 />
               </div>
             </>

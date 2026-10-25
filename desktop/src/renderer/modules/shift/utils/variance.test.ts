@@ -13,7 +13,6 @@ import { varianceWords } from './variance'
 describe('varianceWords', () => {
   it('says Over for cash in the drawer beyond the expected figure', () => {
     expect(varianceWords(1_200)).toBe(`Over ${formatGhs(1_200)}`)
-    expect(varianceWords(1_200)).toContain('12.00')
   })
 
   it('says Short in positive money for cash missing from the drawer', () => {

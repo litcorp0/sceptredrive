@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
  *
  * Routes:
  *
+ * - *(no hash)*      sign-in, which shows enrolment on a terminal with no credential
  * - `#login`         PIN sign-in / enrollment
  * - `#shift`         open and close the shift
  * - `#home`          this terminal's day (take, drawer, credit, tax, hourly shape)
@@ -17,10 +18,11 @@ import { useEffect, useState } from 'react'
  * - `#dev/sync`      sync diagnostics
  * - `#dev/print`     printer diagnostics (POS_DIAGNOSTICS=1)
  * - `#spike`         the PowerSync gate panel
- * - otherwise        shell diagnostics (app info + keychain self-test)
+ * - `#diagnostics`   shell diagnostics (app info + keychain self-test)
  *
  * Keeping this in one pure function means navigation cannot drift from the
- * switch in `main.tsx`.
+ * switch in `main.tsx`. `topLevelScreen` is the outer half of the same contract:
+ * an empty or unknown hash is sign-in, never the diagnostics shell.
  */
 
 export interface HashRoute {

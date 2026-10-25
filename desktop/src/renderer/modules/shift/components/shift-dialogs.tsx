@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from '@/lib/format'
 import { computeVariance } from '@/lib/shift/shift-service'
+import { amountProblem } from '../utils/amount'
 import { varianceWords } from '../utils/variance'
 
 /**
@@ -40,15 +41,7 @@ function MoneyField({
   minimumMinor?: number
   placeholder?: string
 }) {
-  const minor = parseGhsToMinor(value)
-  const problem =
-    value.trim() === ''
-      ? null
-      : minor === null
-        ? 'Enter an amount like 200.00'
-        : minor < minimumMinor
-          ? `Enter at least ${formatGhs(minimumMinor)}`
-          : null
+  const problem = amountProblem(value, minimumMinor)
 
   return (
     <label htmlFor={id} className="grid gap-1.5 text-sm font-medium">
@@ -89,7 +82,9 @@ export function OpenShiftDialog({
   const [busy, setBusy] = useState(false)
 
   const minor = parseGhsToMinor(amount)
-  const ready = minor !== null && minor >= 0
+  // An empty field is not a wrong one: the button stays live and the submit explains it, so a
+  // disabled control never has to carry a reason it cannot show.
+  const ready = amountProblem(amount) === null
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -181,7 +176,7 @@ export function CashMovementDialog({
   const label = type === 'CASH_IN' ? 'Cash in' : 'Cash out'
 
   const minor = parseGhsToMinor(amount)
-  const ready = minor !== null && minor > 0 && reason.trim().length > 0
+  const ready = amountProblem(amount, 1) === null && reason.trim().length > 0
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -377,7 +372,7 @@ export function CloseShiftDialog({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={busy || counted === null}
+                  disabled={busy || amountProblem(amount) !== null}
                   className="h-14 flex-[2] text-base"
                 >
                   {busy ? 'Closing…' : 'Close shift'}
