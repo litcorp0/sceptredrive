@@ -31,6 +31,7 @@ import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateDocumentNumber } from '../platform/sequences.service.ts'
 import { findProductById } from '../products/products.repository.ts'
+import * as replenishmentService from '../replenishment/replenishment.service.ts'
 import * as suppliersService from '../suppliers/suppliers.service.ts'
 import {
   countOrders,
@@ -64,6 +65,7 @@ import type {
   OrderCancelBody,
   OrderCreateBody,
   OrderDetail,
+  OrderFromSuggestionsBody,
   OrderLineInput,
   OrderLineView,
   OrderList,
@@ -166,6 +168,69 @@ export async function createOrder(
   })
 
   return { order: await getOrder(user, created.id), replayed: false }
+}
+
+/**
+ * Raises a DRAFT order from the replenishment screen (PROC-06).
+ *
+ * The suggested quantity is a proposal, so the order is a DRAFT the manager can
+ * edit before submitting; the approval threshold applies on submit exactly as it
+ * does for a hand-raised order. Costs come from the supplier's last delivery
+ * unless one was typed. A product with no cost from this supplier is refused by
+ * name: a zero-value line would pass any threshold, which is the one thing the
+ * gate exists to prevent.
+ */
+export async function createOrderFromSuggestions(
+  user: SessionUser,
+  actor: AuditActor,
+  input: OrderFromSuggestionsBody,
+): Promise<{ order: OrderDetail; replayed: boolean }> {
+  assertBranchAccess(user, input.branchId)
+  await requireBranch(user, input.branchId)
+  const supplier = await suppliersService.requireSupplier(input.supplierId)
+
+  const labels = new Map<string, string>()
+  for (const line of input.lines) {
+    const found = await findProductById(line.productId)
+    if (!found) throw new NotFoundError(`Product ${line.productId} not found`)
+    if (!found.isActive) throw new ConflictError(`Product ${found.sku} is archived`)
+    labels.set(found.id, `${found.sku} — ${found.name}`)
+  }
+
+  const lastCosts = await replenishmentService.resolveSupplierLastCosts(
+    input.supplierId,
+    input.lines.map((line) => line.productId),
+  )
+
+  const lines: OrderLineInput[] = input.lines.map((line) => {
+    const provided = line.unitCostMinor
+    const label = labels.get(line.productId) ?? line.productId
+    if (provided !== undefined) {
+      // A zero cost is refused rather than replaced by the link's cost: silently
+      // substituting a number the manager typed is how a wrong price is agreed.
+      if (provided <= 0) {
+        throw new ValidationError(`${label} needs a cost above zero`)
+      }
+      return { productId: line.productId, quantity: line.quantity, unitCostMinor: provided }
+    }
+
+    const lastCost = lastCosts.get(line.productId) ?? 0
+    if (lastCost <= 0) {
+      throw new ValidationError(
+        `${label} has no cost from ${supplier.name} yet — receive a delivery or type the cost`,
+      )
+    }
+    return { productId: line.productId, quantity: line.quantity, unitCostMinor: lastCost }
+  })
+
+  return createOrder(user, actor, {
+    branchId: input.branchId,
+    supplierId: input.supplierId,
+    expectedDate: input.expectedDate,
+    note: input.note,
+    idempotencyKey: input.idempotencyKey,
+    lines,
+  })
 }
 
 export async function updateOrder(

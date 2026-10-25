@@ -46,6 +46,34 @@ export const orderUpdateSchema = z
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: 'At least one field is required' })
 
+/**
+ * The same line shape as a hand-raised order, except the cost may be omitted:
+ * it is resolved from the supplier's last delivery. A cost of `0` is accepted by
+ * the schema and refused by the service with the product named, because a
+ * zero-value line would pass any approval threshold.
+ */
+const suggestionLineSchema = z
+  .object({
+    productId: z.uuid(),
+    quantity: z.number().int().min(1).max(1_000_000),
+    unitCostMinor: z.number().int().min(0).max(100_000_000_000).optional(),
+  })
+  .strict()
+
+export const orderFromSuggestionsSchema = z
+  .object({
+    branchId: z.uuid(),
+    supplierId: z.uuid(),
+    expectedDate: z.iso.date().optional(),
+    note: z.string().trim().min(1).max(300).optional(),
+    idempotencyKey: z.uuid(),
+    lines: z.array(suggestionLineSchema).min(1).max(100),
+  })
+  .strict()
+  .refine((value) => noDuplicateProducts(value.lines), {
+    message: 'Each product may appear only once in an order',
+  })
+
 export const orderListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   supplierId: z.uuid().optional(),
@@ -71,6 +99,7 @@ export const orderCloseSchema = z
   .strict()
 
 export const validateOrderCreate = validateJson(orderCreateSchema)
+export const validateOrderFromSuggestions = validateJson(orderFromSuggestionsSchema)
 export const validateOrderUpdate = validateJson(orderUpdateSchema)
 export const validateOrderListQuery = validateQuery(orderListQuerySchema)
 export const validateOrderIdParam = validateParam(orderIdParamSchema)

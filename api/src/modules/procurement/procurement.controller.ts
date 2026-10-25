@@ -7,6 +7,7 @@ import type {
   OrderActionBody,
   OrderCancelBody,
   OrderCreateBody,
+  OrderFromSuggestionsBody,
   OrderListQuery,
   OrderUpdateBody,
   ReceiveOrderBody,
@@ -24,6 +25,16 @@ export async function createOrder(c: Context<AppEnv>, input: OrderCreateBody) {
   const user = currentUser(c)
   const actor = actorFromContext(c)
   const result = await procurementService.createOrder(user, actor, input)
+  return c.json(result.order, result.replayed ? 200 : 201)
+}
+
+export async function createOrderFromSuggestions(
+  c: Context<AppEnv>,
+  input: OrderFromSuggestionsBody,
+) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await procurementService.createOrderFromSuggestions(user, actor, input)
   return c.json(result.order, result.replayed ? 200 : 201)
 }
 

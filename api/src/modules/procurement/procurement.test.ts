@@ -37,6 +37,7 @@ let supplierId = ''
 let productAId = ''
 let productBId = ''
 let productCId = ''
+let productDId = ''
 let productIds: string[] = []
 let adminId = ''
 let managerAId = ''
@@ -146,12 +147,21 @@ beforeAll(async () => {
         basePriceMinor: 30_000,
         costPriceMinor: 0,
       },
+      {
+        sku: `OPD${suffix.slice(-5)}`,
+        name: `Order product D ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 40_000,
+        costPriceMinor: 0,
+      },
     ])
     .returning({ id: product.id })
   productAId = products[0]?.id ?? ''
   productBId = products[1]?.id ?? ''
   productCId = products[2]?.id ?? ''
-  productIds = [productAId, productBId, productCId]
+  productDId = products[3]?.id ?? ''
+  productIds = [productAId, productBId, productCId, productDId]
 
   const admin = await createTestUser({ role: 'ADMIN', email: `po-admin-${suffix}@test.local` })
   const managerA = await createTestUser({
@@ -711,6 +721,117 @@ describe.skipIf(!available)('receiving against an order', () => {
   it('keeps another branch out of the receipt', async () => {
     const { orderId, lineId } = await approvedOrder(1, 100)
     const response = await receive(orderId, lineId, 1, 100, {}, managerBCookie)
+    expect(response.status).toBe(403)
+  })
+})
+
+describe.skipIf(!available)('orders from replenishment suggestions', () => {
+  async function suggest(input: {
+    lines: { productId: string; quantity: number; unitCostMinor?: number }[]
+    idempotencyKey?: string
+    branchId?: string
+    cookie?: string
+  }) {
+    return app.request('/api/procurement/orders/from-suggestions', {
+      method: 'POST',
+      headers: authedHeaders(input.cookie ?? managerACookie),
+      body: JSON.stringify({
+        branchId: input.branchId ?? branchAId,
+        supplierId,
+        expectedDate: '2026-12-01',
+        idempotencyKey: input.idempotencyKey ?? randomUUID(),
+        lines: input.lines,
+      }),
+    })
+  }
+
+  beforeAll(async () => {
+    if (!available) return
+    // A supplier's last delivery, which is where a suggestion's cost comes from.
+    await db
+      .insert(supplierProduct)
+      .values({ supplierId, productId: productBId, lastCostMinor: 1_200, leadTimeDays: 5 })
+      .onConflictDoNothing()
+  })
+
+  it('creates a draft priced from the supplier link', async () => {
+    const response = await suggest({ lines: [{ productId: productBId, quantity: 10 }] })
+    expect(response.status, await response.clone().text()).toBe(201)
+    const detail = await readJson<{
+      order: { id: string; status: string }
+      goodsValueMinor: number
+      lines: { unitCostMinor: number; quantity: number }[]
+    }>(response)
+    orderIds.push(detail.order.id)
+
+    expect(detail.order.status).toBe('DRAFT')
+    expect(detail.goodsValueMinor).toBe(12_000)
+    expect(detail.lines[0]?.unitCostMinor).toBe(1_200)
+    expect(detail.lines[0]?.quantity).toBe(10)
+  })
+
+  it('prefers a cost the manager typed', async () => {
+    const response = await suggest({
+      lines: [{ productId: productBId, quantity: 5, unitCostMinor: 1_500 }],
+    })
+    expect(response.status).toBe(201)
+    const detail = await readJson<{ order: { id: string }; goodsValueMinor: number }>(response)
+    orderIds.push(detail.order.id)
+    expect(detail.goodsValueMinor).toBe(7_500)
+  })
+
+  it('replays the same key instead of committing twice', async () => {
+    const idempotencyKey = randomUUID()
+    const first = await suggest({
+      lines: [{ productId: productBId, quantity: 1 }],
+      idempotencyKey,
+    })
+    const second = await suggest({
+      lines: [{ productId: productBId, quantity: 1 }],
+      idempotencyKey,
+    })
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(200)
+    const firstBody = await readJson<{ order: { id: string } }>(first)
+    const secondBody = await readJson<{ order: { id: string } }>(second)
+    orderIds.push(firstBody.order.id)
+    expect(secondBody.order.id).toBe(firstBody.order.id)
+  })
+
+  it('refuses a product with no cost from this supplier, naming it', async () => {
+    const response = await suggest({ lines: [{ productId: productDId, quantity: 2 }] })
+    expect(response.status).toBe(400)
+    const body = await readJson<{ error: { message: string } }>(response)
+    expect(body.error.message).toContain(`OPD${suffix.slice(-5)}`)
+  })
+
+  it('refuses an explicitly zero cost rather than sailing under the threshold', async () => {
+    const response = await suggest({
+      lines: [{ productId: productBId, quantity: 2, unitCostMinor: 0 }],
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('runs through the ordinary threshold on submit', async () => {
+    const response = await suggest({ lines: [{ productId: productBId, quantity: 1 }] })
+    const detail = await readJson<{ order: { id: string } }>(response)
+    orderIds.push(detail.order.id)
+
+    const submit = await app.request(`/api/procurement/orders/${detail.order.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    expect(submit.status).toBe(200)
+    const row = await orderRow(detail.order.id)
+    expect(row?.status).toBe('APPROVED')
+    expect(row?.approvalId).toBeNull()
+  })
+
+  it('keeps another branch out of the suggestion order', async () => {
+    const response = await suggest({
+      lines: [{ productId: productBId, quantity: 1 }],
+      cookie: managerBCookie,
+    })
     expect(response.status).toBe(403)
   })
 })

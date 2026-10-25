@@ -26,6 +26,26 @@ export interface OrderUpdateBody {
   lines?: OrderLineInput[]
 }
 
+/**
+ * An order raised from the replenishment screen: one supplier, the quantities
+ * the manager kept, and an optional cost each. A cost that is omitted comes from
+ * the supplier's last delivery (P11-D12).
+ */
+export interface SuggestionOrderLineInput {
+  productId: string
+  quantity: number
+  unitCostMinor?: number
+}
+
+export interface OrderFromSuggestionsBody {
+  branchId: string
+  supplierId: string
+  expectedDate?: string
+  note?: string
+  idempotencyKey: string
+  lines: SuggestionOrderLineInput[]
+}
+
 export interface OrderListQuery {
   branchId?: string | null
   supplierId?: string

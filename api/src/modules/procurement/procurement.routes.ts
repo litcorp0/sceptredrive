@@ -7,6 +7,7 @@ import {
   validateOrderCancel,
   validateOrderClose,
   validateOrderCreate,
+  validateOrderFromSuggestions,
   validateOrderIdParam,
   validateOrderListQuery,
   validateOrderUpdate,
@@ -32,6 +33,16 @@ procurementRoutes.post(
   requirePermission('procurement.create'),
   validateOrderCreate,
   (c) => procurementController.createOrder(c, c.req.valid('json')),
+)
+
+// Static before param, and the same path shape as `/orders`: a suggestion is a
+// proposal, so it creates a DRAFT order through the normal lifecycle.
+procurementRoutes.post(
+  '/api/procurement/orders/from-suggestions',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderFromSuggestions,
+  (c) => procurementController.createOrderFromSuggestions(c, c.req.valid('json')),
 )
 
 // Static before param: otherwise `/orders/matchable` matches `:id`.
@@ -125,14 +136,6 @@ procurementRoutes.get(
   requirePermission('procurement.read'),
   validateOrderIdParam,
   (c) => procurementController.getReturn(c, c.req.valid('param').id),
-)
-
-procurementRoutes.post(
-  '/api/procurement/returns/:id/post',
-  requireSession,
-  requirePermission('procurement.return'),
-  validateOrderIdParam,
-  (c) => procurementController.postReturn(c, c.req.valid('param').id),
 )
 
 procurementRoutes.post(
