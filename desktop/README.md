@@ -22,10 +22,31 @@ Run from the repository root unless noted.
 | `bun run --filter desktop test:spike` | PowerSync gate: both VFS backends + restart persistence |
 | `bun run --filter desktop test:print` | Packaged receipt + drawer through the fake ESC/POS adapter |
 | `bun run --filter desktop test:sync` | Device sync smoke (needs the API + PowerSync service) |
+| `bun run --filter desktop test:counter` | Counter audit: enrol, sell, home figures, 9 screens × 3 widths, keyboard, offline relaunch (needs the full stack — see below) |
 | `bun .planning/phases/06-pos-offline-core/evidence/verify-outbox.ts` | Outbox recovery simulation (real SQLite, scripted server) |
 
 `make:pos` on Linux needs the `zip` binary (MakerZIP shells out to it); CI images have it,
 minimal distros may not.
+
+### `test:counter` prerequisites
+
+The counter audit drives the app end to end, so it needs more than a build:
+
+- the API on `:4000`, Postgres on `:5434`, and the PowerSync service on `:8080`
+  (`bun run dev:api`, `docker compose up -d`, `bun run sync:up`);
+- the demo seed (`bun run db:seed -- --demo`) for the `ACC-SPX` branch and its products;
+- a built renderer (`bun run --filter desktop package`), because it launches the `.vite`
+  bundle through Electron;
+- `.env` with `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `DATABASE_URL`.
+
+It creates its own terminal and its own credit customer per run and never deletes a shipped
+row, so it is safe to run repeatedly. It exits `2` and names the missing prerequisite rather
+than reporting assertions that were never reached. Screenshots land in
+`.planning/phases/10-desktop-pos-redesign/evidence/shots/`.
+
+It drives the **unpackaged** production build on purpose: a packaged app sets
+`allowLocalOrigins: false`, so it cannot enrol against a localhost API. `test:e2e` proves the
+packaged binary separately.
 
 ## Renamed to Sceptre Drive (2026-10-24)
 
