@@ -41,6 +41,24 @@ export const productCreateSchema = z
   })
   .strict()
 
+/**
+ * A manager's product proposal (Phase 11, MGR-02). It is not a product: the row
+ * is created only when an admin approves the request (P11-D7).
+ */
+export const productSubmissionSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    categoryId: z.uuid(),
+    uomId: z.uuid(),
+    brandId: z.uuid().optional(),
+    description: z.string().trim().min(1).max(500).optional(),
+    proposedBasePriceMinor: z.number().int().min(1).max(100_000_000_000),
+    barcode: barcodeCodeSchema.optional(),
+    supplierId: z.uuid().optional(),
+    note: z.string().trim().min(1).max(300).optional(),
+  })
+  .strict()
+
 export const productUpdateSchema = z
   .object({
     sku: skuSchema.optional(),
@@ -85,6 +103,7 @@ export const validateProductBarcodeParam = validateParam(productBarcodeParamSche
 export const validateProductBranchParam = validateParam(productBranchParamSchema)
 export const validateProductCreate = validateJson(productCreateSchema)
 export const validateProductUpdate = validateJson(productUpdateSchema)
+export const validateProductSubmission = validateJson(productSubmissionSchema)
 export const validateProductListQuery = validateQuery(productListQuerySchema)
 export const validateBarcodeCreate = validateJson(barcodeCreateSchema)
 export const validatePriceOverride = validateJson(priceOverrideSchema)

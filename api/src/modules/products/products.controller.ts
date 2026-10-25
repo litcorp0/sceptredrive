@@ -8,6 +8,7 @@ import type {
   PriceOverrideBody,
   ProductCreateInput,
   ProductListQuery,
+  ProductSubmissionBody,
   ProductUpdateInput,
 } from './products.types.ts'
 
@@ -82,4 +83,11 @@ export async function removePriceOverride(c: Context<AppEnv>, id: string, branch
   const actor = actorFromContext(c)
   await productsService.removePriceOverride(user, actor, id, branchId)
   return c.json({ removed: true })
+}
+
+export async function submitProduct(c: Context<AppEnv>, input: ProductSubmissionBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await productsService.submitProduct(user, actor, input)
+  return c.json(result, 201)
 }

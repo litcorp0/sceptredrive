@@ -93,6 +93,20 @@ export async function getSettingValue<K extends SettingKey>(
   return resolved.value as SettingValue<K>
 }
 
+/**
+ * The resolved value plus where it came from. An audit entry that says "approved
+ * automatically" should name the threshold it used and whether that was the
+ * branch's own value or the company default.
+ */
+export async function getResolvedSetting<K extends SettingKey>(
+  key: K,
+  options: { branchId?: string | null } = {},
+  executor: DbExecutor = db,
+): Promise<{ value: SettingValue<K>; source: 'branch' | 'global' | 'default' }> {
+  const resolved = await resolveSetting(key, options.branchId ?? null, executor)
+  return { value: resolved.value as SettingValue<K>, source: resolved.source }
+}
+
 export async function listSettings(
   user: SessionUser,
   requestedBranchId?: string | null,

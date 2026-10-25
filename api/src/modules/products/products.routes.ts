@@ -10,10 +10,19 @@ import {
   validateProductCreate,
   validateProductIdParam,
   validateProductListQuery,
+  validateProductSubmission,
   validateProductUpdate,
 } from './products.validation.ts'
 
 export const productsRoutes = factory.createApp()
+
+productsRoutes.post(
+  '/api/products/submissions',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateProductSubmission,
+  (c) => productsController.submitProduct(c, c.req.valid('json')),
+)
 
 productsRoutes.get(
   '/api/products',

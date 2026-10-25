@@ -116,10 +116,16 @@ export function registerDecisionHandler(type: ApprovalType, handler: DecisionHan
 export function assertDecisionHandlersRegistered(required: readonly ApprovalType[]): void
 ```
 
-This module self-registers `PRODUCT_CREATE` (its handler lives in this file). Plan 04 calls
-`registerDecisionHandler('PURCHASE_ORDER', …)` from `procurement.service.ts`, so the import runs
-`procurement → approvals` and never the reverse. That direction is the whole reason for a registry
-instead of a `switch`.
+**No owner self-registers inside this module.** `products.service.ts` registers
+`PRODUCT_CREATE` and `procurement.service.ts` (Plan 04) registers `PURCHASE_ORDER`, so the import
+always runs `owner → approvals` and never the reverse. That direction is the whole reason for a
+registry instead of a `switch`: the handler needs the owner's private helpers
+(`createProductFromSubmission`), and importing them here would close a cycle the moment the owner
+imported `requestApproval`.
+
+`api/src/app.ts` calls `assertDecisionHandlersRegistered(['PRODUCT_CREATE'])` at module load —
+Plan 04 adds `PURCHASE_ORDER` to that list — so a request type that can be created but not decided
+fails at boot rather than at the first decision.
 
 An unregistered type at decision time → `AppError(500, 'INTERNAL', …)`. A request type that cannot
 be decided is a programming error, not a user error, and it must be visible in tests the first
@@ -161,6 +167,9 @@ export async function submitProduct(
 - **No product row is created here.** Re-submitting the same product while a request is pending
   is allowed (they are different proposals); the partial unique index in Plan 02 only guards
   `entity_id IS NOT NULL`, which a pending submission does not have.
+- **An admin is refused** with a 400 and told to use the catalogue. Submitting to themselves would
+  need self-approval, which P11-D18's no-self-approval rule makes impossible — the honest answer is
+  that this endpoint is for branch managers.
 
 **Approve** — `productCreateHandler`:
 

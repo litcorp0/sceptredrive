@@ -1,9 +1,11 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { resolveEffectivePrice } from '@sceptre/shared'
 import { and, count, eq } from 'drizzle-orm'
-import { branchScope, resolveBranchFilter } from '../../auth/scope.ts'
-import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
+import { branchScope, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
+import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import * as approvalsService from '../approvals/approvals.service.ts'
+import { registerDecisionHandler } from '../approvals/approvals.service.ts'
 import {
   findBrandById,
   findCategoryById,
@@ -20,6 +22,7 @@ import {
   allocateFromSequence,
   peekSequenceValue,
 } from '../platform/settings.service.ts'
+import * as suppliersService from '../suppliers/suppliers.service.ts'
 import {
   countProductRows,
   deleteBarcodeRow,
@@ -46,9 +49,11 @@ import type {
   ProductListRow,
   ProductPriceRow,
   ProductRow,
+  ProductSubmissionBody,
   ProductUpdateInput,
   ProductWithBarcodes,
 } from './products.types.ts'
+import { productSubmissionSchema } from './products.validation.ts'
 
 async function validateCategoryRef(categoryId: string, executor: DbExecutor): Promise<string> {
   const category = await findCategoryById(categoryId, executor)
@@ -554,3 +559,137 @@ export async function listProducts(
 
   return { products, total, branchId }
 }
+
+/**
+ * A manager's product proposal (MGR-02, P11-D7).
+ *
+ * Nothing is inserted: the proposal becomes a `PRODUCT_CREATE` approval, and the
+ * product exists only if an admin approves it. An admin is sent to the ordinary
+ * catalogue screen instead — submitting to themselves would need self-approval,
+ * which is refused by construction (P11-D18).
+ */
+export async function submitProduct(
+  user: SessionUser,
+  actor: AuditActor,
+  input: ProductSubmissionBody,
+): Promise<{ approvalId: string; status: 'PENDING' }> {
+  if (roleOf(user) === 'ADMIN') {
+    throw new AppError(
+      400,
+      'VALIDATION_ERROR',
+      'Create the product directly in the catalogue; submission is for branch managers',
+    )
+  }
+
+  const branchId = branchScope(user)
+  if (!branchId) throw new ForbiddenError('Your account is not assigned to a branch')
+
+  // Fail at submit, not at the decision: a proposal that names an archived
+  // category is a mistake the manager can fix in a minute.
+  await validateCategoryRef(input.categoryId, db)
+  await validateUomRef(input.uomId, db)
+  await validateBrandRef(input.brandId ?? null, db)
+  if (input.supplierId) await suppliersService.requireSupplier(input.supplierId)
+
+  const approval = await db.transaction(async (tx) =>
+    approvalsService.requestApproval(
+      actor,
+      {
+        type: 'PRODUCT_CREATE',
+        branchId,
+        amountMinor: input.proposedBasePriceMinor,
+        payload: { ...input },
+        note: input.note ?? null,
+      },
+      tx,
+    ),
+  )
+
+  await writeAudit({
+    ...actor,
+    action: 'product.submitted',
+    entity: 'approval',
+    entityId: approval.id,
+    branchId,
+    after: { name: input.name, proposedBasePriceMinor: input.proposedBasePriceMinor },
+  })
+
+  return { approvalId: approval.id, status: 'PENDING' }
+}
+
+/**
+ * Creates the product an approved `PRODUCT_CREATE` request described. Runs in the
+ * decision's transaction, so an approval and its product commit or roll back
+ * together. The cost is zero by design: a received cost is the only cost this
+ * system trusts (P11-D13).
+ */
+async function createProductFromSubmission(
+  executor: DbExecutor,
+  actor: AuditActor,
+  input: ProductSubmissionBody,
+  approvalId: string,
+): Promise<{ id: string; sku: string }> {
+  const sku = await allocateFromSequence('catalog.skuSequence', executor)
+  const categoryId = await validateCategoryRef(input.categoryId, executor)
+  const brandId = await validateBrandRef(input.brandId ?? null, executor)
+  const uomId = await validateUomRef(input.uomId, executor)
+
+  const created = await insertProduct(
+    {
+      sku,
+      name: input.name,
+      description: input.description ?? null,
+      categoryId,
+      brandId,
+      uomId,
+      costPriceMinor: 0,
+      basePriceMinor: input.proposedBasePriceMinor,
+      taxCategory: 'STANDARD',
+      createdBy: actor.actorId,
+    },
+    executor,
+  )
+  if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create the approved product')
+
+  if (input.barcode) {
+    try {
+      await insertBarcode(
+        { productId: created.id, code: input.barcode, createdBy: actor.actorId },
+        executor,
+      )
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`Barcode ${input.barcode} is already in use`)
+      }
+      throw error
+    }
+  }
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'product.created',
+      entity: 'product',
+      entityId: created.id,
+      after: { ...created, via: 'approval', approvalId },
+    },
+    executor,
+  )
+
+  return { id: created.id, sku: created.sku }
+}
+
+registerDecisionHandler('PRODUCT_CREATE', async (tx, approval, actor, decision) => {
+  if (decision === 'REJECTED') return undefined
+
+  const parsed = productSubmissionSchema.safeParse(approval.payload)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    throw new ConflictError(
+      `The proposal is no longer valid (${issue?.path.join('.') ?? 'payload'}: ${issue?.message ?? 'invalid'}); reject it with a reason instead`,
+    )
+  }
+
+  const created = await createProductFromSubmission(tx, actor, parsed.data, approval.id)
+  return { entityId: created.id }
+})

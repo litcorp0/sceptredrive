@@ -103,3 +103,16 @@ export interface ProductDetail extends ProductRow {
   barcodes: BarcodeRow[]
   overrides: ProductPriceRow[]
 }
+
+/** A manager's product proposal: the payload an admin decides on (MGR-02). */
+export interface ProductSubmissionBody {
+  name: string
+  categoryId: string
+  uomId: string
+  brandId?: string
+  description?: string
+  proposedBasePriceMinor: number
+  barcode?: string
+  supplierId?: string
+  note?: string
+}
