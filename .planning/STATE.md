@@ -5,15 +5,16 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-25
-**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is planned — 11 plans,
-none executed.** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
+**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is in progress — plans 01–08
+of 11 are complete.** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics
 & Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a
 later audit the same day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch
 Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 11** plan by plan, starting with `01-PLAN.md` (shared
-vocabulary). The plan set is `phases/11-procurement-replenishment/{README,00-DECISIONS,
-01-RESEARCH,01…11-PLAN}.md`; `00-DECISIONS.md` P11-D1…D20 refinements win over `00-CONTEXT.md`
+**Next action:** execute **Phase 11 Plan 09** — the console's `procurement` module (orders,
+receiving, returns, product submission, invoice matching). The plan set is
+`phases/11-procurement-replenishment/{README,00-DECISIONS,
+01-RESEARCH,01…11-PLAN}.md`; `00-DECISIONS.md` P11-D1…D21 refinements win over `00-CONTEXT.md`
 where the two disagree.
 
 ---
@@ -33,7 +34,7 @@ where the two disagree.
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
-| 11 | Procurement, Replenishment & Supplier Returns | 🔷 Planned (11 plans) |
+| 11 | Procurement, Replenishment & Supplier Returns | 🔷 In progress (8/11 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
@@ -74,6 +75,79 @@ where the two disagree.
   because `supplier_product` has no branch column (D10); credit notes reduce the balance but are
   not aged (D9, following Phase 5's on-account rule); write-off requests stay in Phase 12 (D8);
   approval expiry is not implemented.
+
+### Phase 11 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Shared vocabulary: permissions, approval types, replenishment arithmetic | ✅ Complete |
+| 02 | Schema, migration, threshold settings, document numbering, seeds | ✅ Complete |
+| 03 | Approvals core, threshold resolution, product submission | ✅ Complete |
+| 04 | Purchase order lifecycle | ✅ Complete |
+| 05 | Receiving, supplier-product link, derived catalogue cost | ✅ Complete |
+| 06 | Invoice matching against a purchase order | ✅ Complete |
+| 07 | Purchase returns and supplier credit notes | ✅ Complete |
+| 08 | Replenishment suggestions and supplier performance | ✅ Complete |
+| 09 | Console: procurement module | 🔷 Planned |
+| 10 | Console: replenishment and supplier performance | 🔷 Planned |
+| 11 | Verification, evidence, state update | 🔷 Planned |
+
+### Phase 11 execution notes (2026-10-25)
+
+- **Plans 01–07 were executed in an earlier session and this file was never updated.** Their
+  commits are `a132bc0` (shared vocabulary), `949b097` (schema, numbering, settings), `1b638c9`
+  (approvals), `9b5b438` (order lifecycle), `5ac263d` (receiving), `f2916f9` (invoice matching) and
+  `dac33ff` (returns and credit notes), plus two fixes (`a04fe12` CORS, `780268d`/`3e33492` desktop
+  CSP). The whole API suite was green before Plan 08 began: **36 files, 451 tests**.
+- **Plan 08 complete** (commits `a408d0e`, `c077484`, `378e327`). API **451 → 477** (18 new in
+  `replenishment.test.ts`, 7 in `procurement.test.ts`, 1 in `inventory.api.test.ts`); shared
+  **191** and desktop unchanged; `check-types` 6/6.
+- **Three commits instead of the plan's five, and the reason is structural.** The plan split the  two read models into separate commits, but both live in the same six module files, so the split
+  would have committed the same files twice; they land together. The plan's fifth commit was to be
+  "suggestion arithmetic against hand-computed fixtures", and those tests were written with the
+  code they test instead of after it. Both deviations are bookkeeping, not scope.
+- **No index was added, and the measurement is the reason.** `EXPLAIN (ANALYZE, BUFFERS)` on the
+  seeded demo month shows a hash join with a seq scan on `sale_line`; adding
+  `sale_line_product_sale_idx` inside a rolled-back transaction did **not** change the plan
+  (4.04 ms → 2.60 ms with noise in that range), because the query joins on `sale_id`, not
+  `product_id`. Plan 08 said "if it seq-scans `sale_line`, add the index and record why"; the
+  honest record is that the index has no reader, so the migration was not written. Evidence in
+  `phases/11-procurement-replenishment/evidence/08-velocity-and-suggestion.md`.
+- **One query, not two per supplier.** Cost drift reads the two newest receipt lines per
+  `(supplier, product)` through a window function, so a screen with sixty suppliers runs one
+  statement instead of a hundred and twenty; the two rows are re-sorted in the service so the
+  figure cannot depend on the database's row order.
+- **Two definitions were tightened against the plan's prose, and the tests say which.**  (a) The promised lead time averages over **delivered** lines only, the same set as the actual
+  lead time, so "we promised 7, they took 9" compares like with like; averaging undelivered lines
+  in produced 48 tenths where the fixture's delivered lines promise exactly 40.
+  (b) The fill rate is gated on the order's **status** (`RECEIVED`, `CLOSED`,
+  `PARTIALLY_RECEIVED`), which is what P11-D11 says, rather than on "has any receipt" — a
+  cancelled order must not depress a supplier's fill rate.
+- **A zero cost is refused, not silently replaced.** When a suggestion order carries
+  `unitCostMinor: 0`, the order is rejected with the product named rather than falling back to the
+  supplier's last cost: substituting a number the manager typed is how a wrong price is agreed, and
+  a zero-value line would pass any approval threshold. An omitted cost does take the link's last
+  cost (P11-D12).
+- **Defect found and removed:** `POST /api/procurement/returns/:id/post` was registered twice —
+  same handler, same middleware — left behind by Plan 07. Harmless at runtime, removed in
+  `c077484`.
+- **Numbers proved by hand, not by shape.** The suggestions tests assert the exact arithmetic on
+  every branch of `suggestReplenishment` (coverage 900 sold / lead 7 / safety 7 / max 40 / on hand
+  10 → 130; the same row with 130 on order → 0; no history → 30 and `NO_HISTORY`; MOQ 50 →
+  `MIN_ORDER`; no level → 0 and `NO_LEVEL`; never stocked → 20). Performance asserts 2/3 on time →
+  **6667 bp**, 200 of 270 fillable → **7407 bp**, lead time 43 tenths against a promise of 40,
+  drift 500 minor → **1000 bp**, and `null` rather than `0` for a rate with no denominator.
+- **Branch scoping is enforced twice, as P11-D17 requires:** routes check `procurement.read`, the
+  service resolves the branch from the session, and a manager asking for another branch gets
+  **403** while an admin without a branch gets **400** rather than every branch's rows.
+- **Not proven here, by design:** the console has no screens yet (Plans 09–10), so nothing has been
+  driven in a browser; the idempotency replay, threshold and ordering paths are proven at the API.
+  Plan 11's walkthrough owns the IDOR legs and the reconciliation against the ledgers.
+- **Pre-existing, left alone:** `admin/src/modules/settings/pages/settings-page.tsx` and
+  `admin/src/modules/branches/pages/branch-detail-page.tsx` were already modified in the working
+  tree (a stray formatter run adding semicolons, and one removed `max-w-xl`). The formatter change
+  is the only `bun run lint` error in the repository and is **not** from Phase 11; it was left
+  untouched rather than reverted, and the Plan 08 gates were read with that failure named.
 
 ### Phase 10 execution notes (2026-10-25)
 
