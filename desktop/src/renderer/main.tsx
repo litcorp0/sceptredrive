@@ -4,7 +4,6 @@ import { App } from './App'
 import { PosProvider } from './lib/powersync/provider'
 import { parseHash } from './lib/router'
 import { PosRoutes } from './routes/_pos/app'
-import { DevChartsRoute } from './routes/_pos/dev-charts'
 import { DevPrintRoute } from './routes/_pos/dev-print'
 import { DevSyncRoute } from './routes/_pos/dev-sync'
 import { LoginRoute } from './routes/login'
@@ -22,10 +21,10 @@ if (!container) {
  *
  * - `#login`         PIN sign-in (offline-capable) and staff authorization
  * - `#shift`         open/close the shift, cash in/out
+ * - `#home`          this terminal's day: take, drawer, credit, tax, hourly shape, top five
  * - `#pos`           POS app shell: selling (`#pos`), tender (`#pos/tender`),
  *                    settings (`#pos/settings`)
  * - `#dev/sync`      sync diagnostics: counts, session, status
- * - `#dev/charts`    chart-layer proof with static fixtures (Phase 7)
  * - `#spike`         the Phase 6 PowerSync gate (kept for verification)
  * - otherwise        shell diagnostics (app info + keychain self-test)
  */
@@ -58,16 +57,22 @@ function Root() {
     )
   }
 
+  // `#home` and `#pos` mount the same provider and the same guard ladder (P10-D6); the route
+  // decides which page renders inside it.
+  if (route.path === 'home') {
+    return (
+      <PosProvider>
+        <PosRoutes />
+      </PosProvider>
+    )
+  }
+
   if (route.path === 'pos' || (route.path === 'dev' && route.segments[1] === 'sync')) {
     return <PosProvider>{route.path === 'dev' ? <DevSyncRoute /> : <PosRoutes />}</PosProvider>
   }
 
   if (route.path === 'dev' && route.segments[1] === 'print') {
     return <DevPrintRoute />
-  }
-
-  if (route.path === 'dev' && route.segments[1] === 'charts') {
-    return <DevChartsRoute />
   }
 
   return <App />

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
  *
  * - `#login`         PIN sign-in / enrollment
  * - `#shift`         open and close the shift
+ * - `#home`          this terminal's day (take, drawer, credit, tax, hourly shape)
  * - `#pos`           selling (catalog + cart)
  * - `#pos/tender`    payment choice and sale hand-off
  * - `#pos/receipt/:id` receipt preview, print status, reprint
@@ -15,7 +16,6 @@ import { useEffect, useState } from 'react'
  * - `#pos/settings`  terminal + printer settings (manager only)
  * - `#dev/sync`      sync diagnostics
  * - `#dev/print`     printer diagnostics (POS_DIAGNOSTICS=1)
- * - `#dev/charts`    chart-layer proof with static fixtures
  * - `#spike`         the PowerSync gate panel
  * - otherwise        shell diagnostics (app info + keychain self-test)
  *
@@ -40,6 +40,20 @@ export function navigate(route: string): void {
   const next = route.startsWith('#') ? route : `#${route}`
   if (window.location.hash === next) return
   window.location.hash = next
+}
+
+/**
+ * Which POS screen a hash route means (P10-D6).
+ *
+ * `#home` is a top-level route beside `#pos`, not a `#pos/*` sub-screen: `#pos` already
+ * means selling in nine places (tender, receipt, sales, sync, and the header), so redefining
+ * it as home would silently change every one of them. Anything else under `#pos` keeps its
+ * second segment; bare `#pos` is selling.
+ *
+ * Pure and exported so the mapping can be pinned without rendering the guard ladder.
+ */
+export function screenForRoute(route: HashRoute): string {
+  return route.path === 'home' ? 'home' : (route.segments[1] ?? 'sell')
 }
 
 export function currentHash(): string {

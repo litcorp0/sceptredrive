@@ -1,3 +1,4 @@
+import { HomePage } from '@/modules/home'
 import { ReceiptScreen } from '@/modules/receipt'
 import { SalesScreen } from '@/modules/sales'
 import { SellScreen } from '@/modules/sell'
@@ -9,7 +10,7 @@ import { CartProvider } from '../../lib/cart/cart-store'
 import type { PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosRuntime } from '../../lib/pos-runtime'
 import { usePos } from '../../lib/powersync/provider'
-import { useHashRoute, useRedirect } from '../../lib/router'
+import { screenForRoute, useHashRoute, useRedirect } from '../../lib/router'
 
 /**
  * The POS application shell and its guards (Plan 06 Task 1).
@@ -22,6 +23,10 @@ import { useHashRoute, useRedirect } from '../../lib/router'
  * 3. no cached terminal config → `#login` (enrolment);
  * 4. no open shift while `pos.salesRequireOpenShift` → `#shift`;
  * 5. settings needs a manager/admin binding.
+ *
+ * `#home` and `#pos` mount this same shell (P10-D6). The guard ladder is identical for both:
+ * home is a counter screen, so a cashier with no open shift is still sent to `#shift`, one hop,
+ * exactly as before. The only difference is which page the shell renders once the gates pass.
  *
  * The shell keeps the same chrome for every screen so the sync badge and the
  * cashier identity never disappear mid-sale.
@@ -58,11 +63,13 @@ function PosBoot() {
   const route = useHashRoute()
   const staff = useStaffSession()
   const runtime = usePosRuntime()
-  const sub = route.segments[1] ?? 'sell'
+  // `#home` sits beside `#pos`; nothing else changes meaning (P10-D6). On `#pos` the second
+  // segment is the sell sub-screen, defaulting to selling.
+  const screen = screenForRoute(route)
 
   // Receipts and today's sales must be reachable after the shift is closed, so
   // a manager can reprint yesterday evening's sale while opening the next one.
-  const shiftOptional = sub === 'sales' || sub === 'receipt' || sub === 'sync'
+  const shiftOptional = screen === 'sales' || screen === 'receipt' || screen === 'sync'
   const needsShift =
     Boolean(runtime.config?.pos.salesRequireOpenShift) && !runtime.shift && !shiftOptional
 
@@ -74,7 +81,7 @@ function PosBoot() {
         ? 'login'
         : needsShift
           ? 'shift'
-          : sub === 'settings' && staff.role === 'CASHIER'
+          : screen === 'settings' && staff.role === 'CASHIER'
             ? 'pos'
             : null
 
@@ -94,7 +101,14 @@ function PosBoot() {
   // needs a shift id, so the tender screen refuses without one.
   const identity: PosIdentityRow = runtime.identity
 
-  if (sub === 'settings') {
+  // Home is a counter screen, not a selling screen: it renders outside the cart provider so a
+  // cart left mid-sale is not rebuilt (and its queries are not re-run) just by looking at the
+  // day's figures.
+  if (screen === 'home') {
+    return <HomePage identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  if (screen === 'settings') {
     return (
       <SettingsScreen
         identity={identity}
@@ -105,15 +119,15 @@ function PosBoot() {
     )
   }
 
-  if (sub === 'sales') {
+  if (screen === 'sales') {
     return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
   }
 
-  if (sub === 'sync') {
+  if (screen === 'sync') {
     return <SyncScreen identity={identity} shift={runtime.shift} staff={staff} />
   }
 
-  if (sub === 'receipt') {
+  if (screen === 'receipt') {
     const saleId = route.segments[2]
     if (!saleId) {
       return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
@@ -128,7 +142,7 @@ function PosBoot() {
       shiftId={runtime.shift?.id ?? ''}
       config={runtime.config}
     >
-      {sub === 'tender' ? (
+      {screen === 'tender' ? (
         <TenderScreen
           identity={identity}
           shift={runtime.shift}

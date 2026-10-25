@@ -24,6 +24,11 @@ import { SyncBadge } from './sync-badge'
  *
  * The unprinted-receipt count is a module query (`useUnprintedCount`), not SQL in
  * the chrome: Plan 04's home strip shows the same number.
+ *
+ * The terminal/branch block is the one way back to `#home` from any counter screen
+ * (Plan 05). It is a 44 px button rather than a new icon, because the chrome is
+ * already crowded and the block is where a cashier looks to answer "which till is
+ * this?" — the same question the home screen answers.
  */
 export function AppHeader({
   identity,
@@ -44,13 +49,19 @@ export function AppHeader({
 
   return (
     <header className="flex h-(--layout-topbar-height) shrink-0 items-center justify-between gap-4 bg-topbar px-5 text-topbar-foreground">
-      <div className="flex min-w-0 items-baseline gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium tracking-wide text-topbar-muted uppercase">
+      <button
+        type="button"
+        onClick={() => navigate('home')}
+        data-testid="pos-home"
+        title="This terminal today"
+        className="flex h-11 min-w-0 items-center gap-3 rounded-md px-1 text-left hover:bg-white/10"
+      >
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium tracking-wide text-topbar-muted uppercase">
             {identity?.branchName ?? 'Sceptre Drive'} · {identity?.branchCode ?? '—'}
-          </p>
-          <p
-            className="truncate text-sm font-semibold text-topbar-foreground"
+          </span>
+          <span
+            className="block truncate text-sm font-semibold text-topbar-foreground"
             data-testid="pos-terminal"
           >
             {identity?.terminalCode ?? 'Terminal not configured'}
@@ -65,9 +76,9 @@ export function AppHeader({
                 No open shift
               </Badge>
             )}
-          </p>
-        </div>
-      </div>
+          </span>
+        </span>
+      </button>
 
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-xs" data-testid="sync-cluster">

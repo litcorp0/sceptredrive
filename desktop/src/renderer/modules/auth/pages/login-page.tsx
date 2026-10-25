@@ -24,8 +24,8 @@ import { ManagerUnlock } from '../components/manager-unlock'
 
 type Phase = 'loading' | 'select' | 'pin' | 'activate' | 'change'
 
-function goToShift(): void {
-  window.location.hash = '#shift'
+function goHome(): void {
+  window.location.hash = '#home'
 }
 
 /**
@@ -107,7 +107,7 @@ export function LoginRoute() {
       }
 
       startStaffSession(binding)
-      goToShift()
+      goHome()
     } catch (signInError) {
       handlePinError(signInError)
     } finally {
@@ -272,7 +272,7 @@ export function LoginRoute() {
                   // Offline fallback: the temporary PIN still sells, but the
                   // badge stays Temporary and the POS asks again next sign-in.
                   startStaffSession(pendingChange.binding)
-                  goToShift()
+                  goHome()
                   return
                 }
                 setPendingChange(null)
@@ -280,7 +280,7 @@ export function LoginRoute() {
               }}
               onDone={(updated) => {
                 startStaffSession(updated)
-                goToShift()
+                goHome()
               }}
             />
           ) : null}
@@ -297,7 +297,7 @@ export function LoginRoute() {
                   return
                 }
                 startStaffSession(binding)
-                goToShift()
+                goHome()
               }}
               onRefresh={async () => {
                 if (db) await refresh(db)

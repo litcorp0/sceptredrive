@@ -1,6 +1,6 @@
 import { accraIsoDay } from '@sceptre/shared'
 import { describe, expect, it } from 'vitest'
-import { dayWindow, fillHours, homeSummary, peakHour, toTopSellers } from './day'
+import { dayWindow, fillHours, homeSummary, hourLabel, peakHour, toTopSellers } from './day'
 
 /**
  * The home screen's pure arithmetic (Plan 04 §Pure functions).
@@ -193,6 +193,15 @@ describe('homeSummary', () => {
 
     expect(summary.expectedCashMinor).toBeNull()
     expect(summary.shiftNumber).toBeNull()
+  })
+})
+
+describe('hourLabel', () => {
+  it('renders a 24-hour clock label, zero-padded at both ends of the day', () => {
+    expect(hourLabel(0)).toBe('00:00')
+    expect(hourLabel(9)).toBe('09:00')
+    expect(hourLabel(11)).toBe('11:00')
+    expect(hourLabel(23)).toBe('23:00')
   })
 })
 

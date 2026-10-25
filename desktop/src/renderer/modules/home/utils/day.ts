@@ -77,6 +77,16 @@ export function peakHour(points: ReadonlyArray<HourPoint>): number | null {
   return peak?.hour ?? null
 }
 
+/**
+ * `11:00` — the hour label the chart axis, the summary sentence, and the table all use.
+ *
+ * Zero-padded and 24-hour because the counter reads a clock, not a locale: a cashier looking
+ * for "when did it pick up" should never have to decide whether `1:00` is midday.
+ */
+export function hourLabel(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`
+}
+
 /** Query rows to the list the screen renders. Order is the SQL's — quantity desc, then name. */
 export function toTopSellers(rows: ReadonlyArray<TopSellerRow>): TopSeller[] {
   return rows.map((row) => ({

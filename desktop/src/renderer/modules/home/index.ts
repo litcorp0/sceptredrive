@@ -5,8 +5,9 @@
  * calls the API, so the screen is correct with the network unplugged; branch and company
  * takings stay the console's job.
  *
- * `api/` holds the statements, `hooks/` watches them, `utils/` is the pure arithmetic. The
- * page itself arrives in Plan 05 — this barrel exposes only the data layer until then.
+ * `api/` holds the statements, `hooks/` watches them, `utils/` is the pure arithmetic, and
+ * `pages/home-page.tsx` composes the screen. The page is the module's only cross-module
+ * export besides the day data the shell needs.
  */
 export type {
   CountRow,
@@ -17,6 +18,13 @@ export type {
   TopSellerRow,
 } from './api/queries'
 export { ACCRA_DAY_GUARD_MS, scheduleAccraDayFlip, useAccraDay } from './hooks/use-accra-day'
+export {
+  currentAccraHour,
+  HOUR_GUARD_MS,
+  msUntilNextAccraHour,
+  scheduleAccraHourFlip,
+  useCurrentAccraHour,
+} from './hooks/use-accra-hour'
 export {
   type ExpectedCash,
   type HomeDay,
@@ -29,6 +37,7 @@ export {
   useOutOfStock,
   useTopSellers,
 } from './hooks/use-home'
+export { HomePage } from './pages/home-page'
 export type {
   AccraDay,
   AttentionItem,
@@ -44,6 +53,7 @@ export {
   fillHours,
   type HomeSummaryInput,
   homeSummary,
+  hourLabel,
   peakHour,
   toTopSellers,
 } from './utils/day'

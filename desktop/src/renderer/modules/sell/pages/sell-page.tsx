@@ -28,6 +28,7 @@ import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
 import { usePosDatabase } from '@/lib/powersync/provider'
 import { navigate } from '@/lib/router'
 import { usePosShortcuts } from '@/lib/shortcuts'
+import { consumeFocus } from '@/lib/ui-intent'
 import { CartLineRow, CartTotalsPanel } from '@/modules/cart'
 import { CatalogBrowser } from '@/modules/catalog'
 import { CreditPanel } from '@/modules/credit'
@@ -71,6 +72,12 @@ export function SellScreen({
   const [pendingDiscount, setPendingDiscount] = useState<PendingDiscount | null>(null)
   const [showDiscountOverride, setShowDiscountOverride] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // F2 means "find an item" on both screens (P10-D7). Home records the intent before it
+  // navigates; this is the one place that acts on it, and it acts exactly once.
+  useEffect(() => {
+    if (consumeFocus('search')) searchRef.current?.focus()
+  }, [])
 
   const dialogOpen =
     confirmClear ||

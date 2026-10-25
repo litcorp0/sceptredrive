@@ -84,6 +84,10 @@ export function ShiftRoute() {
     setDialog(null)
     setLastClose(null)
     await refresh()
+    // A shift is open, so the till owes the cashier the day's picture rather than a second
+    // confirmation screen: the roadmap's promise is that the terminal opens on the shift home.
+    // `#home` renders it, and selling is one action from there (P10-D6).
+    window.location.hash = '#home'
   }
 
   async function handleCashMovement(input: {
@@ -200,11 +204,12 @@ export function ShiftRoute() {
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      window.location.hash = '#pos'
+                      window.location.hash = '#home'
                     }}
                     className="h-11"
+                    data-testid="shift-to-home"
                   >
-                    Start selling
+                    Go to today
                   </Button>
                   <Button
                     type="button"
