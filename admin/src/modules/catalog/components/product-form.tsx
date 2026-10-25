@@ -32,7 +32,6 @@ export interface ProductFormValues {
 	brandId: string
 	uomId: string
 	taxCategory: TaxCategory
-	costPrice: string
 	basePrice: string
 }
 
@@ -44,7 +43,6 @@ const EMPTY_VALUES: ProductFormValues = {
 	brandId: NO_BRAND,
 	uomId: "",
 	taxCategory: "STANDARD",
-	costPrice: "",
 	basePrice: "",
 }
 
@@ -57,7 +55,6 @@ function valuesFromProduct(product: ProductRow): ProductFormValues {
 		brandId: product.brandId ?? NO_BRAND,
 		uomId: product.uomId,
 		taxCategory: product.taxCategory,
-		costPrice: formatMinorPlain(product.costPriceMinor),
 		basePrice: formatMinorPlain(product.basePriceMinor),
 	}
 }
@@ -68,7 +65,6 @@ export function ProductForm({
 	categories,
 	brands,
 	units,
-	canEditCost,
 	readOnly = false,
 	barcodeEditor,
 	createBarcodes,
@@ -79,7 +75,6 @@ export function ProductForm({
 	categories: CategoryTreeNode[]
 	brands: Brand[]
 	units: Uom[]
-	canEditCost: boolean
 	readOnly?: boolean
 	barcodeEditor?: ReactNode
 	/** Barcodes submitted with a create (the API takes them in one call). */
@@ -100,14 +95,12 @@ export function ProductForm({
 	const [values, setValues] = useState<ProductFormValues>(EMPTY_VALUES)
 	const [formError, setFormError] = useState<string | null>(null)
 	const [priceError, setPriceError] = useState<string | null>(null)
-	const [costError, setCostError] = useState<string | null>(null)
 	const [suggesting, setSuggesting] = useState(false)
 
 	useEffect(() => {
 		setValues(initialProduct ? valuesFromProduct(initialProduct) : EMPTY_VALUES)
 		setFormError(null)
 		setPriceError(null)
-		setCostError(null)
 	}, [initialProduct])
 
 	useEffect(() => {
@@ -147,11 +140,6 @@ export function ProductForm({
 				setPriceError("Enter a valid amount, e.g. 95.00")
 				throw new Error("invalid price")
 			}
-			const costPriceMinor = parseGhsToMinor(values.costPrice || "0")
-			if (costPriceMinor === null) {
-				setCostError("Enter a valid amount, e.g. 45.00")
-				throw new Error("invalid cost")
-			}
 
 			const payload = {
 				sku: values.sku.trim() || undefined,
@@ -160,7 +148,6 @@ export function ProductForm({
 				categoryId: values.categoryId,
 				brandId: values.brandId === NO_BRAND ? null : values.brandId,
 				uomId: values.uomId,
-				costPriceMinor,
 				basePriceMinor,
 				taxCategory: values.taxCategory,
 			}
@@ -182,7 +169,7 @@ export function ProductForm({
 		},
 		onError: (error) => {
 			if (error instanceof Error && !("status" in error)) {
-				if (error.message === "invalid price" || error.message === "invalid cost") return
+				if (error.message === "invalid price") return
 				setFormError(error.message)
 				return
 			}
@@ -198,7 +185,6 @@ export function ProductForm({
 		event.preventDefault()
 		setFormError(null)
 		setPriceError(null)
-		setCostError(null)
 		saveMutation.mutate()
 	}
 
@@ -347,56 +333,34 @@ export function ProductForm({
 						</div>
 					</div>
 
-					<div className="grid grid-cols-2 gap-3">
-						<div className="grid gap-1.5">
-							<Label htmlFor="product-cost">Cost price</Label>
-							<div className="relative">
-								<span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
-									GHS
-								</span>
-								<Input
-									id="product-cost"
-									className="pl-10 tabular-nums"
-									value={values.costPrice}
-									disabled={disabled || !canEditCost}
-									onChange={(event) => update("costPrice", event.target.value)}
-								/>
-							</div>
-							{!canEditCost ? (
-								<p className="text-xs text-muted-foreground">
-									Only administrators can change the cost price.
-								</p>
-							) : null}
-							{costError ? (
-								<p role="alert" className="text-xs text-destructive">
-									{costError}
-								</p>
-							) : null}
+					{/*
+					 * No cost field: the catalogue cost follows the latest goods receipt (P11-D13).
+					 * The read-only line lives on the product detail page, beside the price history;
+					 * a form field here would be a second, editable source of truth and the API
+					 * rejects it (`productUpdateSchema` is strict).
+					 */}
+					<div className="grid gap-1.5 sm:max-w-xs">
+						<Label htmlFor="product-base-price">
+							Base selling price{taxMode === "INCLUSIVE" ? " (tax included)" : ""}
+						</Label>
+						<div className="relative">
+							<span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
+								GHS
+							</span>
+							<Input
+								id="product-base-price"
+								required
+								className="pl-10 tabular-nums"
+								value={values.basePrice}
+								disabled={disabled}
+								onChange={(event) => update("basePrice", event.target.value)}
+							/>
 						</div>
-
-						<div className="grid gap-1.5">
-							<Label htmlFor="product-base-price">
-								Base selling price{taxMode === "INCLUSIVE" ? " (tax included)" : ""}
-							</Label>
-							<div className="relative">
-								<span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
-									GHS
-								</span>
-								<Input
-									id="product-base-price"
-									required
-									className="pl-10 tabular-nums"
-									value={values.basePrice}
-									disabled={disabled}
-									onChange={(event) => update("basePrice", event.target.value)}
-								/>
-							</div>
-							{priceError ? (
-								<p role="alert" className="text-xs text-destructive">
-									{priceError}
-								</p>
-							) : null}
-						</div>
+						{priceError ? (
+							<p role="alert" className="text-xs text-destructive">
+								{priceError}
+							</p>
+						) : null}
 					</div>
 
 					<div className="grid gap-1.5">

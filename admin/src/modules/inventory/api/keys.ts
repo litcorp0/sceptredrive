@@ -25,6 +25,8 @@ export const inventoryKeys = {
 		[...inventoryKeys.stock, "detail", productId, branchId] as const,
 	movementList: (query: { productId: string; branchId: string | null; offset: number }) =>
 		[...inventoryKeys.movements, query] as const,
+	latestReceipt: (productId: string) =>
+		[...inventoryKeys.movements, "latest-receipt", productId] as const,
 	receiptList: (query: ReceiptListQuery) => [...inventoryKeys.receipts, query] as const,
 	receiptDetail: (id: string) => [...inventoryKeys.receipt, id] as const,
 }

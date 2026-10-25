@@ -13,7 +13,6 @@ export function ProductNewPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const navigate = useNavigate()
 	const canCreate = hasPermission(session.user.role, "catalog.create")
-	const canEditCost = hasPermission(session.user.role, "price.update")
 
 	const [barcodes, setBarcodes] = useState<BarcodeItem[]>([])
 
@@ -53,7 +52,6 @@ export function ProductNewPage() {
 					categories={categoriesQuery.data?.categories ?? []}
 					brands={brandsQuery.data?.brands ?? []}
 					units={unitsQuery.data?.uoms ?? []}
-					canEditCost={canEditCost}
 					createBarcodes={barcodes.map((item) => item.code)}
 					onSaved={(product) => {
 						void navigate({ to: "/catalog/products/$id", params: { id: product.id } })

@@ -1,3 +1,4 @@
+import { formatDay } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -8,8 +9,11 @@ import { ActiveBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+// The catalogue cost follows the latest goods receipt (P11-D13); the receipt read is inventory's.
+import { latestReceiptCostOptions } from "#/modules/inventory"
 import { brandListOptions, categoryListOptions, unitListOptions } from "../api/catalog"
 import { catalogKeys } from "../api/keys"
 import {
@@ -32,11 +36,11 @@ export function ProductDetailPage() {
 	const { branches } = useBranch()
 	const queryClient = useQueryClient()
 	const canUpdate = hasPermission(session.user.role, "catalog.update")
-	const canEditCost = hasPermission(session.user.role, "price.update")
 	const canArchive = hasPermission(session.user.role, "catalog.archive")
 	const canOverride = hasPermission(session.user.role, "price.override")
 
 	const productQuery = useQuery(productDetailOptions(id))
+	const latestReceiptQuery = useQuery(latestReceiptCostOptions(id))
 	const categoriesQuery = useQuery(categoryListOptions({ includeArchived: true }))
 	const brandsQuery = useQuery(brandListOptions({ includeArchived: true }))
 	const unitsQuery = useQuery(unitListOptions({ includeArchived: true }))
@@ -89,6 +93,11 @@ export function ProductDetailPage() {
 
 	const product = productQuery.data.product
 	const readOnly = !canUpdate || !product.isActive
+	const latestReceipt = latestReceiptQuery.data?.movements[0]
+	const latestReceiptBranch = latestReceipt
+		? (branches.find((branch) => branch.id === latestReceipt.branchId)?.name ??
+			latestReceipt.branchCode)
+		: null
 
 	return (
 		<div>
@@ -121,13 +130,36 @@ export function ProductDetailPage() {
 				) : null}
 			</div>
 
+			<div className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+				{latestReceiptQuery.isLoading ? (
+					<span className="text-muted-foreground">Loading the latest receipt cost…</span>
+				) : latestReceiptQuery.isError ? (
+					<span role="alert" className="text-destructive">
+						Couldn't load the latest receipt cost.
+					</span>
+				) : latestReceipt && latestReceiptBranch ? (
+					<>
+						Latest receipt cost:{" "}
+						<span className="font-medium tabular-nums">
+							{formatGhs(latestReceipt.unitCostMinor)}
+						</span>{" "}
+						<span className="text-muted-foreground">
+							— {latestReceiptBranch}, {formatDay(latestReceipt.createdAt)}
+						</span>
+					</>
+				) : (
+					<span className="text-muted-foreground">
+						No receipt yet — the cost is set by the first goods receipt.
+					</span>
+				)}
+			</div>
+
 			<ProductForm
 				mode="edit"
 				initialProduct={product}
 				categories={categoriesQuery.data?.categories ?? []}
 				brands={brandsQuery.data?.brands ?? []}
 				units={unitsQuery.data?.uoms ?? []}
-				canEditCost={canEditCost}
 				readOnly={readOnly}
 				barcodeEditor={
 					<BarcodeEditor

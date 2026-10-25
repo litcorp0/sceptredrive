@@ -58,6 +58,24 @@ export function movementListOptions(
 	})
 }
 
+/**
+ * The latest goods receipt for a product — the only receipt cost the console may show.
+ *
+ * The catalogue cost is derived from the latest receipt (P11-D13), so the product detail reads it
+ * here rather than offering an editable cost field. The API returns movements newest first and
+ * filters by `type` itself; the console renders `unitCostMinor`, never a recomputation.
+ */
+export function latestReceiptCostOptions(productId: string) {
+	return queryOptions({
+		queryKey: inventoryKeys.latestReceipt(productId),
+		queryFn: () =>
+			apiRequest<{ movements: MovementRow[]; total: number; branchId: string | null }>(
+				"/api/inventory/movements",
+				{ query: { productId, type: "RECEIPT", limit: 1, offset: 0 } },
+			),
+	})
+}
+
 export function listReceipts(query: ReceiptListQuery = {}) {
 	return apiRequest<{ receipts: InventoryReceipt[]; total: number; branchId: string | null }>(
 		"/api/inventory/receipts",

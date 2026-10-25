@@ -30,6 +30,7 @@ export {
 	createAdjustment,
 	createReceipt,
 	getReceipt,
+	latestReceiptCostOptions,
 	listReceipts,
 	movementListOptions,
 	receiptDetailOptions,

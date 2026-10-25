@@ -130,7 +130,6 @@ export interface ProductCreateInput {
 	categoryId: string
 	brandId?: string | null
 	uomId: string
-	costPriceMinor?: number
 	basePriceMinor: number
 	taxCategory?: TaxCategory
 	barcodes?: string[]
@@ -143,7 +142,6 @@ export interface ProductUpdateInput {
 	categoryId?: string
 	brandId?: string | null
 	uomId?: string
-	costPriceMinor?: number
 	basePriceMinor?: number
 	taxCategory?: TaxCategory
 }
