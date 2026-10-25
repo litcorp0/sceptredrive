@@ -239,7 +239,21 @@ export const sale = new Table(
     reprint_count: minor,
     created_at: isoText,
   },
-  { localOnly: true, indexes: { sale_shift: ['shift_id'], sale_occurred: ['occurred_at'] } },
+  {
+    localOnly: true,
+    indexes: {
+      /** The shift-close totals: every sale of one shift. */
+      sale_shift: ['shift_id'],
+      /** The sales-screen scan: one day across the table. */
+      sale_occurred: ['occurred_at'],
+      /**
+       * The home screen's aggregates: `terminal_id` first, because every home
+       * query filters on this terminal and only then on the Accra day window
+       * (`occurred_at >= ? AND occurred_at < ?`). P10-D12.
+       */
+      sale_terminal_occurred: ['terminal_id', 'occurred_at'],
+    },
+  },
 )
 
 export const saleLine = new Table(

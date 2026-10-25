@@ -19,7 +19,7 @@ import { PosSchema } from './schema'
 export const POS_DB_FILENAME = 'sceptre-drive-pos.db'
 
 /** SDK pre-built worker, copied to `public/@powersync` by `copy-assets`. */
-const WORKER_URL = '/@powersync/worker.js'
+export const POS_WORKER_URL = '/@powersync/worker.js'
 
 let databasePromise: Promise<PowerSyncDatabase> | null = null
 
@@ -57,7 +57,12 @@ export function getDatabase(): Promise<PowerSyncDatabase> {
           encryptionKey,
           // Single-instance desktop app: no shared workers.
           enableMultiTabs: false,
-          worker: WORKER_URL,
+          worker: POS_WORKER_URL,
+          // The home screen runs seven day-bounded aggregates over `sale`; a
+          // watched query re-runs them after every sale, line, and tender write.
+          // Caching prepared statements keeps the column/day queries off the
+          // prepare path (P10-D12).
+          preparedStatementsCache: 64,
         },
         logger: createConsoleLogger({ minLevel: LogLevels.warn }),
       })
