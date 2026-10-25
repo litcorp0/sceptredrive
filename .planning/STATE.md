@@ -11,9 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 09** (counter audit — widths, keyboard, reduced motion,
-offline copy). Plans 01–08 are complete; all fourteen modules are migrated, the strict gate covers
-both clients, and a first install now opens enrolment.
+**Next action:** Execute **Phase 10, Plan 10** (verification, evidence, and state update). Plans
+01–09 are complete; the counter audit runs as a gate at **150/150** and a first install opens
+enrolment.
 
 ---
 
@@ -31,7 +31,7 @@ both clients, and a first install now opens enrolment.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (8/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (9/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -39,6 +39,51 @@ both clients, and a first install now opens enrolment.
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
 ### Phase 10 execution notes (2026-10-25)
+
+- **Plan 09 complete** (commits `815baa2`, `88d828c`, `71e4d5c`, `4682947`). The counter audit
+  is a gate, not a transcript: `bun run --filter desktop test:counter` reports **150/150** from
+  the repository root, drives nine screens across three viewports, and leaves a screenshot per
+  screen at 1024 × 768 in `phases/10-desktop-pos-redesign/evidence/shots/`.
+- **The audit found two real defects, and both are fixed rather than asserted around.**
+  (a) *The tender keypad was the last pointer-only step in a sale.* To enter cash the cashier
+  had to Tab to the on-screen keys and press Enter ten times. The digit model moved into
+  `appendPesewaDigit`/`removePesewaDigit` and the number row drives it. (b) *The tender screen
+  invented a credit answer.* `hasProfile: false` meant both "no account here" and "not looked
+  yet", so for one frame a customer with GH₵5,000 of headroom read as `NO_PROFILE` — and
+  `creditNeedsApproval` treats that as a reason to ask a manager. A cashier pressing F9 in that
+  window would have been sent to an override dialog for a sale that needed none. `CustomerContext`
+  now carries `creditLoading`.
+- **The gate was proved able to fail, by mutation.** Adding one pesewa to the expected take and
+  one `text-emerald-600` to a module produced three failures and exit 1; both were reverted. The
+  mutation run is also what reproduced the credit defect deterministically: the assertion had been
+  passing or failing with the sync timing until the fixture was examined.
+- **The first draft of the audit could not fail.** `check()` had `(label, condition)` while every
+  call site passed `(condition, label)`, so each assertion evaluated the label string and printed
+  `PASS true`. It reported 150/150 on the first run, which is what gave it away. The signature now
+  matches the call sites, and the ten `check(true, …)` cases that follow a `waitFor` are documented
+  as deliberate: reaching the line is the proof, because `waitFor` throws.
+- **Two flaky reads were test bugs, not product bugs.** The credit decision was read before the
+  element rendered, and the average basket was parsed with `digits()` over the whole sub-line
+  ("3 sales · 4 items · GH₵171.67"), which concatenated the counts into the amount. Both are
+  fixed; three consecutive runs are green.
+- **The audit drives the unpackaged production build**, not the packaged binary: a packaged app
+  sets `allowLocalOrigins: false` by design, so it cannot enrol against a localhost API. Same
+  bundle, `app://` origin, preload bridge, and CSP; `security-smoke.mjs` still proves the
+  packaged binary at 40/40.
+- **Fixtures are created per run, never borrowed.** A terminal and a customer with a real credit
+  limit come from the admin API. The seeded ACC-SPX customer is already over its limit from the
+  Phase 9 demo month, so using it would have tested the override path instead of the sale.
+- **Bundle recorded for Plan 10:** main chunk **1,271,754 bytes**, +28,805 on Plan 06's
+  1,242,949 and +5,024 on Plan 07's 1,266,730. D11's 250 KB budget was never in play. Written to
+  `evidence/bundle.json` with a trailing newline, because the first version broke `bun run lint`
+  on every run.
+- **One carry-forward the audit cannot close:** the sell screen's credit panel has the same
+  "no account here" flash as the tender screen had. It is cosmetic there — nothing acts on it —
+  and it is recorded rather than folded into a verification plan's fix.
+- **Gates.** Desktop **413/413** (50 files), shared **149**, API **394**, `check-types` 6/6, lint
+  exit 0 (24 pre-existing warnings), `brand:check` over 880 tracked files, `tokens:check`,
+  `modules:check:strict` 14/14 both clients, counter audit **150/150**, packaged shell E2E
+  **40/40**.
 
 - **Plan 08 complete** (commits `9f4ba3d`, `697a116`, `2abeb6a`, `2443876`, `7194351`,
   `e498bae`, `36b6043`, `def55ab`). Seven task commits as the plan listed them, plus one fix
@@ -316,7 +361,7 @@ both clients, and a first install now opens enrolment.
 | 06 | Sell module — catalog, cart, and the counter panels | ✅ Complete |
 | 07 | Tender and receipt modules | ✅ Complete |
 | 08 | Shift, login, settings, sales, and sync modules | ✅ Complete |
-| 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ⬜ Not started |
+| 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ✅ Complete |
 | 10 | Verification, evidence, and state update | ⬜ Not started |
 
 ### Phase 10 planning notes (2026-10-25)

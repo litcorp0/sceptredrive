@@ -36,7 +36,11 @@ transcript, so the next phase inherits it.
 ## Prerequisites
 
 - API up (`bun run dev:api`), Postgres up, PowerSync up (`bun run sync:up`), demo seed applied.
-- `bun run --filter desktop package` completed (the audit runs the packaged binary).
+- `bun run --filter desktop package` completed. *(Correction after execution: the audit drives
+  the **unpackaged** production build, not the packaged binary. A packaged app sets
+  `allowLocalOrigins: false` by design — a shipped terminal must never be pointed at a local
+  impersonator — so it cannot enrol against a localhost API. Same `.vite` bundle, `app://`
+  origin, preload bridge, and CSP; `security-smoke.mjs` still proves the packaged binary.)*
 - A dedicated terminal is enrolled per run, as Phase 7's POS walkthrough does: never delete a
   shipped row to make room for a fixture.
 
@@ -130,6 +134,12 @@ killing a service the script does not own:
 - no `toFixed(` in the renderer's non-test sources.
 
 Target: **≥ 60 checks**, each printing `PASS`/`FAIL` with a label, the Phase 6/7 convention.
+Delivered: **150 checks**, plus nine screenshots and `evidence/bundle.json`.
+
+*(Correction after execution: two defects were found and fixed rather than asserted around —
+the tender keypad was pointer-only for cash entry, and the tender screen reported "no credit
+account" while its local read was still running, which could open a manager override for a sale
+that needed none.)*
 
 ## Verification
 
@@ -147,6 +157,10 @@ plan that owns the screen, not an assertion to loosen — the same rule as Phase
 3. `test(desktop): the keyboard path and chart accessibility`
 4. `test(desktop): the offline leg and relaunch`
 5. `chore(desktop): wire test:counter and record the bundle figure`
+
+*(Correction after execution: four commits, not five. The audit is one new file, so slicing it
+into four commits would have committed the same script four times with more of it each time.
+The two defects it found got their own commits instead, which is the more useful history.)*
 
 ## Done when
 
