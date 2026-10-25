@@ -5,15 +5,14 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-25
-**Status:** **Phase 9 (Analytics, Dashboard & Reporting Read Models) complete — 8/8 plans,
+**Status:** **Phase 10 (Desktop POS Modules, Chrome & Shift Home) complete — 10/10 plans,
 verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
 System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 10** (verification, evidence, and state update). Plans
-01–09 are complete; the counter audit runs as a gate at **150/150** and a first install opens
-enrolment.
+**Next action:** Plan **Phase 11** (Procurement, Replenishment & Supplier Returns). Its context is
+locked in `phases/11-procurement-replenishment/00-CONTEXT.md`; it needs task-level plans.
 
 ---
 
@@ -31,7 +30,7 @@ enrolment.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (9/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -39,6 +38,40 @@ enrolment.
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
 
 ### Phase 10 execution notes (2026-10-25)
+
+- **Phase 10 verified** — 10/10 plans. `01-VERIFICATION.md` maps every roadmap criterion to a
+  command or a recorded step; `evidence/suites.txt` is the whole gate matrix in one transcript
+  (`evidence/run-suites.sh`), and `desktop/test/e2e/counter-audit.mjs` is the phase's new gate.
+- **Numbers.** shared **127 → 149**, API **394** (unchanged; the one edit is `analytics.service.ts`
+  adopting the shared average-basket helper), desktop **339 → 413**, packaged shell E2E
+  **38 → 40**, packaged print **21/21**, counter audit **150/150** (new), `modules:check:strict`
+  **14/14 POS** and **15/15 admin**, brand gate over **880** tracked files. Renderer bundle
+  **1,242,949 → 1,271,754** bytes, +28,805 — D11's 250 KB budget was never in play. Nine
+  screenshots at 1024 × 768 in `evidence/shots/`.
+- **Decisions.** P10-D1…P10-D15 are indexed in `00-DECISIONS.md` and folded into
+  `00-CONTEXT.md` under "Amendments (2026-10-25)", with footnotes on D5, D6, and D13 where a
+  refinement contradicted the locked table.
+- **Deviations, all deliberate.** The E2E landing assertions were updated for `#home` (Plan 05)
+  and for `#diagnostics` (Plan 08) — pointed at the route that owns them, never loosened. Phase 7's
+  `verify-charts-desktop.mjs` is left as history and superseded by the counter audit. D13's
+  "both themes" became light-only (P10-D8). The counter audit drives the **unpackaged** build
+  because a packaged app cannot enrol against localhost by design. Four commits instead of the
+  plan's seven in Plan 07, and four instead of five in Plan 09, because in both cases the split
+  would have committed the same file repeatedly.
+- **Defects found and fixed: 11.** A first install opening the diagnostics shell; product tiles
+  truncating names; two `(minor / 100).toFixed(2)` money inputs; ~100 raw palette classes; the
+  pointer-only tender keypad; the tender screen inventing a credit answer; the number row dying
+  after a failed PIN; autofocus swallowing the staff code; no visible focus indicator on four
+  screens; a pending receipt's badge satisfying `/Printed/i`; and today's sales counting other
+  days' unprinted receipts into "today". The table is in `01-VERIFICATION.md`.
+- **Carry-forwards.** `stock_threshold` sync and never-stocked parts → **Phase 11**. Held carts,
+  split tender, refunds, and the `averageBasketMinor`-on-a-negative-take question → **Phase 13**.
+  Phase 6's 51-check `e2e-pos.mjs` (device revocation, duplicate upload, last-unit race) was **not
+  re-run** because it assumes it owns `:4000`; those legs belong to **Phase 15**'s offline drill
+  suite and the gap is named in the verification rather than papered over. A dark till, if ever
+  wanted, is unscheduled. Two cosmetic items are recorded and unfixed: the sell screen's credit
+  panel flashes "No account here" for one frame, and `components/ui/sidebar.tsx` is a generated
+  registry file the POS never renders.
 
 - **Plan 09 complete** (commits `815baa2`, `88d828c`, `71e4d5c`, `4682947`). The counter audit
   is a gate, not a transcript: `bun run --filter desktop test:counter` reports **150/150** from
@@ -362,7 +395,7 @@ enrolment.
 | 07 | Tender and receipt modules | ✅ Complete |
 | 08 | Shift, login, settings, sales, and sync modules | ✅ Complete |
 | 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ✅ Complete |
-| 10 | Verification, evidence, and state update | ⬜ Not started |
+| 10 | Verification, evidence, and state update | ✅ Complete |
 
 ### Phase 10 planning notes (2026-10-25)
 
