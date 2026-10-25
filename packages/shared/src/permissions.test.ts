@@ -17,9 +17,13 @@ describe('permissions', () => {
     expect(can('MANAGER', 'settings.update')).toBe(true)
   })
 
-  it('gives managers catalog read and own-branch price overrides only', () => {
+  it('keeps managers out of catalogue creation, updates, and archiving', () => {
     expect(can('MANAGER', 'catalog.read')).toBe(true)
     expect(can('MANAGER', 'price.override')).toBe(true)
+    // Phase 11 (MGR-02): submitting a product is `procurement.create`, not
+    // `catalog.create` — `catalog.create` also guards categories, brands, and
+    // units, and a manager has no business creating those directly. Editing a
+    // product's base price is price policy, which stays admin.
     expect(can('MANAGER', 'catalog.create')).toBe(false)
     expect(can('MANAGER', 'catalog.update')).toBe(false)
     expect(can('MANAGER', 'catalog.archive')).toBe(false)
@@ -85,9 +89,10 @@ describe('permissions', () => {
     expect(can('CASHIER', 'loyalty.read')).toBe(false)
   })
 
-  it('lets managers read suppliers and run payables, but not edit the supplier master', () => {
+  it('lets managers read suppliers, create them, and run payables — never edit or archive', () => {
     expect(can('MANAGER', 'supplier.read')).toBe(true)
-    expect(can('MANAGER', 'supplier.create')).toBe(false)
+    // Phase 11 (MGR-01): a manager may add a supplier they need to order from.
+    expect(can('MANAGER', 'supplier.create')).toBe(true)
     expect(can('MANAGER', 'supplier.update')).toBe(false)
     expect(can('MANAGER', 'supplier.archive')).toBe(false)
 
@@ -123,6 +128,30 @@ describe('permissions', () => {
     expect(can('ADMIN', 'analytics.read')).toBe(true)
     expect(can('MANAGER', 'analytics.read')).toBe(true)
     expect(can('CASHIER', 'analytics.read')).toBe(false)
+  })
+
+  it('lets managers order and receive, and keeps approval admin-only', () => {
+    expect(can('MANAGER', 'procurement.read')).toBe(true)
+    expect(can('MANAGER', 'procurement.create')).toBe(true)
+    expect(can('MANAGER', 'procurement.receive')).toBe(true)
+    expect(can('MANAGER', 'procurement.return')).toBe(true)
+    // PROC-02 / P11-D18: approving is the one thing a manager never does, including
+    // for their own branch, so no self-approval path can exist.
+    expect(can('MANAGER', 'procurement.approve')).toBe(false)
+
+    expect(can('ADMIN', 'procurement.read')).toBe(true)
+    expect(can('ADMIN', 'procurement.create')).toBe(true)
+    expect(can('ADMIN', 'procurement.approve')).toBe(true)
+    expect(can('ADMIN', 'procurement.receive')).toBe(true)
+    expect(can('ADMIN', 'procurement.return')).toBe(true)
+  })
+
+  it('keeps cashiers out of procurement entirely', () => {
+    expect(can('CASHIER', 'procurement.read')).toBe(false)
+    expect(can('CASHIER', 'procurement.create')).toBe(false)
+    expect(can('CASHIER', 'procurement.approve')).toBe(false)
+    expect(can('CASHIER', 'procurement.receive')).toBe(false)
+    expect(can('CASHIER', 'procurement.return')).toBe(false)
   })
 
   it('has no duplicate permissions', () => {

@@ -492,12 +492,17 @@ describe.skipIf(!available)('suppliers module', () => {
     })
 
     it('enforces the permission matrix', async () => {
+      // Phase 11 (MGR-01): a manager may add a supplier they need to order from.
+      // The rest of the matrix is unchanged — no listing of archived suppliers,
+      // no editing the master, no archiving.
       const managerCreate = await app.request('/api/suppliers', {
         method: 'POST',
         headers: authedHeaders(managerCookie),
         body: JSON.stringify({ name: `Manager ${suffix}` }),
       })
-      expect(managerCreate.status).toBe(403)
+      expect(managerCreate.status).toBe(201)
+      const managerCreated = (await managerCreate.json()) as { supplier: { id: string } }
+      supplierIds.push(managerCreated.supplier.id)
 
       const cashierList = await app.request('/api/suppliers', {
         headers: authedHeaders(cashierCookie),
