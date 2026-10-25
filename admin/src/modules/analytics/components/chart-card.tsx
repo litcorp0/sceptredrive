@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useId } from "react"
 import {
 	Table,
 	TableBody,
@@ -76,21 +76,22 @@ interface ChartCardProps {
 }
 
 export function ChartCard({ title, summary, description, children, table }: ChartCardProps) {
+	const titleId = useId()
 	return (
-		<figure className="min-w-0 rounded-lg border bg-card p-4">
+		<figure aria-labelledby={titleId} className="min-w-0 rounded-lg border bg-card p-4">
 			<figcaption className="mb-2">
-				<h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+				<h3 id={titleId} className="text-sm font-semibold tracking-tight">
+					{title}
+				</h3>
 				{description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
 				<p className="mt-1 text-xs text-muted-foreground">{summary}</p>
 			</figcaption>
 			{/*
-			 * `group`, not `img`: the Recharts accessibility layer inside is focusable and
-			 * announces data points, and `role="img"` would hide those descendants from
-			 * assistive technology. The caption names the chart; the data table repeats it.
+			 * A named `<figure>`, not `role="img"`: the Recharts accessibility layer inside is
+			 * focusable and announces data points, and `role="img"` would hide those descendants
+			 * from assistive technology. The caption names the chart; the data table repeats it.
 			 */}
-			<div role="group" aria-label={`${title}. ${summary}`} className="min-w-0">
-				{children}
-			</div>
+			<div className="min-w-0">{children}</div>
 			<details className="mt-3 text-xs">
 				<summary className="cursor-pointer select-none font-medium text-muted-foreground hover:text-foreground">
 					View data table

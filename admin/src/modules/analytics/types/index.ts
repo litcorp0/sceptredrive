@@ -290,7 +290,7 @@ export interface InventoryResponse {
 		receivedValueMinor: number
 	}>
 	topMovers: Array<{ productId: string; sku: string; name: string; unitsSold: number }>
-	deadStock: number
+	deadStock: { count: number }
 }
 
 export interface CreditResponse {

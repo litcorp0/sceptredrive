@@ -79,8 +79,8 @@ export function InventoryTab() {
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{formatCount(data.totals.distinctProducts)} products ·{" "}
-					{formatCount(data.totals.unitsOnHand)} units on hand · {formatCount(data.deadStock)} with
-					stock but no movement
+					{formatCount(data.totals.unitsOnHand)} units on hand · {formatCount(data.deadStock.count)}{" "}
+					with stock but no movement
 				</p>
 				<ExportButton report="inventory" query={query} label="Inventory" />
 			</div>

@@ -354,8 +354,7 @@ try {
 		const problems = await figures.evaluateAll((nodes) =>
 			nodes.map((figure) => {
 				const caption = figure.querySelector("figcaption")?.textContent?.trim() ?? ""
-				const labelled = figure.querySelector('[role="img"], [role="group"][aria-label]')
-				const label = labelled?.getAttribute("aria-label") ?? ""
+				const label = figure.getAttribute("aria-labelledby") ?? ""
 				const details = figure.querySelector("details")
 				const table = details?.querySelector("table")
 				const tableCaption = table?.querySelector("caption")?.textContent?.trim() ?? ""
@@ -383,7 +382,10 @@ try {
 	const csvPath = path.join(evidenceDir, "plan09-sales-export.csv")
 	const [download] = await Promise.all([
 		page.waitForEvent("download", { timeout: 20_000 }),
-		page.getByRole("button", { name: /Export CSV/i }).first().click(),
+		page
+			.getByRole("button", { name: /Export CSV/i })
+			.first()
+			.click(),
 	])
 	await download.saveAs(csvPath)
 	const csvText = fs.readFileSync(csvPath, "utf8")
@@ -462,16 +464,15 @@ try {
 	})
 	await managerPage.locator("main").waitFor()
 	const analyticsBaseline = await managerPage.locator("main").innerText()
-	await managerPage.goto(
-		`${adminUrl}/analytics?branchId=00000000-0000-0000-0000-000000000000`,
-		{ waitUntil: "networkidle" },
-	)
+	await managerPage.goto(`${adminUrl}/analytics?branchId=00000000-0000-0000-0000-000000000000`, {
+		waitUntil: "networkidle",
+	})
 	await managerPage.locator("main").waitFor()
 	const analyticsAfter = await managerPage.locator("main").innerText()
 	check(
 		analyticsBaseline.length > 0 &&
 			analyticsAfter.replace(/\s+/g, " ") === analyticsBaseline.replace(/\s+/g, " "),
-		"a foreign branchId does not change a manager\'s analytics view",
+		"a foreign branchId does not change a manager's analytics view",
 	)
 	check(analyticsBefore !== null, "manager analytics navigated")
 
@@ -542,8 +543,7 @@ try {
 								: Number(value.trim().slice(0, -1)) * 1000
 						return nodes.filter((node) => {
 							const style = getComputedStyle(node)
-							const animation =
-								style.animationName !== "none" ? toMs(style.animationDuration) : 0
+							const animation = style.animationName !== "none" ? toMs(style.animationDuration) : 0
 							return animation > ceiling || toMs(style.transitionDuration) > ceiling
 						}).length
 					}, 1)
@@ -576,7 +576,10 @@ try {
 		}
 	})
 	function luminance(rgb) {
-		const parts = rgb.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0]
+		const parts = rgb
+			.match(/[\d.]+/g)
+			?.slice(0, 3)
+			.map(Number) ?? [0, 0, 0]
 		const [r, g, b] = parts.map((part) => {
 			const channel = part / 255
 			return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
@@ -609,7 +612,11 @@ try {
 		const wrapper = document.querySelector('[data-slot="chart"] .recharts-tooltip-wrapper')
 		return wrapper ? (wrapper.textContent ?? "").trim() : ""
 	})
-	check(keyboardTooltip.length > 0, "chart is readable by keyboard arrow keys", keyboardTooltip.slice(0, 60))
+	check(
+		keyboardTooltip.length > 0,
+		"chart is readable by keyboard arrow keys",
+		keyboardTooltip.slice(0, 60),
+	)
 
 	section("console hygiene")
 	check(
