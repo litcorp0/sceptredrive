@@ -11,7 +11,7 @@ import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
-import { findOrderById } from '../procurement/procurement.repository.ts'
+import { findOrderById, sumCreditNotesBySupplier } from '../procurement/procurement.repository.ts'
 import { getOrderLinesForMatch } from '../procurement/procurement.service.ts'
 import { findProductById } from '../products/products.repository.ts'
 import { sumSupplierOwed } from '../suppliers/suppliers.repository.ts'
@@ -955,9 +955,10 @@ export async function listSupplierBalances(
   query: BalancesQuery,
 ): Promise<SupplierBalanceResult> {
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
-  const [outstandingRows, onAccountRows] = await Promise.all([
+  const [outstandingRows, onAccountRows, creditBySupplier] = await Promise.all([
     selectOutstandingBySupplier(branchId, isoDay(new Date())),
     selectOnAccountBySupplier(branchId, null),
+    sumCreditNotesBySupplier(branchId, null),
   ])
 
   const bySupplier = new Map<string, SupplierBalanceRow>()
@@ -969,6 +970,7 @@ export async function listSupplierBalances(
       branchId,
       invoiceOutstandingMinor: row.outstandingMinor,
       onAccountMinor: 0,
+      creditMinor: 0,
       owedMinor: row.outstandingMinor,
       overdueMinor: row.overdueMinor,
       invoiceCount: row.invoiceCount,
@@ -983,13 +985,34 @@ export async function listSupplierBalances(
       branchId,
       invoiceOutstandingMinor: 0,
       onAccountMinor: 0,
+      creditMinor: 0,
       owedMinor: 0,
       overdueMinor: 0,
       invoiceCount: 0,
     }
     balance.onAccountMinor = row.onAccountMinor
-    balance.owedMinor = balance.invoiceOutstandingMinor - row.onAccountMinor
     bySupplier.set(row.supplierId, balance)
+  }
+  for (const [creditSupplierId, credit] of creditBySupplier) {
+    if (credit.totalMinor === 0) continue
+    const balance = bySupplier.get(creditSupplierId) ?? {
+      supplierId: creditSupplierId,
+      supplierCode: credit.code,
+      supplierName: credit.name,
+      branchId,
+      invoiceOutstandingMinor: 0,
+      onAccountMinor: 0,
+      creditMinor: 0,
+      owedMinor: 0,
+      overdueMinor: 0,
+      invoiceCount: 0,
+    }
+    balance.creditMinor = credit.totalMinor
+    bySupplier.set(creditSupplierId, balance)
+  }
+  for (const balance of bySupplier.values()) {
+    balance.owedMinor =
+      balance.invoiceOutstandingMinor - balance.onAccountMinor - balance.creditMinor
   }
 
   const balances = [...bySupplier.values()].sort(
@@ -1008,9 +1031,10 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
   const supplierId = query.supplierId ?? null
 
-  const [invoiceRows, onAccountRows] = await Promise.all([
+  const [invoiceRows, onAccountRows, creditBySupplier] = await Promise.all([
     selectAgingInvoiceRows({ branchId, supplierId }),
     selectOnAccountBySupplier(branchId, supplierId),
+    sumCreditNotesBySupplier(branchId, supplierId),
   ])
 
   const bySupplier = new Map<string, PayableAgingSupplierRow>()
@@ -1028,6 +1052,7 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
         buckets: emptyAgingBuckets(),
         totalOutstandingMinor: 0,
         onAccountMinor: 0,
+        creditMinor: 0,
         invoices: [],
       }
       bySupplier.set(row.supplierId, supplierRow)
@@ -1054,6 +1079,11 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
     if (row.onAccountMinor === 0) continue
     ensureSupplier(row).onAccountMinor = row.onAccountMinor
   }
+  for (const [creditSupplierId, credit] of creditBySupplier) {
+    if (credit.totalMinor === 0) continue
+    const existing = bySupplier.get(creditSupplierId)
+    if (existing) existing.creditMinor = credit.totalMinor
+  }
 
   const suppliers = [...bySupplier.values()].sort((a, b) =>
     a.supplierName.localeCompare(b.supplierName),
@@ -1067,7 +1097,18 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
     totalOnAccountMinor += supplierRow.onAccountMinor
   }
 
-  return { asOf, branchId, suppliers, totals, totalOutstandingMinor, totalOnAccountMinor }
+  return {
+    asOf,
+    branchId,
+    suppliers,
+    totals,
+    creditNotesMinor: [...creditBySupplier.values()].reduce(
+      (sum, value) => sum + value.totalMinor,
+      0,
+    ),
+    totalOutstandingMinor,
+    totalOnAccountMinor,
+  }
 }
 
 /**

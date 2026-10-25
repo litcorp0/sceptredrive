@@ -25,6 +25,7 @@ import {
 } from '../approvals/approvals.service.ts'
 import { findReceiptByIdempotency } from '../inventory/inventory.repository.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
+import { postMovements } from '../inventory/inventory.service.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -33,17 +34,30 @@ import { findProductById } from '../products/products.repository.ts'
 import * as suppliersService from '../suppliers/suppliers.service.ts'
 import {
   countOrders,
+  countReturns,
   deleteOrderLines,
+  findCreditNoteByReturn,
   findOrderByIdempotency,
+  findReturnById,
+  findReturnByIdempotency,
+  insertCreditNote,
   insertOrder,
   insertOrderLines,
+  insertReturn,
+  insertReturnLines,
   lockOrderForUpdate,
+  lockReturnForUpdate,
   selectMatchableOrders,
   selectOrderLines,
   selectOrderPage,
   selectOrderWithSupplier,
+  selectReceiptLineForReturn,
   selectReceivedByOrderLine,
+  selectReturnedQuantityByReceiptLine,
+  selectReturnLines,
+  selectReturnPage,
   updateOrderRow,
+  updateReturnRow,
 } from './procurement.repository.ts'
 import type {
   OrderActionBody,
@@ -56,6 +70,11 @@ import type {
   OrderListQuery,
   OrderUpdateBody,
   ReceiveOrderBody,
+  ReturnCreateBody,
+  ReturnDetail,
+  ReturnLineView,
+  ReturnList,
+  ReturnListQuery,
 } from './procurement.types.ts'
 
 /** The line-level facts the invoice matcher needs; read-only and scoped. */
@@ -743,4 +762,310 @@ export async function listMatchableOrders(
     throw new AppError(400, 'VALIDATION_ERROR', 'Choose a branch to match invoices against')
   }
   return { orders: await selectMatchableOrders(branchId, query.supplierId) }
+}
+
+// ------------------------------------------------------------- returns
+
+/**
+ * A return of goods to a supplier (PROC-05, P11-D1).
+ *
+ * Created as a DRAFT that posts nothing — it is a worksheet until somebody
+ * confirms it. The cap is `received − already returned` per receipt line,
+ * checked here and again inside `postReturn`'s transaction, because two drafts
+ * can propose the same unit and only one may post it.
+ */
+export async function createReturn(
+  user: SessionUser,
+  actor: AuditActor,
+  input: ReturnCreateBody,
+): Promise<{ supplierReturn: ReturnDetail; replayed: boolean }> {
+  assertBranchAccess(user, input.branchId)
+  await requireBranch(user, input.branchId)
+  await suppliersService.requireSupplier(input.supplierId)
+
+  const existing = await findReturnByIdempotency(input.branchId, input.idempotencyKey)
+  if (existing) return { supplierReturn: await getReturn(user, existing.id), replayed: true }
+
+  // Every line must come from the same receipt, from this branch and supplier.
+  const receiptLines: {
+    input: { receiptLineId: string; quantity: number }
+    receiptLine: NonNullable<Awaited<ReturnType<typeof selectReceiptLineForReturn>>>
+  }[] = []
+  for (const line of input.lines) {
+    const receiptLine = await selectReceiptLineForReturn(line.receiptLineId)
+    if (!receiptLine) throw new NotFoundError('Receipt line not found')
+    if (receiptLine.branchId !== input.branchId) {
+      throw new ForbiddenError('That receipt belongs to another branch')
+    }
+    if (receiptLine.supplierId && receiptLine.supplierId !== input.supplierId) {
+      throw new ValidationError('That receipt belongs to another supplier')
+    }
+    const returned = await selectReturnedQuantityByReceiptLine(receiptLine.id, null)
+    if (line.quantity > receiptLine.quantity - returned) {
+      throw new ValidationError(
+        `You can return at most ${receiptLine.quantity - returned} of the ${receiptLine.quantity} received`,
+      )
+    }
+    receiptLines.push({ input: line, receiptLine })
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const replay = await findReturnByIdempotency(input.branchId, input.idempotencyKey, tx)
+    if (replay) return replay
+
+    const { number } = await allocateDocumentNumber('supplier_return', input.branchId, tx)
+    const supplierReturn = await insertReturn(
+      {
+        number,
+        branchId: input.branchId,
+        supplierId: input.supplierId,
+        purchaseOrderId:
+          input.purchaseOrderId ?? receiptLines[0]?.receiptLine.purchaseOrderId ?? null,
+        receiptId: input.receiptId ?? receiptLines[0]?.receiptLine.receiptId ?? null,
+        reason: input.reason,
+        note: input.note ?? null,
+        supplierCreditNoteNumber: input.supplierCreditNoteNumber ?? null,
+        idempotencyKey: input.idempotencyKey,
+        createdBy: actor.actorId,
+      },
+      tx,
+    )
+
+    await insertReturnLines(
+      receiptLines.map(({ input: line, receiptLine }) => ({
+        returnId: supplierReturn.id,
+        receiptLineId: receiptLine.id,
+        purchaseOrderLineId: receiptLine.purchaseOrderLineId,
+        productId: receiptLine.productId,
+        quantity: line.quantity,
+        unitCostMinor: receiptLine.unitCostMinor,
+      })),
+      tx,
+    )
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_return.created',
+        entity: 'supplier_return',
+        entityId: supplierReturn.id,
+        branchId: supplierReturn.branchId,
+        after: {
+          number,
+          supplierId: input.supplierId,
+          creditValueMinor: receiptLines.reduce(
+            (sum, line) => sum + line.input.quantity * line.receiptLine.unitCostMinor,
+            0,
+          ),
+        },
+      },
+      tx,
+    )
+
+    return supplierReturn
+  })
+
+  return { supplierReturn: await getReturn(user, created.id), replayed: false }
+}
+
+/** Posts the stock movement and its credit note in one transaction (P11-D1). */
+export async function postReturn(
+  user: SessionUser,
+  actor: AuditActor,
+  returnId: string,
+): Promise<ReturnDetail> {
+  await db.transaction(async (tx) => {
+    const supplierReturn = await lockReturnForUpdate(returnId, tx)
+    if (!supplierReturn) throw new NotFoundError('Supplier return not found')
+    assertBranchAccess(user, supplierReturn.branchId)
+    if (supplierReturn.status !== 'DRAFT') {
+      throw new ConflictError(`A ${supplierReturn.status.toLowerCase()} return cannot be posted`)
+    }
+
+    const lines = await selectReturnLines(supplierReturn.id, tx)
+    if (lines.length === 0) throw new ConflictError('This return has no lines')
+
+    for (const line of lines) {
+      const returned = await selectReturnedQuantityByReceiptLine(
+        line.receiptLineId,
+        supplierReturn.id,
+        tx,
+      )
+      if (line.quantity > line.receivedQuantity - returned) {
+        throw new ConflictError(
+          `Only ${line.receivedQuantity - returned} of ${line.sku} can still be returned`,
+        )
+      }
+    }
+
+    const amountMinor = lines.reduce((sum, line) => sum + line.quantity * line.unitCostMinor, 0)
+    const { number } = await allocateDocumentNumber(
+      'supplier_credit_note',
+      supplierReturn.branchId,
+      tx,
+    )
+
+    await insertCreditNote(
+      {
+        number,
+        branchId: supplierReturn.branchId,
+        supplierId: supplierReturn.supplierId,
+        returnId: supplierReturn.id,
+        amountMinor,
+        createdBy: actor.actorId,
+      },
+      tx,
+    )
+
+    // The ledger refuses to go negative: goods that were sold cannot be returned
+    // until stock is adjusted. `allowNegative` is deliberately not passed.
+    await postMovements(
+      actor,
+      lines.map((line) => ({
+        productId: line.productId,
+        branchId: supplierReturn.branchId,
+        type: 'SUPPLIER_RETURN' as const,
+        quantityDelta: -line.quantity,
+        unitCostMinor: line.unitCostMinor,
+        referenceType: 'SUPPLIER_RETURN' as const,
+        referenceId: supplierReturn.id,
+        referenceNumber: supplierReturn.number,
+        note: supplierReturn.reason,
+        productName: line.name,
+      })),
+      { executor: tx },
+    )
+
+    await updateReturnRow(
+      supplierReturn.id,
+      {
+        status: 'POSTED',
+        postedAt: new Date(),
+        postedBy: actor.actorId,
+        creditNoteNumber: number,
+      },
+      tx,
+    )
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_return.posted',
+        entity: 'supplier_return',
+        entityId: supplierReturn.id,
+        branchId: supplierReturn.branchId,
+        before: { status: 'DRAFT' },
+        after: { status: 'POSTED', creditNoteNumber: number, amountMinor, lines: lines.length },
+      },
+      tx,
+    )
+  })
+
+  return getReturn(user, returnId)
+}
+
+export async function cancelReturn(
+  user: SessionUser,
+  actor: AuditActor,
+  returnId: string,
+  reason: string,
+): Promise<ReturnDetail> {
+  await db.transaction(async (tx) => {
+    const supplierReturn = await lockReturnForUpdate(returnId, tx)
+    if (!supplierReturn) throw new NotFoundError('Supplier return not found')
+    assertBranchAccess(user, supplierReturn.branchId)
+    if (supplierReturn.status !== 'DRAFT') {
+      throw new ConflictError('A posted return cannot be cancelled; raise a new document instead')
+    }
+
+    await updateReturnRow(
+      supplierReturn.id,
+      {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelledBy: actor.actorId,
+        cancelReason: reason,
+      },
+      tx,
+    )
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_return.cancelled',
+        entity: 'supplier_return',
+        entityId: supplierReturn.id,
+        branchId: supplierReturn.branchId,
+        before: { status: 'DRAFT' },
+        after: { status: 'CANCELLED', reason },
+      },
+      tx,
+    )
+  })
+
+  return getReturn(user, returnId)
+}
+
+export async function getReturn(user: SessionUser, returnId: string): Promise<ReturnDetail> {
+  const supplierReturn = await findReturnById(returnId)
+  if (!supplierReturn) throw new NotFoundError('Supplier return not found')
+  assertBranchAccess(user, supplierReturn.branchId)
+
+  const [lines, creditNote, supplierRow] = await Promise.all([
+    selectReturnLines(returnId),
+    findCreditNoteByReturn(returnId),
+    suppliersService.requireSupplier(supplierReturn.supplierId),
+  ])
+
+  const lineViews: ReturnLineView[] = lines.map((line) => ({
+    id: line.id,
+    receiptLineId: line.receiptLineId,
+    receiptNumber: line.receiptNumber,
+    productId: line.productId,
+    sku: line.sku,
+    name: line.name,
+    quantity: line.quantity,
+    unitCostMinor: line.unitCostMinor,
+    lineCreditMinor: line.quantity * line.unitCostMinor,
+    receivedQuantity: line.receivedQuantity,
+  }))
+
+  const canWrite = hasPermission(user, 'procurement.return')
+
+  return {
+    supplierReturn,
+    supplierName: supplierRow.name,
+    lines: lineViews,
+    creditNote: creditNote
+      ? {
+          number: creditNote.number,
+          amountMinor: creditNote.amountMinor,
+          postedAt: creditNote.postedAt,
+        }
+      : null,
+    totalCreditMinor: lineViews.reduce((sum, line) => sum + line.lineCreditMinor, 0),
+    canPost: canWrite && supplierReturn.status === 'DRAFT',
+    canCancel: canWrite && supplierReturn.status === 'DRAFT',
+  }
+}
+
+export async function listReturns(user: SessionUser, query: ReturnListQuery): Promise<ReturnList> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters = {
+    branchId,
+    supplierId: query.supplierId,
+    status: query.status,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [rows, total] = await Promise.all([selectReturnPage(filters), countReturns(filters)])
+
+  return {
+    branchId,
+    total,
+    returns: rows.map((row) => ({
+      ...row.ret,
+      supplierName: row.supplierName,
+      creditMinor: row.creditMinor ?? null,
+    })),
+  }
 }

@@ -123,3 +123,59 @@ export interface ReceiveOrderBody {
   note?: string
   lines: ReceiveLineBody[]
 }
+
+export interface ReturnLineBody {
+  receiptLineId: string
+  quantity: number
+}
+
+export interface ReturnCreateBody {
+  branchId: string
+  supplierId: string
+  purchaseOrderId?: string
+  receiptId?: string
+  reason: string
+  note?: string
+  supplierCreditNoteNumber?: string
+  idempotencyKey: string
+  lines: ReturnLineBody[]
+}
+
+export interface ReturnLineView {
+  id: string
+  receiptLineId: string
+  receiptNumber: string
+  productId: string
+  sku: string
+  name: string
+  quantity: number
+  unitCostMinor: number
+  lineCreditMinor: number
+  receivedQuantity: number
+}
+
+export interface ReturnDetail {
+  supplierReturn: OrderReturnRow
+  supplierName: string
+  lines: ReturnLineView[]
+  creditNote: { number: string; amountMinor: number; postedAt: Date } | null
+  totalCreditMinor: number
+  canPost: boolean
+  canCancel: boolean
+}
+
+export type OrderReturnRow = typeof import('./procurement.schema.ts').supplierReturn.$inferSelect
+
+export interface ReturnListQuery {
+  branchId?: string | null
+  supplierId?: string
+  status?: 'DRAFT' | 'POSTED' | 'CANCELLED'
+  limit: number
+  offset: number
+}
+
+export interface ReturnList {
+  returns: (OrderReturnRow & { supplierName: string; creditMinor: number | null })[]
+  total: number
+  branchId: string | null
+}

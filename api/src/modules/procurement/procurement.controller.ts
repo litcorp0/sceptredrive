@@ -10,6 +10,8 @@ import type {
   OrderListQuery,
   OrderUpdateBody,
   ReceiveOrderBody,
+  ReturnCreateBody,
+  ReturnListQuery,
 } from './procurement.types.ts'
 
 export async function listOrders(c: Context<AppEnv>, query: OrderListQuery) {
@@ -75,4 +77,33 @@ export async function receiveOrder(c: Context<AppEnv>, id: string, input: Receiv
   const actor = actorFromContext(c)
   const result = await procurementService.receiveOrder(user, actor, id, input)
   return c.json(result, result.replayed ? 200 : 201)
+}
+
+export async function createReturn(c: Context<AppEnv>, input: ReturnCreateBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await procurementService.createReturn(user, actor, input)
+  return c.json(result.supplierReturn, result.replayed ? 200 : 201)
+}
+
+export async function listReturns(c: Context<AppEnv>, query: ReturnListQuery) {
+  const user = currentUser(c)
+  return c.json(await procurementService.listReturns(user, query))
+}
+
+export async function getReturn(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  return c.json(await procurementService.getReturn(user, id))
+}
+
+export async function postReturn(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  return c.json(await procurementService.postReturn(user, actor, id))
+}
+
+export async function cancelReturn(c: Context<AppEnv>, id: string, input: { reason: string }) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  return c.json(await procurementService.cancelReturn(user, actor, id, input.reason))
 }

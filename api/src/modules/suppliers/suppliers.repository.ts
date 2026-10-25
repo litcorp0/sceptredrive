@@ -5,6 +5,7 @@ import {
   supplierPayment,
   supplierPaymentAllocation,
 } from '../payables/payables.schema.ts'
+import { supplierCreditNote } from '../procurement/procurement.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierPaymentDetail, supplierProduct } from './suppliers.schema.ts'
 import type {
@@ -363,7 +364,8 @@ export async function updateLastCost(
 
 /**
  * The D9 owed figure for a supplier: invoice outstanding minus unallocated
- * payment remainders (on account), VOID documents excluded. Reads the payables
+ * payment remainders (on account) minus supplier credit notes, VOID documents
+ * excluded. Reads the payables
  * tables directly (schema-level seam) so suppliers stays free of a payables
  * service dependency.
  */
@@ -400,7 +402,17 @@ export async function sumSupplierOwed(
     .innerJoin(supplierPayment, eq(supplierPayment.id, supplierPaymentAllocation.paymentId))
     .where(and(eq(supplierPayment.supplierId, supplierId), eq(supplierPayment.status, 'COMPLETED')))
 
+  const creditRows = await executor
+    .select({
+      total: sql<number>`coalesce(sum(${supplierCreditNote.amountMinor}), 0)`.mapWith(Number),
+    })
+    .from(supplierCreditNote)
+    .where(eq(supplierCreditNote.supplierId, supplierId))
+
   const outstanding = outstandingRows[0]?.total ?? 0
   const onAccount = (paymentRows[0]?.total ?? 0) - (allocationRows[0]?.total ?? 0)
-  return outstanding - onAccount
+  const credited = creditRows[0]?.total ?? 0
+  // Phase 11 (P11-D9): a purchase return's credit note reduces what is owed, the
+  // same way an unallocated payment does.
+  return outstanding - onAccount - credited
 }

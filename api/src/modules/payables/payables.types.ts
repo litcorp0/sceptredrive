@@ -232,6 +232,8 @@ export interface SupplierBalanceRow {
   branchId: string | null
   invoiceOutstandingMinor: number
   onAccountMinor: number
+  /** Purchase-return credit notes: they reduce what is owed, never an aging bucket. */
+  creditMinor: number
   owedMinor: number
   overdueMinor: number
   invoiceCount: number
@@ -263,6 +265,7 @@ export interface PayableAgingSupplierRow {
   buckets: AgingBuckets
   totalOutstandingMinor: number
   onAccountMinor: number
+  creditMinor: number
   invoices: PayableAgingInvoiceRow[]
 }
 
@@ -271,6 +274,8 @@ export interface PayablesAgingResult {
   branchId: string | null
   suppliers: PayableAgingSupplierRow[]
   totals: AgingBuckets
+  /** Credit notes are reported beside the buckets, never inside them (P11-D9). */
+  creditNotesMinor: number
   totalOutstandingMinor: number
   totalOnAccountMinor: number
 }

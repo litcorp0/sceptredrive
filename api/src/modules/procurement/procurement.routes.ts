@@ -11,6 +11,9 @@ import {
   validateOrderListQuery,
   validateOrderUpdate,
   validateReceiveOrder,
+  validateReturnCancel,
+  validateReturnCreate,
+  validateReturnListQuery,
 } from './procurement.validation.ts'
 
 export const procurementRoutes = factory.createApp()
@@ -98,4 +101,53 @@ procurementRoutes.post(
   validateOrderIdParam,
   validateReceiveOrder,
   (c) => procurementController.receiveOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+procurementRoutes.get(
+  '/api/procurement/returns',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateReturnListQuery,
+  (c) => procurementController.listReturns(c, c.req.valid('query')),
+)
+
+procurementRoutes.post(
+  '/api/procurement/returns',
+  requireSession,
+  requirePermission('procurement.return'),
+  validateReturnCreate,
+  (c) => procurementController.createReturn(c, c.req.valid('json')),
+)
+
+procurementRoutes.get(
+  '/api/procurement/returns/:id',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateOrderIdParam,
+  (c) => procurementController.getReturn(c, c.req.valid('param').id),
+)
+
+procurementRoutes.post(
+  '/api/procurement/returns/:id/post',
+  requireSession,
+  requirePermission('procurement.return'),
+  validateOrderIdParam,
+  (c) => procurementController.postReturn(c, c.req.valid('param').id),
+)
+
+procurementRoutes.post(
+  '/api/procurement/returns/:id/post',
+  requireSession,
+  requirePermission('procurement.return'),
+  validateOrderIdParam,
+  (c) => procurementController.postReturn(c, c.req.valid('param').id),
+)
+
+procurementRoutes.post(
+  '/api/procurement/returns/:id/cancel',
+  requireSession,
+  requirePermission('procurement.return'),
+  validateOrderIdParam,
+  validateReturnCancel,
+  (c) => procurementController.cancelReturn(c, c.req.valid('param').id, c.req.valid('json')),
 )

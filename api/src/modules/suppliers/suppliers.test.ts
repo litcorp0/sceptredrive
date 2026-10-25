@@ -500,9 +500,11 @@ describe.skipIf(!available)('suppliers module', () => {
         headers: authedHeaders(managerCookie),
         body: JSON.stringify({ name: `Manager ${suffix}` }),
       })
-      expect(managerCreate.status).toBe(201)
+      // Record before asserting: a failed expectation must not leak a supplier
+      // whose sequence-allocated code then collides in every later run.
       const managerCreated = (await managerCreate.json()) as { supplier: { id: string } }
-      supplierIds.push(managerCreated.supplier.id)
+      if (managerCreated.supplier?.id) supplierIds.push(managerCreated.supplier.id)
+      expect(managerCreate.status).toBe(201)
 
       const cashierList = await app.request('/api/suppliers', {
         headers: authedHeaders(cashierCookie),

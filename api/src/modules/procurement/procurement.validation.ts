@@ -106,3 +106,41 @@ export const receiveOrderSchema = z
   .strict()
 
 export const validateReceiveOrder = validateJson(receiveOrderSchema)
+
+export const returnCreateSchema = z
+  .object({
+    branchId: z.uuid(),
+    supplierId: z.uuid(),
+    purchaseOrderId: z.uuid().optional(),
+    receiptId: z.uuid().optional(),
+    reason: z.string().trim().min(3).max(300),
+    note: z.string().trim().min(1).max(300).optional(),
+    supplierCreditNoteNumber: z.string().trim().min(1).max(60).optional(),
+    idempotencyKey: z.uuid(),
+    lines: z
+      .array(
+        z
+          .object({ receiptLineId: z.uuid(), quantity: z.number().int().min(1).max(1_000_000) })
+          .strict(),
+      )
+      .min(1)
+      .max(100)
+      .refine((lines) => new Set(lines.map((line) => line.receiptLineId)).size === lines.length, {
+        message: 'Each receipt line may appear only once in a return',
+      }),
+  })
+  .strict()
+
+export const returnListQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  supplierId: z.uuid().optional(),
+  status: z.enum(['DRAFT', 'POSTED', 'CANCELLED']).optional(),
+  limit: limitSchema,
+  offset: offsetSchema,
+})
+
+export const returnCancelSchema = z.object({ reason: z.string().trim().min(3).max(300) }).strict()
+
+export const validateReturnCreate = validateJson(returnCreateSchema)
+export const validateReturnListQuery = validateQuery(returnListQuerySchema)
+export const validateReturnCancel = validateJson(returnCancelSchema)

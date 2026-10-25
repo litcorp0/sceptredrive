@@ -137,8 +137,10 @@ selectCreditNotesBySupplier(branchId: string | null, supplierId: string | null, 
 `payables.service.ts`:
 
 - `listSupplierBalances` — the result row gains `creditMinor`. `owedMinor` becomes
-  `invoiceOutstandingMinor − onAccountMinor − creditMinor`. The supplier row is created even when
-  it has only a credit note and no invoices.
+  `invoiceOutstandingMinor − onAccountMinor − creditMinor`. A supplier with **only** a credit note
+  gets a row of its own (zeros plus the credit, so `owedMinor` is negative), which is why the
+  credit query joins `supplier` for the code and name rather than returning ids alone — a
+  credit-only supplier has no invoice query to borrow them from.
 - `getAging` — each supplier row gains `creditMinor`; **the buckets are untouched**. A credit note
   has no due date, so bucketing it would invent one. The report's footnote says credit notes are
   shown separately and are not aged (the same sentence Phase 5 uses for on-account credit).

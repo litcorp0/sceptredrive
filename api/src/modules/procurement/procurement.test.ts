@@ -24,7 +24,7 @@ import { documentSequence } from '../platform/sequences.schema.ts'
 import { setting } from '../platform/settings.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierProduct } from '../suppliers/suppliers.schema.ts'
-import { purchaseOrder } from './procurement.schema.ts'
+import { purchaseOrder, supplierCreditNote, supplierReturn } from './procurement.schema.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[procurement.test] database unavailable; integration tests skipped')
@@ -183,6 +183,16 @@ afterAll(async () => {
       .where(inArray(purchaseOrder.branchId, [branchAId, branchBId]))
   ).map((row) => row.id)
 
+  const returnIds = (
+    await db
+      .select({ id: supplierReturn.id })
+      .from(supplierReturn)
+      .where(inArray(supplierReturn.branchId, [branchAId, branchBId]))
+  ).map((row) => row.id)
+  if (returnIds.length > 0) {
+    await db.delete(supplierCreditNote).where(inArray(supplierCreditNote.returnId, returnIds))
+    await db.delete(supplierReturn).where(inArray(supplierReturn.id, returnIds))
+  }
   if (orderIdsForBranches.length > 0) {
     await db.delete(purchaseOrder).where(inArray(purchaseOrder.id, orderIdsForBranches))
   }
@@ -701,6 +711,170 @@ describe.skipIf(!available)('receiving against an order', () => {
   it('keeps another branch out of the receipt', async () => {
     const { orderId, lineId } = await approvedOrder(1, 100)
     const response = await receive(orderId, lineId, 1, 100, {}, managerBCookie)
+    expect(response.status).toBe(403)
+  })
+})
+
+describe.skipIf(!available)('purchase returns', () => {
+  async function receiptLineFor(productId: string) {
+    const rows = await db
+      .select()
+      .from(stockReceiptLine)
+      .where(eq(stockReceiptLine.productId, productId))
+      .limit(1)
+    return rows[0]
+  }
+
+  async function createReturn(quantity: number, productId = productAId, cookie = managerACookie) {
+    const line = await receiptLineFor(productId)
+    const response = await app.request('/api/procurement/returns', {
+      method: 'POST',
+      headers: authedHeaders(cookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        reason: 'Damaged on arrival',
+        idempotencyKey: randomUUID(),
+        lines: [{ receiptLineId: line?.id, quantity }],
+      }),
+    })
+    const body = await readJson<{
+      supplierReturn: { id: string; status: string; number: string }
+    }>(response)
+    return { response, body: body.supplierReturn, line }
+  }
+
+  it('creates a draft that posts nothing', async () => {
+    const { response, body } = await createReturn(1)
+    expect(response.status).toBe(201)
+    expect(body.status).toBe('DRAFT')
+
+    const credits = await db
+      .select()
+      .from(supplierCreditNote)
+      .where(eq(supplierCreditNote.returnId, body.id))
+    expect(credits).toHaveLength(0)
+  })
+
+  it('posts the return: negative movement, credit note, reduced balance', async () => {
+    const balanceBefore = await app.request('/api/payables/balances', {
+      headers: authedHeaders(managerACookie),
+    })
+    const beforeBody = await readJson<{ balances: { supplierId: string; owedMinor: number }[] }>(
+      balanceBefore,
+    )
+    const owedBefore =
+      beforeBody.balances.find((row) => row.supplierId === supplierId)?.owedMinor ?? 0
+
+    const { body, line } = await createReturn(2)
+    const posted = await app.request(`/api/procurement/returns/${body.id}/post`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    expect(posted.status).toBe(200)
+
+    const detail = await readJson<{
+      supplierReturn: { status: string; creditNoteNumber: string | null }
+      creditNote: { number: string; amountMinor: number } | null
+    }>(posted)
+    expect(detail.supplierReturn.status).toBe('POSTED')
+    expect(detail.creditNote?.number).toMatch(/^SCN-/)
+
+    const expectedCredit = 2 * (line?.unitCostMinor ?? 0)
+    expect(detail.creditNote?.amountMinor).toBe(expectedCredit)
+
+    const movements = await db
+      .select()
+      .from(stockMovement)
+      .where(eq(stockMovement.referenceId, body.id))
+    expect(movements).toHaveLength(1)
+    expect(movements[0]?.type).toBe('SUPPLIER_RETURN')
+    expect(movements[0]?.quantityDelta).toBe(-2)
+
+    const balanceAfter = await app.request('/api/payables/balances', {
+      headers: authedHeaders(managerACookie),
+    })
+    const afterBody = await readJson<{
+      balances: { supplierId: string; owedMinor: number; creditMinor: number }[]
+    }>(balanceAfter)
+    const row = afterBody.balances.find((entry) => entry.supplierId === supplierId)
+    expect(row?.owedMinor).toBe(owedBefore - expectedCredit)
+    expect(row?.creditMinor).toBe(expectedCredit)
+  })
+
+  it('refuses to return more than was received', async () => {
+    const { line } = await createReturn(1)
+    const response = await app.request('/api/procurement/returns', {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        reason: 'Too many',
+        idempotencyKey: randomUUID(),
+        lines: [{ receiptLineId: line?.id, quantity: 999 }],
+      }),
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('cancels a draft and refuses to cancel a posted return', async () => {
+    const draft = await createReturn(1)
+    const cancel = await app.request(`/api/procurement/returns/${draft.body.id}/cancel`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ reason: 'Supplier accepted the goods after all' }),
+    })
+    expect(cancel.status).toBe(200)
+    const cancelled = await readJson<{ supplierReturn: { status: string } }>(cancel)
+    expect(cancelled.supplierReturn.status).toBe('CANCELLED')
+
+    const posted = await createReturn(1)
+    await app.request(`/api/procurement/returns/${posted.body.id}/post`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    const refuse = await app.request(`/api/procurement/returns/${posted.body.id}/cancel`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ reason: 'Changed my mind' }),
+    })
+    expect(refuse.status).toBe(409)
+  })
+
+  it('keeps credit notes out of the aging buckets', async () => {
+    const aging = await app.request('/api/payables/aging', {
+      headers: authedHeaders(managerACookie),
+    })
+    expect(aging.status).toBe(200)
+    const body = await readJson<{
+      suppliers: { supplierId: string; creditMinor: number; buckets: Record<string, number> }[]
+      creditNotesMinor: number
+    }>(aging)
+    const row = body.suppliers.find((entry) => entry.supplierId === supplierId)
+    expect(body.creditNotesMinor).toBeGreaterThan(0)
+    if (row) {
+      expect(row.creditMinor).toBeGreaterThan(0)
+      // The credit is reported beside the buckets, never inside them.
+      expect(Object.keys(row.buckets).sort()).toEqual(
+        ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'].sort(),
+      )
+    }
+  })
+
+  it('keeps another branch out of the return', async () => {
+    const line = await receiptLineFor(productAId)
+    const response = await app.request('/api/procurement/returns', {
+      method: 'POST',
+      headers: authedHeaders(managerBCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        reason: 'Cross branch',
+        idempotencyKey: randomUUID(),
+        lines: [{ receiptLineId: line?.id, quantity: 1 }],
+      }),
+    })
     expect(response.status).toBe(403)
   })
 })
