@@ -1,7 +1,8 @@
 import { formatDateTime, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
-import { ScreenHeader } from '@/components/common'
+import { ScreenHeader, StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import {
   Empty,
   EmptyContent,
@@ -21,21 +22,37 @@ import {
   type ShiftState,
 } from '@/lib/shift/shift-service'
 import { CashMovementDialog, CloseShiftDialog, OpenShiftDialog } from '../components/shift-dialogs'
+import { varianceWords } from '../utils/variance'
 
 type Dialog = 'open' | 'cash-in' | 'cash-out' | 'close' | null
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  caption,
+}: {
+  label: string
+  value: string
+  /** One line of context. A figure that means nothing on its own gets one. */
+  caption?: string
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 font-mono text-xl font-semibold tabular-nums">{value}</p>
+      {caption ? <p className="mt-1 text-[11px] text-muted-foreground">{caption}</p> : null}
     </div>
   )
 }
 
 /**
  * Shift screen: open with a float, record cash in/out, close with counted cash.
- * Everything works offline; the outbox row ships with Plan 08's uploader.
+ * Everything works offline; the outbox row ships with the uploader.
+ *
+ * Three figures answer the three questions a cashier asks: what did I start
+ * with, what should be in the drawer now, and how far off am I. The variance
+ * cannot exist until the drawer is counted, so while the shift is open it says
+ * so rather than showing a zero — a zero would read as a balanced drawer.
  */
 export function ShiftRoute() {
   const { db, session } = usePos()
@@ -147,26 +164,61 @@ export function ShiftRoute() {
 
       <div className="mx-auto max-w-4xl p-6">
         {lastClose ? (
-          <div
-            className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-              lastClose.varianceMinor === 0
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-amber-300 bg-amber-50 text-amber-900'
-            }`}
-          >
-            Shift closed. Expected {formatGhs(lastClose.expectedCashMinor)}, counted{' '}
-            {formatGhs(lastClose.shift.countedCashMinor ?? 0)} — variance{' '}
-            <strong>{formatGhs(lastClose.varianceMinor)}</strong>.
-          </div>
+          <Card className="mb-4 gap-0 py-4" data-testid="close-summary">
+            <div className="px-5">
+              <h2 className="font-display text-lg font-semibold">
+                Shift {lastClose.shift.number} closed
+              </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Counted at {formatTime(lastClose.shift.closedAt ?? new Date().toISOString())}. The
+                server recomputes these figures when the shift syncs.
+              </p>
+              <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Expected</dt>
+                  <dd className="font-mono text-lg tabular-nums">
+                    {formatGhs(lastClose.expectedCashMinor)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Counted</dt>
+                  <dd className="font-mono text-lg tabular-nums">
+                    {formatGhs(lastClose.shift.countedCashMinor ?? 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Variance</dt>
+                  <dd
+                    className="flex items-center gap-1.5 font-mono text-lg font-semibold text-foreground tabular-nums"
+                    data-testid="close-summary-variance"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`size-1.5 shrink-0 rounded-full ${
+                        lastClose.varianceMinor === 0
+                          ? 'bg-ok'
+                          : lastClose.varianceMinor > 0
+                            ? 'bg-warn'
+                            : 'bg-danger'
+                      }`}
+                    />
+                    {varianceWords(lastClose.varianceMinor)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4">
+                <Button type="button" onClick={() => setLastClose(null)} className="h-11 px-6">
+                  Done
+                </Button>
+              </div>
+            </div>
+          </Card>
         ) : null}
 
         {error ? (
-          <p
-            role="alert"
-            className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          >
+          <StatusNote tone="danger" role="alert" className="mb-4">
             {error}
-          </p>
+          </StatusNote>
         ) : null}
 
         {!shift ? (
@@ -241,10 +293,13 @@ export function ShiftRoute() {
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Opening float" value={formatGhs(shift.openingFloatMinor)} />
               <Stat label="Expected cash" value={formatGhs(expected)} />
-              <Stat label="Cash movements" value={String(state?.movements.length ?? 0)} />
+              <Stat label="Variance" value="—" caption="Known when you count the drawer" />
             </div>
 
             <section className="mt-6 overflow-hidden rounded-lg border border-border">
+              <h2 className="border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Cash movements · {state?.movements.length ?? 0}
+              </h2>
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
                   <tr>
@@ -264,7 +319,7 @@ export function ShiftRoute() {
                   ) : (
                     state?.movements.map((movement) => (
                       <tr key={movement.id}>
-                        <td className="px-4 py-2 text-muted-foreground">
+                        <td className="px-4 py-2 font-mono text-muted-foreground tabular-nums">
                           {formatTime(movement.occurredAt)}
                         </td>
                         <td className="px-4 py-2">

@@ -1,3 +1,4 @@
+import { cn } from 'cn'
 import { type FormEvent, useState } from 'react'
 import { useDialogFocusReturn } from '@/components/common'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,70 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from '@/lib/format'
+import { computeVariance } from '@/lib/shift/shift-service'
+import { varianceWords } from '../utils/variance'
+
+/**
+ * A money field that rejects a bad amount while it is being typed.
+ *
+ * The three shift dialogs all collect an amount, and all three used to accept
+ * anything and complain only on submit. A cashier who typed `200,00` learned
+ * about it after pressing the button; the field now says so immediately, marks
+ * itself `aria-invalid`, and points at the sentence with `aria-describedby`.
+ *
+ * Integer pesewas throughout: `parseGhsToMinor` returns `null` rather than a
+ * float, so an unparseable amount can never reach the shift arithmetic.
+ */
+function MoneyField({
+  id,
+  label,
+  value,
+  onChange,
+  minimumMinor = 0,
+  placeholder,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (next: string) => void
+  /** Smallest acceptable amount. `0` allows an empty drawer. */
+  minimumMinor?: number
+  placeholder?: string
+}) {
+  const minor = parseGhsToMinor(value)
+  const problem =
+    value.trim() === ''
+      ? null
+      : minor === null
+        ? 'Enter an amount like 200.00'
+        : minor < minimumMinor
+          ? `Enter at least ${formatGhs(minimumMinor)}`
+          : null
+
+  return (
+    <label htmlFor={id} className="grid gap-1.5 text-sm font-medium">
+      {label}
+      <input
+        id={id}
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={problem ? `${id}-problem` : undefined}
+        className={cn(
+          'h-11 rounded-md border bg-background px-3 text-sm tabular-nums',
+          problem ? 'border-danger' : 'border-border',
+        )}
+        placeholder={placeholder}
+      />
+      {problem ? (
+        <span id={`${id}-problem`} className="text-xs font-normal text-danger">
+          {problem}
+        </span>
+      ) : null}
+    </label>
+  )
+}
 
 /** Opening float entry. The amount is collected before the shift row exists. */
 export function OpenShiftDialog({
@@ -23,9 +88,11 @@ export function OpenShiftDialog({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const minor = parseGhsToMinor(amount)
+  const ready = minor !== null && minor >= 0
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const minor = parseGhsToMinor(amount)
     if (minor === null) {
       setError('Enter an amount like 200.00')
       return
@@ -58,23 +125,19 @@ export function OpenShiftDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <form onSubmit={submit} className="grid gap-4">
-            <label htmlFor="opening-float" className="grid gap-1.5 text-sm font-medium">
-              Opening float (cash in the drawer)
-              <input
-                id="opening-float"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                className="h-11 rounded-md border border-border bg-background px-3 text-sm tabular-nums"
-                placeholder="200.00"
-              />
-            </label>
+            <MoneyField
+              id="opening-float"
+              label="Opening float (cash in the drawer)"
+              value={amount}
+              onChange={setAmount}
+              placeholder="200.00"
+            />
             <p className="text-xs text-muted-foreground">
               The shift is numbered for this terminal and day. Selling stays blocked until it is
               open.
             </p>
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             ) : null}
@@ -83,7 +146,7 @@ export function OpenShiftDialog({
                 <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={busy} className="h-11 flex-[2]">
+                <Button type="submit" disabled={busy || !ready} className="h-11 flex-[2]">
                   {busy ? 'Opening…' : 'Open shift'}
                 </Button>
               </div>
@@ -117,9 +180,11 @@ export function CashMovementDialog({
   const [busy, setBusy] = useState(false)
   const label = type === 'CASH_IN' ? 'Cash in' : 'Cash out'
 
+  const minor = parseGhsToMinor(amount)
+  const ready = minor !== null && minor > 0 && reason.trim().length > 0
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const minor = parseGhsToMinor(amount)
     if (minor === null || minor <= 0) {
       setError('Enter an amount like 50.00')
       return
@@ -162,17 +227,14 @@ export function CashMovementDialog({
                 {formatGhs(expectedCashMinor)}
               </span>
             </div>
-            <label htmlFor="cash-amount" className="grid gap-1.5 text-sm font-medium">
-              Amount
-              <input
-                id="cash-amount"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                className="h-11 rounded-md border border-border bg-background px-3 text-sm tabular-nums"
-                placeholder="50.00"
-              />
-            </label>
+            <MoneyField
+              id="cash-amount"
+              label="Amount"
+              value={amount}
+              onChange={setAmount}
+              minimumMinor={1}
+              placeholder="50.00"
+            />
             <label htmlFor="cash-reason" className="grid gap-1.5 text-sm font-medium">
               Reason
               <input
@@ -185,7 +247,7 @@ export function CashMovementDialog({
               />
             </label>
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             ) : null}
@@ -194,7 +256,7 @@ export function CashMovementDialog({
                 <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={busy} className="h-11 flex-[2]">
+                <Button type="submit" disabled={busy || !ready} className="h-11 flex-[2]">
                   {busy ? 'Saving…' : label}
                 </Button>
               </div>
@@ -224,7 +286,7 @@ export function CloseShiftDialog({
   const [busy, setBusy] = useState(false)
 
   const counted = parseGhsToMinor(amount)
-  const variance = counted === null ? null : counted - expectedCashMinor
+  const variance = counted === null ? null : computeVariance(counted, expectedCashMinor)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -266,28 +328,30 @@ export function CloseShiftDialog({
                 {formatGhs(expectedCashMinor)}
               </span>
             </div>
-            <label htmlFor="counted-cash" className="grid gap-1.5 text-sm font-medium">
-              Counted cash
-              <input
-                id="counted-cash"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                className="h-11 rounded-md border border-border bg-background px-3 text-sm tabular-nums"
-              />
-            </label>
-            <div className="flex items-baseline justify-between text-sm">
+            <MoneyField
+              id="counted-cash"
+              label="Counted cash"
+              value={amount}
+              onChange={setAmount}
+            />
+            <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="text-muted-foreground">Variance</span>
-              <span
-                className={
-                  variance === null
-                    ? 'font-mono text-muted-foreground tabular-nums'
-                    : variance === 0
-                      ? 'font-mono font-semibold text-emerald-600 tabular-nums'
-                      : 'font-mono font-semibold text-red-600 tabular-nums'
-                }
-              >
-                {variance === null ? '—' : formatGhs(variance)}
+              <span className="flex items-center gap-1.5">
+                {variance === null ? null : (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'size-1.5 shrink-0 rounded-full',
+                      variance === 0 ? 'bg-ok' : variance > 0 ? 'bg-warn' : 'bg-danger',
+                    )}
+                  />
+                )}
+                <span
+                  className="font-mono font-semibold text-foreground tabular-nums"
+                  data-testid="close-variance"
+                >
+                  {variance === null ? '—' : varianceWords(variance)}
+                </span>
               </span>
             </div>
             <label htmlFor="close-note" className="grid gap-1.5 text-sm font-medium">
@@ -302,7 +366,7 @@ export function CloseShiftDialog({
               />
             </label>
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             ) : null}
@@ -311,7 +375,11 @@ export function CloseShiftDialog({
                 <Button type="button" variant="outline" onClick={onClose} className="h-11 flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={busy} className="h-14 flex-[2] text-base">
+                <Button
+                  type="submit"
+                  disabled={busy || counted === null}
+                  className="h-14 flex-[2] text-base"
+                >
                   {busy ? 'Closing…' : 'Close shift'}
                 </Button>
               </div>
