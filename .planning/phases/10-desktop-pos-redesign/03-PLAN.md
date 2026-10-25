@@ -54,11 +54,15 @@ Behaviour that must survive, and how to prove it:
 | Behaviour today | After |
 |---|---|
 | Escape closes (window keydown listener) | Radix handles Escape; the global shortcut hook stays disabled while open |
-| Focus moves into the panel; returns to the trigger | Radix traps and restores focus — strictly better, since `Modal` never trapped Tab |
+| Focus moves into the panel; returns to the trigger | Radix traps focus, but **does not restore it here**: every POS dialog opens from state, so `DialogTrigger` is absent and `DialogContent`'s close handler skips its restore. `components/common/use-dialog-focus-return.ts` captures the opener and restores it via `onCloseAutoFocus`. |
 | Backdrop tap closes on a touch screen | `DialogContent` `onPointerDownOutside` |
 | `aria-labelledby` / `aria-describedby` | `DialogTitle` / `DialogDescription`, generated ids |
-| `wide` prop (`max-w-2xl`) | `className="max-w-2xl"` at the three call sites that use it |
+| `wide` prop (`max-w-2xl`) | `className="max-w-2xl"` at the call sites that use it |
 | `data-testid` | preserved on `DialogContent` — the E2E and walkthrough selectors must not move |
+
+There are **eight** `Modal` consumers, not seven: the clear-cart confirmation inside the sell page
+is one too, and it is module-local (`modules/sell/components/clear-cart-dialog.tsx`) because it
+acts on the cart.
 
 The `Modal` shell's own header/footer chrome is replaced by `DialogHeader`/`DialogFooter`; keep
 the 90vh cap and the scrolling body so a long customer-change dialog still fits at 1024×768.
@@ -158,7 +162,9 @@ confirm focus returns to the control that opened it.
   hand-rolled panel, chip, or dialog markup remains in `modules/` or `components/`.
 - Every interactive control has a ≥ 44 × 44 px hit area; the primary action is 56 px.
 - Money never round-trips through `Number.toFixed` anywhere in the renderer.
-- `useUnprintedCount()` lives in `modules/sales/api/queries.ts` and the header imports it; no SQL
-  string remains in `components/layout/`.
+- `useUnprintedCount()` lives in `modules/sales/api/queries.ts` and the header imports it; no
+  unprinted-receipt SQL remains in `components/layout/`. (`sync-badge.tsx` keeps its own
+  conflicts query: it must stay byte-identical in state machine and labels, and moving its SQL
+  was not this plan's job.)
 - `tokens:check` and `brand:check` are green, and `components/ui/*` is byte-identical to what it
   was before the registry run, apart from the two new files.
