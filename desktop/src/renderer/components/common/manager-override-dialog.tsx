@@ -21,6 +21,7 @@ import {
 } from '../../lib/overrides/override-service'
 import { usePosDatabase } from '../../lib/powersync/provider'
 import { PinPad } from './pin-pad'
+import { StatusNote } from './status-note'
 import { useDialogFocusReturn } from './use-dialog-focus-return'
 
 /**
@@ -148,13 +149,14 @@ export function ManagerOverrideDialog({
           ) : null}
 
           {typeof overByMinor === 'number' && overByMinor > 0 ? (
-            <div
-              className="flex items-baseline justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-              data-testid="over-by"
-            >
-              <span>Over the limit by</span>
-              <span className="font-mono font-semibold tabular-nums">{formatGhs(overByMinor)}</span>
-            </div>
+            <StatusNote tone="notice" data-testid="over-by">
+              <span className="flex items-baseline justify-between gap-3">
+                <span>Over the limit by</span>
+                <span className="font-mono font-semibold text-foreground tabular-nums">
+                  {formatGhs(overByMinor)}
+                </span>
+              </span>
+            </StatusNote>
           ) : null}
 
           <label htmlFor="override-approver" className="grid gap-1.5 text-sm font-medium">
@@ -204,9 +206,9 @@ export function ManagerOverrideDialog({
           </label>
 
           {approvers.length === 0 ? (
-            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <StatusNote tone="notice">
               No manager is authorized on this terminal. Authorize one online, then try again.
-            </p>
+            </StatusNote>
           ) : (
             <PinPad
               value={pin}
@@ -237,7 +239,7 @@ export function ManagerOverrideDialog({
                   onBypass()
                   onClose()
                 }}
-                className="h-11 w-full border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                className="h-11 w-full border-warn/40 bg-warn/10 text-foreground hover:bg-warn/15"
                 data-testid="continue-without-approval"
               >
                 Continue without approval
