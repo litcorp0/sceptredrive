@@ -29,7 +29,8 @@
     "test:spike": "node test/e2e/powersync-spike.mjs",
     "test:schema-migration": "node test/e2e/schema-migration.mjs",
     "test:sync": "node test/e2e/sync-smoke.mjs",
-    "test:print": "node test/e2e/print-smoke.mjs"
+    "test:print": "node test/e2e/print-smoke.mjs",
+    "test:counter": "node test/e2e/counter-audit.mjs"
   },
   "dependencies": {
     "@maxxuxx/node-printer": "1.6.11",
