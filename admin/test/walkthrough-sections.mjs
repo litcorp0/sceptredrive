@@ -554,12 +554,10 @@ try {
 					check(animating === 0, `${tag}: no entrance animation`, String(animating))
 				}
 
-				if (width === 1440) {
-					await page.screenshot({
-						path: path.join(evidenceDir, `plan09-analytics-${width}-${theme}-${motion}.png`),
-						fullPage: false,
-					})
-				}
+				await page.screenshot({
+					path: path.join(evidenceDir, `plan09-analytics-${width}-${theme}-${motion}.png`),
+					fullPage: false,
+				})
 			}
 		}
 	}

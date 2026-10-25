@@ -62,8 +62,10 @@ for (const [name, endpoint] of ENDPOINTS) {
   const timings = []
   let status = 0
   let bytes = 0
-  // One warm-up call is excluded, so the numbers describe steady state.
-  for (let run = 0; run < 11; run += 1) {
+  // One warm-up call is excluded so the numbers describe steady state. Six calls per
+  // endpoint keeps the whole run under the endpoint's own rate limit (120/min for reports,
+  // 20/min for exports), because measuring must not require disabling a security control.
+  for (let run = 0; run < 6; run += 1) {
     const started = performance.now()
     const response = await fetch(`${apiUrl}${endpoint}`, {
       headers: { cookie, accept: name.endsWith('export') ? 'text/csv' : 'application/json' },
@@ -76,9 +78,9 @@ for (const [name, endpoint] of ENDPOINTS) {
     if (!response.ok) break
   }
 
-  const p50 = percentile(timings, 0.5)
-  const p95 = percentile(timings, 0.95)
-  const max = Math.max(...timings)
+  const p50 = timings.length > 0 ? percentile(timings, 0.5) : Number.NaN
+  const p95 = timings.length > 0 ? percentile(timings, 0.95) : Number.NaN
+  const max = timings.length > 0 ? Math.max(...timings) : Number.NaN
   const row = {
     endpoint: name,
     status,
@@ -88,7 +90,7 @@ for (const [name, endpoint] of ENDPOINTS) {
     bytes,
   }
   rows.push(row)
-  const overBudget = status !== 200 || p95 > 300
+  const overBudget = status !== 200 || !(p95 <= 300)
   if (overBudget) failures += 1
   console.log(
     `${overBudget ? 'FAIL' : 'ok  '} ${name.padEnd(16)} status ${status}  p50 ${String(row.p50).padStart(4)}ms  p95 ${String(row.p95).padStart(4)}ms  max ${String(row.max).padStart(4)}ms  ${(bytes / 1024).toFixed(0)}KiB`,

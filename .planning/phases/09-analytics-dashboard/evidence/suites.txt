@@ -1,0 +1,1898 @@
+captured 2026-10-25T02:03:01Z on Linux 7.2.9-2-cachyos x86_64
+
+### bun install
+[0.20ms] ".env"
+bun install v1.3.14 (0d9b296a)
+
+Checked 650 installs across 813 packages (no changes) [50.00ms]
+(exit 0)
+
+### bun run lint
+$ biome check .
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:76:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function freePort is unused.
+  
+    74 │ }
+    75 │ 
+  > 76 │ function freePort() {
+       │          ^^^^^^^^
+    77 │   return new Promise((resolve, reject) => {
+    78 │     const server = net.createServer()
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend freePort with an underscore.
+  
+     74  74 │   }
+     75  75 │   
+     76     │ - function·freePort()·{
+         76 │ + function·_freePort()·{
+     77  77 │     return new Promise((resolve, reject) => {
+     78  78 │       const server = net.createServer()
+  
+
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:89:16 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function waitForCdp is unused.
+  
+    87 │ }
+    88 │ 
+  > 89 │ async function waitForCdp(port, timeoutMs) {
+       │                ^^^^^^^^^^
+    90 │   const deadline = Date.now() + timeoutMs
+    91 │   while (Date.now() < deadline) {
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend waitForCdp with an underscore.
+  
+     87  87 │   }
+     88  88 │   
+     89     │ - async·function·waitForCdp(port,·timeoutMs)·{
+         89 │ + async·function·_waitForCdp(port,·timeoutMs)·{
+     90  90 │     const deadline = Date.now() + timeoutMs
+     91  91 │     while (Date.now() < deadline) {
+  
+
+.planning/phases/06-pos-offline-core/evidence/perf-pos.mjs:133:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function slug is unused.
+  
+    131 │ }
+    132 │ 
+  > 133 │ function slug(value) {
+        │          ^^^^
+    134 │   return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 │ }
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend slug with an underscore.
+  
+    131 131 │   }
+    132 132 │   
+    133     │ - function·slug(value)·{
+        133 │ + function·_slug(value)·{
+    134 134 │     return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 135 │   }
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-outbox.ts:215:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function outboxCounts is unused.
+  
+    213 │ }
+    214 │ 
+  > 215 │ function outboxCounts(db: SqlDb): { status: string; count: number }[] {
+        │          ^^^^^^^^^^^^
+    216 │   return db.sqlite
+    217 │     .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend outboxCounts with an underscore.
+  
+    213 213 │   }
+    214 214 │   
+    215     │ - function·outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+        215 │ + function·_outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+    216 216 │     return db.sqlite
+    217 217 │       .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:97:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    95 │ check('the barcode resolves to one product', scannedRow?.sku === 'GIK-00001')
+    96 │ 
+  > 97 │ const brakePads = toSellableProduct(scannedRow!, 11_000) // branch override price
+       │                                     ^^^^^^^^^^^
+    98 │ check('the branch override price wins', brakePads?.unitPriceMinor === 11_000)
+    99 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:104:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    102 │ const enterTarget = pickEnterTarget('oil', filtered)
+    103 │ check('Enter adds the only search result', enterTarget?.sku === 'GIK-00002')
+  > 104 │ const oilFilter = toSellableProduct(enterTarget!, null)
+        │                                     ^^^^^^^^^^^^
+    105 │ 
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:108:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+  > 108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+        │                                                         ^^^^^^^^^^
+    109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+    110 │ cart = cartReducer(cart, {
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:109:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+    108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+  > 109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+        │                                                         ^^^^^^^^^^
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:12 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:30 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │                              ^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:148:16 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    146 │ //    approves it at the till.
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+  > 148 │ const lineId = cart.lines[1]!.id
+        │                ^^^^^^^^^^^^^^
+    149 │ const lineDiscountMinor = discountAmountFromInput(
+    150 │   '2.00',
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    146 146 │   //    approves it at the till.
+    147 147 │   totals = computeCartTotals(cart, CONTEXT)
+    148     │ - const·lineId·=·cart.lines[1]!.id
+        148 │ + const·lineId·=·cart.lines[1]?.id
+    149 149 │   const lineDiscountMinor = discountAmountFromInput(
+    150 150 │     '2.00',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:149:27 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+    148 │ const lineId = cart.lines[1]!.id
+  > 149 │ const lineDiscountMinor = discountAmountFromInput(
+        │                           ^^^^^^^^^^^^^^^^^^^^^^^^
+  > 150 │   '2.00',
+  > 151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+  > 153 │ )!
+        │ ^^
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+    155 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:152:3 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    150 │   '2.00',
+    151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+        │   ^^^^^^^^^^^^^^^^^^^^^^^
+    153 │ )!
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    150 150 │     '2.00',
+    151 151 │     'AMOUNT',
+    152     │ - ··totals.priced.lines[1]!.grossMinor,
+        152 │ + ··totals.priced.lines[1]?.grossMinor,
+    153 153 │   )!
+    154 154 │   check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:292:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    290 │   'one credit tender for the full total',
+    291 │   draft.payload.tenders.length === 1 &&
+  > 292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 │ )
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    290 290 │     'one credit tender for the full total',
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292     │ - ····draft.payload.tenders[0]!.method·===·'CREDIT'·&&
+        292 │ + ····draft.payload.tenders[0]?.method·===·'CREDIT'·&&
+    293 293 │       draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 294 │   )
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:293:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    291 │   draft.payload.tenders.length === 1 &&
+    292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+  > 293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 │ )
+    295 │ check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292 292 │       draft.payload.tenders[0]!.method === 'CREDIT' &&
+    293     │ - ····draft.payload.tenders[0]!.amountMinor·===·draft.payload.totals.totalMinor,
+        293 │ + ····draft.payload.tenders[0]?.amountMinor·===·draft.payload.totals.totalMinor,
+    294 294 │   )
+    295 295 │   check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+
+.planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs:18:26 lint/correctness/noUnusedImports  FIXABLE  ━━━━━━━━━━
+
+  ! Several of these imports are unused.
+  
+    16 │ import fs from 'node:fs'
+    17 │ import path from 'node:path'
+  > 18 │ import { formatDateTime, formatDay } from '@sceptre/shared'
+       │                          ^^^^^^^^^
+    19 │ import { chromium } from 'playwright'
+    20 │ 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+    18 │ import·{·formatDateTime,·formatDay·}·from·'@sceptre/shared'
+       │                          ----------                        
+
+packages/brand/src/tokens.css:258:34 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    256 │     *::before,
+    257 │     *::after {
+  > 258 │       animation-duration: 0.01ms !important;
+        │                                  ^^^^^^^^^^
+    259 │       animation-iteration-count: 1 !important;
+    260 │       transition-duration: 0.01ms !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    258 │ ······animation-duration:·0.01ms·!important;
+        │                                 ----------- 
+
+packages/brand/src/tokens.css:259:36 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    257 │     *::after {
+    258 │       animation-duration: 0.01ms !important;
+  > 259 │       animation-iteration-count: 1 !important;
+        │                                    ^^^^^^^^^^
+    260 │       transition-duration: 0.01ms !important;
+    261 │       scroll-behavior: auto !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    259 │ ······animation-iteration-count:·1·!important;
+        │                                   ----------- 
+
+packages/brand/src/tokens.css:260:35 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    258 │       animation-duration: 0.01ms !important;
+    259 │       animation-iteration-count: 1 !important;
+  > 260 │       transition-duration: 0.01ms !important;
+        │                                   ^^^^^^^^^^
+    261 │       scroll-behavior: auto !important;
+    262 │     }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    260 │ ······transition-duration:·0.01ms·!important;
+        │                                  ----------- 
+
+packages/brand/src/tokens.css:261:29 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    259 │       animation-iteration-count: 1 !important;
+    260 │       transition-duration: 0.01ms !important;
+  > 261 │       scroll-behavior: auto !important;
+        │                             ^^^^^^^^^^
+    262 │     }
+    263 │   }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    261 │ ······scroll-behavior:·auto·!important;
+        │                            ----------- 
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 4.
+Checked 814 files in 2s. No fixes applied.
+Found 24 warnings.
+(exit 0)
+
+### bun run check-types
+$ bun run --if-present --filter '*' check-types
+@sceptre/brand check-types: Exited with code 0
+@sceptre/shared check-types: Exited with code 0
+@sceptre/db check-types: Exited with code 0
+api check-types: Exited with code 0
+desktop check-types: Exited with code 0
+admin check-types: Exited with code 0
+(exit 0)
+
+### bun run brand:check
+$ node scripts/check-brand.mjs
+brand check OK (814 tracked files, old brand absent)
+(exit 0)
+
+### bun run tokens:check
+$ node scripts/check-tokens.mjs
+token check OK
+  token source: packages/brand/src/tokens.css (both clients import it)
+  app sources scanned: 462 tracked files, no brand literal
+  tokens: 36 required in :root, 35 redefined in .dark
+  date-fns: date-fns@4.4.0
+  contrast (WCAG 2.2 relative luminance, measured from the token file):
+      5.41:1  min 4.5:1                      primary button label: brand-fg on brand (AA normal text) [light #1b1f23 on #f26a1b]
+      3.06:1  max 4.5:1 (must stay rejected) rejected pairing: white on brand stays below AA normal text [light #FFFFFF on #f26a1b]
+      5.53:1  min 4.5:1                      muted text: muted-ink on canvas [light #5c6470 on #f6f6f4]
+     15.32:1  min 7:1                        body text: ink on canvas (AAA) [light #1b1f23 on #f6f6f4]
+      4.56:1  min 4.5:1                      brand as text: brand-ink on surface [light #c25515 on #ffffff]
+     13.92:1  min 7:1                        dark body text: ink on surface (AAA) [dark #f6f6f4 on #22272c]
+      6.87:1  min 4.5:1                      dark muted text: muted-ink on surface [dark #a8b0b9 on #22272c]
+      6.57:1  min 4.5:1                      dark brand as text: brand-ink on surface [dark #f5934f on #22272c]
+      3.65:1  min 3:1                        light input boundary: line-strong on surface (SC 1.4.11) [light #7c8794 on #ffffff]
+      3.38:1  min 3:1                        light input boundary: line-strong on canvas (SC 1.4.11) [light #7c8794 on #f6f6f4]
+      3.11:1  min 3:1                        dark input boundary: line-strong on surface (SC 1.4.11) [dark #6b7280 on #22272c]
+      3.06:1  min 3:1                        light chart series: chart-1 on surface (SC 1.4.11) [light #f26a1b on #ffffff]
+     16.58:1  min 3:1                        light chart series: chart-2 on surface (SC 1.4.11) [light #1b1f23 on #ffffff]
+      3.11:1  min 3:1                        light chart series: chart-3 on surface (SC 1.4.11) [light #8a939f on #ffffff]
+      3.29:1  min 3:1                        light chart series: chart-4 on surface (SC 1.4.11) [light #c97b3d on #ffffff]
+      5.83:1  min 3:1                        light chart series: chart-5 on surface (SC 1.4.11) [light #2f6f6a on #ffffff]
+      4.95:1  min 3:1                        light chart series: chart-6 on surface (SC 1.4.11) [light #5b6ea8 on #ffffff]
+      5.28:1  min 3:1                        light chart series: chart-7 on surface (SC 1.4.11) [light #8c5a8f on #ffffff]
+      4.91:1  min 3:1                        dark chart series: chart-1 on surface (SC 1.4.11) [dark #f26a1b on #22272c]
+     13.92:1  min 3:1                        dark chart series: chart-2 on surface (SC 1.4.11) [dark #f6f6f4 on #22272c]
+       5.9:1  min 3:1                        dark chart series: chart-3 on surface (SC 1.4.11) [dark #9aa3ae on #22272c]
+      5.55:1  min 3:1                        dark chart series: chart-4 on surface (SC 1.4.11) [dark #d98b4b on #22272c]
+      4.57:1  min 3:1                        dark chart series: chart-5 on surface (SC 1.4.11) [dark #4e9a94 on #22272c]
+      6.02:1  min 3:1                        dark chart series: chart-6 on surface (SC 1.4.11) [dark #8fa3d8 on #22272c]
+      5.71:1  min 3:1                        dark chart series: chart-7 on surface (SC 1.4.11) [dark #c08fc4 on #22272c]
+(exit 0)
+
+### bun run modules:check:strict
+$ node scripts/check-modules.mjs --strict
+
+Modules
+  module      folders   status
+  analytics   6         migrated
+  auth        3         migrated
+  audit       4         migrated
+  branches    4         migrated
+  catalog     4         migrated
+  credit      5         migrated
+  customers   4         migrated
+  dashboard   2         migrated
+  inventory   5         migrated
+  loyalty     5         migrated
+  payables    4         migrated
+  settings    4         migrated
+  staff       4         migrated
+  suppliers   6         migrated
+  terminals   4         migrated
+
+modules:check OK — 15/15 modules migrated
+(exit 0)
+
+### bun run test
+$ bun run --if-present --filter '*' test
+@sceptre/db test: 
+@sceptre/db test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/db
+@sceptre/db test: 
+@sceptre/shared test: 
+@sceptre/shared test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+@sceptre/shared test: 
+@sceptre/db test: No test files found, exiting with code 0
+@sceptre/db test: 
+@sceptre/db test: include: **/*.{test,spec}.?(c|m)[jt]s?(x)
+@sceptre/db test: exclude:  **/node_modules/**, **/.git/**
+@sceptre/db test: 
+@sceptre/db test: Exited with code 0
+desktop test: 
+desktop test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/desktop
+desktop test: 
+@sceptre/shared test: 
+@sceptre/shared test:  Test Files  11 passed (11)
+@sceptre/shared test:       Tests  127 passed (127)
+@sceptre/shared test:    Start at  02:03:32
+@sceptre/shared test:    Duration  7.10s (import 85%, tests 10%, worker 3%, transform 2%)
+@sceptre/shared test: 
+@sceptre/shared test:     Isolate  11 workers spawned · ~442ms startup each (spawn + environment, per file)
+@sceptre/shared test:              at least ~1.18s faster with isolate: false — reuses workers across files instead of one per file
+@sceptre/shared test: 
+@sceptre/shared test: Exited with code 0
+api test: 
+api test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+api test: 
+desktop test: 
+desktop test:  Test Files  38 passed (38)
+desktop test:       Tests  339 passed (339)
+desktop test:    Start at  02:03:32
+desktop test:    Duration  24.50s (import 90%, tests 8%, transform 1%, worker 1%)
+desktop test: 
+desktop test:      Import  108 modules were evaluated 210 times · 50.94s total, 90% of tracked time
+desktop test:              ~4.29s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+desktop test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
+desktop test: 
+desktop test: Exited with code 0
+api test: 
+api test:  Test Files  32 passed (32)
+api test:       Tests  394 passed (394)
+api test:    Start at  02:03:40
+api test:    Duration  260.35s (tests 62%, import 36%, transform 2%)
+api test: 
+api test:      Import  225 modules were evaluated 4874 times · 91.09s total, 36% of tracked time
+api test:              ~86.89s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+api test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
+api test: 
+api test: Exited with code 0
+(exit 0)
+
+### bun run --filter admin build
+admin build: vite v8.3.5 building client environment for production...
+admin build: transforming...
+admin build: 
+admin build: [@tanstack/devtools-vite] Removed devtools code from: /src/routes/__root.tsx
+admin build: 
+admin build: ✓ 3545 modules transformed.
+admin build: rendering chunks...
+admin build: computing gzip size...
+admin build: .output/public/assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2    2.02 kB
+admin build: .output/public/assets/space-grotesk-vietnamese-wght-normal-D0rl6rjA.woff2       6.71 kB
+admin build: .output/public/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      7.50 kB
+admin build: .output/public/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           9.00 kB
+admin build: .output/public/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2              10.25 kB
+admin build: .output/public/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2               11.23 kB
+admin build: .output/public/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2       12.10 kB
+admin build: .output/public/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2      15.19 kB
+admin build: .output/public/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2                18.74 kB
+admin build: .output/public/assets/space-grotesk-latin-ext-wght-normal-D9tNdqV9.woff2       18.94 kB
+admin build: .output/public/assets/inter-greek-wght-normal-CkhJZR-_.woff2                   18.99 kB
+admin build: .output/public/assets/space-grotesk-latin-wght-normal-BhU9QXUp.woff2           22.28 kB
+admin build: .output/public/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2            25.96 kB
+admin build: .output/public/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2          40.40 kB
+admin build: .output/public/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                   48.25 kB
+admin build: .output/public/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2               85.06 kB
+admin build: .output/public/assets/styles-LXlcmS1B.css                                     101.91 kB │ gzip:  17.34 kB
+admin build: .output/public/assets/queryOptions-Dfvzj6n2.js                                  0.03 kB │ gzip:   0.05 kB
+admin build: .output/public/assets/change-password-KxzGHg6J.js                               0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/forgot-password-DjGteY1-.js                               0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/login-Dd6_HA_E.js                                         0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/reset-password-u4pwXhmM.js                                0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/two-factor-BZ8l4kWp.js                                    0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/_authenticated-7AWgO5Xt.js                                0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/audit-Btx6BwnW.js                                         0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/_id.statement-DYMSYKV1.js                                 0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/aging-BFdBoPYi.js                                         0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/brands-C087YISQ.js                                        0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/categories-_tzSY-mb.js                                    0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/loyalty-Br7QLpOB.js                                       0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/products-D1d15rd7.js                                      0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/products._id-Dv6LSCfD.js                                  0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/products.new-DRBtTBZZ.js                                  0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/route-DhlhvgWI.js                                         0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/units-DMa7NyVG.js                                         0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/branches-BTkFbyLL.js                                      0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/branches._id-DE5jE0ha.js                                  0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/settings-BhGXnCbx.js                                      0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/_countId-DZyEH-HN.js                                      0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_id-CeOmjxg9.js                                           0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_invoiceId-DrCHjzpz.js                                    0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_paymentId-BvJFDfeY.js                                    0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_productId-CJte3H8z.js                                    0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_receiptId-CsR462F4.js                                    0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_supplierId-CuAICpGa.js                                   0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/_transferId-nUCO1dAj.js                                   0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/aging-BC-lxf2v.js                                         0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/analytics-DrJoBYiK.js                                     0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/counts-BCyZ47zk.js                                        0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/customers-DwQVGfAZ.js                                     0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/invoices-CcVlAAta.js                                      0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/new-9YpWg_qw.js                                           0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/new-Co0Tqe2R.js                                           0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/new-CyR4GZYF.js                                           0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/payments-zoPQlm7z.js                                      0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/receipts-DyZH0Avm.js                                      0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/route-CQfA9tIf.js                                         0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/route-CkInTq1i.js                                         0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/route-DKH8iWqo.js                                         0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/stock-Cf3l8nz5.js                                         0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/suppliers-BzDuZJ6z.js                                     0.07 kB │ gzip:   0.09 kB
+admin build: .output/public/assets/transfers-CKDPNwqU.js                                     0.07 kB │ gzip:   0.08 kB
+admin build: .output/public/assets/chevron-right-Cpwnw_sJ.js                                 0.12 kB │ gzip:   0.13 kB
+admin build: .output/public/assets/_id-DaR4kbwc.js                                           0.14 kB │ gzip:   0.13 kB
+admin build: .output/public/assets/products-DaR4kbwc.js                                      0.14 kB │ gzip:   0.13 kB
+admin build: .output/public/assets/stock-DaR4kbwc.js                                         0.14 kB │ gzip:   0.13 kB
+admin build: .output/public/assets/plus-BPIwlXDH.js                                          0.14 kB │ gzip:   0.14 kB
+admin build: .output/public/assets/arrow-left-B2SwUdbh.js                                    0.15 kB │ gzip:   0.15 kB
+admin build: .output/public/assets/chevron-down-D5qJkPTm.js                                  0.19 kB │ gzip:   0.17 kB
+admin build: .output/public/assets/useRouterState-pEO2A6Vd.js                                0.20 kB │ gzip:   0.17 kB
+admin build: .output/public/assets/skeleton-BIZ31prv.js                                      0.24 kB │ gzip:   0.20 kB
+admin build: .output/public/assets/format-CCOb0hG3.js                                        0.45 kB │ gzip:   0.28 kB
+admin build: .output/public/assets/monitor-smartphone-nahHPFoR.js                            0.62 kB │ gzip:   0.38 kB
+admin build: .output/public/assets/page-header-7MngFhP9.js                                   0.65 kB │ gzip:   0.35 kB
+admin build: .output/public/assets/textarea-C4_fzVlw.js                                      0.66 kB │ gzip:   0.41 kB
+admin build: .output/public/assets/pagination-C8i6A7FT.js                                    0.69 kB │ gzip:   0.42 kB
+admin build: .output/public/assets/label-CRDIp7G3.js                                         0.74 kB │ gzip:   0.47 kB
+admin build: .output/public/assets/copy-button-bJKvUm0o.js                                   0.74 kB │ gzip:   0.50 kB
+admin build: .output/public/assets/branch-context-Bc9hrZoE.js                                1.01 kB │ gzip:   0.58 kB
+admin build: .output/public/assets/card-JN8hH-qR.js                                          1.12 kB │ gzip:   0.45 kB
+admin build: .output/public/assets/table-BKF7GRI9.js                                         1.45 kB │ gzip:   0.54 kB
+admin build: .output/public/assets/role-CeGbIgLy.js                                          1.69 kB │ gzip:   0.50 kB
+admin build: .output/public/assets/dialog-Cb_86T_1.js                                        2.42 kB │ gzip:   0.91 kB
+admin build: .output/public/assets/status-badge-BNkSVORr.js                                  3.88 kB │ gzip:   1.68 kB
+admin build: .output/public/assets/dist-Dl10mNXv.js                                          4.20 kB │ gzip:   1.85 kB
+admin build: .output/public/assets/switch-8MZCcHlz.js                                        4.66 kB │ gzip:   1.94 kB
+admin build: .output/public/assets/confirm-dialog-6KqbbAgG.js                                5.04 kB │ gzip:   1.57 kB
+admin build: .output/public/assets/dist-REgDGTdR.js                                          5.37 kB │ gzip:   2.03 kB
+admin build: .output/public/assets/tabs-BLa7jiFX.js                                          5.48 kB │ gzip:   2.03 kB
+admin build: .output/public/assets/settings-B4yXMhA7.js                                      8.14 kB │ gzip:   2.97 kB
+admin build: .output/public/assets/route-B9k28ezn.js                                         8.22 kB │ gzip:   3.27 kB
+admin build: .output/public/assets/jsx-runtime-Wy9s6hX0.js                                   8.91 kB │ gzip:   3.39 kB
+admin build: .output/public/assets/terminals-DwnDoLny.js                                     9.35 kB │ gzip:   3.18 kB
+admin build: .output/public/assets/branches-YZP8GJ0k.js                                     10.39 kB │ gzip:   3.24 kB
+admin build: .output/public/assets/dist-DVW3QhbF.js                                         13.40 kB │ gzip:   4.66 kB
+admin build: .output/public/assets/dropdown-menu-DFdEqmoB.js                                16.10 kB │ gzip:   5.23 kB
+admin build: .output/public/assets/staff-CYjIbz91.js                                        17.37 kB │ gzip:   5.23 kB
+admin build: .output/public/assets/loyalty-BcNpc9X4.js                                      18.31 kB │ gzip:   5.33 kB
+admin build: .output/public/assets/customers-DA903x0X.js                                    23.28 kB │ gzip:   6.20 kB
+admin build: .output/public/assets/dates-B8AEd8bn.js                                        23.71 kB │ gzip:   7.10 kB
+admin build: .output/public/assets/query-keys-C8ON_YLH.js                                   23.89 kB │ gzip:   8.15 kB
+admin build: .output/public/assets/auth-client-B0gXx7Zy.js                                  33.03 kB │ gzip:  12.43 kB
+admin build: .output/public/assets/dist-D0Fht-jE.js                                         33.53 kB │ gzip:   9.35 kB
+admin build: .output/public/assets/route-DU45h-tH.js                                        35.21 kB │ gzip:  11.15 kB
+admin build: .output/public/assets/auth-8tpr1P3J.js                                         39.37 kB │ gzip:  12.88 kB
+admin build: .output/public/assets/catalog-DpVua3Qq.js                                      43.47 kB │ gzip:  10.13 kB
+admin build: .output/public/assets/useSelector-CKzD-cd2.js                                  61.38 kB │ gzip:  21.76 kB
+admin build: .output/public/assets/select-B9zvuzFQ.js                                       76.43 kB │ gzip:  26.34 kB
+admin build: .output/public/assets/input-BqqJsNO_.js                                       124.37 kB │ gzip:  40.06 kB
+admin build: .output/public/assets/credit-S2VJ_ofW.js                                      151.60 kB │ gzip:  37.52 kB
+admin build: .output/public/assets/inventory-D8nH05e4.js                                   163.77 kB │ gzip:  32.50 kB
+admin build: .output/public/assets/index-D1k73sga.js                                       321.47 kB │ gzip:  98.78 kB
+admin build: .output/public/assets/analytics-C_5cEBKT.js                                   467.42 kB │ gzip: 130.10 kB
+admin build: 
+admin build: ✓ built in 2.73s
+admin build: vite v8.3.5 building ssr environment for production...
+admin build: transforming...
+admin build: 
+admin build: [@tanstack/devtools-vite] Removed devtools code from: /src/routes/__root.tsx
+admin build: 
+admin build: ✓ 465 modules transformed.
+admin build: rendering chunks...
+admin build: computing gzip size...
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2    2.02 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/space-grotesk-vietnamese-wght-normal-D0rl6rjA.woff2       6.71 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      7.50 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           9.00 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2              10.25 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2               11.23 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2       12.10 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2      15.19 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2                18.74 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/space-grotesk-latin-ext-wght-normal-D9tNdqV9.woff2       18.94 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-greek-wght-normal-CkhJZR-_.woff2                   18.99 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/space-grotesk-latin-wght-normal-BhU9QXUp.woff2           22.28 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2            25.96 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2          40.40 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                   48.25 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2               85.06 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/styles-LXlcmS1B.css                                     101.91 kB │ gzip: 17.34 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/start-Dilxh8wN.js                                         0.15 kB │ gzip:  0.13 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/login-DZ7cCj08.js                                         0.18 kB │ gzip:  0.15 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/two-factor-abODm267.js                                    0.20 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/audit-hiMMvdBF.js                                         0.20 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/loyalty-BFUFw0-W.js                                       0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_authenticated-BsbYZJwe.js                                0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/reset-password-CGDIBQXA.js                                0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/units-BNbEfV11.js                                         0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/branches-CGExFrST.js                                      0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/forgot-password-BcEBoJk5.js                               0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/settings-Ch-awAoJ.js                                      0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/brands-C0ksFZ-L.js                                        0.21 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/analytics-CXe-nOTf.js                                     0.22 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/route-D5WuwfJI.js                                         0.22 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/stock-HHysz9Eu.js                                         0.22 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/customers-DN9YH1V3.js                                     0.22 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/suppliers-Blu4hPT7.js                                     0.22 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/aging-CM4VfhC6.js                                         0.22 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/counts-CDo5NWaP.js                                        0.22 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/branches._id-BV8FWrpZ.js                                  0.22 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/empty-plugin-adapters-DFHTEB3e.js                         0.22 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/categories-C6_hs1Cu.js                                    0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/new-ip9ppZHF.js                                           0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/products-CuOvwfxL.js                                      0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/route-B3QIFrmh.js                                         0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/route-CMLqJyXm.js                                         0.23 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/route-fO9dVTAG.js                                         0.23 kB │ gzip:  0.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/change-password-CsIS3Yr_.js                               0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/products.new-BcAVNJA3.js                                  0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/invoices-ByRm3MuJ.js                                      0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/payments-BeQmMFW-.js                                      0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/receipts-xGdfIy5q.js                                      0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/aging-D1CVzP3a.js                                         0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/new-D5C4eWIQ.js                                           0.23 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/transfers-CCouWrLC.js                                     0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/products._id-Cj1YqJpH.js                                  0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/new-atDj-AJX.js                                           0.23 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_countId-BM3bdwRn.js                                      0.24 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_id-D9YvNphf.js                                           0.24 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_productId-iVNnGjHc.js                                    0.24 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_supplierId-VbAW1Mg5.js                                   0.24 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_id.statement-CNK_tj7n.js                                 0.24 kB │ gzip:  0.17 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_invoiceId-Cr5d7Ny6.js                                    0.24 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_paymentId-Cmmm_RT_.js                                    0.24 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_receiptId-BuqxJZm2.js                                    0.24 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_transferId-BLVHwcid.js                                   0.25 kB │ gzip:  0.18 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_id-fe9CC8t3.js                                           0.27 kB │ gzip:  0.20 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/stock-B-QglVPJ.js                                         0.27 kB │ gzip:  0.21 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/products-BGhMOKW5.js                                      0.28 kB │ gzip:  0.21 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/skeleton-GU9i_gfW.js                                      0.33 kB │ gzip:  0.24 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/createServerRpc-ycs-v7cy.js                               0.38 kB │ gzip:  0.26 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/label-Yo8OuWWm.js                                         0.54 kB │ gzip:  0.34 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/query-keys-CTxRjMhI.js                                    0.59 kB │ gzip:  0.38 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/textarea-DatlWlC6.js                                      0.76 kB │ gzip:  0.45 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/auth-policy-DOrTlYF7.js                                   0.95 kB │ gzip:  0.50 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/session.functions-kD2lApMi.js                             1.00 kB │ gzip:  0.54 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/page-header-D2rDq_Ug.js                                   1.12 kB │ gzip:  0.53 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/pagination-CzYlLG1M.js                                    1.16 kB │ gzip:  0.56 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/format-BiE3ZYjx.js                                        1.21 kB │ gzip:  0.58 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/switch-aeRIJMEE.js                                        1.27 kB │ gzip:  0.60 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/card-C7XOm-Fq.js                                          1.56 kB │ gzip:  0.52 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/env-BCIJWqV5.js                                           1.69 kB │ gzip:  0.89 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/branch-context-DdEMb6AI.js                                1.88 kB │ gzip:  0.77 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/table-SoR0ZBBG.js                                         1.98 kB │ gzip:  0.63 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/role-Dm5c8q9y.js                                          2.64 kB │ gzip:  0.74 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/status-badge-CnACv5Qp.js                                  2.76 kB │ gzip:  1.27 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/tabs-CjKUE8Ao.js                                          3.33 kB │ gzip:  1.02 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/dialog-CD-FrzB9.js                                        3.40 kB │ gzip:  1.06 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/dates-X-uba-FL.js                                         3.89 kB │ gzip:  1.57 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/dropdown-menu-BvAcvuRa.js                                 3.94 kB │ gzip:  1.12 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/select-BB81aZrl.js                                        4.76 kB │ gzip:  1.44 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/confirm-dialog-BbVL27EI.js                                4.80 kB │ gzip:  1.26 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/input-GitqW34z.js                                         6.01 kB │ gzip:  2.16 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/settings-D_aRoBqJ.js                                     12.33 kB │ gzip:  3.85 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-C5nA6nSp.js                   16.77 kB │ gzip:  2.39 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/terminals-BkSK7INB.js                                    17.46 kB │ gzip:  4.50 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/branches-CzaHvfuA.js                                     19.40 kB │ gzip:  4.73 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/auth-BTQjySMs.js                                         25.47 kB │ gzip:  5.22 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/auth-client-BlphzGSu.js                                  33.15 kB │ gzip:  9.63 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/staff-BLvsiTUd.js                                        33.78 kB │ gzip:  7.75 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/loyalty-g4Y0fOl_.js                                      34.80 kB │ gzip:  8.23 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/route-BcW0mS8p.js                                        36.25 kB │ gzip:  9.47 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/customers-BUDuMK_t.js                                    44.95 kB │ gzip:  9.35 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/dist-CsmgpX1i.js                                         52.83 kB │ gzip: 12.03 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/credit-xXN-dh_9.js                                       56.96 kB │ gzip: 11.19 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/router-DdSYfMdJ.js                                       74.94 kB │ gzip: 15.92 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/catalog-DRLsTcpE.js                                      79.20 kB │ gzip: 15.03 kB
+admin build: node_modules/.nitro/vite/services/ssr/index.js                                                        99.94 kB │ gzip: 25.30 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/analytics-H5QU36SB.js                                   102.67 kB │ gzip: 19.40 kB
+admin build: node_modules/.nitro/vite/services/ssr/assets/inventory-xPSvEmPg.js                                   299.48 kB │ gzip: 50.52 kB
+admin build: 
+admin build: ✓ built in 1.11s
+admin build: 
+admin build: [nitro] ◐ Building [Nitro] (preset: node-server, compatibility: 2026-10-25)
+admin build: [nitro] ✔ Generated public .output/public
+admin build: vite v8.3.5 building nitro environment for production...
+admin build: `output.codeSplitting.groups[0].name` is a function. Set `output.codeSplitting.groups[0].debugName` so the bundler timing report can identify this group.
+admin build: transforming...
+admin build: ✓ 3258 modules transformed.
+admin build: ℹ Tracing dependencies:
+admin build: - tslib (2.8.1)
+admin build: ✔ Traced 1 dependencies (4 files) in 59ms.
+admin build: ℹ Ensure your production environment matches the builder OS and architecture (linux-x64) to avoid native module issues.
+admin build: rendering chunks...
+admin build: computing gzip size...
+admin build: .output/server/_ssr/start-Dilxh8wN.mjs                             0.14 kB │ gzip:   0.13 kB
+admin build: .output/server/_ssr/login-DZ7cCj08.mjs                             0.21 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/audit-hiMMvdBF.mjs                             0.21 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/units-BNbEfV11.mjs                             0.21 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/stock-HHysz9Eu.mjs                             0.21 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/brands-C0ksFZ-L.mjs                            0.21 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/counts-CDo5NWaP.mjs                            0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/loyalty-BFUFw0-W.mjs                           0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/new-ip9ppZHF.mjs                               0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/route-D5WuwfJI.mjs                             0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/products-CuOvwfxL.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/branches-CGExFrST.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/new-D5C4eWIQ.mjs                               0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/settings-Ch-awAoJ.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/two-factor-abODm267.mjs                        0.22 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/aging-CM4VfhC6.mjs                             0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/analytics-CXe-nOTf.mjs                         0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/invoices-ByRm3MuJ.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/payments-BeQmMFW-.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/receipts-xGdfIy5q.mjs                          0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/new-atDj-AJX.mjs                               0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/customers-DN9YH1V3.mjs                         0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/route-B3QIFrmh.mjs                             0.22 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/route-CMLqJyXm.mjs                             0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/route-fO9dVTAG.mjs                             0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/suppliers-Blu4hPT7.mjs                         0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/transfers-CCouWrLC.mjs                         0.22 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/categories-C6_hs1Cu.mjs                        0.23 kB │ gzip:   0.17 kB
+admin build: .output/server/_ssr/empty-plugin-adapters-DFHTEB3e.mjs             0.23 kB │ gzip:   0.16 kB
+admin build: .output/server/_ssr/products.new-BcAVNJA3.mjs                      0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/aging-D1CVzP3a.mjs                             0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_authenticated-BsbYZJwe.mjs                         0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_countId-BM3bdwRn.mjs                               0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/branches._id-BV8FWrpZ.mjs                      0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/reset-password-CGDIBQXA.mjs                    0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_id-D9YvNphf.mjs                                    0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/products._id-Cj1YqJpH.mjs                      0.23 kB │ gzip:   0.18 kB
+admin build: .output/server/_productId-iVNnGjHc.mjs                             0.23 kB │ gzip:   0.19 kB
+admin build: .output/server/_ssr/change-password-CsIS3Yr_.mjs                   0.24 kB │ gzip:   0.18 kB
+admin build: .output/server/_ssr/forgot-password-BcEBoJk5.mjs                   0.24 kB │ gzip:   0.18 kB
+admin build: .output/server/_invoiceId-Cr5d7Ny6.mjs                             0.24 kB │ gzip:   0.19 kB
+admin build: .output/server/_paymentId-Cmmm_RT_.mjs                             0.24 kB │ gzip:   0.18 kB
+admin build: .output/server/_receiptId-BuqxJZm2.mjs                             0.24 kB │ gzip:   0.19 kB
+admin build: .output/server/_supplierId-VbAW1Mg5.mjs                            0.24 kB │ gzip:   0.19 kB
+admin build: .output/server/_transferId-BLVHwcid.mjs                            0.24 kB │ gzip:   0.19 kB
+admin build: .output/server/_id.statement-CNK_tj7n.mjs                          0.24 kB │ gzip:   0.18 kB
+admin build: .output/server/_libs/radix-ui__number.mjs                          0.33 kB │ gzip:   0.24 kB
+admin build: .output/server/_ssr/createServerRpc-ycs-v7cy.mjs                   0.38 kB │ gzip:   0.26 kB
+admin build: .output/server/_id-fe9CC8t3.mjs                                    0.41 kB │ gzip:   0.27 kB
+admin build: .output/server/_ssr/stock-B-QglVPJ.mjs                             0.42 kB │ gzip:   0.27 kB
+admin build: .output/server/_ssr/products-BGhMOKW5.mjs                          0.42 kB │ gzip:   0.27 kB
+admin build: .output/server/_libs/radix-ui__react-direction.mjs                 0.82 kB │ gzip:   0.43 kB
+admin build: .output/server/_ssr/textarea-DatlWlC6.mjs                          0.93 kB │ gzip:   0.54 kB
+admin build: .output/server/_chunks/ssr-renderer.mjs                            0.97 kB │ gzip:   0.49 kB
+admin build: .output/server/_ssr/auth-policy-DOrTlYF7.mjs                       0.98 kB │ gzip:   0.53 kB
+admin build: .output/server/_libs/radix-ui__react-label.mjs                     1.01 kB │ gzip:   0.52 kB
+admin build: .output/server/_ssr/session.functions-kD2lApMi.mjs                 1.02 kB │ gzip:   0.56 kB
+admin build: .output/server/_libs/radix-ui__react-arrow.mjs                     1.07 kB │ gzip:   0.54 kB
+admin build: .output/server/_libs/defu.mjs                                      1.39 kB │ gzip:   0.58 kB
+admin build: .output/server/_libs/radix-ui__react-toggle.mjs                    1.42 kB │ gzip:   0.66 kB
+admin build: .output/server/_ssr/switch-aeRIJMEE.mjs                            1.51 kB │ gzip:   0.70 kB
+admin build: .output/server/_runtime.mjs                                        1.59 kB │ gzip:   0.74 kB
+admin build: .output/server/_ssr/env-BCIJWqV5.mjs                               1.79 kB │ gzip:   0.94 kB
+admin build: .output/server/_libs/radix-ui__primitive.mjs                       1.83 kB │ gzip:   0.72 kB
+admin build: .output/server/_libs/react-is.mjs                                  1.89 kB │ gzip:   0.73 kB
+admin build: .output/server/_libs/ufo.mjs                                       2.21 kB │ gzip:   0.72 kB
+admin build: .output/server/_libs/prop-types.mjs                                2.27 kB │ gzip:   0.84 kB
+admin build: .output/server/_ssr/role-Dm5c8q9y.mjs                              2.62 kB │ gzip:   0.75 kB
+admin build: .output/server/_ssr/status-badge-CnACv5Qp.mjs                      2.97 kB │ gzip:   1.35 kB
+admin build: .output/server/_libs/t3-oss__env-core.mjs                          3.08 kB │ gzip:   1.17 kB
+admin build: .output/server/_libs/class-variance-authority+clsx.mjs             3.17 kB │ gzip:   1.25 kB
+admin build: .output/server/_libs/d3-path.mjs                                   3.25 kB │ gzip:   1.17 kB
+admin build: .output/server/_ssr/tabs-CjKUE8Ao.mjs                              3.68 kB │ gzip:   1.14 kB
+admin build: .output/server/_ssr/dialog-CD-FrzB9.mjs                            4.02 kB │ gzip:   1.18 kB
+admin build: .output/server/_libs/@tanstack/react-router-ssr-query+[...].mjs    4.68 kB │ gzip:   1.43 kB
+admin build: .output/server/_ssr/dropdown-menu-BvAcvuRa.mjs                     4.68 kB │ gzip:   1.27 kB
+admin build: .output/server/_libs/react-qr-code.mjs                             4.85 kB │ gzip:   1.49 kB
+admin build: .output/server/_libs/d3-interpolate.mjs                            5.06 kB │ gzip:   1.61 kB
+admin build: .output/server/_ssr/confirm-dialog-BbVL27EI.mjs                    5.58 kB │ gzip:   1.37 kB
+admin build: .output/server/_ssr/select-BB81aZrl.mjs                            5.64 kB │ gzip:   1.61 kB
+admin build: .output/server/_ssr/input-GitqW34z.mjs                             6.11 kB │ gzip:   2.23 kB
+admin build: .output/server/_libs/nanostores.mjs                                6.12 kB │ gzip:   1.99 kB
+admin build: .output/server/_libs/radix-ui__react-tabs.mjs                      6.20 kB │ gzip:   1.79 kB
+admin build: .output/server/_libs/react-redux+[...].mjs                         6.48 kB │ gzip:   2.03 kB
+admin build: .output/server/_libs/better-auth__core+better-call.mjs             6.99 kB │ gzip:   2.93 kB
+admin build: .output/server/_libs/radix-ui__react-toggle-group.mjs              7.04 kB │ gzip:   1.65 kB
+admin build: .output/server/_libs/radix-ui__react-switch.mjs                    7.92 kB │ gzip:   2.28 kB
+admin build: .output/server/_libs/d3-array.mjs                                  8.09 kB │ gzip:   2.25 kB
+admin build: .output/server/_libs/eventemitter3.mjs                             8.32 kB │ gzip:   2.04 kB
+admin build: .output/server/_libs/d3-color.mjs                                 10.39 kB │ gzip:   3.57 kB
+admin build: .output/server/_libs/d3-format.mjs                                10.60 kB │ gzip:   3.03 kB
+admin build: .output/server/_libs/tanstack__history.mjs                        12.33 kB │ gzip:   3.66 kB
+admin build: .output/server/_ssr/settings-D_aRoBqJ.mjs                         13.11 kB │ gzip:   3.96 kB
+admin build: .output/server/_tanstack-start-manifest_v-C5nA6nSp.mjs            16.83 kB │ gzip:   2.42 kB
+admin build: .output/server/_libs/tanstack__react-query.mjs                    18.28 kB │ gzip:   5.10 kB
+admin build: .output/server/_ssr/terminals-BkSK7INB.mjs                        19.47 kB │ gzip:   4.56 kB
+admin build: .output/server/_libs/radix-ui__react-tooltip.mjs                  19.86 kB │ gzip:   4.55 kB
+admin build: .output/server/_libs/radix-ui__react-collection.mjs               20.15 kB │ gzip:   4.52 kB
+admin build: .output/server/_libs/immer.mjs                                    21.80 kB │ gzip:   6.26 kB
+admin build: .output/server/_ssr/branches-CzaHvfuA.mjs                         22.10 kB │ gzip:   4.82 kB
+admin build: .output/server/_libs/decimal.js-light.mjs                         23.32 kB │ gzip:   6.89 kB
+admin build: .output/server/_libs/better-fetch__fetch.mjs                      23.65 kB │ gzip:   6.05 kB
+admin build: .output/server/_libs/d3-shape.mjs                                 24.69 kB │ gzip:   5.03 kB
+admin build: .output/server/_libs/@floating-ui/dom+[...].mjs                   25.39 kB │ gzip:   6.58 kB
+admin build: .output/server/_libs/@floating-ui/core+[...].mjs                  25.57 kB │ gzip:   6.33 kB
+admin build: .output/server/_libs/lucide-react.mjs                             26.93 kB │ gzip:   5.14 kB
+admin build: .output/server/_ssr/auth-BTQjySMs.mjs                             28.42 kB │ gzip:   5.36 kB
+admin build: .output/server/_ssr/auth-client-BlphzGSu.mjs                      31.83 kB │ gzip:   9.55 kB
+admin build: .output/server/_libs/@floating-ui/react-dom+[...].mjs             32.64 kB │ gzip:   8.24 kB
+admin build: .output/server/_libs/@tanstack/router-core+[...].mjs              34.18 kB │ gzip:   9.39 kB
+admin build: .output/server/index.mjs                                          36.84 kB │ gzip:   8.99 kB
+admin build: .output/server/_ssr/staff-BLvsiTUd.mjs                            37.78 kB │ gzip:   7.85 kB
+admin build: .output/server/_ssr/loyalty-g4Y0fOl_.mjs                          39.16 kB │ gzip:   8.34 kB
+admin build: .output/server/_ssr/route-BcW0mS8p.mjs                            39.70 kB │ gzip:   9.66 kB
+admin build: .output/server/_libs/qrcode-generator.mjs                         43.94 kB │ gzip:   9.82 kB
+admin build: .output/server/_libs/cn.mjs                                       44.47 kB │ gzip:  13.76 kB
+admin build: .output/server/_libs/h3+rou3+srvx.mjs                             46.02 kB │ gzip:  12.35 kB
+admin build: .output/server/_libs/@radix-ui/react-select+[...].mjs             47.40 kB │ gzip:   9.98 kB
+admin build: .output/server/_ssr/customers-BUDuMK_t.mjs                        50.85 kB │ gzip:   9.47 kB
+admin build: .output/server/_libs/@radix-ui/react-dropdown-menu+[...].mjs      53.67 kB │ gzip:  11.21 kB
+admin build: .output/server/_libs/@reduxjs/toolkit+[...].mjs                   55.99 kB │ gzip:  14.54 kB
+admin build: .output/server/_ssr/page-header-D2rDq_Ug.mjs                      57.55 kB │ gzip:  13.47 kB
+admin build: .output/server/_libs/d3-scale+[...].mjs                           58.34 kB │ gzip:  12.12 kB
+admin build: .output/server/_ssr/credit-xXN-dh_9.mjs                           64.27 kB │ gzip:  11.35 kB
+admin build: .output/server/_libs/es-toolkit.mjs                               68.92 kB │ gzip:  16.15 kB
+admin build: .output/server/_libs/date-fns.mjs                                 87.51 kB │ gzip:  17.42 kB
+admin build: .output/server/_ssr/catalog-DRLsTcpE.mjs                          87.64 kB │ gzip:  15.37 kB
+admin build: .output/server/_libs/@radix-ui/react-alert-dialog+[...].mjs       95.27 kB │ gzip:  21.25 kB
+admin build: .output/server/_ssr/ssr.mjs                                       97.92 kB │ gzip:  25.22 kB
+admin build: .output/server/_libs/tanstack__query-core.mjs                    148.93 kB │ gzip:  35.48 kB
+admin build: .output/server/_libs/zod.mjs                                     166.75 kB │ gzip:  37.41 kB
+admin build: .output/server/_ssr/router-DdSYfMdJ.mjs                          197.83 kB │ gzip:  36.60 kB
+admin build: .output/server/_libs/libphonenumber-js.mjs                       211.50 kB │ gzip:  41.37 kB
+admin build: .output/server/_ssr/inventory-xPSvEmPg.mjs                       338.33 kB │ gzip:  51.59 kB
+admin build: .output/server/_libs/recharts+[...].mjs                          712.91 kB │ gzip: 148.48 kB
+admin build: .output/server/_libs/@tanstack/react-router+[...].mjs            794.84 kB │ gzip: 167.14 kB
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/index.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/index.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/utils.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/utils.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/Match.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/Match.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useMatch.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useMatch.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/ClientOnly.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useRouter.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useRouter.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useNavigate.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useNavigate.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/HeadContent.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/HeadContent.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/link.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/link.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/Matches.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/Matches.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/RouterProvider.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/RouterProvider.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useBlocker.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useBlocker.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useRouterState.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useRouterState.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/useLocation.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/useLocation.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/Asset.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/Asset.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/nonRouteComponentContext.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/matchContext.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/matchContext.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/HydrationBoundary.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/QueryErrorResetBoundary.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/QueryErrorResetBoundary.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useSuspenseQueries.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useIsFetching.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useIsFetching.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/Transitioner.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/Transitioner.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useMutationState.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useMutationState.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useMutation.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useMutation.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useInfiniteQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useInfiniteQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/IsRestoringProvider.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useQueries.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useQueries.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-router/dist/esm/routerContext.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-router/dist/esm/routerContext.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-visually-hidden/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-visually-hidden/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/useBaseQuery.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-aspect-ratio/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-avatar/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-avatar/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-checkbox/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-checkbox/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-slider/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-slider/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-accessible-icon/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-accessible-icon/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-switch/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-switch/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-hover-card/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-hover-card/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-menubar/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-menubar/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-accordion/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-accordion/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-context-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-context-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-navigation-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-navigation-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-one-time-password-field/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popover/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popover/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-password-toggle-field/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-progress/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-progress/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-tabs/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-tabs/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-radio-group/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-radio-group/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@tanstack/react-query/build/modern/errorBoundaryUtils.js:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toast/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toast/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-form/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-form/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-toolbar/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-toolbar/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-scroll-area/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-scroll-area/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-separator/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-separator/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-label/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-label/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-tooltip/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-tooltip/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-select/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-select/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-focus-scope/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-focus-scope/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-roving-focus/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-roving-focus/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-focus-guards/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-focus-guards/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../node_modules/@radix-ui/react-arrow/dist/index.mjs" may not be preserved when bundling.
+admin build:    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../node_modules/@radix-ui/react-arrow/dist/index.mjs:1:1 [38;5;246m][0m
+admin build:    [38;5;246m│[0m
+admin build:  [38;5;246m1 │[0m "use client";
+admin build:  [38;5;240m  │[0m ──────┬──────  
+admin build:  [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+admin build:  [38;5;240m  │[0m 
+admin build:  [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+admin build: [38;5;246m───╯[0m
+admin build: 
+admin build: ✓ built in 1.41s
+admin build: ℹ Generated .output/nitro.json
+admin build: 
+admin build: [nitro] ✔ You can preview this build using npx vite preview
+admin build: Exited with code 0
+(exit 0)
+
+### npm_config_user_agent=... bun run --filter desktop package
+desktop package: $ node scripts/prepare-desktop.mjs
+desktop package: $ powersync-web copy-assets -o public
+desktop package: Resolved input path: /home/litcorp/Projects/Fullstack/gikautos/node_modules/@powersync/web/dist/worker/worker.js
+desktop package: Target directory: public
+desktop package: Assets copied from /home/litcorp/Projects/Fullstack/gikautos/node_modules/@powersync/web/dist/worker to /home/litcorp/Projects/Fullstack/gikautos/desktop/public/@powersync
+desktop package: ❯ Checking your system
+desktop package: ❯ Checking package manager version
+desktop package: ✔ Found npm@11.16.0
+desktop package: ✔ Checking your system
+desktop package: ❯ Preparing to package application
+desktop package: ✔ Preparing to package application
+desktop package: ❯ Running packaging hooks
+desktop package: ❯ Running generateAssets hook
+desktop package: ✔ Running generateAssets hook
+desktop package: ❯ Running prePackage hook
+desktop package: ❯ [plugin-vite] Building production Vite bundles
+desktop package: ❯ Building main and preload targets...
+desktop package: ❯ Building renderer targets...
+desktop package: ❯ Building src/main/main.ts
+desktop package: ❯ Building src/preload/preload.ts
+desktop package: ❯ Building main_window
+desktop package: ✔ Built target src/preload/preload.ts
+desktop package: ✔ Built target src/main/main.ts
+desktop package: ✔ Building main and preload targets...
+desktop package: ✔ Built target main_window
+desktop package: ✔ Building renderer targets...
+desktop package: ✔ [plugin-vite] Building production Vite bundles
+desktop package: ✔ Running prePackage hook
+desktop package: ✔ Running packaging hooks
+desktop package: ❯ Packaging application
+desktop package: › Determining targets...
+desktop package: ❯ Packaging for x64 on linux
+desktop package: ❯ Copying files
+desktop package: ✔ Copying files
+desktop package: ❯ Preparing native dependencies
+desktop package: ✔ Preparing native dependencies
+desktop package: ❯ Finalizing package
+desktop package: ✔ Finalizing package
+desktop package: ✔ Packaging for x64 on linux
+desktop package: ✔ Packaging application
+desktop package: ❯ Running postPackage hook
+desktop package: ✔ Running postPackage hook
+desktop package: Exited with code 0
+(exit 0)
+
+### bun run --filter admin test:walkthrough (needs the API, admin dev server, demo sales)
+admin test:walkthrough: 
+admin test:walkthrough: -- admin sign-in --
+admin test:walkthrough:   ok   admin lands on the dashboard
+admin test:walkthrough: 
+admin test:walkthrough: -- every section --
+admin test:walkthrough:   ok   / renders "Today at"
+admin test:walkthrough:   ok   /analytics renders "Analytics"
+admin test:walkthrough:   ok   /branches renders "Branches"
+admin test:walkthrough:   ok   /terminals renders "Terminals"
+admin test:walkthrough:   ok   /staff renders "Staff"
+admin test:walkthrough:   ok   /catalog/products renders "Products"
+admin test:walkthrough:   ok   /catalog/products/new renders "New product"
+admin test:walkthrough:   ok   /catalog/categories renders "Categories"
+admin test:walkthrough:   ok   /catalog/brands renders "Brands"
+admin test:walkthrough:   ok   /catalog/units renders "Units"
+admin test:walkthrough:   ok   /inventory/stock renders "Stock"
+admin test:walkthrough:   ok   /inventory/receipts renders "Receipts"
+admin test:walkthrough:   ok   /inventory/transfers renders "Transfers"
+admin test:walkthrough:   ok   /inventory/transfers/new renders "New transfer"
+admin test:walkthrough:   ok   /inventory/counts renders "Counts"
+admin test:walkthrough:   ok   /inventory/counts/new renders "New stock count"
+admin test:walkthrough:   ok   /customers renders "Customers"
+admin test:walkthrough:   ok   /customers/aging renders "Aging"
+admin test:walkthrough:   ok   /loyalty renders "Loyalty"
+admin test:walkthrough:   ok   /suppliers renders "Suppliers"
+admin test:walkthrough:   ok   /suppliers/invoices renders "Invoices"
+admin test:walkthrough:   ok   /suppliers/invoices/new renders "New supplier invoice"
+admin test:walkthrough:   ok   /suppliers/payments renders "Payments"
+admin test:walkthrough:   ok   /suppliers/aging renders "Aging"
+admin test:walkthrough:   ok   /audit renders "Audit"
+admin test:walkthrough:   ok   /settings renders "Settings"
+admin test:walkthrough: 
+admin test:walkthrough: -- detail screens --
+admin test:walkthrough:   ok   /branches/863391e7-adec-4821-8810-fb7d43cb7be4 renders
+admin test:walkthrough:   ok   /catalog/products/07fafc5c-852e-44a0-b80c-50c66454becb renders
+admin test:walkthrough:   ok   /inventory/stock/07fafc5c-852e-44a0-b80c-50c66454becb renders
+admin test:walkthrough:   ok   /inventory/receipts/22cbc898-302c-4006-afc2-066eb29e2017 renders
+admin test:walkthrough:   ok   /suppliers/9fa38b35-1e0a-4616-84f2-a6f615e3daf0 renders
+admin test:walkthrough:   ok   /suppliers/invoices/new renders
+admin test:walkthrough:   ok   /suppliers/payments/98c86c4e-c492-4d28-b79d-6c9ccc5cf532 renders
+admin test:walkthrough:   ok   /customers/ba27ff38-3a93-4e36-9f11-970a28a16515 renders
+admin test:walkthrough:   ok   /customers/ba27ff38-3a93-4e36-9f11-970a28a16515/statement renders
+admin test:walkthrough: 
+admin test:walkthrough: -- analytics charts and export --
+admin test:walkthrough:   ok   /analytics?tab=sales renders
+admin test:walkthrough:   ok   /analytics?tab=sales renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=sales: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=products renders
+admin test:walkthrough:   ok   /analytics?tab=products renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=products: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=inventory renders
+admin test:walkthrough:   ok   /analytics?tab=inventory renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=inventory: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=credit renders
+admin test:walkthrough:   ok   /analytics?tab=credit renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=credit: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=loyalty renders
+admin test:walkthrough:   ok   /analytics?tab=loyalty renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=loyalty: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=payables renders
+admin test:walkthrough:   ok   /analytics?tab=payables renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=payables: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month renders
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   sales CSV starts with a UTF-8 BOM
+admin test:walkthrough:   ok   sales CSV carries the expected header row
+admin test:walkthrough:   ok   sales CSV uses CRLF line endings
+admin test:walkthrough:   ok   sales CSV carries at least one data row
+admin test:walkthrough: 
+admin test:walkthrough: -- manager role boundary --
+admin test:walkthrough:   ok   manager password already changed (re-run)
+admin test:walkthrough:   ok   manager lands on the dashboard
+admin test:walkthrough:   ok   manager has no "All branches" option
+admin test:walkthrough:   ok   manager branch control is a locked badge, not a select
+admin test:walkthrough:   ok   manager can open /
+admin test:walkthrough:   ok   manager can open /analytics
+admin test:walkthrough:   ok   manager can open /analytics?tab=payables
+admin test:walkthrough:   ok   manager can open /inventory/stock
+admin test:walkthrough:   ok   manager can open /customers
+admin test:walkthrough:   ok   manager can open /customers/aging
+admin test:walkthrough:   ok   manager can open /suppliers
+admin test:walkthrough:   ok   manager can open /audit
+admin test:walkthrough:   ok   a foreign branchId does not change a manager's analytics view
+admin test:walkthrough:   ok   manager analytics navigated
+admin test:walkthrough:   ok   a foreign branchId in the URL does not break the manager view
+admin test:walkthrough:   ok   manager staff list hides global admin accounts
+admin test:walkthrough: 
+admin test:walkthrough: -- analytics responsive matrix --
+admin test:walkthrough:   ok   320px light no-preference: charts rendered
+admin test:walkthrough:   ok   320px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   320px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   320px light reduce: charts rendered
+admin test:walkthrough:   ok   320px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   320px light reduce: no zero-height chart
+admin test:walkthrough:   ok   320px light reduce: no entrance animation
+admin test:walkthrough:   ok   320px dark no-preference: charts rendered
+admin test:walkthrough:   ok   320px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   320px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   320px dark reduce: charts rendered
+admin test:walkthrough:   ok   320px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   320px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   320px dark reduce: no entrance animation
+admin test:walkthrough:   ok   768px light no-preference: charts rendered
+admin test:walkthrough:   ok   768px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   768px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   768px light reduce: charts rendered
+admin test:walkthrough:   ok   768px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   768px light reduce: no zero-height chart
+admin test:walkthrough:   ok   768px light reduce: no entrance animation
+admin test:walkthrough:   ok   768px dark no-preference: charts rendered
+admin test:walkthrough:   ok   768px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   768px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   768px dark reduce: charts rendered
+admin test:walkthrough:   ok   768px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   768px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   768px dark reduce: no entrance animation
+admin test:walkthrough:   ok   1024px light no-preference: charts rendered
+admin test:walkthrough:   ok   1024px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1024px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   1024px light reduce: charts rendered
+admin test:walkthrough:   ok   1024px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   1024px light reduce: no zero-height chart
+admin test:walkthrough:   ok   1024px light reduce: no entrance animation
+admin test:walkthrough:   ok   1024px dark no-preference: charts rendered
+admin test:walkthrough:   ok   1024px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1024px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   1024px dark reduce: charts rendered
+admin test:walkthrough:   ok   1024px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   1024px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   1024px dark reduce: no entrance animation
+admin test:walkthrough:   ok   1440px light no-preference: charts rendered
+admin test:walkthrough:   ok   1440px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1440px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   1440px light reduce: charts rendered
+admin test:walkthrough:   ok   1440px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   1440px light reduce: no zero-height chart
+admin test:walkthrough:   ok   1440px light reduce: no entrance animation
+admin test:walkthrough:   ok   1440px dark no-preference: charts rendered
+admin test:walkthrough:   ok   1440px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1440px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   1440px dark reduce: charts rendered
+admin test:walkthrough:   ok   1440px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   1440px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   1440px dark reduce: no entrance animation
+admin test:walkthrough:   ok   first analytics series takes the brand orange
+admin test:walkthrough:   ok   first series clears 3:1 against its panel (SC 1.4.11)
+admin test:walkthrough:   ok   chart is readable by keyboard arrow keys
+admin test:walkthrough: 
+admin test:walkthrough: -- console hygiene --
+admin test:walkthrough:   ok   no console errors across the whole walkthrough
+admin test:walkthrough:   ok   no failed requests across the whole walkthrough
+admin test:walkthrough: 
+admin test:walkthrough: 138/138 checks passed
+admin test:walkthrough: Exited with code 0
+(exit 0)
+
+### gateway invariants
+chart tokens in :root: 21
+analytics endpoints mounted: 12
+client money arithmetic in the analytics module (expect 0):
+0
+(exit 0)

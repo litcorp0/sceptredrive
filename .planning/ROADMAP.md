@@ -250,6 +250,9 @@ topbar, page header, and empty/loading/error states on the new tokens.
 
 ## Phase 9 — Analytics, Dashboard & Reporting Read Models
 
+**Status:** ✅ Complete (verified 2026-10-25 — see
+`phases/09-analytics-dashboard/01-VERIFICATION.md`; gates in `evidence/suites.txt`)
+
 **Goal:** The console shows the truth about the business — real, reconciled, branch-correct
 numbers with charts that answer a manager's question and an owner's question differently.
 

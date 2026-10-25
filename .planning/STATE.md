@@ -4,13 +4,14 @@
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-24
-**Status:** **Phase 8 (Admin Module Architecture & Shell) complete — 13/13 plans, verified.** The
-roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin
-Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of
-the former Phases 7–9, and a later audit the same day added Phase 11 (Procurement & Replenishment)
-and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
-**Next action:** Plan **Phase 9** (Analytics, Dashboard & Reporting Read Models).
+**Updated:** 2026-10-25
+**Status:** **Phase 9 (Analytics, Dashboard & Reporting Read Models) complete — 8/8 plans,
+verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
+System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
+inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
+(Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
+became Phases 13/14/15.
+**Next action:** Plan **Phase 10** (Desktop POS Modules, Chrome & Shift Home).
 
 ---
 
@@ -27,13 +28,70 @@ and Phase 12 (Branch Operations & Approvals). The former 7/8/9 became Phases 13/
 | 6 | POS Offline Core | ✅ Complete (9/9 plans, verified) |
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
-| 9 | Analytics, Dashboard & Reporting Read Models | ⬜ Not started |
+| 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 9 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Shared contract: basis points, CSV, Accra day, `analytics.read`, seven-step ramp | ✅ Complete |
+| 02 | Analytics module core and `GET /api/analytics/overview` | ✅ Complete |
+| 03 | `sales`, `products`, `tax` read models + CSV export | ✅ Complete |
+| 04 | `inventory`, `credit`, `loyalty`, `payables` read models + exports | ✅ Complete |
+| 05 | `seed:demo-sales` — a month through `applySale` | ✅ Complete |
+| 06 | Admin `analytics` module: `/analytics`, seven tabs, URL state | ✅ Complete |
+| 07 | Dashboard rebuild and `dev-charts` retirement | ✅ Complete |
+| 08 | Verification, evidence, and state update | ✅ Complete |
+
+### Phase 9 execution notes (2026-10-25)
+
+- **Goal met:** every dashboard and analytics figure is a server aggregate in one read-only
+  snapshot; a manager cannot obtain another branch's numbers by any parameter; the period,
+  branch, granularity, tab, and sort all live in the URL; every chart carries a summary
+  sentence and a data-table alternative; and all seven views export CSV.
+- **Numbers.** API **394** (was 360), shared **127** (was 96), desktop **339** unchanged,
+  walkthrough **138/138**, `modules:check:strict` 15/15, `tokens:check` with seven ramp steps
+  and 14 chart/surface contrast pairs. Performance on 2,424 seeded sales: every endpoint
+  p95 ≤ **56 ms** against the 300 ms budget. Demo seed: **168 shifts, 2,422 sales** across
+  three terminals in two retail branches.
+- **Decisions taken in planning** (`phases/09-…/00-DECISIONS.md`): gross profit is the
+  **ex-tax base minus frozen cost** (using `net_minor` would overstate margin by the 20% tax
+  in inclusive mode); the **tender mix is derived** (`take − electronic − credit`) because a
+  CASH tender row contains the change handed back; the chart ramp is **seven steps** with
+  measured surface contrast; and **URL branch wins on `/` and `/analytics`** with the header
+  switcher writing it there.
+- **The read-model boundary is a documented exception (P9-D10).** `analytics.repository.ts`
+  imports sibling **schemas** to aggregate; it never imports a sibling repository and
+  delegates every existing rule (payables ageing buckets, loyalty valuation, low-stock
+  semantics) to the owning service.
+- **Defect found by the demo month:** `stock_movement` gained `SALE` in Phase 6 but the
+  console's `StockMovementType`/`MOVEMENT_META` never did, so any stock detail page with a
+  sale in its history threw. Invisible in Phase 8 because no sale movement was on the product
+  it opened. Fixed, with the walkthrough now opening that page.
+- **Accessibility corrections:** chart panels are named `<figure>` elements (`role="img"`
+  would mute the Recharts accessibility layer), and the period fields wrap at 320 px after an
+  implicit grid track pushed the page to 953 px.
+- **Evidence lives in the walkthrough** (`admin/test/walkthrough-sections.mjs`): it signs in
+  once, then runs the 4-width × 2-theme × 2-motion matrix, measures the first series against
+  its panel, proves keyboard arrow navigation with the pointer parked off-chart
+  (recharts#7905), downloads a real CSV, and leaves its cookie for
+  `evidence/verify-analytics-perf.mjs`.
+- **The perf script calls each endpoint six times, not eleven**, because eleven would breach
+  the endpoint's own 120/min limit (20/min for exports). Measuring must not require disabling
+  a rate limiter.
+- **Dev database rebuilt** on 2026-10-25 (`drop/create`, migrate, `db:seed --demo`,
+  `sync:init`) because an aborted seed left partial demo rows and an open shift. Local
+  generated data only; PowerSync was restarted and its publication recreated.
+- **Carry-forwards:** refunds stay reserved at `refundsMinor: 0` until Phase 13; electronic
+  tender methods group automatically when Phase 13 adds them; `stock_movement` has no business
+  date so inventory flow buckets on `created_at`; RPT-04/RPT-05 screens stay in Phase 14; the
+  in-memory rate limiter needs a shared store if the API is ever scaled out (Phase 15).
 
 ### Phase 8 plan progress
 
@@ -432,9 +490,9 @@ Operator decisions (locked in `phases/11-…/00-CONTEXT.md` and `phases/12-…/0
 - `product.costPriceMinor` becomes **derived and read-only**; `stock_level.avg_cost_minor` is
   the current figure and `sale_line.unit_cost_minor` the historical one.
 
-Phase 7's detailed plans still come first: Phase 7 is the only phase with `NN-PLAN.md` files.
-Phases 11–14 carry context and a planned-plan list, and get task-level plans when the phase
-before them completes. Phase 15 is deliberately context-deferred: its decisions are operator
+Phases 7 and 9 are the phases with `NN-PLAN.md` files, and 7 is complete. Phases 11–14 carry
+context and a planned-plan list, and get task-level plans when the phase before them
+completes. Phase 15 is deliberately context-deferred: its decisions are operator
 inputs (domain, VPS sizing, RPO/RTO, backup retention, signing certificate, PowerSync Cloud
 instances, monitoring, UAT), listed in `phases/15-production-hardening/00-CONTEXT.md`.
 

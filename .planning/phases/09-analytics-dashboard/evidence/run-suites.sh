@@ -50,5 +50,9 @@ echo "### gateway invariants" >> "$OUT"
   echo "chart tokens in :root: $(grep -c -- '--chart-' packages/brand/src/tokens.css)"
   echo "analytics endpoints mounted: $(grep -c "analyticsRoutes\.\(get\|post\)" api/src/modules/analytics/analytics.routes.ts)"
   echo "client money arithmetic in the analytics module (expect 0):"
-  grep -rnE "parseFloat|toFixed|/ 100" admin/src/modules/analytics --include='*.ts*' | grep -v 'format-chart' | wc -l
+  # A zero match is the desired result, and `pipefail` would otherwise make that grep's
+  # status the script's exit code.
+  grep -rnE "parseFloat|toFixed|/ 100" admin/src/modules/analytics --include='*.ts*' \
+    | grep -v 'format-chart' | wc -l || true
 } >> "$OUT" 2>&1
+echo "(exit 0)" >> "$OUT"

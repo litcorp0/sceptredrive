@@ -20,7 +20,9 @@ export const DEMO_SALES_BRANCHES: readonly DemoPlanBranch[] = [
     code: 'ACC-SPX',
     name: 'Accra Spintex',
     city: 'Accra',
-    terminals: ['ACC-SPX-T01', 'ACC-SPX-T02'],
+    // T01 belongs to `seed/demo.ts`, which already owns a closed shift on it; the demo month
+    // uses its own T02 and T03 so a run can never collide with the shipped fixture.
+    terminals: ['ACC-SPX-T02', 'ACC-SPX-T03'],
   },
   {
     code: 'KUM-ASO',
