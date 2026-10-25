@@ -1,0 +1,501 @@
+import { randomUUID } from 'node:crypto'
+import { db } from '@sceptre/db'
+import { and, eq, inArray } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  deleteTestUser,
+  signIn,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
+import { approval } from '../approvals/approvals.schema.ts'
+import { category, uom } from '../catalog/catalog.schema.ts'
+import { branch } from '../org/branches.schema.ts'
+import { auditLog } from '../platform/audit.schema.ts'
+import { documentSequence } from '../platform/sequences.schema.ts'
+import { setting } from '../platform/settings.schema.ts'
+import { product } from '../products/products.schema.ts'
+import { supplier } from '../suppliers/suppliers.schema.ts'
+import { purchaseOrder } from './procurement.schema.ts'
+
+const available = await databaseAvailable()
+if (!available) console.warn('[procurement.test] database unavailable; integration tests skipped')
+
+const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
+
+let branchAId = ''
+let branchBId = ''
+let supplierId = ''
+let productAId = ''
+let productBId = ''
+let adminId = ''
+let managerAId = ''
+let managerBId = ''
+let adminCookie = ''
+let managerACookie = ''
+let managerBCookie = ''
+const orderIds: string[] = []
+
+async function readJson<T>(response: Response): Promise<T> {
+  return (await response.json()) as T
+}
+
+function key(): string {
+  return randomUUID()
+}
+
+async function createOrder(
+  cookie: string,
+  input: { quantity: number; unitCostMinor: number; branchId?: string; idempotencyKey?: string },
+) {
+  const response = await app.request('/api/procurement/orders', {
+    method: 'POST',
+    headers: authedHeaders(cookie),
+    body: JSON.stringify({
+      branchId: input.branchId ?? branchAId,
+      supplierId,
+      expectedDate: '2026-11-05',
+      idempotencyKey: input.idempotencyKey ?? key(),
+      lines: [
+        {
+          productId: productAId,
+          quantity: input.quantity,
+          unitCostMinor: input.unitCostMinor,
+        },
+      ],
+    }),
+  })
+  const detail = await readJson<{ order: { id: string; status: string; number: string } }>(response)
+  if (detail.order?.id) orderIds.push(detail.order.id)
+  return { response, body: detail.order }
+}
+
+async function orderRow(id: string) {
+  const rows = await db.select().from(purchaseOrder).where(eq(purchaseOrder.id, id)).limit(1)
+  return rows[0]
+}
+
+async function approvalRowsFor(orderId: string) {
+  return db.select().from(approval).where(eq(approval.entityId, orderId))
+}
+
+beforeAll(async () => {
+  if (!available) return
+
+  const branches = await db
+    .insert(branch)
+    .values([
+      { code: `PA${suffix.slice(-6)}`, name: `Order A ${suffix}`, city: 'Accra' },
+      { code: `PB${suffix.slice(-6)}`, name: `Order B ${suffix}`, city: 'Kumasi' },
+    ])
+    .returning({ id: branch.id })
+  branchAId = branches[0]?.id ?? ''
+  branchBId = branches[1]?.id ?? ''
+
+  const [unit] = await db
+    .insert(uom)
+    .values({ code: `O${suffix.slice(-5)}`, name: `Order unit ${suffix}` })
+    .returning({ id: uom.id })
+  const [categoryRow] = await db
+    .insert(category)
+    .values({ name: `Order category ${suffix}` })
+    .returning({ id: category.id })
+
+  const [supplierRow] = await db
+    .insert(supplier)
+    .values({ code: `OS${suffix.slice(-5)}`, name: `Order supplier ${suffix}` })
+    .returning({ id: supplier.id })
+  supplierId = supplierRow?.id ?? ''
+
+  const products = await db
+    .insert(product)
+    .values([
+      {
+        sku: `OPA${suffix.slice(-5)}`,
+        name: `Order product A ${suffix}`,
+        categoryId: categoryRow?.id,
+        uomId: unit?.id,
+        basePriceMinor: 10_000,
+        costPriceMinor: 0,
+      },
+      {
+        sku: `OPB${suffix.slice(-5)}`,
+        name: `Order product B ${suffix}`,
+        categoryId: categoryRow?.id,
+        uomId: unit?.id,
+        basePriceMinor: 20_000,
+        costPriceMinor: 0,
+      },
+    ])
+    .returning({ id: product.id })
+  productAId = products[0]?.id ?? ''
+  productBId = products[1]?.id ?? ''
+
+  const admin = await createTestUser({ role: 'ADMIN', email: `po-admin-${suffix}@test.local` })
+  const managerA = await createTestUser({
+    role: 'MANAGER',
+    branchId: branchAId,
+    email: `po-mgr-a-${suffix}@test.local`,
+  })
+  const managerB = await createTestUser({
+    role: 'MANAGER',
+    branchId: branchBId,
+    email: `po-mgr-b-${suffix}@test.local`,
+  })
+  adminId = admin.id
+  managerAId = managerA.id
+  managerBId = managerB.id
+
+  adminCookie = await signIn(admin.email)
+  managerACookie = await signIn(managerA.email)
+  managerBCookie = await signIn(managerB.email)
+})
+
+afterAll(async () => {
+  if (!available) return
+
+  const orderIdsForBranches = (
+    await db
+      .select({ id: purchaseOrder.id })
+      .from(purchaseOrder)
+      .where(inArray(purchaseOrder.branchId, [branchAId, branchBId]))
+  ).map((row) => row.id)
+
+  if (orderIdsForBranches.length > 0) {
+    await db.delete(purchaseOrder).where(inArray(purchaseOrder.id, orderIdsForBranches))
+  }
+  await db.delete(approval).where(inArray(approval.branchId, [branchAId, branchBId]))
+  await db
+    .delete(documentSequence)
+    .where(inArray(documentSequence.branchId, [branchAId, branchBId]))
+  await db.delete(auditLog).where(inArray(auditLog.branchId, [branchAId, branchBId]))
+  await db.delete(product).where(inArray(product.id, [productAId, productBId]))
+  await db.delete(supplier).where(eq(supplier.id, supplierId))
+  for (const id of [adminId, managerAId, managerBId]) {
+    if (id) await deleteTestUser(id)
+  }
+  await db.delete(branch).where(inArray(branch.id, [branchAId, branchBId]))
+})
+
+describe.skipIf(!available)('purchase orders', () => {
+  it('creates a draft with a branch-month number and a goods value', async () => {
+    const { response, body } = await createOrder(managerACookie, {
+      quantity: 10,
+      unitCostMinor: 5_000,
+    })
+    expect(response.status).toBe(201)
+    expect(body.status).toBe('DRAFT')
+    expect(body.number).toMatch(/^PO-[A-Z0-9]+-\d{6}-0001$/)
+
+    const detail = await app.request(`/api/procurement/orders/${body.id}`, {
+      headers: authedHeaders(managerACookie),
+    })
+    const detailBody = await readJson<{
+      goodsValueMinor: number
+      lines: { outstandingQuantity: number; receivedQuantity: number }[]
+      canApply: Record<string, boolean>
+    }>(detail)
+    expect(detailBody.goodsValueMinor).toBe(50_000)
+    expect(detailBody.lines[0]?.outstandingQuantity).toBe(10)
+    expect(detailBody.canApply.submit).toBe(true)
+    expect(detailBody.canApply.receive).toBe(false)
+  })
+
+  it('replays the same idempotency key instead of creating a second order', async () => {
+    const idempotencyKey = key()
+    const first = await createOrder(managerACookie, {
+      quantity: 1,
+      unitCostMinor: 1_000,
+      idempotencyKey,
+    })
+    const second = await createOrder(managerACookie, {
+      quantity: 1,
+      unitCostMinor: 1_000,
+      idempotencyKey,
+    })
+
+    expect(first.response.status).toBe(201)
+    expect(second.response.status).toBe(200)
+    expect(second.body.id).toBe(first.body.id)
+  })
+
+  it('rejects a product twice in one order', async () => {
+    const response = await app.request('/api/procurement/orders', {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        idempotencyKey: key(),
+        lines: [
+          { productId: productAId, quantity: 1, unitCostMinor: 100 },
+          { productId: productAId, quantity: 2, unitCostMinor: 100 },
+        ],
+      }),
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('edits a draft and refuses to edit an approved order', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 2, unitCostMinor: 1_000 })
+
+    const update = await app.request(`/api/procurement/orders/${body.id}`, {
+      method: 'PATCH',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        lines: [
+          { productId: productAId, quantity: 3, unitCostMinor: 1_000 },
+          { productId: productBId, quantity: 1, unitCostMinor: 2_000 },
+        ],
+      }),
+    })
+    expect(update.status).toBe(200)
+    const updated = await readJson<{ goodsValueMinor: number; lines: unknown[] }>(update)
+    expect(updated.goodsValueMinor).toBe(5_000)
+    expect(updated.lines).toHaveLength(2)
+
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const blocked = await app.request(`/api/procurement/orders/${body.id}`, {
+      method: 'PATCH',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ note: 'too late' }),
+    })
+    expect(blocked.status).toBe(409)
+  })
+
+  it('auto-approves a manager order one pesewa below the limit', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 999_999 })
+
+    const submit = await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    expect(submit.status).toBe(200)
+
+    const row = await orderRow(body.id)
+    expect(row?.status).toBe('APPROVED')
+    expect(row?.approvalId).toBeNull()
+    expect(await approvalRowsFor(body.id)).toHaveLength(0)
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, 'purchase_order'), eq(auditLog.entityId, body.id)))
+    expect(audits.map((entry) => entry.action)).toContain('purchase_order.auto_approved')
+  })
+
+  it('waits for an admin at exactly the limit', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 1_000_000 })
+
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const row = await orderRow(body.id)
+    expect(row?.status).toBe('PENDING_APPROVAL')
+    expect(row?.approvalId).toBeTruthy()
+
+    const approvals = await approvalRowsFor(body.id)
+    expect(approvals).toHaveLength(1)
+    expect(approvals[0]?.amountMinor).toBe(1_000_000)
+  })
+
+  it('uses a branch override of the threshold', async () => {
+    const override = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        key: 'procurement.approvalThresholdMinor',
+        value: 500_000,
+        branchId: branchAId,
+      }),
+    })
+    expect(override.status).toBe(200)
+
+    try {
+      const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 600_000 })
+      await app.request(`/api/procurement/orders/${body.id}/submit`, {
+        method: 'POST',
+        headers: authedHeaders(managerACookie),
+      })
+      expect((await orderRow(body.id))?.status).toBe('PENDING_APPROVAL')
+    } finally {
+      await db
+        .delete(setting)
+        .where(
+          and(
+            eq(setting.key, 'procurement.approvalThresholdMinor'),
+            eq(setting.branchId, branchAId),
+          ),
+        )
+    }
+  })
+
+  it('never sends an admin order to a second admin', async () => {
+    const { body } = await createOrder(adminCookie, { quantity: 5, unitCostMinor: 1_000_000 })
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+    })
+
+    const row = await orderRow(body.id)
+    expect(row?.status).toBe('APPROVED')
+    expect(row?.approvalId).toBeNull()
+    expect(await approvalRowsFor(body.id)).toHaveLength(0)
+  })
+
+  it('approves, sends, and refuses a second send timestamp', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 2_000_000 })
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const pending = await approvalRowsFor(body.id)
+    const decide = await app.request(`/api/approvals/${pending[0]?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(decide.status).toBe(200)
+
+    expect((await orderRow(body.id))?.status).toBe('APPROVED')
+
+    const send = await app.request(`/api/procurement/orders/${body.id}/send`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    expect(send.status).toBe(200)
+    const firstSend = await orderRow(body.id)
+    expect(firstSend?.status).toBe('SENT')
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await app.request(`/api/procurement/orders/${body.id}/send`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    const secondSend = await orderRow(body.id)
+    expect(secondSend?.sentAt?.getTime()).toBe(firstSend?.sentAt?.getTime())
+  })
+
+  it('refuses to send a rejected order', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 3_000_000 })
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const pending = await approvalRowsFor(body.id)
+    await app.request(`/api/approvals/${pending[0]?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ decision: 'REJECTED', reasonCode: 'OVER_THRESHOLD' }),
+    })
+
+    const send = await app.request(`/api/procurement/orders/${body.id}/send`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    expect(send.status).toBe(409)
+    expect((await orderRow(body.id))?.status).toBe('REJECTED')
+  })
+
+  it('cancels a pending order and withdraws its approval', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 4_000_000 })
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const cancel = await app.request(`/api/procurement/orders/${body.id}/cancel`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ reason: 'Supplier changed the price' }),
+    })
+    expect(cancel.status).toBe(200)
+
+    expect((await orderRow(body.id))?.status).toBe('CANCELLED')
+    const approvals = await approvalRowsFor(body.id)
+    expect(approvals[0]?.status).toBe('WITHDRAWN')
+  })
+
+  it('closes a sent order short and records what is outstanding', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 10, unitCostMinor: 100 })
+    await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    await app.request(`/api/procurement/orders/${body.id}/send`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+
+    const close = await app.request(`/api/procurement/orders/${body.id}/close`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ note: 'Supplier discontinued the part' }),
+    })
+    expect(close.status).toBe(200)
+    expect((await orderRow(body.id))?.status).toBe('CLOSED')
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, 'purchase_order'), eq(auditLog.entityId, body.id)))
+    const closed = audits.find((entry) => entry.action === 'purchase_order.closed')
+    expect(JSON.stringify(closed?.after)).toContain('outstanding')
+  })
+
+  it('keeps one branch out of another branch order', async () => {
+    const { body } = await createOrder(managerACookie, { quantity: 1, unitCostMinor: 100 })
+
+    const read = await app.request(`/api/procurement/orders/${body.id}`, {
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(read.status).toBe(403)
+
+    const list = await app.request(`/api/procurement/orders?branchId=${branchAId}`, {
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(list.status).toBe(403)
+
+    const submit = await app.request(`/api/procurement/orders/${body.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(submit.status).toBe(403)
+  })
+
+  it('rejects an unknown field and a cashier', async () => {
+    const strict = await app.request('/api/procurement/orders', {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        idempotencyKey: key(),
+        lines: [{ productId: productAId, quantity: 1, unitCostMinor: 100 }],
+        totalMinor: 100,
+      }),
+    })
+    expect(strict.status).toBe(400)
+
+    const cashier = await createTestUser({ role: 'CASHIER', email: `po-cash-${suffix}@test.local` })
+    try {
+      const cashierCookie = await signIn(cashier.email)
+      const denied = await app.request('/api/procurement/orders', {
+        headers: authedHeaders(cashierCookie),
+      })
+      expect(denied.status).toBe(403)
+    } finally {
+      await deleteTestUser(cashier.id)
+    }
+  })
+})

@@ -6,16 +6,19 @@
  * cannot disagree about what is allowed next if there is only one answer.
  */
 
-export type PurchaseOrderStatus =
-  | 'DRAFT'
-  | 'PENDING_APPROVAL'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'SENT'
-  | 'PARTIALLY_RECEIVED'
-  | 'RECEIVED'
-  | 'CLOSED'
-  | 'CANCELLED'
+export const PURCHASE_ORDER_STATUSES = [
+  'DRAFT',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'REJECTED',
+  'SENT',
+  'PARTIALLY_RECEIVED',
+  'RECEIVED',
+  'CLOSED',
+  'CANCELLED',
+] as const
+
+export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number]
 
 export type PurchaseOrderAction = 'submit' | 'send' | 'receive' | 'close' | 'cancel'
 

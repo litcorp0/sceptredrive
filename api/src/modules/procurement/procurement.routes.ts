@@ -1,7 +1,81 @@
+import { requirePermission } from '../../http/authorize.ts'
 import { factory } from '../../http/factory.ts'
+import { requireSession } from '../../http/session.ts'
+import * as procurementController from './procurement.controller.ts'
+import {
+  validateOrderCancel,
+  validateOrderClose,
+  validateOrderCreate,
+  validateOrderIdParam,
+  validateOrderListQuery,
+  validateOrderUpdate,
+} from './procurement.validation.ts'
 
-/**
- * Procurement routes. The paths are added by the plan that owns them; mounting an empty
- * router here keeps `app.ts` out of every later plan's diff.
- */
 export const procurementRoutes = factory.createApp()
+
+procurementRoutes.get(
+  '/api/procurement/orders',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateOrderListQuery,
+  (c) => procurementController.listOrders(c, c.req.valid('query')),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderCreate,
+  (c) => procurementController.createOrder(c, c.req.valid('json')),
+)
+
+procurementRoutes.get(
+  '/api/procurement/orders/:id',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateOrderIdParam,
+  (c) => procurementController.getOrder(c, c.req.valid('param').id),
+)
+
+procurementRoutes.patch(
+  '/api/procurement/orders/:id',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderIdParam,
+  validateOrderUpdate,
+  (c) => procurementController.updateOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders/:id/submit',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderIdParam,
+  (c) => procurementController.submitOrder(c, c.req.valid('param').id),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders/:id/send',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderIdParam,
+  (c) => procurementController.sendOrder(c, c.req.valid('param').id),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders/:id/cancel',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderIdParam,
+  validateOrderCancel,
+  (c) => procurementController.cancelOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders/:id/close',
+  requireSession,
+  requirePermission('procurement.create'),
+  validateOrderIdParam,
+  validateOrderClose,
+  (c) => procurementController.closeOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)

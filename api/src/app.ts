@@ -38,7 +38,7 @@ import { jwksRoutes } from './routes/jwks.ts'
 
 // Fail at boot, not at the first decision: a request type that can be created
 // but not decided is a programming error. Plan 04 adds PURCHASE_ORDER here.
-assertDecisionHandlersRegistered(['PRODUCT_CREATE'])
+assertDecisionHandlersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER'])
 
 export const app = factory.createApp()
 
