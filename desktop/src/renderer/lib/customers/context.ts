@@ -33,6 +33,15 @@ export interface CustomerLoyalty {
 
 export interface CustomerContext {
   credit: CreditSnapshot
+  /**
+   * True while the first local read of the credit profile is still running.
+   *
+   * Without this, `hasProfile: false` means two different things — "this customer has no
+   * account here" and "we have not looked yet" — and a screen that cannot tell them apart
+   * states the first one before the second has finished. Plan 09's audit caught the tender
+   * screen offering a manager override to a customer who did have a limit.
+   */
+  creditLoading: boolean
   loyalty: CustomerLoyalty
 }
 
@@ -102,7 +111,7 @@ export function useCustomerContext(
   )
 
   return useMemo<CustomerContext>(() => {
-    if (!customer) return { credit: EMPTY_CREDIT, loyalty: EMPTY_LOYALTY }
+    if (!customer) return { credit: EMPTY_CREDIT, creditLoading: false, loyalty: EMPTY_LOYALTY }
 
     const credit = creditRow.data?.[0]
     const accountRow = account.data?.[0]
@@ -114,6 +123,7 @@ export function useCustomerContext(
     }))
 
     return {
+      creditLoading: creditRow.isLoading,
       credit: credit
         ? {
             hasProfile: true,
@@ -135,5 +145,13 @@ export function useCustomerContext(
         lots: lotRows,
       },
     }
-  }, [account.data, creditPending.data, creditRow.data, customer, lots.data, loyaltyPending.data])
+  }, [
+    account.data,
+    creditPending.data,
+    creditRow.data,
+    creditRow.isLoading,
+    customer,
+    lots.data,
+    loyaltyPending.data,
+  ])
 }
