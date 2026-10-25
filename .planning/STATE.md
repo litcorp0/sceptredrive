@@ -40,12 +40,14 @@ and the tender and receipt screens now read at counter distance.
 
 ### Phase 10 execution notes (2026-10-25)
 
-- **Plan 07 complete** (commits `c93457e`, `8baf7f0`). The tender screen now reads change at
-  counter distance and the receipt is the paper. Desktop **384** unchanged, no test edited.
-- **Two commits, not four, and the reason is structural.** The plan's fourth commit
-  ("semantic colour tokens replace the raw palette") has no independent diff: every raw class
-  in these two modules sat on a control the first three commits were already restyling, so it
-  is folded in rather than staged as a fourth pass over files it had just rewritten.
+- **Plan 07 complete** (commits `c93457e`, `8baf7f0`, `ee0cbd8`). The tender screen now reads
+  change at counter distance and the receipt is the paper. Desktop **387** (was 384; three new
+  tests, none edited).
+- **Three commits, not the plan's four, and the reason is structural.** The plan's fourth
+  commit ("semantic colour tokens replace the raw palette") has no independent diff: every raw
+  class in these two modules sat on a control the first three commits were already restyling,
+  so it is folded in rather than staged as a fourth pass over files it had just rewritten. The
+  third commit is the review fix below.
 - **The plan's `Exact` claim was stale**, exactly like Plan 06's "24–28 px" one: `Exact` was
   already `h-11` (44 px) from Plan 03, not `h-10`. The keypad keys were already 48 px. What
   actually changed is the method pair (12 px taller and now a segmented control) and the
@@ -61,31 +63,58 @@ and the tender and receipt screens now read at counter distance.
 - **Radix `ToggleGroup type="single"` reports `''` when the pressed item is pressed again** —
   documented under "Ensuring there is always a value". Unhandled, clicking the already-selected
   *Cash* would clear the method, `ready` would read as if no method were chosen, and `F9` would
-  complete with a `TenderMethod` that is not in the union. The empty value is now ignored.
+  complete with a `TenderMethod` that is not in the union. `nextTenderMethod` now owns that
+  decision (see below).
 - **The selected state is non-colour on purpose.** A check icon in a reserved 16 px box, a 2 px
   border, and a `font-bold` label: three signals that survive colour blindness (WCAG 2.2
-  SC 1.4.1). The icon's box is reserved in both states so choosing a method cannot shift the
-  label sideways.
+  SC 1.4.1). The icon's box is reserved in both states so the label does not jump when the icon
+  appears; the border grows inward and the centred label widens symmetrically, so neither
+  moves it sideways.
 - **The receipt's surface moved from `bg-white text-black` to `--card`/`--card-foreground`.**
-  Byte-identical in the POS's light-only theme (P10-D8) and it removes the last raw palette
-  from the module. `role="article"` on the `Card` keeps the accessible name the `<article>`
-  element carried; `Card` alone renders a `div`, where `aria-label` would be inert.
-- **The print badge keeps the word "Printed".** `data-status` still carries the machine value,
-  but labels are now `Not printed yet` / `Printing…` / `Printed` / `Did not print` — and the
-  Phase 6 evidence files select that chip with `/Printed/i`, so the word is load-bearing.
+  The surface is equivalent — `--card` is `#FFFFFF` in the POS's light-only theme (P10-D8) — and
+  it removes the last raw palette from the module; the body text shifts from pure `#000` to
+  `--ink #1b1f23`, which is the difference the design system exists to make. `role="article"`
+  on the `Card` keeps the accessible name the `<article>` element carried; `Card` alone renders
+  a `div`, where `aria-label` would be inert.
+- **The print badge's words are load-bearing in both directions.** Labels are `Pending`,
+  `Printing…`, `Printed`, `Did not print`; `data-status` still carries the machine value. The
+  Phase 6 evidence selects that chip with `hasText: /Printed/i`, so `PRINTED` must say
+  "Printed" **and `PENDING` must not contain the word.** The first draft labelled PENDING
+  "Not printed yet", which satisfied that wait before anything had printed — a FAILED or stuck
+  PRINTING receipt would have passed, and `perf-pos` would have measured ~0 ms. Review caught
+  it; it is the same cannot-fail class as `196209c`.
+- **Review also caught two things worth keeping:** the change figure's live region wrapped only
+  the amount, so a screen-reader cashier heard a bare number with no way to tell a shortfall
+  from change owed (the label is inside the region now, with `aria-atomic`); and the Radix `''`
+  guard was an unchecked `as TenderMethod` cast with no test. It is now `nextTenderMethod`,
+  a pure function in `modules/tender/utils/` with three cases, which also rejects values that
+  are not tender methods instead of casting them into the union.
+- **No DOM test harness was added.** The desktop suite is node-only (`environment: 'node'`, no
+  jsdom, no testing-library), so component behaviour is proven by `utils/` unit tests plus
+  Plan 09's counter audit rather than by rendering. Adding jsdom would have touched
+  `bun.lock`, which is a controller file.
 - **The 44/48/56 px claim was checked in the compiled stylesheet, not assumed.** The renderer
-  builds (`bunx vite build --config vite.renderer.config.mts`, **1,266.69 kB**) and the emitted
+  builds (`bunx vite build --config vite.renderer.config.mts`, **1,266.73 kB** — well under
+  D11's 250 KB growth budget against Plan 06's 1,242,949) and the emitted
   CSS carries `h-11`→2.75rem, `h-12`→3rem, `h-14`→3.5rem, plus every new semantic utility
   (`data-[state=on]:border-2`, `border-foreground`, `bg-ok/10`, `bg-warn/10`, `bg-info/10`,
   `size-1.5`, `font-display`). A misspelt class would have compiled to nothing.
-- **Gates.** Desktop **384/384** (45 files, none edited), API **394**, `check-types` 6/6, lint
-  exit 0 (24 pre-existing warnings), `brand:check` over 869 tracked files, `tokens:check`,
-  `modules:check:pos` 14/14. `grep -E "amber-|emerald-|sky-|red-|zinc-|neutral-|bg-white|text-black"`
-  over both modules returns nothing.
+- **Gates.** Desktop **387/387** (46 files, no existing assertion edited), shared **149**, API
+  **394**, `check-types` 6/6, lint exit 0 (24 pre-existing warnings), `brand:check` over 871
+  tracked files, `tokens:check`, `modules:check:strict` 14/14 both clients.
+  `grep -E "amber-|emerald-|sky-|red-|zinc-|neutral-|bg-white|text-black"` over both modules
+  returns nothing.
+- **`bun run --filter desktop test:print` was not run.** It drives `#dev/print`, which renders
+  the ESC/POS text through `toEscPosLines`, and this plan changed neither `lib/receipt/render.ts`
+  nor `lib/printing/**` — the paper is untouched by definition. Running it needs a packaged
+  build and the fake-printer harness; Plan 10's gate matrix is where it gets run.
 - **Not proven here, by design:** the live 1024 × 768 pass with a real printer and a cash drawer.
   It needs an enrolled terminal, and it is Plan 09's counter audit — which also owns the width,
   keyboard, reduced-motion, and offline-copy matrix. No figure was checked against a hand count
-  or a paper receipt yet.
+  or a paper receipt yet. Two known gaps review named and this plan did not close: the disabled
+  *Credit* control's reason is visible but not `aria-describedby`-linked (a disabled button is
+  out of the tab order, so a screen-reader user meets the sentence in reading order instead),
+  and the FAILED→primary promotion has no unit test because it is a two-branch class decision.
 
 - **Plan 06 complete** (commits `fd289f9`, `196209c`). The product card is content-sized with a
   three-line name, its height owned by `--product-card-height` in `index.css` and read by the
