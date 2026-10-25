@@ -70,8 +70,16 @@ rounding rule is how that happens.
 - The API call site changes: `analytics.service.ts` deletes its inline expression in favour of
   the helper. Behaviour is byte-identical for the existing `analytics.test.ts:463` assertion
   (`15_000`).
+- There were **four** inline copies, not three: both `getOverview` and `getSales` carried a
+  current and a previous-period expression. All four now call the helper.
 - This is the **only** API file touched in this phase, and it is a controller follow-up in
   Plan 01, not a lane task.
+- **The helper is stricter than the expression it replaced.** It throws `TypeError` on a negative
+  or non-safe-integer argument, where the inline code would have returned a negative figure or
+  `NaN`. Nothing can reach that today — `sale.total_minor` is always non-negative — but **Phase
+  13 must decide what a refund day does to `take`**. If refunds ever make a day's take negative,
+  average basket needs a deliberate rule (clamp, or a separate refund-adjusted figure), not a
+  crash on a dashboard. Recorded here so Phase 13 inherits the question rather than the bug.
 
 ---
 
