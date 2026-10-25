@@ -48,6 +48,8 @@ const REQUIRED_MODULES = [
   'inventory',
   'loyalty',
   'payables',
+  'procurement',
+  'replenishment',
   'settings',
   'staff',
   'suppliers',
