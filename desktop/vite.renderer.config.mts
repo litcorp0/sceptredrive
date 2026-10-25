@@ -2,7 +2,7 @@ import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
-import { buildContentSecurityPolicy } from './src/main/csp.ts'
+import { buildContentSecurityPolicy, devContentSecurityPolicy } from './src/main/csp.ts'
 
 const rendererRoot = path.resolve(import.meta.dirname, 'src/renderer')
 
@@ -55,7 +55,11 @@ export default defineConfig(({ command }) => {
     },
     server: {
       headers: {
-        'Content-Security-Policy': buildContentSecurityPolicy({ dev: true }),
+        // Dev is local by definition: the API, PowerSync, and HMR all live on
+        // localhost. Building this policy without `allowLocalOrigins` blocked
+        // enrolment silently — the browser refuses the fetch before the main
+        // process (which allows it) is ever asked.
+        'Content-Security-Policy': devContentSecurityPolicy(),
         'X-Content-Type-Options': 'nosniff',
       },
     },

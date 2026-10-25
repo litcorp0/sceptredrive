@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SCEPTRE_DOMAIN } from './config'
-import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import { buildContentSecurityPolicy, devContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
 
 function directive(policy: string, name: string): string {
   const found = policy
@@ -66,6 +66,24 @@ describe('buildContentSecurityPolicy', () => {
   it('relaxes only what the dev server needs', () => {
     const policy = buildContentSecurityPolicy({ dev: true, allowLocalOrigins: true })
     expect(directive(policy, 'script-src')).toContain("'unsafe-inline'")
+  })
+})
+
+describe('devContentSecurityPolicy', () => {
+  it('lets the dev renderer reach the local API, PowerSync, and HMR sockets', () => {
+    const policy = devContentSecurityPolicy()
+    const connect = directive(policy, 'connect-src')
+
+    expect(connect).toContain('http://localhost:4000')
+    expect(connect).toContain('http://localhost:8080')
+    expect(connect).toContain('ws://localhost:*')
+  })
+
+  it('relaxes inline scripts for React Refresh but never grants unsafe-eval', () => {
+    const scriptSrc = directive(devContentSecurityPolicy(), 'script-src')
+    expect(scriptSrc).toContain("'unsafe-inline'")
+    expect(scriptSrc).toContain("'wasm-unsafe-eval'")
+    expect(scriptSrc).not.toContain("'unsafe-eval'")
   })
 })
 

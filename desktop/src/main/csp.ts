@@ -76,6 +76,20 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
 }
 
 /**
+ * The policy the Vite dev server sends with the renderer document.
+ *
+ * Dev is local by definition: the API, PowerSync, and HMR all live on localhost,
+ * so the local origins are on. `vite.renderer.config.mts` uses this function
+ * rather than calling `buildContentSecurityPolicy` directly, so the header a
+ * developer actually runs under is covered by the same tests as every other
+ * policy — a missing `allowLocalOrigins` here is exactly how enrolment against
+ * `http://localhost:4000` got blocked while every packaged test stayed green.
+ */
+export function devContentSecurityPolicy(): string {
+  return buildContentSecurityPolicy({ dev: true, allowLocalOrigins: true })
+}
+
+/**
  * True when `url`'s origin is one the CSP also permits in `connect-src`.
  *
  * Used to reject config values that would point the app at an origin the policy
