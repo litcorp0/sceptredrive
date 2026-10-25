@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatGhs } from '@/lib/format'
 import type { TenderMethod } from '@/lib/sale/sale-draft'
+import { nextTenderMethod } from '../utils/tender-method'
 
 /**
  * Cash keypad for the tender screen (Plan 06 Task 7, retuned by Plan 07).
@@ -54,7 +55,11 @@ export function CashKeypad({
           </span>
         </div>
 
-        <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-2">
+        <div
+          className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-2"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             {short ? (
               <>
@@ -69,8 +74,6 @@ export function CashKeypad({
             className="font-display text-4xl font-semibold tabular-nums"
             data-testid="change-due"
             data-state={short ? 'short' : 'change'}
-            aria-live="polite"
-            aria-atomic="true"
           >
             {formatGhs(short ? totalMinor - tenderedMinor : change)}
           </span>
@@ -160,10 +163,11 @@ export function NoPaymentDue() {
  *
  * The selected state is not colour-only: it carries a check icon, a heavier
  * border, and a heavier label (WCAG 2.2 SC 1.4.1). The icon's box is reserved
- * in both states so choosing a method cannot shift the label sideways.
+ * in both states, so the label does not jump when the icon appears.
  *
- * Radix reports `''` when the pressed item is pressed again. A till always has
- * a payment method, so an empty value is ignored rather than clearing it.
+ * Radix reports `''` when the pressed item is pressed again; `nextTenderMethod`
+ * turns that — and any other unexpected value — back into the current choice,
+ * because a till always has a payment method.
  */
 export function TenderMethodToggle({
   method,
@@ -179,9 +183,7 @@ export function TenderMethodToggle({
       type="single"
       variant="outline"
       value={method}
-      onValueChange={(value) => {
-        if (value) onChange(value as TenderMethod)
-      }}
+      onValueChange={(value) => onChange(nextTenderMethod(value, method))}
       aria-label="Payment method"
       className="mb-4 flex w-full"
     >

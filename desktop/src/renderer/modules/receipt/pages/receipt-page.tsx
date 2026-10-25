@@ -45,7 +45,11 @@ const STATUS_DOT: Record<PrintStatus, string> = {
 }
 
 const STATUS_LABEL: Record<PrintStatus, string> = {
-  PENDING: 'Not printed yet',
+  // Deliberately free of the substring "printed": the Phase 6 evidence waits on
+  // this chip with `hasText: /Printed/i`, so a PENDING label containing the word
+  // would let that wait resolve before anything had printed (the cannot-fail
+  // assertion class this repository has already had to fix once).
+  PENDING: 'Pending',
   PRINTING: 'Printing…',
   PRINTED: 'Printed',
   FAILED: 'Did not print',
