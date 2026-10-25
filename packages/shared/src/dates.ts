@@ -8,9 +8,12 @@
  * the UTC calendar day directly.
  *
  * Two rules that matter:
- * - Formatting is display only. Nothing here returns a number, and **no helper divides money
- *   by 100** — `formatGhs` stays the single money formatter.
- * - Invalid input renders `—` rather than `Invalid Date`.
+ * - Formatting is display only. Nothing here formats money, and **no helper divides money
+ *   by 100** — `formatGhs` stays the single money formatter. The one number this file
+ *   returns is a duration in milliseconds (`msUntilNextAccraDay`), never an amount.
+ * - Invalid input renders `—` rather than `Invalid Date`. The exception is the two day-window
+ *   helpers below, which throw: they feed a SQL bound and a timer, where a dash is silent
+ *   breakage rather than a visible one.
  */
 import { differenceInCalendarDays, format, getISOWeek, isValid, parseISO } from 'date-fns'
 import { enGB } from 'date-fns/locale/en-GB'
@@ -177,6 +180,66 @@ export function accraIsoDay(value: DateInput = new Date()): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, '0')
   const day = String(date.getUTCDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/**
+ * The Accra day containing `now`, as a half-open window `[from, to)`.
+ *
+ * Every terminal figure — take, items sold, average basket, the hourly shape — is counted
+ * inside one of these, so the window is computed once here rather than in each query.
+ */
+export interface AccraDayBounds {
+  /** "2026-10-25" — the day every terminal figure is counted in. */
+  day: string
+  /** ISO timestamp of that day's 00:00 UTC (= 00:00 Accra). */
+  from: string
+  /** ISO timestamp of the next day's 00:00 UTC — the exclusive upper bound. */
+  to: string
+}
+
+/**
+ * An instant, or a throw.
+ *
+ * The display helpers above return `—` for input they cannot parse, because a screen can
+ * render a dash. These two feed a SQL window and a timer instead: an empty window would
+ * silently report zero takings and a `NaN` delay would never fire, so they fail loudly.
+ */
+function requireInstant(now: Date | number): Date {
+  const date = parse(now)
+  if (!date) throw new TypeError('now must be a valid date')
+  return date
+}
+
+/**
+ * The Accra day containing `now`, as `[from, to)` ISO timestamps.
+ *
+ * `to` comes from the calendar parts (`Date.UTC(year, month, day + 1)`), never from adding
+ * 86 400 000 to `from`: Accra is UTC+0 all year so the two agree today, but a day is a
+ * calendar concept and the arithmetic should stay one even if the offset ever moves.
+ * `from`/`to` are ISO timestamps at 00:00 UTC, and `to` is exclusive.
+ */
+export function accraDayBounds(now: Date | number = new Date()): AccraDayBounds {
+  const date = requireInstant(now)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  return {
+    day: accraIsoDay(date),
+    from: new Date(Date.UTC(year, month, day)).toISOString(),
+    to: new Date(Date.UTC(year, month, day + 1)).toISOString(),
+  }
+}
+
+/**
+ * Milliseconds until the next Accra midnight, always in `(0, 86_400_000]`.
+ *
+ * At exactly midnight this returns a full day rather than `0`: a zero `setTimeout` re-arms
+ * immediately and burns the event loop. Derived from `accraDayBounds(now).to`, so the
+ * rollover timer and the day window the queries use cannot disagree about the boundary.
+ */
+export function msUntilNextAccraDay(now: Date | number = new Date()): number {
+  const date = requireInstant(now)
+  return Date.parse(accraDayBounds(date).to) - date.getTime()
 }
 
 /**

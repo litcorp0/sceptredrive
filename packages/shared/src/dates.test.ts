@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   accraDay,
+  accraDayBounds,
   accraIsoDay,
   formatAccraDateTime,
   formatBucket,
@@ -13,6 +14,7 @@ import {
   formatRelative,
   formatTime,
   INVALID_DATE,
+  msUntilNextAccraDay,
   toDateInputValue,
   toDateTimeInputValue,
 } from './dates.ts'
@@ -189,5 +191,121 @@ describe('formatAccraDateTime', () => {
 
   it('returns a dash for an unparseable value', () => {
     expect(formatAccraDateTime('not-a-date')).toBe(INVALID_DATE)
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
+describe('accraDayBounds', () => {
+  it("brackets a mid-morning instant with that day's UTC midnights", () => {
+    const now = new Date('2026-10-24T09:15:00.000Z')
+    const bounds = accraDayBounds(now)
+
+    expect(bounds).toEqual({
+      day: '2026-10-24',
+      from: '2026-10-24T00:00:00.000Z',
+      to: '2026-10-25T00:00:00.000Z',
+    })
+    expect(Date.parse(bounds.from)).toBeLessThan(now.getTime())
+    expect(now.getTime()).toBeLessThan(Date.parse(bounds.to))
+  })
+
+  it('keeps the last millisecond of a day inside it, and moves the next one out', () => {
+    const lastMs = accraDayBounds(new Date('2026-10-24T23:59:59.999Z'))
+    expect(lastMs.day).toBe('2026-10-24')
+    expect(lastMs.to).toBe('2026-10-25T00:00:00.000Z')
+
+    const firstMs = accraDayBounds(new Date('2026-10-25T00:00:00.000Z'))
+    expect(firstMs.day).toBe('2026-10-25')
+    expect(firstMs.from).toBe('2026-10-25T00:00:00.000Z')
+  })
+
+  it('derives the next midnight from calendar parts, not by adding a day', () => {
+    // A month end and a year end: only calendar arithmetic rolls these over correctly.
+    expect(accraDayBounds(new Date('2026-10-31T23:30:00.000Z')).to).toBe('2026-11-01T00:00:00.000Z')
+    expect(accraDayBounds(new Date('2026-12-31T23:30:00.000Z'))).toEqual({
+      day: '2026-12-31',
+      from: '2026-12-31T00:00:00.000Z',
+      to: '2027-01-01T00:00:00.000Z',
+    })
+  })
+
+  it('handles a leap day, where the day before is not a year earlier', () => {
+    expect(accraDayBounds(new Date('2028-02-28T23:59:59.999Z')).to).toBe('2028-02-29T00:00:00.000Z')
+    expect(accraDayBounds(new Date('2028-02-29T12:00:00.000Z')).to).toBe('2028-03-01T00:00:00.000Z')
+  })
+
+  it('accepts epoch milliseconds and defaults to now', () => {
+    expect(accraDayBounds(Date.parse('2026-10-24T09:15:00.000Z')).day).toBe('2026-10-24')
+    expect(accraDayBounds().day).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('spans exactly one day in milliseconds', () => {
+    const bounds = accraDayBounds(new Date('2026-10-24T09:15:00.000Z'))
+    expect(Date.parse(bounds.to) - Date.parse(bounds.from)).toBe(86_400_000)
+  })
+
+  it('is defined in Accra, so the host timezone cannot move the bounds', () => {
+    const now = new Date('2026-10-24T23:30:00.000Z')
+    const inUtc = accraDayBounds(now)
+
+    vi.stubEnv('TZ', 'Pacific/Kiritimati') // UTC+14: already 2026-10-25 there.
+    // Prove the stub took effect, or the case would assert nothing.
+    expect(now.getTimezoneOffset()).toBe(-840)
+
+    expect(accraDayBounds(now)).toEqual(inUtc)
+    expect(accraDayBounds(now).day).toBe('2026-10-24')
+    expect(msUntilNextAccraDay(now)).toBe(30 * 60_000)
+  })
+
+  it('rejects an unparseable instant rather than returning an empty SQL window', () => {
+    expect(() => accraDayBounds(new Date('not-a-date'))).toThrow(TypeError)
+    expect(() => accraDayBounds(Number.NaN)).toThrow(TypeError)
+  })
+})
+
+describe('msUntilNextAccraDay', () => {
+  it('is half a day at noon', () => {
+    expect(msUntilNextAccraDay(new Date('2026-10-24T12:00:00.000Z'))).toBe(12 * 60 * 60_000)
+  })
+
+  it('is a full day at exactly midnight, never zero (a zero timeout is a busy loop)', () => {
+    expect(msUntilNextAccraDay(new Date('2026-10-24T00:00:00.000Z'))).toBe(86_400_000)
+    expect(msUntilNextAccraDay(new Date('2026-12-31T00:00:00.000Z'))).toBe(86_400_000)
+    expect(msUntilNextAccraDay(new Date('2028-02-29T00:00:00.000Z'))).toBe(86_400_000)
+  })
+
+  it('is one millisecond at the last millisecond of the day', () => {
+    expect(msUntilNextAccraDay(new Date('2026-10-24T23:59:59.999Z'))).toBe(1)
+  })
+
+  it('always lands inside (0, 86_400_000]', () => {
+    const instants = [
+      '2026-10-24T00:00:00.001Z',
+      '2026-10-24T06:00:00.000Z',
+      '2026-10-24T18:00:00.000Z',
+      '2026-10-24T23:59:59.998Z',
+      '2027-01-01T00:00:00.000Z',
+    ]
+    for (const instant of instants) {
+      const remaining = msUntilNextAccraDay(new Date(instant))
+      expect(remaining).toBeGreaterThan(0)
+      expect(remaining).toBeLessThanOrEqual(86_400_000)
+      expect(Number.isInteger(remaining)).toBe(true)
+    }
+  })
+
+  it('agrees with the bounds it is paired with', () => {
+    const now = new Date('2026-10-24T07:45:30.250Z')
+    const bounds = accraDayBounds(now)
+    expect(msUntilNextAccraDay(now)).toBe(Date.parse(bounds.to) - now.getTime())
+    expect(msUntilNextAccraDay(now)).toBe(16 * 60 * 60_000 + 14 * 60_000 + 29_750)
+  })
+
+  it('rejects an unparseable instant', () => {
+    expect(() => msUntilNextAccraDay(new Date('not-a-date'))).toThrow(TypeError)
+    expect(() => msUntilNextAccraDay(Number.NaN)).toThrow(TypeError)
   })
 })
