@@ -23,6 +23,7 @@ import { ApprovalPanel } from "../components/approval-panel"
 import { OrderActions } from "../components/order-actions"
 import { OrderForm } from "../components/order-form"
 import { OrderPrintSheet } from "../components/order-print-sheet"
+import { OrderReturns } from "../components/order-returns"
 import { OrderStatusBadge } from "../ui/order-status-badge"
 import { orderCsv } from "../utils/order"
 
@@ -240,6 +241,8 @@ export function OrderDetailPage() {
 										) : null}
 									</CardContent>
 								</Card>
+
+								<OrderReturns order={detail} role={session.user.role} />
 							</div>
 
 							<div className="grid content-start gap-4">

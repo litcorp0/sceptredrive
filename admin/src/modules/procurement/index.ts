@@ -57,7 +57,9 @@ export { OrderForm } from "./components/order-form"
 export { OrderLinesEditor } from "./components/order-lines-editor"
 export { OrderList } from "./components/order-list"
 export { OrderPrintSheet } from "./components/order-print-sheet"
+export { OrderReturns } from "./components/order-returns"
 export { ReceiveOrderDialog } from "./components/receive-dialog"
+export { ReturnDialog } from "./components/return-dialog"
 export { OrderDetailPage } from "./pages/order-detail-page"
 export { OrderNewPage } from "./pages/order-new-page"
 export { OrdersPage } from "./pages/orders-page"
@@ -104,6 +106,7 @@ export {
 	orderCsv,
 	orderCsvRows,
 	returnStatusLabel,
+	returnStatusTone,
 	statusLabel,
 	statusTone,
 } from "./utils/order"

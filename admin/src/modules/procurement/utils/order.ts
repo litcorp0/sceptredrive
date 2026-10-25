@@ -51,6 +51,12 @@ export function returnStatusLabel(status: ReturnStatus): string {
 	return RETURN_STATUS_LABELS[status]
 }
 
+export function returnStatusTone(status: ReturnStatus): StatusVariant {
+	if (status === "POSTED") return "ok"
+	if (status === "CANCELLED") return "danger"
+	return "muted"
+}
+
 /** `SKU — name`, or the name alone when a product has no SKU. */
 export function formatOrderLine(line: Pick<OrderLine, "sku" | "name">): string {
 	return line.sku ? `${line.sku} — ${line.name}` : line.name
