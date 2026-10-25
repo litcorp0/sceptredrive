@@ -11,7 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Plan **Phase 10** (Desktop POS Modules, Chrome & Shift Home).
+**Next action:** Execute **Phase 10, Plan 01** (Shared counter maths, local schema indexes, and
+the desktop module gate). Phase 10 is planned: ten plans plus a locked-context amendment set in
+`phases/10-desktop-pos-redesign/`.
 
 ---
 
@@ -29,12 +31,56 @@ became Phases 13/14/15.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | ⬜ Not started |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔷 Planned (10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 10 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Shared counter maths, local schema indexes, and the desktop module gate | ⬜ Not started |
+| 02 | `modules/` scaffolding and the route → page split | ⬜ Not started |
+| 03 | Primitives, chrome, and counter ergonomics | ⬜ Not started |
+| 04 | Home data layer — reactive queries and pure aggregation | ⬜ Not started |
+| 05 | Home screen, `#home`, and `dev-charts` retirement | ⬜ Not started |
+| 06 | Sell module — catalog, cart, and the counter panels | ⬜ Not started |
+| 07 | Tender and receipt modules | ⬜ Not started |
+| 08 | Shift, login, settings, sales, and sync modules | ⬜ Not started |
+| 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ⬜ Not started |
+| 10 | Verification, evidence, and state update | ⬜ Not started |
+
+### Phase 10 planning notes (2026-10-25)
+
+- Ten plans, written to `phases/10-desktop-pos-redesign/`: `README.md` (index and lane order),
+  `00-DECISIONS.md` (P10-D1…D15), `01-RESEARCH.md` (sources and repository verifications), and
+  `01-PLAN.md`…`10-PLAN.md`. The plan-mode research pass is folded into `01-RESEARCH.md` so the
+  next session does not repeat it.
+- **Four decisions change what the home screen shows** and refine `00-CONTEXT.md` D5/D6:
+  the figures are **this terminal's day** and say so (sales are deliberately not synced, so a
+  branch number would be a lie offline); **out of stock now** replaces D5's low-stock item
+  (`stock_threshold` is not synced and is not going to be widened here — that is Phase 11);
+  the counter shows **no tender mix** (P9-D2: a CASH tender row contains the change handed back);
+  and **average basket moves into `@sceptre/shared`** so the till and the dashboard cannot round
+  differently.
+- **D13's "both themes" is not achievable** and is amended to light-only: the desktop renderer
+  never applies `.dark` and has no theme toggle (P10-D8).
+- **Two carried-forward defects are scheduled**: a first install opening the diagnostics shell
+  instead of enrolment (Plan 08) and POS product tiles truncating names (Plan 06). Two more were
+  found while planning: `(minor / 100).toFixed(2)` in two money inputs, and ~100 raw Tailwind
+  palette classes across 24 renderer files — both get a gate-able zero in the counter audit.
+- **`#home` is a new top-level route**, not a redefinition of `#pos`: nine call sites already
+  mean "selling" by `pos`, and the Electron E2E encodes that meaning.
+- **Execution shape is in the README, not left to chance.** Seven of ten plans write
+  `desktop/**`, so the phase is serial by the one-writer-per-lane rule. The only parallelism that
+  is safe is wave 1 (01's three disjoint parts) and wave 4 (04 beside 06/07/08 under a
+  directory split with a frozen file set). Two plan defects were found and fixed while working
+  that out: Plan 05 edited the route files instead of the module pages Plan 02 creates, and
+  Plans 03/04 both claimed `components/layout/app-header.tsx` — the unprinted-count extraction
+  now lives in Plan 03 so Plan 04 writes only `modules/home/**`.
 
 ### Phase 9 plan progress
 

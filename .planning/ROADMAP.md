@@ -284,6 +284,9 @@ reconciliation tests; CSV export with formula-injection escaping; `seed:demo-sal
 **Goal:** The terminal wears the same brand as the console, opens on a shift dashboard that
 answers "how is today going?", and still sells with the network unplugged.
 
+**Status:** 🔷 Planned (10 plans, 2026-10-25 — see
+`phases/10-desktop-pos-redesign/README.md`; decisions in `00-DECISIONS.md`)
+
 **Dependencies:** Phases 6–9
 **Requirements:** UIX-08, UIX-09
 
