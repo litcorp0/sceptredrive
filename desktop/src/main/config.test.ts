@@ -2,7 +2,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { ConfigError, loadRuntimeConfig, parseRuntimeConfig, SCEPTRE_DOMAIN } from './config'
+import {
+  allowsLocalOrigins,
+  ConfigError,
+  loadRuntimeConfig,
+  parseRuntimeConfig,
+  readAllowLocalApiFlag,
+  SCEPTRE_DOMAIN,
+} from './config'
 
 describe('parseRuntimeConfig', () => {
   it('accepts http and https URLs', () => {
@@ -80,5 +87,37 @@ describe('loadRuntimeConfig', () => {
     )
 
     expect(loadRuntimeConfig(target, false).apiBaseUrl).toBe(`https://api.${SCEPTRE_DOMAIN}`)
+  })
+})
+
+describe('allowsLocalOrigins', () => {
+  it('always allows a dev server, packaged or not', () => {
+    expect(allowsLocalOrigins({ isDev: true, isPackaged: true, allowLocalApi: false })).toBe(true)
+    expect(allowsLocalOrigins({ isDev: true, isPackaged: false, allowLocalApi: false })).toBe(true)
+  })
+
+  it('allows an unpackaged build without any opt-in', () => {
+    expect(allowsLocalOrigins({ isDev: false, isPackaged: false, allowLocalApi: false })).toBe(true)
+  })
+
+  it('refuses a packaged build by default', () => {
+    expect(allowsLocalOrigins({ isDev: false, isPackaged: true, allowLocalApi: false })).toBe(false)
+  })
+
+  it('allows a packaged build only with the explicit opt-in', () => {
+    expect(allowsLocalOrigins({ isDev: false, isPackaged: true, allowLocalApi: true })).toBe(true)
+  })
+})
+
+describe('readAllowLocalApiFlag', () => {
+  it('accepts exactly "1"', () => {
+    expect(readAllowLocalApiFlag({ SCEPTRE_ALLOW_LOCAL_API: '1' })).toBe(true)
+  })
+
+  it('ignores everything else', () => {
+    for (const value of ['0', 'true', 'yes', 'TRUE', ' 1', '']) {
+      expect(readAllowLocalApiFlag({ SCEPTRE_ALLOW_LOCAL_API: value })).toBe(false)
+    }
+    expect(readAllowLocalApiFlag({})).toBe(false)
   })
 })

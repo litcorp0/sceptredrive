@@ -1,6 +1,12 @@
 import { app, BrowserWindow, Menu, safeStorage } from 'electron'
 import started from 'electron-squirrel-startup'
-import { loadRuntimeConfig, originOf, type RuntimeConfig } from './config'
+import {
+  allowsLocalOrigins,
+  loadRuntimeConfig,
+  originOf,
+  type RuntimeConfig,
+  readAllowLocalApiFlag,
+} from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
 import { createKeychain } from './ipc/keychain'
 import { registerIpcHandlers } from './ipc/register'
@@ -22,9 +28,21 @@ const devServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined
 const isDev = Boolean(devServerUrl)
 /**
  * Localhost API/PowerSync origins are allowed for the dev server and for an
- * unpackaged build (E2E, local smoke tests) — never for a packaged app.
+ * unpackaged build (E2E, local smoke tests) — never for a packaged app, unless
+ * the operator opted in at launch with SCEPTRE_ALLOW_LOCAL_API=1.
  */
-const allowLocalOrigins = isDev || !app.isPackaged
+const allowLocalApi = readAllowLocalApiFlag(process.env)
+const allowLocalOrigins = allowsLocalOrigins({
+  isDev,
+  isPackaged: app.isPackaged,
+  allowLocalApi,
+})
+if (allowLocalApi && app.isPackaged) {
+  // Never a token, never a URL: just the fact that the shipped default is overridden.
+  console.warn(
+    '[security] SCEPTRE_ALLOW_LOCAL_API=1 — this packaged build may talk to a localhost API',
+  )
+}
 
 function failClosed(code: string, message: string): never {
   console.error(`[startup] ${code}: ${message}`)

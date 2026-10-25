@@ -48,6 +48,28 @@ It drives the **unpackaged** production build on purpose: a packaged app sets
 `allowLocalOrigins: false`, so it cannot enrol against a localhost API. `test:e2e` proves the
 packaged binary separately.
 
+### A packaged build against a local API (demo / pilot)
+
+A packaged terminal cannot reach `http://localhost:4000` by default, because a local
+impersonator could collect an enrolment code and a device token. For a local demo or an
+on-site pilot, launch the packaged app with the explicit opt-in:
+
+```bash
+SCEPTRE_ALLOW_LOCAL_API=1 ./out/Sceptre\ Drive\ POS-linux-x64/sceptre_drive_pos
+```
+
+The flag adds `http://localhost:4000`, `http://localhost:8080`, and `ws://localhost:*` to
+`connect-src` and lets `config.json` name a localhost API. It prints
+`[security] SCEPTRE_ALLOW_LOCAL_API=1 …` on startup, is read at launch only (it writes no
+setting), and accepts exactly the string `1` — `true`, `yes`, and `0` are all off. Never set
+it on a terminal that talks to a real server.
+
+Write the target into `userData/config.json` first if the API is not on the defaults:
+
+```json
+{ "apiBaseUrl": "http://localhost:4000", "powersyncUrl": "http://localhost:8080" }
+```
+
 ## Renamed to Sceptre Drive (2026-10-24)
 
 The application was renamed on 2026-10-24. Three consequences are accepted rather than
@@ -169,7 +191,8 @@ triggers on the first `start`/`package` — no postinstall hook is involved, so
 The CSP is derived from `config.json` in `app.getPath('userData')`, but every origin is
 checked against a fixed allowlist first, so a tampered config cannot widen the policy.
 Dev additionally allows `http://localhost:*`, `ws://localhost:*`, and inline scripts for
-React Refresh.
+React Refresh. An unpackaged build allows the localhost origins without the dev relaxations;
+a packaged build allows them only with `SCEPTRE_ALLOW_LOCAL_API=1` (see above).
 
 ## Secrets
 

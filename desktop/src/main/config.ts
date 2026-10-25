@@ -59,6 +59,35 @@ export function originOf(url: string): string {
   return new URL(url).origin
 }
 
+/**
+ * Whether the renderer may talk to localhost API/PowerSync origins.
+ *
+ * A dev server and an unpackaged build always may — that is how the E2E and the
+ * local smoke tests run. A **packaged** app may not by default: a shipped
+ * terminal that can reach `http://localhost:4000` can be pointed at a local
+ * impersonator that collects the enrolment code and the device token.
+ *
+ * The one exception is deliberate and explicit: an operator running a packaged
+ * build for a local demo or an on-site pilot sets `SCEPTRE_ALLOW_LOCAL_API=1`.
+ * It is an environment variable rather than a `config.json` field because it has
+ * to be opted into at launch, it warns on startup, and it leaves no setting
+ * behind for the next person who opens the app.
+ */
+export const ALLOW_LOCAL_API_ENV = 'SCEPTRE_ALLOW_LOCAL_API'
+
+export function allowsLocalOrigins(input: {
+  isDev: boolean
+  isPackaged: boolean
+  allowLocalApi: boolean
+}): boolean {
+  return input.isDev || !input.isPackaged || input.allowLocalApi
+}
+
+/** The opt-in is the exact string `1`; `true`, `yes`, `0` and unset are all off. */
+export function readAllowLocalApiFlag(env: Record<string, string | undefined>): boolean {
+  return env[ALLOW_LOCAL_API_ENV] === '1'
+}
+
 export const CONFIG_FILE_NAME = 'config.json'
 
 export class ConfigError extends Error {
