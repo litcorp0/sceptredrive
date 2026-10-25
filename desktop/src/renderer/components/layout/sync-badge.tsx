@@ -1,6 +1,6 @@
-import { useQuery } from '@powersync/react'
 import { formatTime } from '@sceptre/shared'
 import { Check, Clock, CloudOff, type LucideIcon, TriangleAlert, Upload } from 'lucide-react'
+import { useOpenConflictCounts } from '@/modules/sync'
 import { usePos } from '../../lib/powersync/provider'
 import { useSyncStatus } from '../../lib/powersync/status'
 import { navigate } from '../../lib/router'
@@ -47,14 +47,9 @@ export function SyncBadge() {
   const upload = useUploadStatus()
   const download = useSyncStatus()
   const outbox = useOutboxSummary()
-  const conflicts = useQuery<{ high: number; open: number }>(
-    `SELECT
-       COALESCE(SUM(CASE WHEN status = 'OPEN' AND severity = 'HIGH' THEN 1 ELSE 0 END), 0) AS high,
-       COALESCE(SUM(CASE WHEN status = 'OPEN' THEN 1 ELSE 0 END), 0) AS open
-       FROM sync_conflict_local`,
-  )
+  const conflicts = useOpenConflictCounts()
 
-  const highOpen = conflicts.data?.[0]?.high ?? 0
+  const highOpen = conflicts.high
   const pending = outbox.pending
   const needsAction = outbox.failed > 0 || highOpen > 0 || upload.deadLetters > 0
   /*
