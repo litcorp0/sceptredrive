@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { stockReceipt } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
+import { purchaseOrder, purchaseOrderLine } from '../procurement/procurement.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierPaymentDetail } from '../suppliers/suppliers.schema.ts'
 
@@ -45,6 +46,16 @@ export const supplierPaymentVoidReasonEnum = pgEnum('supplier_payment_void_reaso
 
 export const supplierAllocationKindEnum = pgEnum('supplier_allocation_kind', ['APPLY', 'RELEASE'])
 
+/** How an invoice line compares to the purchase-order line it was matched to (Phase 11). */
+export const invoiceMatchStatusEnum = pgEnum('invoice_match_status', [
+  'UNMATCHED',
+  'MATCHED',
+  'PRICE_VARIANCE',
+  'QUANTITY_VARIANCE',
+  'PRICE_AND_QUANTITY_VARIANCE',
+  'NOT_ON_ORDER',
+])
+
 /**
  * A supplier invoice (bill): branch-scoped, optionally recorded from a stock
  * receipt. `amountPaidMinor` and `status` are projections recomputed from the
@@ -66,6 +77,10 @@ export const supplierInvoice = pgTable(
     invoiceDate: date('invoice_date').notNull(),
     dueDate: date('due_date').notNull(),
     receiptId: uuid('receipt_id').references(() => stockReceipt.id, { onDelete: 'restrict' }),
+    /** The order this invoice settles, when the supplier names one (P11-D5). */
+    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id, {
+      onDelete: 'restrict',
+    }),
     subtotalMinor: integer('subtotal_minor').notNull(),
     vatMinor: integer('vat_minor').notNull().default(0),
     nhilMinor: integer('nhil_minor').notNull().default(0),
@@ -96,6 +111,7 @@ export const supplierInvoice = pgTable(
       .where(sql`${table.receiptId} is not null`),
     index('supplier_invoice_branch_status_due_idx').on(table.branchId, table.status, table.dueDate),
     index('supplier_invoice_supplier_status_idx').on(table.supplierId, table.status),
+    index('supplier_invoice_purchase_order_idx').on(table.purchaseOrderId),
   ],
 )
 
@@ -112,6 +128,15 @@ export const supplierInvoiceLine = pgTable(
     quantity: integer('quantity').notNull(),
     unitCostMinor: integer('unit_cost_minor').notNull(),
     lineTotalMinor: integer('line_total_minor').notNull(),
+    /** The ordered line this invoice line was compared to; null when not matched. */
+    purchaseOrderLineId: uuid('purchase_order_line_id').references(() => purchaseOrderLine.id, {
+      onDelete: 'restrict',
+    }),
+    /**
+     * Advisory only: a variance is recorded so somebody can look, and never
+     * blocks the payable (P11-D5).
+     */
+    matchStatus: invoiceMatchStatusEnum('match_status').notNull().default('UNMATCHED'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -120,6 +145,7 @@ export const supplierInvoiceLine = pgTable(
       .on(table.invoiceId, table.productId)
       .where(sql`${table.productId} is not null`),
     index('supplier_invoice_line_product_idx').on(table.productId),
+    index('supplier_invoice_line_purchase_order_line_idx').on(table.purchaseOrderLineId),
   ],
 )
 

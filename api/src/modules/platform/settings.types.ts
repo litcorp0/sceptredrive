@@ -14,6 +14,8 @@ export interface ResolvedSetting {
   key: SettingKey
   value: unknown
   branchScoped: boolean
+  /** `admin` keys are branch-overridable but only an admin may write them. */
+  writableBy: 'admin' | 'manager'
   source: 'branch' | 'global' | 'default'
 }
 

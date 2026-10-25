@@ -23,6 +23,20 @@ import {
   type SettingValue,
 } from './settings.validation.ts'
 
+/**
+ * Who may write a key. The default reproduces the behaviour every existing key
+ * already had: a global setting is admin-only, a branch setting is writable by
+ * the branch manager. Only a key that says so can be branch-overridable and
+ * admin-only (the procurement threshold).
+ */
+function writableByOf(definition: (typeof SETTING_DEFINITIONS)[SettingKey]): 'admin' | 'manager' {
+  return 'writableBy' in definition
+    ? definition.writableBy
+    : definition.branchScoped
+      ? 'manager'
+      : 'admin'
+}
+
 async function resolveSetting<K extends SettingKey>(
   key: K,
   branchId: string | null,
@@ -35,7 +49,13 @@ async function resolveSetting<K extends SettingKey>(
     const branchRow = await readSettingRow(key, scopeBranch, executor)
     const parsed = definition.schema.safeParse(branchRow?.value)
     if (parsed.success) {
-      return { key, value: parsed.data, branchScoped: definition.branchScoped, source: 'branch' }
+      return {
+        key,
+        value: parsed.data,
+        branchScoped: definition.branchScoped,
+        writableBy: writableByOf(definition),
+        source: 'branch',
+      }
     }
   }
 
@@ -46,6 +66,7 @@ async function resolveSetting<K extends SettingKey>(
       key,
       value: parsedGlobal.data,
       branchScoped: definition.branchScoped,
+      writableBy: writableByOf(definition),
       source: 'global',
     }
   }
@@ -54,6 +75,7 @@ async function resolveSetting<K extends SettingKey>(
     key,
     value: definition.defaultValue,
     branchScoped: definition.branchScoped,
+    writableBy: writableByOf(definition),
     source: 'default',
   }
 }
@@ -92,6 +114,14 @@ export async function updateSetting(
   const key = input.key
   const definition = SETTING_DEFINITIONS[key]
   const isAdmin = roleOf(user) === 'ADMIN'
+
+  // Default preserves the behaviour every existing key already had: a global
+  // setting is admin-only, a branch setting is writable by the branch manager.
+  // Only a key that says so explicitly can be branch-overridable and admin-only,
+  // which is what the procurement threshold needs (P11-D2).
+  if (writableByOf(definition) === 'admin' && !isAdmin) {
+    throw new ForbiddenError('Only an admin can change this setting')
+  }
 
   let targetBranchId: string | null
   if (definition.branchScoped) {
@@ -160,6 +190,7 @@ export async function updateSetting(
       key,
       value: parsed.data,
       branchScoped: definition.branchScoped,
+      writableBy: writableByOf(definition),
       source: targetBranchId ? ('branch' as const) : ('global' as const),
     }
   })

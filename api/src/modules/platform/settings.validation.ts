@@ -213,6 +213,61 @@ export const SETTING_DEFINITIONS = {
     defaultValue: true,
     branchScoped: false,
   },
+  // --- Phase 11: procurement -------------------------------------------------
+  /**
+   * The goods value at or above which an admin must decide a purchase order.
+   * Branch-overridable but admin-writable: a branch that can raise its own limit
+   * has no limit (P11-D2).
+   */
+  'procurement.approvalThresholdMinor': {
+    schema: z.number().int().min(0).max(1_000_000_000),
+    defaultValue: 1_000_000,
+    branchScoped: true,
+    writableBy: 'admin',
+  },
+  /** Extra days of cover added to the supplier lead time (P11-D12). */
+  'procurement.safetyDays': {
+    schema: z.number().int().min(0).max(365),
+    defaultValue: 7,
+    branchScoped: true,
+    writableBy: 'manager',
+  },
+  /** Lead time assumed when the supplier-product link has none. */
+  'procurement.defaultLeadDays': {
+    schema: z.number().int().min(1).max(365),
+    defaultValue: 14,
+    branchScoped: false,
+  },
+  'procurement.orderPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'PO',
+    branchScoped: false,
+  },
+  'procurement.returnPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'PR',
+    branchScoped: false,
+  },
+  'procurement.creditNotePrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'SCN',
+    branchScoped: false,
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS

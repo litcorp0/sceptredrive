@@ -1,5 +1,5 @@
 import { db } from '@sceptre/db'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   authedHeaders,
@@ -30,7 +30,13 @@ interface AuditEntry {
 }
 
 interface SettingsResponse {
-  settings: { key: string; value: unknown; branchScoped: boolean; source: string }[]
+  settings: {
+    key: string
+    value: unknown
+    branchScoped: boolean
+    writableBy: 'admin' | 'manager'
+    source: string
+  }[]
   branchId: string | null
 }
 
@@ -180,6 +186,53 @@ describe.skipIf(!available)('audit and settings API', () => {
     })
     const otherBody = await readJson<{ total: number }>(otherBranchEntity)
     expect(otherBody.total).toBe(0)
+  })
+
+  it('keeps the procurement threshold admin-only while a manager may tune safety days', async () => {
+    const list = await app.request('/api/settings', { headers: authedHeaders(managerCookie) })
+    const body = await readJson<SettingsResponse>(list)
+    const threshold = body.settings.find(
+      (item) => item.key === 'procurement.approvalThresholdMinor',
+    )
+    const safety = body.settings.find((item) => item.key === 'procurement.safetyDays')
+
+    expect(threshold?.value).toBe(1_000_000)
+    expect(threshold?.writableBy).toBe('admin')
+    expect(safety?.writableBy).toBe('manager')
+
+    const denied = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'procurement.approvalThresholdMinor', value: 2_000_000 }),
+    })
+    expect(denied.status).toBe(403)
+
+    const allowed = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'procurement.safetyDays', value: 3 }),
+    })
+    expect(allowed.status).toBe(200)
+
+    const adminWrite = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        key: 'procurement.approvalThresholdMinor',
+        value: 2_000_000,
+        branchId: branchAId,
+      }),
+    })
+    expect(adminWrite.status).toBe(200)
+
+    await db
+      .delete(setting)
+      .where(
+        and(eq(setting.key, 'procurement.approvalThresholdMinor'), eq(setting.branchId, branchAId)),
+      )
+    await db
+      .delete(setting)
+      .where(and(eq(setting.key, 'procurement.safetyDays'), eq(setting.branchId, branchAId)))
   })
 
   it('lists typed settings with defaults', async () => {

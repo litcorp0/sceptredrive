@@ -9,6 +9,7 @@ import { securityHeaders } from './http/security-headers.ts'
 import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { analyticsRoutes } from './modules/analytics/analytics.routes.ts'
+import { approvalsRoutes } from './modules/approvals/approvals.routes.ts'
 import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
 import { countsRoutes } from './modules/counts/counts.routes.ts'
 import { creditRoutes } from './modules/credit/credit.routes.ts'
@@ -23,7 +24,9 @@ import { payablesRoutes } from './modules/payables/payables.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { posRoutes } from './modules/pos/pos.routes.ts'
+import { procurementRoutes } from './modules/procurement/procurement.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
+import { replenishmentRoutes } from './modules/replenishment/replenishment.routes.ts'
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { syncRoutes } from './modules/sync/sync.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
@@ -50,6 +53,7 @@ app.route('/', terminalsRoutes)
 app.route('/', enrollmentRoutes)
 app.route('/', staffRoutes)
 app.route('/', analyticsRoutes)
+app.route('/', approvalsRoutes)
 app.route('/', catalogRoutes)
 app.route('/', productsRoutes)
 app.route('/', inventoryRoutes)
@@ -61,6 +65,8 @@ app.route('/', loyaltyRoutes)
 app.route('/', suppliersRoutes)
 app.route('/', payablesRoutes)
 app.route('/', posRoutes)
+app.route('/', procurementRoutes)
+app.route('/', replenishmentRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 app.route('/', syncRoutes)

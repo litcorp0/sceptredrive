@@ -94,6 +94,7 @@ export async function selectInvoiceDetailHeader(
       invoiceDate: supplierInvoice.invoiceDate,
       dueDate: supplierInvoice.dueDate,
       receiptId: supplierInvoice.receiptId,
+      purchaseOrderId: supplierInvoice.purchaseOrderId,
       subtotalMinor: supplierInvoice.subtotalMinor,
       vatMinor: supplierInvoice.vatMinor,
       nhilMinor: supplierInvoice.nhilMinor,

@@ -64,6 +64,20 @@
       "when": 1792758066852,
       "tag": "0008_parallel_marvel_apes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792953412400,
+      "tag": "0009_enum_supplier_return",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792953412401,
+      "tag": "0010_procurement",
+      "breakpoints": true
     }
   ]
 }

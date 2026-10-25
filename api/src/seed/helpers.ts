@@ -9,6 +9,7 @@ import {
   taxBreakdown,
 } from '@sceptre/shared'
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { approval } from '../modules/approvals/approvals.schema.ts'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../modules/credit/credit.schema.ts'
 import { customer } from '../modules/customers/customers.schema.ts'
@@ -34,8 +35,15 @@ import {
   supplierPayment,
   supplierPaymentAllocation,
 } from '../modules/payables/payables.schema.ts'
+import { documentSequence } from '../modules/platform/sequences.schema.ts'
+import { allocateDocumentNumber } from '../modules/platform/sequences.service.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
 import { sale, saleLine, saleTender, shift, syncConflict } from '../modules/pos/pos.schema.ts'
+import {
+  purchaseOrder,
+  purchaseOrderLine,
+  type purchaseOrderStatusEnum,
+} from '../modules/procurement/procurement.schema.ts'
 import { barcode, product, productPrice } from '../modules/products/products.schema.ts'
 import {
   supplier,
@@ -1442,4 +1450,140 @@ export async function ensureDemoConflict(input: {
     resolutionNote: 'Resolved in the demo seed',
   })
   return true
+}
+
+/** Seeds (or raises) a branch-month document counter. Never lowers a live value. */
+export async function ensureDocumentSequence(input: {
+  branchId: string
+  kind: string
+  period: string
+  value: number
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: documentSequence.id })
+    .from(documentSequence)
+    .where(
+      and(
+        eq(documentSequence.branchId, input.branchId),
+        eq(documentSequence.kind, input.kind),
+        eq(documentSequence.period, input.period),
+      ),
+    )
+    .limit(1)
+
+  if (existing[0]) {
+    await db
+      .update(documentSequence)
+      .set({ value: sql`greatest(${documentSequence.value}, ${input.value})` })
+      .where(eq(documentSequence.id, existing[0].id))
+    return false
+  }
+
+  await db.insert(documentSequence).values(input).onConflictDoNothing()
+  return true
+}
+
+/**
+ * Seeds a purchase order with its lines. Idempotent by number; when no number is
+ * given one is allocated through the production allocator, which means a second
+ * call without a number creates a second order (use a number in demo data).
+ */
+export async function ensurePurchaseOrder(input: {
+  number?: string
+  branchId: string
+  supplierId: string
+  status?: (typeof purchaseOrderStatusEnum.enumValues)[number]
+  expectedDate?: string
+  requestedBy?: string
+  lines: readonly { productId: string; quantity: number; unitCostMinor: number }[]
+}): Promise<{ id: string; number: string; created: boolean }> {
+  if (input.number) {
+    const existing = await db
+      .select({ id: purchaseOrder.id, number: purchaseOrder.number })
+      .from(purchaseOrder)
+      .where(eq(purchaseOrder.number, input.number))
+      .limit(1)
+    if (existing[0]) return { ...existing[0], created: false }
+  }
+
+  return db.transaction(async (tx) => {
+    const number =
+      input.number ?? (await allocateDocumentNumber('purchase_order', input.branchId, tx)).number
+
+    const [order] = await tx
+      .insert(purchaseOrder)
+      .values({
+        number,
+        branchId: input.branchId,
+        supplierId: input.supplierId,
+        status: input.status ?? 'DRAFT',
+        expectedDate: input.expectedDate ?? null,
+        requestedBy: input.requestedBy ?? 'seed',
+        createdBy: 'seed',
+      })
+      .returning({ id: purchaseOrder.id, number: purchaseOrder.number })
+
+    if (!order) throw new Error('Could not insert the seed purchase order')
+
+    await tx.insert(purchaseOrderLine).values(
+      input.lines.map((line, index) => ({
+        orderId: order.id,
+        lineNumber: index + 1,
+        productId: line.productId,
+        quantity: line.quantity,
+        unitCostMinor: line.unitCostMinor,
+      })),
+    )
+
+    return { ...order, created: true }
+  })
+}
+
+/**
+ * Seeds an approval. Idempotent by `(type, entityId)` while one is pending; a
+ * request type without an entity id (a product submission) always inserts.
+ */
+export async function ensureApproval(input: {
+  type: (typeof approval.$inferInsert)['type']
+  entityId?: string | null
+  branchId: string
+  requestedBy: string
+  amountMinor?: number
+  payload?: Record<string, unknown>
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+  decisionReasonCode?: (typeof approval.$inferInsert)['decisionReasonCode']
+}): Promise<{ id: string; created: boolean }> {
+  if (input.entityId) {
+    const existing = await db
+      .select({ id: approval.id })
+      .from(approval)
+      .where(
+        and(
+          eq(approval.type, input.type),
+          eq(approval.entityId, input.entityId),
+          eq(approval.status, 'PENDING'),
+        ),
+      )
+      .limit(1)
+    if (existing[0]) return { id: existing[0].id, created: false }
+  }
+
+  const [row] = await db
+    .insert(approval)
+    .values({
+      type: input.type,
+      entityId: input.entityId ?? null,
+      branchId: input.branchId,
+      requestedBy: input.requestedBy,
+      amountMinor: input.amountMinor ?? null,
+      payload: input.payload ?? {},
+      status: input.status ?? 'PENDING',
+      decisionReasonCode: input.decisionReasonCode ?? null,
+      decidedAt: input.status && input.status !== 'PENDING' ? new Date() : null,
+      decidedBy: input.status && input.status !== 'PENDING' ? 'seed' : null,
+    })
+    .returning({ id: approval.id })
+
+  if (!row) throw new Error('Could not insert the seed approval')
+  return { id: row.id, created: true }
 }

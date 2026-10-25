@@ -199,11 +199,16 @@ export async function allocateDocumentNumber(
 - The period is `new Date().toISOString().slice(0, 7)`. Africa/Accra is UTC+0 with no DST, so a
   UTC month boundary is an Accra month boundary — state that in a comment; do not import a
   timezone library.
+- **The counter stores the last serial issued, not the next one**, and is bumped with
+  `UPDATE … SET value = value + 1 … RETURNING value`. That statement takes the row lock for its
+  own duration, so the allocator is safe in an autocommit call as well as inside a transaction —
+  whereas a `SELECT … FOR UPDATE` followed by a write is only safe inside one, and this helper is
+  reachable from both. The first-use race is `insert … on conflict do nothing` (value 0) and a
+  retry. Implemented this way during execution; the concurrency test fails if it regresses to
+  read-then-write.
 - The branch code is read from `branch.code`; the prefix from `getSettingValue(prefixKey, {},
   executor)`.
-- Lock with `.for('update')`; on a missing row, `insert … on conflict do nothing` and retry, exactly
-  as `settings.service.ts:244-275` does. Three attempts, then
-  `AppError(500, 'INTERNAL', 'Could not allocate a purchase order number')`.
+- Three attempts, then `AppError(500, 'INTERNAL', 'Could not allocate a <label>')`.
 - Gaps are acceptable and documented: a rolled-back transaction burns its number.
 
 Tests (`api/src/modules/platform/sequences.test.ts`, real database):

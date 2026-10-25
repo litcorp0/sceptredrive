@@ -19,6 +19,10 @@ export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   'TRANSFER_IN',
   'COUNT_VARIANCE',
   'SALE',
+  // Phase 11: goods sent back to a supplier. Added by its own migration; a
+  // value added inside a transaction cannot be used until that transaction
+  // commits, so it never travels with the tables that write it.
+  'SUPPLIER_RETURN',
 ])
 
 export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
@@ -27,6 +31,15 @@ export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
   'TRANSFER',
   'COUNT',
   'SALE',
+  'SUPPLIER_RETURN',
+])
+
+/** Why a delivery arrived with more than was ordered (Phase 11, PROC-03). */
+export const overReceiptReasonEnum = pgEnum('over_receipt_reason', [
+  'SUPPLIER_SENT_MORE',
+  'ORDER_ROUNDING',
+  'SUBSTITUTE',
+  'OTHER',
 ])
 
 export const stockAdjustmentReasonEnum = pgEnum('stock_adjustment_reason', [
@@ -107,6 +120,10 @@ export const stockThreshold = pgTable(
       .notNull()
       .references(() => branch.id, { onDelete: 'restrict' }),
     threshold: integer('threshold').notNull(),
+    /** Top-up level (P11-D3); null means "no maximum set". */
+    maxQuantity: integer('max_quantity'),
+    /** A supplier's minimum order quantity: a floor on the suggestion. */
+    minOrderQuantity: integer('min_order_quantity').notNull().default(0),
     updatedBy: text('updated_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -133,14 +150,24 @@ export const stockReceipt = pgTable(
     supplierId: uuid('supplier_id').references(() => supplier.id, { onDelete: 'restrict' }),
     supplierName: text('supplier_name'),
     supplierInvoiceNumber: text('supplier_invoice_number'),
+    /**
+     * The purchase order this delivery fulfils (Phase 11). A plain uuid, not a
+     * foreign key: inventory must not import procurement, so the relationship is
+     * owned by the procurement service and indexed here.
+     */
+    purchaseOrderId: uuid('purchase_order_id'),
+    /** Replay guard for a console retry (P11-D20). */
+    idempotencyKey: text('idempotency_key'),
     note: text('note'),
     createdBy: text('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('stock_receipt_number_unique').on(table.number),
+    uniqueIndex('stock_receipt_idempotency_unique').on(table.branchId, table.idempotencyKey),
     index('stock_receipt_branch_idx').on(table.branchId, table.createdAt),
     index('stock_receipt_supplier_idx').on(table.supplierId),
+    index('stock_receipt_purchase_order_idx').on(table.purchaseOrderId),
   ],
 )
 
@@ -159,8 +186,13 @@ export const stockReceiptLine = pgTable(
     movementId: uuid('movement_id')
       .notNull()
       .references(() => stockMovement.id, { onDelete: 'restrict' }),
+    /** The ordered line this receipt satisfies; soft reference (see `purchaseOrderId`). */
+    purchaseOrderLineId: uuid('purchase_order_line_id'),
+    overReceiptReason: overReceiptReasonEnum('over_receipt_reason'),
+    overReceiptNote: text('over_receipt_note'),
   },
   (table) => [
     uniqueIndex('stock_receipt_line_receipt_product_unique').on(table.receiptId, table.productId),
+    index('stock_receipt_line_purchase_order_line_idx').on(table.purchaseOrderLineId),
   ],
 )
