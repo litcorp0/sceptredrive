@@ -119,6 +119,12 @@ describe('permissions', () => {
     expect(can('CASHIER', 'pos.discount')).toBe(false)
   })
 
+  it('lets managers and admins read analytics, never cashiers', () => {
+    expect(can('ADMIN', 'analytics.read')).toBe(true)
+    expect(can('MANAGER', 'analytics.read')).toBe(true)
+    expect(can('CASHIER', 'analytics.read')).toBe(false)
+  })
+
   it('has no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
