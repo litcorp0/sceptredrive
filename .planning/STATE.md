@@ -5,14 +5,16 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-25
-**Status:** **Phase 10 (Desktop POS Modules, Chrome & Shift Home) complete — 10/10 plans,
-verified.** The roadmap was re-sequenced on 2026-10-24: four interface phases (7 Identity/Design
-System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & Shift Home) were
-inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
-(Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
-became Phases 13/14/15.
-**Next action:** Plan **Phase 11** (Procurement, Replenishment & Supplier Returns). Its context is
-locked in `phases/11-procurement-replenishment/00-CONTEXT.md`; it needs task-level plans.
+**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is planned — 11 plans,
+none executed.** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
+2026-10-24: four interface phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics
+& Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a
+later audit the same day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch
+Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
+**Next action:** execute **Phase 11** plan by plan, starting with `01-PLAN.md` (shared
+vocabulary). The plan set is `phases/11-procurement-replenishment/{README,00-DECISIONS,
+01-RESEARCH,01…11-PLAN}.md`; `00-DECISIONS.md` P11-D1…D20 refinements win over `00-CONTEXT.md`
+where the two disagree.
 
 ---
 
@@ -31,11 +33,47 @@ locked in `phases/11-procurement-replenishment/00-CONTEXT.md`; it needs task-lev
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
-| 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
+| 11 | Procurement, Replenishment & Supplier Returns | 🔷 Planned (11 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 11 planning notes (2026-10-25)
+
+- Eleven plans written to `phases/11-procurement-replenishment/`: `README.md` (index, lanes,
+  execution shape), `00-DECISIONS.md` (P11-D1…D20), `01-RESEARCH.md` (sources + 30 verified
+  repository facts), `01…11-PLAN.md`. Research is folded into `01-RESEARCH.md` so the next session
+  does not repeat it.
+- **Five decisions were put to the operator and answered**: the credit note is posted with the
+  return in one transaction (D1); the approval threshold compares the ex-tax goods value (D2);
+  D7's `reorder_quantity` is replaced by a minimum order quantity (D3); `SENT` records a send and
+  unlocks a printable PO, with no email integration (D4); Phase 11 ships a PO-filtered queue, not
+  the unified inbox (D5).
+- **Four defects in the locked context were found and resolved rather than worked around**:
+  D7 and D8 define the same quantity two ways; D11's "existing settings sequence machinery" cannot
+  express per-branch-per-month numbers, so `document_sequence` is a new table (D15);
+  `drizzle-kit migrate` wraps each file in a transaction, so `ALTER TYPE … ADD VALUE` must be its
+  own migration (D16, verified in `node_modules/drizzle-kit/bin.cjs`); and D5's header-only PO link
+  cannot support the line-level variance it requires.
+- **The phase touches no client that sells.** No `desktop/**` file, no `sync-config.yaml`, no local
+  schema, no outbox change — Plan 11 proves it with an empty `git diff --stat` and the desktop
+  suite still at 413.
+- **Schema additions**: `purchase_order`, `purchase_order_line`, `supplier_return`,
+  `supplier_return_line`, `supplier_credit_note`, `approval`, `document_sequence`; extensions to
+  `stock_threshold` (`max_quantity`, `min_order_quantity`), `stock_receipt` (PO link, idempotency),
+  `stock_receipt_line` (PO line, over-receipt reason), `supplier_invoice` (PO link) and
+  `supplier_invoice_line` (PO line, `match_status`).
+- **`product.cost_price_minor` becomes derived and read-only** (D13): written only by an inbound
+  `RECEIPT` movement through `inventory.repository.updateDerivedCost`, which is documented as the
+  one deliberate cross-module write because `products.service` already imports `inventory.service`.
+- **Execution shape**: `packages/**` alone first; `api/**` is one lane for plans 02–08, so they are
+  serial; `admin/**` for 09–10; verification last. The only parallelism considered was 06 ∥ 07
+  and it was rejected — they both edit `payables.service.ts`.
+- **Known limits recorded now, not discovered later**: lead time and preferred supplier are global
+  because `supplier_product` has no branch column (D10); credit notes reduce the balance but are
+  not aged (D9, following Phase 5's on-account rule); write-off requests stay in Phase 12 (D8);
+  approval expiry is not implemented.
 
 ### Phase 10 execution notes (2026-10-25)
 
