@@ -60,6 +60,7 @@
     "db:generate": "bun run --filter api db:generate",
     "db:migrate": "bun run --filter api db:migrate",
     "db:seed": "bun run --filter api db:seed",
+    "seed:demo-sales": "bun run --filter api seed:demo-sales",
     "sync:init": "docker compose exec -T postgres psql -U sceptre_drive -d sceptre_drive < powersync/init/powersync.sql",
     "sync:up": "bun run scripts/prepare-powersync-service.mjs && docker compose --profile sync up -d powersync",
     "sync:down": "docker compose stop powersync",
