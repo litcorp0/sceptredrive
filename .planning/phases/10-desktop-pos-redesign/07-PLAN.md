@@ -44,6 +44,12 @@ Received     GH₵ 300.00        (large, tabular, editable)
 Change due   GH₵  55.00        (largest, font-display, tabular)
 ```
 
+> **Correction after execution.** Total stayed in the screen header rather than joining the
+> keypad stack: a `Total due` row inside the keypad would be the second copy of a figure the
+> totals rail already shows. Reading order is unchanged (Total → Received → Change), and
+> `tender-total` stays outside the cash branch so it also exists in the credit and zero-total
+> states — Phase 6's perf evidence waits on it before clicking `exact-cash`.
+
 ### 2. Short vs change without colour as the only signal
 
 Today the pair is `text-amber-700` ("Short …") versus `text-emerald-700` ("Change …")
@@ -57,7 +63,8 @@ Phase 7 measured `text-warn` on `bg-warn/10` at 4.39 : 1 and had to walk that ba
 
 ### 3. Targets
 
-- Quick-note and keypad keys ≥ 44 × 44 (`Exact` is `h-10` today); the digit grid keeps a 4 × 3
+- Quick-note and keypad keys ≥ 44 × 44 (`Exact` is `h-11`, not `h-10` — this premise was stale;
+  Plan 03 had already taken the whole keypad past 44 px); the digit grid keeps a 4 × 3
   shape and the same `data-testid`s (`cash-keypad`, `exact-cash`, `tendered`, `change-due`).
 - The `Complete sale` / `Pay` action stays 56 px and keeps `F9`.
 - The method choice (Cash / Credit) becomes a `ToggleGroup`-style pair of 44 px buttons with a
