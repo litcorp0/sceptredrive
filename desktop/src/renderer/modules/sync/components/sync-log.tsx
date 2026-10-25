@@ -26,17 +26,18 @@ export interface OutboxLogRow {
   receipt_number: string | null
 }
 
-/* The tint and the dot carry the state; the label stays `text-foreground`. */
+/* The tint and the dot carry the state; the label stays `text-foreground`. A dead letter is
+   the only state that is a problem — the rest are a queue working as designed. */
 const STATE_TINT: Record<string, string> = {
   pending: 'bg-muted',
-  in_flight: 'bg-sky-50',
-  acked: 'bg-emerald-50',
-  conflict: 'bg-amber-50',
-  dead_letter: 'bg-red-50',
+  in_flight: 'bg-info/10',
+  acked: 'bg-ok/10',
+  conflict: 'bg-muted',
+  dead_letter: 'bg-danger/10',
 }
 
 const STATE_DOT: Record<string, string> = {
-  pending: 'bg-topbar-muted',
+  pending: 'bg-muted-foreground',
   in_flight: 'bg-info',
   acked: 'bg-ok',
   conflict: 'bg-warn',
@@ -128,7 +129,7 @@ export function SyncLog({
                   <span
                     aria-hidden="true"
                     className={`size-1.5 shrink-0 rounded-full ${
-                      STATE_DOT[row.status] ?? 'bg-topbar-muted'
+                      STATE_DOT[row.status] ?? 'bg-muted-foreground'
                     }`}
                   />
                   {row.status.replace('_', ' ')}

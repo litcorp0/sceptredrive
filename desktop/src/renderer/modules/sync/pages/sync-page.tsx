@@ -1,6 +1,6 @@
 import { useQuery } from '@powersync/react'
 import { useEffect, useState } from 'react'
-import { ScreenHeader } from '@/components/common'
+import { ScreenHeader, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { httpSyncClient } from '@/lib/api/sync-client'
@@ -54,7 +54,7 @@ function Card({
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold" data-testid={testId}>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums" data-testid={testId}>
         {value}
       </p>
       {detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
@@ -167,32 +167,26 @@ export function SyncScreen({
         />
 
         {upload.pauseReason || sessionState === 'revoked' ? (
-          <p
-            className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-            data-testid="sync-pause"
-          >
+          <StatusNote tone="notice" className="mb-3" data-testid="sync-pause">
             {PAUSE_TEXT[upload.pauseReason ?? 'REVOKED'] ?? upload.pauseReason}
             {upload.lastError ? ` — ${upload.lastError}` : ''}
-          </p>
+          </StatusNote>
         ) : null}
 
         {highOpen > 0 ? (
-          <p
-            className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
-            data-testid="high-conflict-banner"
-          >
-            {highOpen} high-severity conflict{highOpen === 1 ? '' : 's'} need manager review. The
-            sale{highOpen === 1 ? ' is' : 's are'} recorded and the till keeps selling.
-          </p>
+          <StatusNote tone="danger" className="mb-3" data-testid="high-conflict-banner">
+            <span className="font-semibold text-foreground">
+              {highOpen} high-severity conflict{highOpen === 1 ? '' : 's'}
+            </span>{' '}
+            need{highOpen === 1 ? 's' : ''} manager review. The sale
+            {highOpen === 1 ? ' is' : 's are'} recorded and the till keeps selling.
+          </StatusNote>
         ) : null}
 
         {message ? (
-          <output
-            className="mb-3 block rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
-            data-testid="sync-message"
-          >
+          <StatusNote tone="info" role="status" className="mb-3" data-testid="sync-message">
             {message}
-          </output>
+          </StatusNote>
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -246,7 +240,11 @@ export function SyncScreen({
               Refresh
             </Button>
           </div>
-          {conflictError ? <p className="mb-2 text-xs text-amber-800">{conflictError}</p> : null}
+          {conflictError ? (
+            <StatusNote tone="notice" className="mb-2">
+              {conflictError}
+            </StatusNote>
+          ) : null}
           <ConflictList />
         </section>
 

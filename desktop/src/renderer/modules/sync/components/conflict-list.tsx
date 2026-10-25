@@ -29,17 +29,30 @@ export interface ConflictRow {
   resolved_at: string | null
 }
 
-/* The tint and the dot carry the severity; the label stays `text-foreground`. */
+/*
+ * `HIGH` is the only severity styled as a problem: it is the one a manager must act on, and
+ * the one that says a sale, a limit, or a stock figure disagreed with the server. MEDIUM and
+ * LOW are informational — recording them in red would make every sync look like a failure and
+ * teach a manager to ignore the colour (D10: offline is a normal state).
+ *
+ * The word carries the severity and the dot repeats it; the label stays `text-foreground`.
+ */
 const SEVERITY_TINT: Record<string, string> = {
-  HIGH: 'bg-red-50',
-  MEDIUM: 'bg-amber-50',
+  HIGH: 'bg-danger/10',
+  MEDIUM: 'bg-muted',
   LOW: 'bg-muted',
 }
 
 const SEVERITY_DOT: Record<string, string> = {
   HIGH: 'bg-danger',
-  MEDIUM: 'bg-warn',
-  LOW: 'bg-topbar-muted',
+  MEDIUM: 'bg-muted-foreground',
+  LOW: 'bg-muted-foreground',
+}
+
+const SEVERITY_WORD: Record<string, string> = {
+  HIGH: 'High — needs review',
+  MEDIUM: 'Medium',
+  LOW: 'Low',
 }
 
 function pretty(details: string): string {
@@ -89,17 +102,17 @@ export function ConflictList() {
           <details className="group">
             <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-sm">
               <Badge
-                className={`gap-1.5 border-transparent text-[11px] font-semibold ${
+                className={`gap-1.5 border-transparent text-[11px] font-semibold text-foreground ${
                   SEVERITY_TINT[conflict.severity] ?? ''
                 }`}
               >
                 <span
                   aria-hidden="true"
                   className={`size-1.5 shrink-0 rounded-full ${
-                    SEVERITY_DOT[conflict.severity] ?? 'bg-topbar-muted'
+                    SEVERITY_DOT[conflict.severity] ?? 'bg-muted-foreground'
                   }`}
                 />
-                {conflict.severity}
+                {SEVERITY_WORD[conflict.severity] ?? conflict.severity}
               </Badge>
               <span className="font-medium">{conflict.type.replaceAll('_', ' ')}</span>
               {conflict.sale_receipt_number ? (
