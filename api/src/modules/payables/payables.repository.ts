@@ -1,7 +1,8 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { and, asc, count, desc, eq, gte, inArray, lt, lte, ne, type SQL, sql } from 'drizzle-orm'
-import { stockReceipt } from '../inventory/inventory.schema.ts'
+import { stockReceipt, stockReceiptLine } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
+import { purchaseOrder, purchaseOrderLine } from '../procurement/procurement.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier } from '../suppliers/suppliers.schema.ts'
 import {
@@ -62,9 +63,14 @@ export async function insertInvoice(
 export async function insertInvoiceLines(
   values: (typeof supplierInvoiceLine.$inferInsert)[],
   executor: DbExecutor = db,
-): Promise<void> {
-  if (values.length === 0) return
-  await executor.insert(supplierInvoiceLine).values(values)
+): Promise<{ id: string; productId: string | null; quantity: number; unitCostMinor: number }[]> {
+  if (values.length === 0) return []
+  return executor.insert(supplierInvoiceLine).values(values).returning({
+    id: supplierInvoiceLine.id,
+    productId: supplierInvoiceLine.productId,
+    quantity: supplierInvoiceLine.quantity,
+    unitCostMinor: supplierInvoiceLine.unitCostMinor,
+  })
 }
 
 export async function findInvoiceById(
@@ -253,7 +259,17 @@ function invoiceConditions(filters: InvoiceListFilters): SQL | undefined {
   }
   if (filters.from) conditions.push(gte(supplierInvoice.invoiceDate, filters.from))
   if (filters.to) conditions.push(lte(supplierInvoice.invoiceDate, filters.to))
+  if (filters.variance) conditions.push(varianceExists())
   return and(...conditions)
+}
+
+/** True when any line carries a purchase-order variance (Phase 11, PROC-04). */
+function varianceExists() {
+  return sql<boolean>`exists (
+    select 1 from ${supplierInvoiceLine}
+    where ${supplierInvoiceLine.invoiceId} = ${supplierInvoice.id}
+      and ${supplierInvoiceLine.matchStatus} not in ('UNMATCHED', 'MATCHED')
+  )`
 }
 
 export async function selectInvoicePage(filters: InvoiceListFilters): Promise<InvoiceListRow[]> {
@@ -271,6 +287,9 @@ export async function selectInvoicePage(filters: InvoiceListFilters): Promise<In
       invoiceDate: supplierInvoice.invoiceDate,
       dueDate: supplierInvoice.dueDate,
       receiptId: supplierInvoice.receiptId,
+      purchaseOrderId: supplierInvoice.purchaseOrderId,
+      purchaseOrderNumber: purchaseOrder.number,
+      hasVariance: varianceExists(),
       subtotalMinor: supplierInvoice.subtotalMinor,
       vatMinor: supplierInvoice.vatMinor,
       nhilMinor: supplierInvoice.nhilMinor,
@@ -283,6 +302,7 @@ export async function selectInvoicePage(filters: InvoiceListFilters): Promise<In
     .from(supplierInvoice)
     .innerJoin(supplier, eq(supplier.id, supplierInvoice.supplierId))
     .innerJoin(branch, eq(branch.id, supplierInvoice.branchId))
+    .leftJoin(purchaseOrder, eq(purchaseOrder.id, supplierInvoice.purchaseOrderId))
     .where(invoiceConditions(filters))
     .orderBy(desc(supplierInvoice.invoiceDate), desc(supplierInvoice.number))
     .limit(filters.limit)
@@ -737,4 +757,141 @@ export async function selectSupplierIdsWithActivity(executor: DbExecutor = db): 
     executor.selectDistinct({ supplierId: supplierPayment.supplierId }).from(supplierPayment),
   ])
   return [...new Set([...invoiceRows, ...paymentRows].map((row) => row.supplierId))].sort()
+}
+
+/**
+ * Quantity already invoiced against each order line, excluding voided invoices
+ * and (when given) the invoice being matched.
+ */
+export async function selectInvoicedQuantityByOrderLine(
+  orderId: string,
+  excludeInvoiceId: string | null,
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  const conditions = [eq(purchaseOrderLine.orderId, orderId), ne(supplierInvoice.status, 'VOID')]
+  if (excludeInvoiceId) conditions.push(ne(supplierInvoice.id, excludeInvoiceId))
+
+  const rows = await executor
+    .select({
+      lineId: supplierInvoiceLine.purchaseOrderLineId,
+      quantity: sql<number>`coalesce(sum(${supplierInvoiceLine.quantity}), 0)`.mapWith(Number),
+    })
+    .from(supplierInvoiceLine)
+    .innerJoin(supplierInvoice, eq(supplierInvoice.id, supplierInvoiceLine.invoiceId))
+    .innerJoin(purchaseOrderLine, eq(purchaseOrderLine.id, supplierInvoiceLine.purchaseOrderLineId))
+    .where(and(...conditions))
+    .groupBy(supplierInvoiceLine.purchaseOrderLineId)
+
+  const map = new Map<string, number>()
+  for (const row of rows) if (row.lineId) map.set(row.lineId, row.quantity)
+  return map
+}
+
+/** Records the link and the advisory status; a variance is data, never a block. */
+export async function updateInvoiceLineMatch(
+  links: readonly {
+    invoiceLineId: string
+    purchaseOrderLineId: string | null
+    matchStatus: (typeof supplierInvoiceLine.$inferInsert)['matchStatus']
+  }[],
+  executor: DbExecutor,
+): Promise<void> {
+  for (const link of links) {
+    await executor
+      .update(supplierInvoiceLine)
+      .set({
+        purchaseOrderLineId: link.purchaseOrderLineId,
+        matchStatus: link.matchStatus,
+      })
+      .where(eq(supplierInvoiceLine.id, link.invoiceLineId))
+  }
+}
+
+export interface InvoiceMatchRow {
+  lineNumber: number
+  productId: string | null
+  sku: string
+  name: string
+  invoicedQuantity: number
+  invoicedUnitCostMinor: number
+  orderedQuantity: number | null
+  orderedUnitCostMinor: number | null
+  receivedQuantity: number
+  previouslyInvoicedQuantity: number
+  matchStatus: (typeof supplierInvoiceLine.$inferSelect)['matchStatus']
+}
+
+/** The line-level comparison behind an invoice's match panel. */
+export async function selectInvoiceMatchDetail(
+  invoiceId: string,
+  executor: DbExecutor = db,
+): Promise<InvoiceMatchRow[]> {
+  const rows = await executor
+    .select({
+      productId: supplierInvoiceLine.productId,
+      sku: sql<string>`coalesce(${product.sku}, '')`,
+      name: sql<string>`coalesce(${product.name}, '')`,
+      invoicedQuantity: supplierInvoiceLine.quantity,
+      invoicedUnitCostMinor: supplierInvoiceLine.unitCostMinor,
+      orderedQuantity: purchaseOrderLine.quantity,
+      orderedUnitCostMinor: purchaseOrderLine.unitCostMinor,
+      purchaseOrderLineId: supplierInvoiceLine.purchaseOrderLineId,
+      matchStatus: supplierInvoiceLine.matchStatus,
+      invoiceLineId: supplierInvoiceLine.id,
+    })
+    .from(supplierInvoiceLine)
+    .leftJoin(purchaseOrderLine, eq(purchaseOrderLine.id, supplierInvoiceLine.purchaseOrderLineId))
+    .leftJoin(product, eq(product.id, supplierInvoiceLine.productId))
+    .where(eq(supplierInvoiceLine.invoiceId, invoiceId))
+
+  const lineIds = rows
+    .map((row) => row.purchaseOrderLineId)
+    .filter((id): id is string => Boolean(id))
+  const [receivedRows, invoicedRows] =
+    lineIds.length === 0
+      ? [[], []]
+      : await Promise.all([
+          executor
+            .select({
+              lineId: stockReceiptLine.purchaseOrderLineId,
+              quantity: sql<number>`coalesce(sum(${stockReceiptLine.quantity}), 0)`.mapWith(Number),
+            })
+            .from(stockReceiptLine)
+            .where(inArray(stockReceiptLine.purchaseOrderLineId, lineIds))
+            .groupBy(stockReceiptLine.purchaseOrderLineId),
+          executor
+            .select({
+              lineId: supplierInvoiceLine.purchaseOrderLineId,
+              quantity: sql<number>`coalesce(sum(${supplierInvoiceLine.quantity}), 0)`.mapWith(
+                Number,
+              ),
+            })
+            .from(supplierInvoiceLine)
+            .innerJoin(supplierInvoice, eq(supplierInvoice.id, supplierInvoiceLine.invoiceId))
+            .where(
+              and(
+                inArray(supplierInvoiceLine.purchaseOrderLineId, lineIds),
+                ne(supplierInvoice.id, invoiceId),
+                ne(supplierInvoice.status, 'VOID'),
+              ),
+            )
+            .groupBy(supplierInvoiceLine.purchaseOrderLineId),
+        ])
+
+  const receivedByLine = new Map(receivedRows.map((row) => [row.lineId, row.quantity]))
+  const invoicedByLine = new Map(invoicedRows.map((row) => [row.lineId, row.quantity]))
+
+  return rows.map((row, index) => ({
+    lineNumber: index + 1,
+    productId: row.productId,
+    sku: row.sku,
+    name: row.name,
+    invoicedQuantity: row.invoicedQuantity,
+    invoicedUnitCostMinor: row.invoicedUnitCostMinor,
+    orderedQuantity: row.orderedQuantity,
+    orderedUnitCostMinor: row.orderedUnitCostMinor,
+    receivedQuantity: receivedByLine.get(row.purchaseOrderLineId ?? '') ?? 0,
+    previouslyInvoicedQuantity: invoicedByLine.get(row.purchaseOrderLineId ?? '') ?? 0,
+    matchStatus: row.matchStatus,
+  }))
 }

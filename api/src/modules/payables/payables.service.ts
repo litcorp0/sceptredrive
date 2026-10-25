@@ -11,6 +11,8 @@ import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
+import { findOrderById } from '../procurement/procurement.repository.ts'
+import { getOrderLinesForMatch } from '../procurement/procurement.service.ts'
 import { findProductById } from '../products/products.repository.ts'
 import { sumSupplierOwed } from '../suppliers/suppliers.repository.ts'
 import {
@@ -37,7 +39,9 @@ import {
   selectAllocationsByInvoice,
   selectAllocationsByPayment,
   selectInvoiceDetailHeader,
+  selectInvoicedQuantityByOrderLine,
   selectInvoiceLines,
+  selectInvoiceMatchDetail,
   selectInvoicePage,
   selectInvoiceReconciliationRows,
   selectOnAccountBySupplier,
@@ -47,9 +51,11 @@ import {
   selectSupplierIdsWithActivity,
   setInvoiceAmountPaid,
   sumAllocationsForInvoice,
+  updateInvoiceLineMatch,
   voidInvoiceRow,
   voidPaymentRow,
 } from './payables.repository.ts'
+import type { supplierInvoiceLine } from './payables.schema.ts'
 import type {
   AgingBucketKey,
   AgingBuckets,
@@ -61,6 +67,8 @@ import type {
   InvoiceListFilters,
   InvoiceListQuery,
   InvoiceListResult,
+  InvoiceMatch,
+  InvoiceMatchLine,
   InvoiceStatus,
   InvoiceVoidReason,
   PayableAgingSupplierRow,
@@ -80,6 +88,7 @@ import type {
 
 /** Effective invoice line after receipt copy or operator input. */
 interface EffectiveLine {
+  purchaseOrderLineId?: string | null
   productId: string | null
   description: string | null
   quantity: number
@@ -106,14 +115,50 @@ function receiptAlreadyInvoicedError(existing: SupplierInvoiceRow): ConflictErro
   })
 }
 
+const MATCH_SEVERITY = [
+  'NOT_ON_ORDER',
+  'PRICE_AND_QUANTITY_VARIANCE',
+  'QUANTITY_VARIANCE',
+  'PRICE_VARIANCE',
+  'MATCHED',
+  'UNMATCHED',
+] as const
+
+/** Worst status across the lines: what the invoice's badge should say. */
+function worstMatchStatus(
+  rows: readonly { matchStatus: (typeof supplierInvoiceLine.$inferSelect)['matchStatus'] }[],
+): (typeof supplierInvoiceLine.$inferSelect)['matchStatus'] {
+  for (const status of MATCH_SEVERITY) {
+    if (rows.some((row) => row.matchStatus === status)) return status
+  }
+  return 'UNMATCHED'
+}
+
+async function buildInvoiceMatch(
+  invoice: SupplierInvoiceRow,
+  rows: readonly InvoiceMatchLine[],
+): Promise<InvoiceMatch | null> {
+  if (rows.length === 0 || !invoice.purchaseOrderId) return null
+  const order = await findOrderById(invoice.purchaseOrderId)
+  return {
+    purchaseOrderId: invoice.purchaseOrderId,
+    orderNumber: order?.number ?? '',
+    status: worstMatchStatus(rows),
+    lines: [...rows],
+  }
+}
+
 async function loadInvoice(invoiceId: string): Promise<InvoiceDetail> {
   const header = await selectInvoiceDetailHeader(invoiceId)
   if (!header) throw new NotFoundError('Supplier invoice not found')
-  const [lines, allocations] = await Promise.all([
+  const [lines, allocations, matchRows] = await Promise.all([
     selectInvoiceLines(invoiceId),
     selectAllocationsByInvoice(invoiceId),
+    selectInvoiceMatchDetail(invoiceId),
   ])
+  const match = await buildInvoiceMatch(header.invoice, matchRows)
   return {
+    match,
     invoice: {
       ...header.invoice,
       outstandingMinor: header.invoice.totalMinor - header.invoice.amountPaidMinor,
@@ -187,6 +232,7 @@ export async function createInvoice(
       description: line.description ?? null,
       quantity: line.quantity,
       unitCostMinor: line.unitCostMinor,
+      purchaseOrderLineId: line.purchaseOrderLineId ?? null,
     }))
   } else if (receipt) {
     effectiveLines = receipt.lines.map((line) => ({
@@ -261,6 +307,7 @@ export async function createInvoice(
           invoiceDate: input.invoiceDate,
           dueDate,
           receiptId: input.receiptId ?? null,
+          purchaseOrderId: input.purchaseOrderId ?? null,
           subtotalMinor,
           vatMinor,
           nhilMinor,
@@ -275,7 +322,7 @@ export async function createInvoice(
       if (!header)
         throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create the supplier invoice')
 
-      await insertInvoiceLines(
+      const insertedLines = await insertInvoiceLines(
         effectiveLines.map((line) => ({
           invoiceId: header.id,
           productId: line.productId,
@@ -286,6 +333,17 @@ export async function createInvoice(
         })),
         tx,
       )
+
+      const matchResult = input.purchaseOrderId
+        ? await matchInvoiceToOrder(
+            input.purchaseOrderId,
+            { branchId, supplierId: supplier.id, invoiceId: header.id },
+            effectiveLines,
+            insertedLines,
+            actor,
+            tx,
+          )
+        : null
 
       if (input.receiptId) await attachReceiptSupplier(input.receiptId, supplier.id, tx)
 
@@ -313,6 +371,8 @@ export async function createInvoice(
             supplierInvoiceNumber: input.supplierInvoiceNumber,
             totalMinor,
             receiptId: input.receiptId ?? null,
+            purchaseOrderId: input.purchaseOrderId ?? null,
+            matchStatus: matchResult?.status ?? null,
           },
         },
         tx,
@@ -347,6 +407,141 @@ export async function createInvoice(
 
   const invoice = await loadInvoice(outcome.id)
   return { invoice, replayed: outcome.replayed }
+}
+
+/**
+ * Compares each invoice line to the order line it belongs to (PROC-04).
+ *
+ * Advisory by design: every difference is recorded with both values and the
+ * payable posts anyway, because a documentation gap must never stop a supplier
+ * being paid. The only 4xx outcomes are structural — a foreign branch, a
+ * cancelled order, or a line that is not on the named order.
+ */
+async function matchInvoiceToOrder(
+  purchaseOrderId: string,
+  scope: { branchId: string; supplierId: string; invoiceId: string },
+  effectiveLines: readonly EffectiveLine[],
+  insertedLines: readonly {
+    id: string
+    productId: string | null
+    quantity: number
+    unitCostMinor: number
+  }[],
+  actor: AuditActor,
+  executor: DbExecutor,
+): Promise<{
+  status: (typeof supplierInvoiceLine.$inferSelect)['matchStatus']
+  orderNumber: string
+  variances: Record<string, unknown>[]
+}> {
+  const order = await getOrderLinesForMatch(
+    purchaseOrderId,
+    { branchId: scope.branchId, supplierId: scope.supplierId },
+    executor,
+  )
+  const alreadyInvoiced = await selectInvoicedQuantityByOrderLine(
+    purchaseOrderId,
+    scope.invoiceId,
+    executor,
+  )
+
+  const explicitByProduct = new Map<string, string>()
+  for (const line of effectiveLines) {
+    if (line.productId && line.purchaseOrderLineId) {
+      explicitByProduct.set(line.productId, line.purchaseOrderLineId)
+    }
+  }
+
+  const links: {
+    invoiceLineId: string
+    purchaseOrderLineId: string | null
+    matchStatus: (typeof supplierInvoiceLine.$inferSelect)['matchStatus']
+  }[] = []
+  const variances: Record<string, unknown>[] = []
+  let status: (typeof supplierInvoiceLine.$inferSelect)['matchStatus'] = 'MATCHED'
+
+  for (const line of insertedLines) {
+    if (!line.productId) continue
+
+    const explicitId = explicitByProduct.get(line.productId)
+    if (explicitId && !order.lines.some((candidate) => candidate.id === explicitId)) {
+      throw new ValidationError('That order line is not on the named purchase order')
+    }
+
+    const orderLine =
+      order.lines.find((candidate) => candidate.id === explicitId) ??
+      order.lines.find((candidate) => candidate.productId === line.productId)
+
+    if (!orderLine) {
+      status = 'NOT_ON_ORDER'
+      links.push({
+        invoiceLineId: line.id,
+        purchaseOrderLineId: null,
+        matchStatus: 'NOT_ON_ORDER',
+      })
+      variances.push({
+        invoiceLineId: line.id,
+        productId: line.productId,
+        status: 'NOT_ON_ORDER',
+        invoicedQuantity: line.quantity,
+        invoicedUnitCostMinor: line.unitCostMinor,
+      })
+      continue
+    }
+
+    const priceVariance = line.unitCostMinor !== orderLine.unitCostMinor
+    const invoicedAfter = (alreadyInvoiced.get(orderLine.id) ?? 0) + line.quantity
+    const quantityVariance = invoicedAfter > orderLine.receivedQuantity
+
+    const lineStatus = priceVariance
+      ? quantityVariance
+        ? 'PRICE_AND_QUANTITY_VARIANCE'
+        : 'PRICE_VARIANCE'
+      : quantityVariance
+        ? 'QUANTITY_VARIANCE'
+        : 'MATCHED'
+
+    links.push({
+      invoiceLineId: line.id,
+      purchaseOrderLineId: orderLine.id,
+      matchStatus: lineStatus,
+    })
+
+    if (lineStatus !== 'MATCHED') {
+      status = lineStatus
+      variances.push({
+        invoiceLineId: line.id,
+        purchaseOrderLineId: orderLine.id,
+        status: lineStatus,
+        invoicedQuantity: line.quantity,
+        receivedQuantity: orderLine.receivedQuantity,
+        invoicedUnitCostMinor: line.unitCostMinor,
+        orderedUnitCostMinor: orderLine.unitCostMinor,
+      })
+    }
+  }
+
+  if (links.length > 0) await updateInvoiceLineMatch(links, executor)
+
+  if (links.length > 0 || variances.length > 0) {
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_invoice.matched',
+        entity: 'supplier_invoice',
+        entityId: scope.invoiceId,
+        branchId: scope.branchId,
+        after: {
+          purchaseOrderId,
+          orderNumber: order.orderNumber,
+          variances,
+        },
+      },
+      executor,
+    )
+  }
+
+  return { status, orderNumber: order.orderNumber, variances }
 }
 
 /**
@@ -700,6 +895,7 @@ export async function listInvoices(
     receiptId: query.receiptId ?? null,
     status: query.status ?? null,
     overdue: query.overdue,
+    variance: query.variance ?? false,
     asOfDate: new Date().toISOString().slice(0, 10),
     from: query.from ?? null,
     to: query.to ?? null,

@@ -584,7 +584,7 @@ describe.skipIf(!available)('receiving against an order', () => {
     expect(response.status, await response.clone().text()).toBe(201)
 
     const body = await readJson<{
-      order: { status: string; lines: { receivedQuantity: number }[] }
+      order: { order: { status: string }; lines: { receivedQuantity: number }[] }
     }>(response)
     expect(body.order.order.status).toBe('RECEIVED')
     expect(body.order.lines[0]?.receivedQuantity).toBe(10)
@@ -614,13 +614,13 @@ describe.skipIf(!available)('receiving against an order', () => {
     const first = await receive(orderId, lineId, 6, 1_000)
     expect(first.status).toBe(201)
     const firstBody = await readJson<{
-      order: { status: string; lines: { outstandingQuantity: number }[] }
+      order: { order: { status: string }; lines: { outstandingQuantity: number }[] }
     }>(first)
     expect(firstBody.order.order.status).toBe('PARTIALLY_RECEIVED')
     expect(firstBody.order.lines[0]?.outstandingQuantity).toBe(4)
 
     const second = await receive(orderId, lineId, 4, 1_000)
-    const secondBody = await readJson<{ order: { status: string } }>(second)
+    const secondBody = await readJson<{ order: { order: { status: string } } }>(second)
     expect(secondBody.order.order.status).toBe('RECEIVED')
   })
 

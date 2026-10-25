@@ -1,4 +1,4 @@
-import { type DbTransaction, db } from '@sceptre/db'
+import { type DbExecutor, type DbTransaction, db } from '@sceptre/db'
 import {
   canApplyOrderAction,
   goodsValueMinor,
@@ -9,7 +9,13 @@ import {
 } from '@sceptre/shared'
 import { assertBranchAccess, hasPermission, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
-import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
+import {
+  AppError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { findApprovalById, withdrawApprovalRow } from '../approvals/approvals.repository.ts'
 import {
@@ -32,6 +38,7 @@ import {
   insertOrder,
   insertOrderLines,
   lockOrderForUpdate,
+  selectMatchableOrders,
   selectOrderLines,
   selectOrderPage,
   selectOrderWithSupplier,
@@ -50,6 +57,15 @@ import type {
   OrderUpdateBody,
   ReceiveOrderBody,
 } from './procurement.types.ts'
+
+/** The line-level facts the invoice matcher needs; read-only and scoped. */
+export interface OrderLineForMatch {
+  id: string
+  productId: string
+  quantity: number
+  unitCostMinor: number
+  receivedQuantity: number
+}
 
 /**
  * The purchase order lifecycle.
@@ -675,4 +691,56 @@ async function withdrawPendingApproval(approvalId: string, tx: DbTransaction): P
     // why, so this row is closed without a second decision trail.
     await withdrawApprovalRow(approvalRow.id, tx)
   }
+}
+
+/**
+ * Read seam for invoice matching (Plan 06). Payables calls this, never a
+ * repository, so the order's rules stay in one module and the dependency runs
+ * one way: `payables → procurement`.
+ */
+export async function getOrderLinesForMatch(
+  orderId: string,
+  scope: { branchId: string; supplierId: string },
+  executor: DbExecutor,
+): Promise<{ orderNumber: string; status: PurchaseOrderStatus; lines: OrderLineForMatch[] }> {
+  const found = await selectOrderWithSupplier(orderId, executor)
+  if (!found) throw new NotFoundError('Purchase order not found')
+  if (found.order.branchId !== scope.branchId) {
+    throw new ForbiddenError('This order belongs to another branch')
+  }
+  if (found.order.supplierId !== scope.supplierId) {
+    throw new ValidationError('This order belongs to another supplier')
+  }
+  if (found.order.status === 'CANCELLED' || found.order.status === 'REJECTED') {
+    throw new ConflictError(`A ${found.order.status.toLowerCase()} order cannot be invoiced`)
+  }
+
+  const [lines, received] = await Promise.all([
+    selectOrderLines(orderId, executor),
+    selectReceivedByOrderLine(orderId, executor),
+  ])
+
+  return {
+    orderNumber: found.order.number,
+    status: found.order.status,
+    lines: lines.map((line) => ({
+      id: line.id,
+      productId: line.productId,
+      quantity: line.quantity,
+      unitCostMinor: line.unitCostMinor,
+      receivedQuantity: received.get(line.id) ?? 0,
+    })),
+  }
+}
+
+/** The invoice form's picker: orders for one supplier that can be matched. */
+export async function listMatchableOrders(
+  user: SessionUser,
+  query: { branchId?: string | null; supplierId: string },
+): Promise<{ orders: Awaited<ReturnType<typeof selectMatchableOrders>> }> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  if (!branchId) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Choose a branch to match invoices against')
+  }
+  return { orders: await selectMatchableOrders(branchId, query.supplierId) }
 }

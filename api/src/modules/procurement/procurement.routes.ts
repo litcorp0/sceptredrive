@@ -3,6 +3,7 @@ import { factory } from '../../http/factory.ts'
 import { requireSession } from '../../http/session.ts'
 import * as procurementController from './procurement.controller.ts'
 import {
+  validateMatchableOrdersQuery,
   validateOrderCancel,
   validateOrderClose,
   validateOrderCreate,
@@ -28,6 +29,15 @@ procurementRoutes.post(
   requirePermission('procurement.create'),
   validateOrderCreate,
   (c) => procurementController.createOrder(c, c.req.valid('json')),
+)
+
+// Static before param: otherwise `/orders/matchable` matches `:id`.
+procurementRoutes.get(
+  '/api/procurement/orders/matchable',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateMatchableOrdersQuery,
+  (c) => procurementController.listMatchableOrders(c, c.req.valid('query')),
 )
 
 procurementRoutes.get(

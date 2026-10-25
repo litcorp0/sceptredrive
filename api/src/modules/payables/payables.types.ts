@@ -46,6 +46,8 @@ export interface InvoiceListFilters {
   receiptId: string | null
   status: InvoiceStatus | null
   overdue: boolean
+  /** Only invoices with at least one purchase-order variance. */
+  variance?: boolean
   /** ISO date (YYYY-MM-DD) used as the overdue cut-off. */
   asOfDate: string
   from: string | null
@@ -67,6 +69,9 @@ export interface InvoiceListRow {
   invoiceDate: string
   dueDate: string
   receiptId: string | null
+  purchaseOrderId: string | null
+  purchaseOrderNumber: string | null
+  hasVariance: boolean
   subtotalMinor: number
   vatMinor: number
   nhilMinor: number
@@ -115,12 +120,34 @@ export interface InvoiceReceiptSummary {
   branchId: string
 }
 
+export interface InvoiceMatchLine {
+  lineNumber: number
+  productId: string | null
+  sku: string
+  name: string
+  invoicedQuantity: number
+  invoicedUnitCostMinor: number
+  orderedQuantity: number | null
+  orderedUnitCostMinor: number | null
+  receivedQuantity: number
+  previouslyInvoicedQuantity: number
+  matchStatus: (typeof supplierInvoiceLine.$inferSelect)['matchStatus']
+}
+
+export interface InvoiceMatch {
+  purchaseOrderId: string
+  orderNumber: string
+  status: (typeof supplierInvoiceLine.$inferSelect)['matchStatus']
+  lines: InvoiceMatchLine[]
+}
+
 export interface InvoiceDetail {
   invoice: SupplierInvoiceRow & { outstandingMinor: number }
   supplier: InvoiceSupplierSummary
   receipt: InvoiceReceiptSummary | null
   lines: InvoiceLineView[]
   allocations: InvoiceAllocationRow[]
+  match: InvoiceMatch | null
 }
 
 export interface InvoiceListResult {

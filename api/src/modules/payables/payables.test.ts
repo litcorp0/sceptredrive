@@ -162,7 +162,7 @@ describe.skipIf(!available)('payables module', () => {
   }
 
   function listQuery(overrides: Partial<InvoiceListQuery> = {}): InvoiceListQuery {
-    return { limit: 100, offset: 0, overdue: false, ...overrides }
+    return { limit: 100, offset: 0, overdue: false, variance: false, ...overrides }
   }
 
   function paymentListQuery(overrides: Partial<PaymentListQuery> = {}): PaymentListQuery {

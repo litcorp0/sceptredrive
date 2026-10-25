@@ -13,6 +13,8 @@ const invoiceLineSchema = z
     description: z.string().trim().min(1).max(200).optional(),
     quantity: z.number().int().min(1).max(1_000_000),
     unitCostMinor: z.number().int().min(0).max(1_000_000_000),
+    /** The ordered line this invoice line settles; optional, matched by product otherwise. */
+    purchaseOrderLineId: z.uuid().optional(),
   })
   .strict()
   .refine((line) => (line.productId === undefined) !== (line.description === undefined), {
@@ -28,6 +30,8 @@ export const invoiceCreateSchema = z
     invoiceDate: z.iso.date(),
     dueDate: z.iso.date().optional(),
     receiptId: z.uuid().optional(),
+    /** The purchase order this invoice settles (Phase 11, PROC-04). */
+    purchaseOrderId: z.uuid().optional(),
     copyFromReceipt: z.boolean().optional(),
     lines: z.array(invoiceLineSchema).min(1).max(100).optional(),
     vatMinor: z.number().int().min(0).max(1_000_000_000).optional(),
@@ -56,6 +60,11 @@ export const invoiceListQuerySchema = z.object({
   receiptId: z.uuid().optional(),
   status: z.enum(['OPEN', 'PARTIAL', 'PAID', 'VOID']).optional(),
   overdue: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  /** Only invoices with at least one purchase-order variance. */
+  variance: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),

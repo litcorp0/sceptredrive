@@ -57,6 +57,13 @@ export const orderListQuerySchema = z.object({
 
 export const orderIdParamSchema = z.object({ id: z.uuid() })
 
+export const matchableOrdersQuerySchema = z.object({
+  supplierId: z.uuid(),
+  branchId: z.uuid().optional(),
+})
+
+export const validateMatchableOrdersQuery = validateQuery(matchableOrdersQuerySchema)
+
 export const orderCancelSchema = z.object({ reason: z.string().trim().min(3).max(300) }).strict()
 
 export const orderCloseSchema = z

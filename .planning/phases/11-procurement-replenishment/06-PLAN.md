@@ -59,9 +59,10 @@ export async function getOrderLinesForMatch(
 ): Promise<{ orderNumber: string; status: PurchaseOrderStatus; lines: OrderLineForMatch[] }>
 ```
 
-Throws 400 when the order belongs to another branch or supplier, and
-`AppError('CONFLICT', 'This order was cancelled')` for `CANCELLED`/`REJECTED` orders — an invoice
-cannot cite a document that no longer exists.
+Throws **403** when the order belongs to another branch (the same object-level rule as every other
+foreign id), **400** when it belongs to another supplier (the request is inconsistent, not
+forbidden), and `AppError('CONFLICT', …)` for `CANCELLED`/`REJECTED` orders — an invoice cannot
+cite a document that no longer exists.
 
 `payables.service` imports **this service function**, never `procurement.repository`. The
 dependency is one-way: `payables → procurement`, never the reverse.
@@ -100,7 +101,9 @@ for each invoice line:
 - An invoice that arrives before the goods is therefore `QUANTITY_VARIANCE` with
   `received = 0`. That is a normal state, not an error (research: `OPEN_RECEIPT`).
 - `NOT_ON_ORDER` when the product has no line on the cited order — a supplier billing for
-  something nobody ordered.
+  something nobody ordered. Its row keeps `purchase_order_line_id` null and stores only the
+  status, so the invoice detail still has to show it: the detail query **left-joins** the order
+  line and product, and returns `orderedQuantity: null` rather than pretending zero.
 - With no `purchaseOrderId`, every line stays `UNMATCHED` and behaviour is byte-identical to
   today.
 

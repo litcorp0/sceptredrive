@@ -25,6 +25,14 @@ export async function createOrder(c: Context<AppEnv>, input: OrderCreateBody) {
   return c.json(result.order, result.replayed ? 200 : 201)
 }
 
+export async function listMatchableOrders(
+  c: Context<AppEnv>,
+  query: { supplierId: string; branchId?: string },
+) {
+  const user = currentUser(c)
+  return c.json(await procurementService.listMatchableOrders(user, query))
+}
+
 export async function getOrder(c: Context<AppEnv>, id: string) {
   const user = currentUser(c)
   const detail = await procurementService.getOrder(user, id)

@@ -1,5 +1,5 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, asc, count, desc, eq, ilike, or, sql, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, sql, sum } from 'drizzle-orm'
 import { stockReceiptLine } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
@@ -281,4 +281,46 @@ function buildOrderConditions(filters: OrderListQuery) {
   }
   if (conditions.length === 0) return sql`true`
   return and(...conditions)
+}
+
+/** Orders an invoice may cite: approved, sent, or partly received. */
+export async function selectMatchableOrders(
+  branchId: string,
+  supplierId: string,
+  limit = 20,
+  executor: DbExecutor = db,
+): Promise<
+  {
+    id: string
+    number: string
+    status: string
+    expectedDate: string | null
+    goodsValueMinor: number
+  }[]
+> {
+  const goodsValueMinor =
+    sql<number>`coalesce(sum(${purchaseOrderLine.quantity} * ${purchaseOrderLine.unitCostMinor}), 0)`.mapWith(
+      Number,
+    )
+
+  return executor
+    .select({
+      id: purchaseOrder.id,
+      number: purchaseOrder.number,
+      status: purchaseOrder.status,
+      expectedDate: purchaseOrder.expectedDate,
+      goodsValueMinor,
+    })
+    .from(purchaseOrder)
+    .leftJoin(purchaseOrderLine, eq(purchaseOrderLine.orderId, purchaseOrder.id))
+    .where(
+      and(
+        eq(purchaseOrder.branchId, branchId),
+        eq(purchaseOrder.supplierId, supplierId),
+        inArray(purchaseOrder.status, ['APPROVED', 'SENT', 'PARTIALLY_RECEIVED']),
+      ),
+    )
+    .groupBy(purchaseOrder.id)
+    .orderBy(desc(purchaseOrder.createdAt))
+    .limit(limit)
 }
