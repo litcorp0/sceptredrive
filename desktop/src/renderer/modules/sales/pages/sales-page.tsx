@@ -1,6 +1,6 @@
-import { accraDay, formatTime } from '@sceptre/shared'
+import { accraDayBounds, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
-import { ScreenHeader } from '@/components/common'
+import { ScreenHeader, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,38 +19,35 @@ import {
 } from '@/lib/sale/sale-repository'
 
 /**
- * Today's sales on this terminal (Plan 07 Task 4).
+ * Today's sales on this terminal (Plan 07 Task 4; day window from Phase 10 Plan 08).
  *
  * The local reprint path: every sale the terminal wrote today, whether the
- * shift is still open or was closed. Server-wide reporting is Phase 8; this is
- * what a cashier or manager needs at the counter, offline.
+ * shift is still open or was closed. Server-wide reporting is the console's job;
+ * this is what a cashier or manager needs at the counter, offline.
+ *
+ * The day window comes from `accraDayBounds` in `@sceptre/shared`. The screen used to
+ * build it inline by adding 24 hours to the current instant, which is the one thing the
+ * shared helper exists to prevent: a day is a calendar concept, and a second copy of that
+ * arithmetic is how the till and the dashboard start disagreeing about midnight.
+ *
+ * `listSalesBetween` also returns any sale whose print state is still pending, whatever its
+ * date, so an older receipt that never printed is never hidden by a printer problem.
  */
 
-/*
- * The tint and the dot carry the print state; the label stays `text-foreground`
- * so a 11 px chip keeps its contrast (Phase 7's rule).
- */
+/* The tint and the dot carry the print state; the label stays `text-foreground`
+   so an 11 px chip keeps its contrast (Phase 7's rule). */
 const STATUS_TINT: Record<string, string> = {
   PENDING: 'bg-muted',
-  PRINTING: 'bg-sky-50',
-  PRINTED: 'bg-emerald-50',
-  FAILED: 'bg-amber-50',
+  PRINTING: 'bg-info/10',
+  PRINTED: 'bg-ok/10',
+  FAILED: 'bg-warn/10',
 }
 
 const STATUS_DOT: Record<string, string> = {
-  PENDING: 'bg-topbar-muted',
+  PENDING: 'bg-muted-foreground',
   PRINTING: 'bg-info',
   PRINTED: 'bg-ok',
   FAILED: 'bg-warn',
-}
-
-function dayBounds(now = new Date()): { from: string; to: string; label: string } {
-  const day = accraDay(now)
-  const isoDay = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`
-  const next = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-  const nextDay = accraDay(next)
-  const nextIso = `${nextDay.slice(0, 4)}-${nextDay.slice(4, 6)}-${nextDay.slice(6, 8)}`
-  return { from: `${isoDay}T00:00:00.000Z`, to: `${nextIso}T00:00:00.000Z`, label: isoDay }
 }
 
 interface Row {
@@ -69,7 +66,7 @@ export function SalesScreen({
 }) {
   const { db } = usePos()
   const [rows, setRows] = useState<Row[]>([])
-  const [bounds, setBounds] = useState(() => dayBounds())
+  const [day, setDay] = useState(() => accraDayBounds().day)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -78,7 +75,7 @@ export function SalesScreen({
     void (async () => {
       if (!db) return
       try {
-        const range = dayBounds()
+        const range = accraDayBounds()
         const sales = await listSalesBetween(db, identity.terminalId, range.from, range.to)
         const withTenders = await Promise.all(
           sales.map(async (sale) => ({
@@ -87,7 +84,7 @@ export function SalesScreen({
           })),
         )
         if (cancelled) return
-        setBounds(range)
+        setDay(range.day)
         setRows(withTenders)
         setError(null)
       } catch (loadError) {
@@ -104,6 +101,7 @@ export function SalesScreen({
   }, [db, identity.terminalId])
 
   const pending = rows.filter((row) => row.sale.printStatus !== 'PRINTED').length
+  const totalMinor = rows.reduce((sum, row) => sum + row.sale.totalMinor, 0)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -120,8 +118,7 @@ export function SalesScreen({
           title="Today's sales"
           description={
             <>
-              {bounds.label} · {rows.length} sale{rows.length === 1 ? '' : 's'} on{' '}
-              {identity.terminalCode}
+              {day} · {rows.length} sale{rows.length === 1 ? '' : 's'} on {identity.terminalCode}
               {pending > 0 ? ` · ${pending} not printed` : ''}
             </>
           }
@@ -139,9 +136,9 @@ export function SalesScreen({
         />
 
         {error ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <StatusNote tone="danger" role="alert" className="mb-3">
             {error}
-          </p>
+          </StatusNote>
         ) : loading ? (
           <div className="grid gap-2">
             <span className="sr-only">Loading today's sales…</span>
@@ -161,68 +158,97 @@ export function SalesScreen({
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
+              <caption className="border-b border-border px-3 py-2 text-left text-xs text-muted-foreground">
+                Today on {identity.terminalCode} · {rows.length} sale
+                {rows.length === 1 ? '' : 's'} ·{' '}
+                <span className="font-mono text-foreground tabular-nums">
+                  {formatGhs(totalMinor)}
+                </span>{' '}
+                taken
+              </caption>
               <thead className="bg-muted/40 text-left text-xs text-muted-foreground uppercase">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Receipt</th>
-                  <th className="px-3 py-2 font-medium">Time</th>
-                  <th className="px-3 py-2 font-medium">Tender</th>
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
-                  <th className="px-3 py-2 font-medium">Print</th>
-                  <th className="px-3 py-2" />
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Receipt
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Time
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Tender
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">
+                    Total
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Print
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ sale, tender }) => (
-                  <tr
-                    key={sale.id}
-                    className="border-t border-border hover:bg-muted/30"
-                    data-testid="sale-row"
-                  >
-                    <td className="px-3 py-2 font-mono text-xs">{sale.receiptNumber}</td>
-                    <td className="px-3 py-2 font-mono text-xs tabular-nums">
-                      {formatTime(sale.occurredAt)}
-                    </td>
-                    <td className="px-3 py-2 text-xs">{tender?.method ?? 'NONE'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
-                      {formatGhs(sale.totalMinor)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Badge
-                        className={`gap-1.5 border-transparent text-[11px] ${
-                          STATUS_TINT[sale.printStatus] ?? ''
-                        }`}
+                {rows.map(({ sale, tender }) => {
+                  const time = formatTime(sale.occurredAt)
+                  const how = tender?.method ?? 'NONE'
+                  return (
+                    <tr
+                      key={sale.id}
+                      className="border-t border-border hover:bg-muted/30"
+                      data-testid="sale-row"
+                    >
+                      <th
+                        scope="row"
+                        className="px-3 py-2 text-left font-mono text-xs font-normal tabular-nums"
                       >
-                        <span
-                          aria-hidden="true"
-                          className={`size-1.5 shrink-0 rounded-full ${
-                            STATUS_DOT[sale.printStatus] ?? 'bg-topbar-muted'
+                        {sale.receiptNumber}
+                      </th>
+                      <td className="px-3 py-2 font-mono text-xs tabular-nums">{time}</td>
+                      <td className="px-3 py-2 text-xs">{how}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                        {formatGhs(sale.totalMinor)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge
+                          className={`gap-1.5 border-transparent text-[11px] text-foreground ${
+                            STATUS_TINT[sale.printStatus] ?? ''
                           }`}
-                        />
-                        {sale.printStatus.toLowerCase()}
-                        {sale.reprintCount > 0 ? ` · ${sale.reprintCount}x` : ''}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`pos/receipt/${sale.id}`)}
-                        className="h-11 px-3 text-xs"
-                      >
-                        Open
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`size-1.5 shrink-0 rounded-full ${
+                              STATUS_DOT[sale.printStatus] ?? 'bg-muted-foreground'
+                            }`}
+                          />
+                          {sale.printStatus.toLowerCase()}
+                          {sale.reprintCount > 0 ? ` · ${sale.reprintCount}x` : ''}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`pos/receipt/${sale.id}`)}
+                          className="h-11 px-3 text-xs"
+                          aria-label={`Open receipt ${sale.receiptNumber}, ${time}, paid by ${how.toLowerCase()}`}
+                        >
+                          Open
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Opening a receipt lets you reprint it or open the cash drawer. Any older receipt that
-          still needs printing is listed here too, so a printer problem never hides a sale.
+          Opening a receipt lets you reprint it or open the cash drawer. Any receipt that still
+          needs printing is listed here too, even from an earlier day, so a printer problem never
+          hides a sale.
         </p>
       </main>
     </div>
