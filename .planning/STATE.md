@@ -41,9 +41,10 @@ both clients, and a first install now opens enrolment.
 ### Phase 10 execution notes (2026-10-25)
 
 - **Plan 08 complete** (commits `9f4ba3d`, `697a116`, `2abeb6a`, `2443876`, `7194351`,
-  `e498bae`, `36b6043`). Seven commits, one per task, as the plan listed them. Desktop
-  **387 → 401** (three new test files: routing, lockout copy, variance); no existing assertion
-  edited. API 394, shared 149 unchanged.
+  `e498bae`, `36b6043`, `def55ab`). Seven task commits as the plan listed them, plus one fix
+  commit for what review found. Desktop **387 → 406** (four new test files: routing, lockout
+  copy, variance, amount validation); no existing assertion edited. API 394, shared 149
+  unchanged.
 - **A first install now opens enrolment, and it was proven on a real fresh install.** The outer
   switch moved into `topLevelScreen(parseHash(hash))` so it is testable without a database or an
   Electron window: empty, `#`, `#/`, and an unknown hash all resolve to sign-in. A one-off
@@ -54,9 +55,12 @@ both clients, and a first install now opens enrolment.
   lives outside the repo because it needs a packaged build; Plan 09's audit owns that matrix.
 - **The landed fix cost two E2E edits, and both are deliberate.** `security-smoke.mjs` (two
   legs) and `sync-smoke.mjs` waited for `shell-ready`, which is now a named route. They enter
-  `#diagnostics` explicitly, after `waitForLoadState('domcontentloaded')`, and the packaged shell
-  smoke still passes **38/38** — including "no CSP violations in the console", which is the
-  assertion that proves booting into the sign-in screen does not break the policy.
+  `#diagnostics` explicitly, after `waitForLoadState('domcontentloaded')`. Review pointed out
+  that left no committed test booting the app the way a terminal does, so both legs now also
+  wait for `#enrollment-code` on their fresh `userData` directory and assert the enrolment form
+  is what a shop sees. The packaged shell smoke is **40/40** (was 38) — including "no CSP
+  violations in the console", which proves booting into the sign-in screen does not break the
+  policy.
 - **`sync-smoke` remains broken for its own pre-existing reason** (`pos-shell`, recorded in Phase
   6/Plan 05). This plan did not make it worse and did not fix it — fixing it needs a signed-in
   fixture, which is the audit's job. It also means `sync-smoke` was **not** run to green here.
@@ -91,14 +95,26 @@ both clients, and a first install now opens enrolment.
   `#dev/sync`, `#dev/print`, `#spike`, and `#diagnostics` keep raw classes as the plan allows.
   **The pattern also matches `'stored-token'`** in `desktop-api.test.ts` (`red-` inside
   `stored-`), so a future gate must use a class-shaped pattern rather than a substring.
-- **Gates.** Desktop **401/401** (48 files), shared **149**, API **394**, `check-types` 6/6, lint
-  exit 0 (24 pre-existing warnings), `brand:check` over 875 tracked files, `tokens:check`,
-  `modules:check:strict` 14/14 both clients, packaged shell E2E **38/38** after a real
+- **Review found four real defects in the first pass, all fixed in `def55ab`.** (a) The number
+  row stopped working after every failed PIN: `busy` disabled the hidden field, a disabled
+  control drops focus to `<body>`, and the refocus effect keyed on `disabled`, which never
+  changed. It is `readOnly` now. (b) Autofocus was unconditional, so on the activation screen
+  the digit field swallowed the staff code (`GA-0004` became `0004` in the PIN with the code box
+  empty); autofocus is opt-in. (c) There was **no visible focus indicator at all**, because the
+  only focusable control is `sr-only`; the dot display draws the ring now, and it had to be an
+  arbitrary property — `outline-2` reads `--tw-outline-style`, which is `none` in this
+  stylesheet, so it compiles to nothing. (d) The sales caption's total summed other days'
+  unprinted sales into "today", on the screen a manager cross-checks a Z-report against.
+- **Gates.** Desktop **406/406** (49 files), shared **149**, API **394**, `check-types` 6/6, lint
+  exit 0 (24 pre-existing warnings), `brand:check` over 877 tracked files, `tokens:check`,
+  `modules:check:strict` 14/14 both clients, packaged shell E2E **40/40** after a real
   `electron-forge package` (the Forge package-manager probe still needs
   `npm_config_user_agent="npm/11.16.0 node/v24.18.0 linux x64"`).
-- **Not proven here:** the PIN pad's number-row/Tab path and the lockout sentence against a real
-  lock, because both need an enrolled terminal with a staff binding; the six screens' 1024 × 768
-  layout and the reduced-motion pass. All of it is Plan 09's counter audit.
+- **Not proven here:** the PIN pad's number-row/Enter path *after a rejected PIN* and the lockout
+  sentence against a real lock, because both need an enrolled terminal with a staff binding. The
+  code path is now correct by construction (`readOnly` keeps focus; the effect restores it when
+  it has gone nowhere), but it has not been driven. Nor have the six screens' 1024 × 768 layout
+  or the reduced-motion pass. All of it is Plan 09's counter audit.
 
 - **Plan 07 complete** (commits `c93457e`, `8baf7f0`, `ee0cbd8`). The tender screen now reads
   change at counter distance and the receipt is the paper. Desktop **387** (was 384; three new
