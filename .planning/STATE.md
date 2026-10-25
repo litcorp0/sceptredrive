@@ -11,9 +11,9 @@ System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules & S
 inserted ahead of the former Phases 7–9, and a later audit the same day added Phase 11
 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former 7/8/9
 became Phases 13/14/15.
-**Next action:** Execute **Phase 10, Plan 06** (sell module: catalog, cart, and the counter
-panels). Plans 01–05 are complete, including the `#home` landing screen; all fourteen modules are
-migrated and the strict gate covers both clients.
+**Next action:** Execute **Phase 10, Plan 07** (tender and receipt modules). Plans 01–06 are
+complete, including the `#home` landing screen and the selling screen's redesign; all fourteen
+modules are migrated and the strict gate covers both clients.
 
 ---
 
@@ -31,7 +31,7 @@ migrated and the strict gate covers both clients.
 | 7 | Identity, Design System & Brand Foundation | ✅ Complete (7/7 plans, verified) |
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
-| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (5/10 plans) |
+| 10 | Desktop POS Modules, Chrome & Shift Home | 🔄 In progress (6/10 plans) |
 | 11 | Procurement, Replenishment & Supplier Returns | 🔷 Context locked (9 plans) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
@@ -40,6 +40,25 @@ migrated and the strict gate covers both clients.
 
 ### Phase 10 execution notes (2026-10-25)
 
+- **Plan 06 complete** (commits `fd289f9`, `196209c`). The product card is content-sized with a
+  three-line name, its height owned by `--product-card-height` in `index.css` and read by the
+  virtualiser through a `ResizeObserver`, so the row estimate cannot drift from the painted card.
+  Notice and error bars became a shared `StatusNote` (`role="status"`/`role="alert"`, tint plus dot,
+  label always foreground), which removed the last raw palette classes from `sell`, `cart`,
+  `catalog`, `customers`, `credit`, and `loyalty`. Desktop **384** unchanged, no test edited.
+- **Two planning claims were wrong and are now corrected in the plans.** The card-controls premise
+  ("24–28 px today") was stale — Plan 03 had already taken them to 44 px. And the audit assertion I
+  wrote for the truncation fix (`scrollHeight <= clientHeight + 1`) **cannot fail** on a
+  `-webkit-line-clamp` element, because the clamp sets both to the clamped height; Plan 09 now
+  measures an unclamped clone instead, and checks hit areas with `elementFromPoint` rather than
+  trusting a bounding box.
+- **The truncation claim is proven against the real compiled stylesheet** in headless Chromium: all
+  twelve demo product names fit in ≤2 lines at 1024×768 with the price inside the card, and a
+  58-character synthetic name takes exactly 3 and still keeps the price inside. The live sale stays
+  with Plan 09.
+- **Observed, not fixed:** at 1024 px the cart track resolves to 440 px, leaving the catalog column
+  ~304 px wide and cards 132 px. That is the pre-existing three-column skeleton, not a regression,
+  and every demo name still fits — but it is worth a screenshot in the audit.
 - **Plan 05 complete** (commits `7a125b7`, `08f53f3`). `#home` is the landing after sign-in and
   after opening a shift; the five route gates are unchanged. Desktop **371 → 384**. All fourteen
   modules are migrated, `modules:check:strict` now covers both clients (which is what `ci.yml`
@@ -142,7 +161,7 @@ migrated and the strict gate covers both clients.
 | 03 | Primitives, chrome, and counter ergonomics | ✅ Complete |
 | 04 | Home data layer — reactive queries and pure aggregation | ✅ Complete |
 | 05 | Home screen, `#home`, and `dev-charts` retirement | ✅ Complete |
-| 06 | Sell module — catalog, cart, and the counter panels | ⬜ Not started |
+| 06 | Sell module — catalog, cart, and the counter panels | ✅ Complete |
 | 07 | Tender and receipt modules | ⬜ Not started |
 | 08 | Shift, login, settings, sales, and sync modules | ⬜ Not started |
 | 09 | Counter audit — widths, keyboard, reduced motion, offline copy | ⬜ Not started |
