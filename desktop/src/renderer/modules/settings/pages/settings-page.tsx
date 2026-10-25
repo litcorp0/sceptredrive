@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ScreenHeader } from '@/components/common'
+import { ScreenHeader, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PosConfigSnapshot } from '@/lib/api/types'
 import { endStaffSession, type StaffSession } from '@/lib/auth/staff-session'
@@ -22,11 +23,19 @@ import { navigate } from '@/lib/router'
 import { PRINT_ENCODINGS, type PrinterInfo } from '../../../../shared/printing'
 
 /**
- * Terminal settings (Plan 06 Task 1; printer setup in Plan 07).
+ * Terminal settings (Plan 06 Task 1; printer setup in Plan 07; retuned by Phase 10).
  *
- * Manager-only. Server policy is read-only here (the server owns it); the
- * printer target, drawer pin, charset, and copies are local hardware facts and
- * are editable on the terminal.
+ * Manager-only. Two cards, because there are two kinds of fact on this screen: what this
+ * terminal **is**, which is read-only and comes from the server on the next sync, and what
+ * hardware it prints on, which is a local fact a manager changes at the counter.
+ *
+ * No credential, token, or key material is rendered anywhere on this screen — not in the
+ * identity block, not in the printer block. The device row shows the first eight characters of
+ * an identifier so support can match a terminal; it is not a secret and cannot authenticate.
+ *
+ * The self-test reports in words. "Sent" and "could not be reached" are sentences; a green
+ * tick and a red tick are not, and a manager reading at arm's length should not have to
+ * remember which colour means what.
  */
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -38,13 +47,20 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    <div className="mt-4 first:mt-0">
+      <h3 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+      </h3>
       {children}
-    </section>
+    </div>
   )
+}
+
+interface PrinterResult {
+  ok: boolean
+  text: string
 }
 
 export function SettingsScreen({
@@ -62,7 +78,7 @@ export function SettingsScreen({
   const [printer, setPrinter] = useState<PrinterSettings | null>(null)
   const [printers, setPrinters] = useState<PrinterInfo[]>([])
   const [platform, setPlatform] = useState<string | null>(null)
-  const [printerMessage, setPrinterMessage] = useState<string | null>(null)
+  const [result, setResult] = useState<PrinterResult | null>(null)
   const [printerError, setPrinterError] = useState<string | null>(null)
   const [printerBusy, setPrinterBusy] = useState(false)
 
@@ -87,7 +103,7 @@ export function SettingsScreen({
 
   function updatePrinter(patch: Partial<PrinterSettings>): void {
     setPrinter((current) => (current ? { ...current, ...patch } : current))
-    setPrinterMessage(null)
+    setResult(null)
     setPrinterError(null)
   }
 
@@ -95,10 +111,10 @@ export function SettingsScreen({
     if (!db || !printer) return
     setPrinterBusy(true)
     setPrinterError(null)
-    setPrinterMessage(null)
+    setResult(null)
     try {
       await savePrinterSettings(db, printer)
-      setPrinterMessage('Printer settings saved on this terminal')
+      setResult({ ok: true, text: 'Printer settings saved on this terminal.' })
     } catch (error) {
       setPrinterError(error instanceof Error ? error.message : 'Could not save the settings')
     } finally {
@@ -115,13 +131,14 @@ export function SettingsScreen({
     }
     setPrinterBusy(true)
     setPrinterError(null)
-    setPrinterMessage(null)
+    setResult(null)
     const outcome = await desktopPrinterTransport.test(toPrinterTarget(printer), printer.encoding)
-    setPrinterMessage(
-      outcome.ok
-        ? 'Test print sent. Check the printer (or this terminal’s receipts folder for the file adapter).'
-        : outcome.message,
-    )
+    setResult({
+      ok: outcome.ok,
+      text: outcome.ok
+        ? 'Test print sent. Check the printer — or, with the file-output printer, this terminal’s receipts folder.'
+        : `The test print did not go through. ${outcome.message}`,
+    })
     setPrinterBusy(false)
   }
 
@@ -149,9 +166,10 @@ export function SettingsScreen({
         lockNote={shift ? 'Close the shift before locking' : 'Sign out of this terminal'}
       />
 
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto max-w-5xl p-6">
         <ScreenHeader
           title="Terminal settings"
+          description="What this till is, and what it prints on."
           actions={
             <>
               <Button
@@ -185,257 +203,277 @@ export function SettingsScreen({
           }
         />
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Section title="Terminal">
-            <Row label="Branch" value={`${identity.branchName} (${identity.branchCode})`} />
-            <Row label="Terminal" value={identity.terminalCode} />
-            <Row label="Device" value={identity.deviceId.slice(0, 8)} />
-            <Row label="Tax mode" value={config.taxMode} />
-            <Row label="Server time zone" value={config.serverTimeZone} />
-            <Row label="App version" value={posRuntimeConfig.appVersion} />
-          </Section>
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b border-border py-4">
+              <CardTitle className="text-sm">This terminal</CardTitle>
+              <CardDescription>
+                Read-only. These come from the last device session and update on the next sync.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="py-2">
+              <Group title="Identity">
+                <Row label="Branch" value={`${identity.branchName} (${identity.branchCode})`} />
+                <Row label="Terminal" value={identity.terminalCode} />
+                <Row label="Device" value={identity.deviceId.slice(0, 8)} />
+                <Row label="App version" value={posRuntimeConfig.appVersion} />
+              </Group>
+              <Group title="Tax">
+                <Row label="Tax mode" value={config.taxMode} />
+                <Row label="Server time zone" value={config.serverTimeZone} />
+              </Group>
+              <Group title="Selling policy">
+                <Row
+                  label="Cashier discount cap"
+                  value={`${config.pos.maxCashierDiscountPercent}% of gross`}
+                />
+                <Row
+                  label="Manager discount cap"
+                  value={`${config.pos.maxManagerDiscountPercent}% of gross`}
+                />
+                <Row
+                  label="Open shift required"
+                  value={config.pos.salesRequireOpenShift ? 'yes' : 'no'}
+                />
+                <Row
+                  label="Clock skew tolerance"
+                  value={`${config.pos.clockSkewToleranceMinutes} min`}
+                />
+              </Group>
+              <Group title="Loyalty">
+                <Row
+                  label="Points earned"
+                  value={`${config.loyalty.earnPointsPerCedi} per GH₵1 base`}
+                />
+                <Row label="Points per GH₵1" value={String(config.loyalty.pointsPerCedi)} />
+                <Row
+                  label="Minimum redemption"
+                  value={`${config.loyalty.minimumRedeemPoints} points`}
+                />
+                <Row label="Lot expiry" value={`${config.loyalty.expiryMonths} months`} />
+              </Group>
+              <Group title="PIN and receipt">
+                <Row label="PIN attempts" value={String(config.pos.pinMaxAttempts)} />
+                <Row label="Lockout" value={`${config.pos.pinLockMinutes} min`} />
+                <Row label="Receipt header" value={config.receiptHeader || '—'} />
+                <Row label="Receipt footer" value={config.pos.receiptFooter || '—'} />
+              </Group>
+            </CardContent>
+          </Card>
 
-          <Section title="Selling policy">
-            <Row
-              label="Cashier discount cap"
-              value={`${config.pos.maxCashierDiscountPercent}% of gross`}
-            />
-            <Row
-              label="Manager discount cap"
-              value={`${config.pos.maxManagerDiscountPercent}% of gross`}
-            />
-            <Row
-              label="Open shift required"
-              value={config.pos.salesRequireOpenShift ? 'yes' : 'no'}
-            />
-            <Row
-              label="Clock skew tolerance"
-              value={`${config.pos.clockSkewToleranceMinutes} min`}
-            />
-          </Section>
-
-          <Section title="Loyalty">
-            <Row
-              label="Points earned"
-              value={`${config.loyalty.earnPointsPerCedi} per GHS 1 base`}
-            />
-            <Row label="Points per GHS 1" value={String(config.loyalty.pointsPerCedi)} />
-            <Row
-              label="Minimum redemption"
-              value={`${config.loyalty.minimumRedeemPoints} points`}
-            />
-            <Row label="Lot expiry" value={`${config.loyalty.expiryMonths} months`} />
-          </Section>
-
-          <Section title="PIN and receipt">
-            <Row label="PIN attempts" value={String(config.pos.pinMaxAttempts)} />
-            <Row label="Lockout" value={`${config.pos.pinLockMinutes} min`} />
-            <Row label="Receipt header" value={config.receiptHeader || '—'} />
-            <Row label="Receipt footer" value={config.pos.receiptFooter || '—'} />
-          </Section>
-
-          <Section title="Receipt printer (this terminal)">
-            {!printer ? (
-              <div className="grid gap-2">
-                <span className="sr-only">Loading printer settings…</span>
-                <Skeleton className="h-11 w-full" />
-                <Skeleton className="h-11 w-full" />
-              </div>
-            ) : (
-              <div className="grid gap-3 text-sm">
-                <label className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Driver</span>
-                  <select
-                    className="h-11 rounded-md border border-border bg-background px-2"
-                    value={printer.driver}
-                    onChange={(event) =>
-                      updatePrinter({ driver: event.target.value as PrinterSettings['driver'] })
-                    }
-                    data-testid="printer-driver"
-                  >
-                    <option value="fake">File output (fake, for testing)</option>
-                    <option value="winspool" disabled={platform !== null && platform !== 'win32'}>
-                      Windows printer queue
-                    </option>
-                    <option value="network">Network printer (TCP 9100)</option>
-                  </select>
-                </label>
-
-                {printer.driver === 'winspool' ? (
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b border-border py-4">
+              <CardTitle className="text-sm">Receipt printer</CardTitle>
+              <CardDescription>
+                Hardware on this terminal. Saved here, never sent to the server.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="py-4">
+              {!printer ? (
+                <div className="grid gap-2">
+                  <span className="sr-only">Loading printer settings…</span>
+                  <Skeleton className="h-11 w-full" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+              ) : (
+                <div className="grid gap-3 text-sm">
                   <label className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">Printer name</span>
-                    <input
-                      className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
-                      value={printer.printerName}
-                      onChange={(event) => updatePrinter({ printerName: event.target.value })}
-                      list="printer-names"
-                      placeholder="e.g. EPSON TM-T20III"
-                      data-testid="printer-name"
-                    />
-                    <datalist id="printer-names">
-                      {printers.map((item) => (
-                        <option key={item.name} value={item.name} />
-                      ))}
-                    </datalist>
+                    <span className="text-xs text-muted-foreground">Driver</span>
+                    <select
+                      className="h-11 rounded-md border border-border bg-background px-2"
+                      value={printer.driver}
+                      onChange={(event) =>
+                        updatePrinter({ driver: event.target.value as PrinterSettings['driver'] })
+                      }
+                      data-testid="printer-driver"
+                    >
+                      <option value="fake">File output (fake, for testing)</option>
+                      <option value="winspool" disabled={platform !== null && platform !== 'win32'}>
+                        Windows printer queue
+                      </option>
+                      <option value="network">Network printer (TCP 9100)</option>
+                    </select>
                   </label>
-                ) : null}
 
-                {printer.driver === 'network' ? (
-                  <div className="grid grid-cols-[minmax(0,1fr)_90px] gap-2">
+                  {printer.driver === 'winspool' ? (
                     <label className="grid gap-1">
-                      <span className="text-xs text-muted-foreground">Host</span>
+                      <span className="text-xs text-muted-foreground">Printer name</span>
                       <input
                         className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
-                        value={printer.printerHost}
-                        onChange={(event) => updatePrinter({ printerHost: event.target.value })}
-                        placeholder="192.168.1.50"
-                        data-testid="printer-host"
+                        value={printer.printerName}
+                        onChange={(event) => updatePrinter({ printerName: event.target.value })}
+                        list="printer-names"
+                        placeholder="e.g. EPSON TM-T20III"
+                        data-testid="printer-name"
                       />
+                      <datalist id="printer-names">
+                        {printers.map((item) => (
+                          <option key={item.name} value={item.name} />
+                        ))}
+                      </datalist>
+                    </label>
+                  ) : null}
+
+                  {printer.driver === 'network' ? (
+                    <div className="grid grid-cols-[minmax(0,1fr)_90px] gap-2">
+                      <label className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">Host</span>
+                        <input
+                          className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                          value={printer.printerHost}
+                          onChange={(event) => updatePrinter({ printerHost: event.target.value })}
+                          placeholder="192.168.1.50"
+                          data-testid="printer-host"
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">Port</span>
+                        <input
+                          className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={printer.printerPort}
+                          onChange={(event) =>
+                            updatePrinter({ printerPort: Number(event.target.value) })
+                          }
+                          data-testid="printer-port"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-xs text-muted-foreground">Drawer pin</span>
+                      <select
+                        className="h-11 rounded-md border border-border bg-background px-2"
+                        value={printer.drawerPin}
+                        onChange={(event) =>
+                          updatePrinter({
+                            drawerPin: Number(event.target.value) === 5 ? 5 : 2,
+                          })
+                        }
+                        data-testid="drawer-pin"
+                      >
+                        <option value={2}>Pin 2 (most common)</option>
+                        <option value={5}>Pin 5</option>
+                      </select>
                     </label>
                     <label className="grid gap-1">
-                      <span className="text-xs text-muted-foreground">Port</span>
+                      <span className="text-xs text-muted-foreground">Copies</span>
                       <input
-                        className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                        className="h-11 rounded-md border border-border bg-background px-2"
                         type="number"
                         min={1}
-                        max={65535}
-                        value={printer.printerPort}
-                        onChange={(event) =>
-                          updatePrinter({ printerPort: Number(event.target.value) })
-                        }
-                        data-testid="printer-port"
+                        max={3}
+                        value={printer.copies}
+                        onChange={(event) => updatePrinter({ copies: Number(event.target.value) })}
+                        data-testid="printer-copies"
                       />
                     </label>
                   </div>
-                ) : null}
 
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">Drawer pin</span>
-                    <select
-                      className="h-11 rounded-md border border-border bg-background px-2"
-                      value={printer.drawerPin}
-                      onChange={(event) =>
-                        updatePrinter({
-                          drawerPin: Number(event.target.value) === 5 ? 5 : 2,
-                        })
-                      }
-                      data-testid="drawer-pin"
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-xs text-muted-foreground">Character set</span>
+                      <select
+                        className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
+                        value={printer.encoding}
+                        onChange={(event) =>
+                          updatePrinter({
+                            encoding: event.target.value as PrinterSettings['encoding'],
+                          })
+                        }
+                        data-testid="printer-encoding"
+                      >
+                        {PRINT_ENCODINGS.map((encoding) => (
+                          <option key={encoding} value={encoding}>
+                            {encoding}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-xs text-muted-foreground">Cedi symbol</span>
+                      <select
+                        className="h-11 rounded-md border border-border bg-background px-2"
+                        value={printer.currencySymbol}
+                        onChange={(event) =>
+                          updatePrinter({
+                            currencySymbol: event.target.value as PrinterSettings['currencySymbol'],
+                          })
+                        }
+                        data-testid="currency-symbol"
+                      >
+                        {CURRENCY_SYMBOLS.map((symbol) => (
+                          <option key={symbol} value={symbol}>
+                            {symbol}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  {printerProblem ? <StatusNote tone="notice">{printerProblem}</StatusNote> : null}
+                  {printerError ? (
+                    <StatusNote tone="danger" role="alert">
+                      {printerError}
+                    </StatusNote>
+                  ) : null}
+                  {result ? (
+                    <StatusNote
+                      tone={result.ok ? 'ok' : 'notice'}
+                      role="status"
+                      data-testid="printer-message"
                     >
-                      <option value={2}>Pin 2 (most common)</option>
-                      <option value={5}>Pin 5</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">Copies</span>
-                    <input
-                      className="h-11 rounded-md border border-border bg-background px-2"
-                      type="number"
-                      min={1}
-                      max={3}
-                      value={printer.copies}
-                      onChange={(event) => updatePrinter({ copies: Number(event.target.value) })}
-                      data-testid="printer-copies"
-                    />
-                  </label>
-                </div>
+                      {result.text}
+                    </StatusNote>
+                  ) : null}
 
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">Character set</span>
-                    <select
-                      className="h-11 rounded-md border border-border bg-background px-2 font-mono text-xs"
-                      value={printer.encoding}
-                      onChange={(event) =>
-                        updatePrinter({
-                          encoding: event.target.value as PrinterSettings['encoding'],
-                        })
-                      }
-                      data-testid="printer-encoding"
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void savePrinter()}
+                      disabled={printerBusy || Boolean(printerProblem)}
+                      className="h-11 text-xs"
+                      data-testid="save-printer"
                     >
-                      {PRINT_ENCODINGS.map((encoding) => (
-                        <option key={encoding} value={encoding}>
-                          {encoding}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">Cedi symbol</span>
-                    <select
-                      className="h-11 rounded-md border border-border bg-background px-2"
-                      value={printer.currencySymbol}
-                      onChange={(event) =>
-                        updatePrinter({
-                          currencySymbol: event.target.value as PrinterSettings['currencySymbol'],
-                        })
-                      }
-                      data-testid="currency-symbol"
+                      Save printer
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void testPrint()}
+                      disabled={printerBusy || Boolean(printerProblem)}
+                      className="h-11 text-xs"
+                      data-testid="test-print"
                     >
-                      {CURRENCY_SYMBOLS.map((symbol) => (
-                        <option key={symbol} value={symbol}>
-                          {symbol}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                      Test print
+                    </Button>
+                  </div>
 
-                {printerProblem ? <p className="text-xs text-amber-800">{printerProblem}</p> : null}
-                {printerError ? <p className="text-xs text-destructive">{printerError}</p> : null}
-                {printerMessage ? (
-                  <output className="text-xs text-emerald-800" data-testid="printer-message">
-                    {printerMessage}
-                  </output>
-                ) : null}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => void savePrinter()}
-                    disabled={printerBusy || Boolean(printerProblem)}
-                    className="h-11 text-xs"
-                    data-testid="save-printer"
-                  >
-                    Save printer
-                  </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => void testPrint()}
-                    disabled={printerBusy || Boolean(printerProblem)}
+                    onClick={() => void refreshPrinters()}
+                    disabled={printerBusy}
                     className="h-11 text-xs"
-                    data-testid="test-print"
+                    data-testid="list-printers"
                   >
-                    Test print
+                    Find printers
                   </Button>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    Cash sales append a drawer kick to the receipt. A failed print never voids the
+                    sale; retry from the receipt screen. Hardware names are stored only on this
+                    device.
+                  </p>
                 </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void refreshPrinters()}
-                  disabled={printerBusy}
-                  className="h-11 text-xs"
-                  data-testid="list-printers"
-                >
-                  Find printers
-                </Button>
-
-                <p className="text-[11px] text-muted-foreground">
-                  Cash sales append a drawer kick to the receipt. A failed print never voids the
-                  sale; retry from the receipt screen. Hardware names are stored only on this
-                  device.
-                </p>
-              </div>
-            )}
-          </Section>
+              )}
+            </CardContent>
+          </Card>
         </div>
-
-        <p className="mt-6 text-xs text-muted-foreground">
-          These values come from the last device session and update on the next sync. Change them in
-          the back office.
-        </p>
       </main>
     </div>
   )
