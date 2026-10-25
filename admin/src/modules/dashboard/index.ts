@@ -11,6 +11,7 @@ export {
 	dashboardSearchDefaults,
 	dashboardSearchSchema,
 } from "#/modules/analytics"
+export { NeedsAttention } from "./components/needs-attention"
 export { RecentActivity } from "./components/recent-activity"
-export { StatCard } from "./components/stat-card"
+export { TillLine } from "./components/till-line"
 export { DashboardPage } from "./pages/dashboard-page"
