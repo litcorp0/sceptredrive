@@ -62,12 +62,16 @@
   --input: var(--line-strong);
   --ring: var(--brand);
 
-  /* chart ramp — ordered, distinguishable by lightness as well as hue */
+  /* chart ramp — ordered, distinguishable by lightness as well as hue; the first five are
+     the original brand ramp, 6–7 extend it so a tender mix stays honest once Phase 13 adds
+     MoMo, card, and bank. Every step is ≥ 3:1 on --surface (tokens:check proves it). */
   --chart-1: #f26a1b;
   --chart-2: #1b1f23;
   --chart-3: #8a939f;
   --chart-4: #c97b3d;
   --chart-5: #2f6f6a;
+  --chart-6: #5b6ea8;
+  --chart-7: #8c5a8f;
 
   /* shape */
   --radius: 0.625rem;
@@ -123,6 +127,8 @@
   --chart-3: #9aa3ae;
   --chart-4: #d98b4b;
   --chart-5: #4e9a94;
+  --chart-6: #8fa3d8;
+  --chart-7: #c08fc4;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-pop: 0 10px 30px rgb(0 0 0 / 0.45);
@@ -194,6 +200,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
   --color-ink: var(--ink);
   --color-brand: var(--brand);
   --color-brand-fg: var(--brand-fg);

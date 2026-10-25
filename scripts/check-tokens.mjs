@@ -78,7 +78,7 @@ const REQUIRED_BRAND = [
   'topbar',
 ]
 
-const REQUIRED_CHART = ['chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5']
+const REQUIRED_CHART = ['chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5', 'chart-6', 'chart-7']
 
 const REQUIRED_SIDEBAR = [
   'sidebar',
@@ -207,6 +207,20 @@ const CONTRAST_PAIRS = [
     min: 3,
   },
 ]
+
+// Added by Phase 9: every chart series must be distinguishable from the panel it is drawn
+// on (WCAG 2.2 SC 1.4.11 non-text contrast). Provided as a source-level assertion because a
+// palette retune is exactly when this is forgotten; it is measured, not copied.
+for (const mode of ['light', 'dark']) {
+  for (const token of REQUIRED_CHART) {
+    CONTRAST_PAIRS.push({
+      label: `${mode} chart series: ${token} on surface (SC 1.4.11)`,
+      fg: { token, mode },
+      bg: { token: 'surface', mode },
+      min: 3,
+    })
+  }
+}
 
 const failures = []
 
@@ -341,7 +355,7 @@ for (const app of APPS) {
   if (!/@import\s+["']@sceptre\/brand\/tokens\.css["']/.test(css)) {
     fail(`${file} does not import "@sceptre/brand/tokens.css"`)
   }
-  if (/--(?:brand|ink|canvas|surface|topbar|chart-[1-5])\s*:/.test(css)) {
+  if (/--(?:brand|ink|canvas|surface|topbar|chart-[1-7])\s*:/.test(css)) {
     fail(`${file} declares a brand/layout token; those belong in ${TOKENS_FILE}`)
   }
 }
