@@ -618,6 +618,12 @@ try {
 		keyboardTooltip.slice(0, 60),
 	)
 
+	// Hand the authenticated session to the performance evidence script, so it can time the
+	// endpoints without duplicating the TOTP dance.
+	const cookies = await context.cookies()
+	const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
+	fs.writeFileSync("/tmp/opencode/analytics-cookie.txt", cookieHeader)
+
 	section("console hygiene")
 	check(
 		consoleErrors.length === 0,
