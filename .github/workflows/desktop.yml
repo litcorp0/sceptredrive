@@ -71,6 +71,9 @@ jobs:
       - name: PowerSync spike (phase gate)
         run: xvfb-run --auto-servernum bun run --filter desktop test:spike
 
+      - name: Local schema migration (Phase 10 gate)
+        run: xvfb-run --auto-servernum bun run --filter desktop test:schema-migration
+
       - name: Receipt printing (fake ESC/POS)
         run: xvfb-run --auto-servernum bun run --filter desktop test:print
 
