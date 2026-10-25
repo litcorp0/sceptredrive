@@ -17,6 +17,8 @@ import {
   requestApproval,
   resolveApprovalThreshold,
 } from '../approvals/approvals.service.ts'
+import { findReceiptByIdempotency } from '../inventory/inventory.repository.ts'
+import * as inventoryService from '../inventory/inventory.service.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -46,6 +48,7 @@ import type {
   OrderList,
   OrderListQuery,
   OrderUpdateBody,
+  ReceiveOrderBody,
 } from './procurement.types.ts'
 
 /**
@@ -475,6 +478,153 @@ export async function getOrder(user: SessionUser, orderId: string): Promise<Orde
         }
       : null,
     canApply,
+  }
+}
+
+/**
+ * Receives goods against an order (PROC-03, P11-D4/P11-D19).
+ *
+ * The stock write goes through the existing receipt path — `createReceipt` with
+ * this transaction as its executor — so there is still exactly one way stock
+ * enters the system, average cost is still computed once, and the catalogue cost
+ * still follows the receipt (P11-D13).
+ *
+ * A short delivery leaves the order open. An over-delivery needs a reason and is
+ * recorded, never clamped. A replay of the same idempotency key returns the
+ * original receipt.
+ */
+export async function receiveOrder(
+  user: SessionUser,
+  actor: AuditActor,
+  orderId: string,
+  input: ReceiveOrderBody,
+): Promise<{
+  receipt: Awaited<ReturnType<typeof inventoryService.getReceipt>>
+  order: OrderDetail
+  replayed: boolean
+}> {
+  const result = await db.transaction(async (tx) => {
+    const order = await lockOrderForUpdate(orderId, tx)
+    if (!order) throw new NotFoundError('Purchase order not found')
+    assertBranchAccess(user, order.branchId)
+
+    // Replay first: a retried request must return the original receipt even
+    // though the order has since moved on to RECEIVED.
+    const replay = await findReceiptByIdempotency(order.branchId, input.idempotencyKey, tx)
+    if (replay) return { receiptId: replay.id, receiptNumber: null, replayed: true }
+
+    if (!canApplyOrderAction(order.status, 'receive')) {
+      throw new ConflictError(`A ${order.status} order cannot be received`)
+    }
+
+    const lines = await selectOrderLines(order.id, tx)
+    const lineById = new Map(lines.map((line) => [line.id, line]))
+    const receivedBefore = await selectReceivedByOrderLine(order.id, tx)
+
+    const posting = input.lines.map((inputLine) => {
+      const orderLine = lineById.get(inputLine.purchaseOrderLineId)
+      if (!orderLine) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'That line is not on this order')
+      }
+      const alreadyReceived = receivedBefore.get(orderLine.id) ?? 0
+      const outstanding = Math.max(orderLine.quantity - alreadyReceived, 0)
+
+      if (inputLine.quantity > outstanding && !inputLine.overReceiptReason) {
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          `An over-delivery needs a reason: ordered ${orderLine.quantity}, received ${alreadyReceived}, outstanding ${outstanding}`,
+        )
+      }
+
+      return { ...inputLine, productId: orderLine.productId, alreadyReceived, outstanding }
+    })
+
+    const receipt = await inventoryService.createReceipt(
+      user,
+      actor,
+      {
+        branchId: order.branchId,
+        supplierId: order.supplierId,
+        supplierInvoiceNumber: input.supplierInvoiceNumber,
+        note: input.note,
+        purchaseOrderId: order.id,
+        idempotencyKey: input.idempotencyKey,
+        lines: posting.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          unitCostMinor: line.unitCostMinor,
+          purchaseOrderLineId: line.purchaseOrderLineId,
+          overReceiptReason: line.overReceiptReason,
+          overReceiptNote: line.overReceiptNote,
+        })),
+      },
+      { executor: tx },
+    )
+
+    // PROC-09: the first delivery of a part creates its supplier link and cost.
+    const occurredAt = new Date()
+    for (const line of posting) {
+      await suppliersService.ensureSupplierProductLink(
+        actor,
+        {
+          supplierId: order.supplierId,
+          productId: line.productId,
+          unitCostMinor: line.unitCostMinor,
+          occurredAt,
+          receiptId: receipt.id,
+        },
+        tx,
+      )
+    }
+
+    const receivedAfter = new Map(receivedBefore)
+    for (const line of posting) {
+      receivedAfter.set(
+        line.purchaseOrderLineId,
+        (receivedAfter.get(line.purchaseOrderLineId) ?? 0) + line.quantity,
+      )
+    }
+    const fulfilment = orderFulfilment(
+      lines.map((line) => ({
+        ordered: line.quantity,
+        received: receivedAfter.get(line.id) ?? 0,
+      })),
+    )
+    const status: PurchaseOrderStatus = fulfilment.allReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED'
+    await updateOrderRow(order.id, { status }, tx)
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'purchase_order.received',
+        entity: 'purchase_order',
+        entityId: order.id,
+        branchId: order.branchId,
+        after: {
+          receiptId: receipt.id,
+          receiptNumber: receipt.number,
+          status,
+          lines: posting.map((line) => ({
+            purchaseOrderLineId: line.purchaseOrderLineId,
+            productId: line.productId,
+            receivedBefore: line.alreadyReceived,
+            receivedNow: line.quantity,
+            receivedAfter: receivedAfter.get(line.purchaseOrderLineId) ?? 0,
+            overReceiptReason: line.overReceiptReason ?? null,
+          })),
+        },
+      },
+      tx,
+    )
+
+    return { receiptId: receipt.id, receiptNumber: receipt.number, replayed: false }
+  })
+
+  return {
+    receipt: await inventoryService.getReceipt(user, result.receiptId),
+    order: await getOrder(user, orderId),
+    replayed: result.replayed,
   }
 }
 

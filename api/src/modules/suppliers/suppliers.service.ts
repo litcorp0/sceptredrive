@@ -30,6 +30,7 @@ import {
   insertPaymentDetail,
   insertSupplier,
   insertSupplierProduct,
+  insertSupplierProductIfAbsent,
   listPaymentDetailsBySupplier,
   listSupplierProductsBySupplier,
   selectSupplierPage,
@@ -645,6 +646,66 @@ export async function removeSupplierProduct(
  * Refreshes last-cost projections after an invoice is recorded. Called by the
  * payables service inside the invoice transaction; unmapped products no-op.
  */
+/**
+ * Creates the supplier-product link on the first receipt of a part (PROC-09,
+ * P11-D17), then records the cost. The lead time stays null: a cost is a fact
+ * once goods arrive; a delivery promise is the manager's to record.
+ */
+export async function ensureSupplierProductLink(
+  actor: AuditActor,
+  input: {
+    supplierId: string
+    productId: string
+    unitCostMinor: number
+    occurredAt: Date
+    receiptId?: string
+  },
+  executor: DbExecutor,
+): Promise<{ mappingId: string; created: boolean }> {
+  const result = await insertSupplierProductIfAbsent(
+    {
+      supplierId: input.supplierId,
+      productId: input.productId,
+      supplierSku: null,
+      leadTimeDays: null,
+      lastCostMinor: input.unitCostMinor,
+      lastCostAt: input.occurredAt,
+      isPreferred: false,
+      createdBy: actor.actorId,
+    },
+    executor,
+  )
+
+  await updateLastCost(
+    input.supplierId,
+    [input.productId],
+    new Map([[input.productId, input.unitCostMinor]]),
+    input.occurredAt,
+    executor,
+  )
+
+  if (result.created) {
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_product.created',
+        entity: 'supplier_product',
+        entityId: result.row.id,
+        after: {
+          supplierId: input.supplierId,
+          productId: input.productId,
+          lastCostMinor: input.unitCostMinor,
+          via: 'receipt',
+          receiptId: input.receiptId ?? null,
+        },
+      },
+      executor,
+    )
+  }
+
+  return { mappingId: result.row.id, created: result.created }
+}
+
 export async function recordInvoiceCosts(
   supplierId: string,
   lines: readonly { productId: string | null; unitCostMinor: number }[],

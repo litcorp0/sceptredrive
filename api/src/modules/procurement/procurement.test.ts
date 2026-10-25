@@ -12,12 +12,18 @@ import {
 import { app } from '../../app.ts'
 import { approval } from '../approvals/approvals.schema.ts'
 import { category, uom } from '../catalog/catalog.schema.ts'
+import {
+  stockLevel,
+  stockMovement,
+  stockReceipt,
+  stockReceiptLine,
+} from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import { documentSequence } from '../platform/sequences.schema.ts'
 import { setting } from '../platform/settings.schema.ts'
 import { product } from '../products/products.schema.ts'
-import { supplier } from '../suppliers/suppliers.schema.ts'
+import { supplier, supplierProduct } from '../suppliers/suppliers.schema.ts'
 import { purchaseOrder } from './procurement.schema.ts'
 
 const available = await databaseAvailable()
@@ -30,6 +36,8 @@ let branchBId = ''
 let supplierId = ''
 let productAId = ''
 let productBId = ''
+let productCId = ''
+let productIds: string[] = []
 let adminId = ''
 let managerAId = ''
 let managerBId = ''
@@ -130,10 +138,20 @@ beforeAll(async () => {
         basePriceMinor: 20_000,
         costPriceMinor: 0,
       },
+      {
+        sku: `OPC${suffix.slice(-5)}`,
+        name: `Order product C ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 30_000,
+        costPriceMinor: 0,
+      },
     ])
     .returning({ id: product.id })
   productAId = products[0]?.id ?? ''
   productBId = products[1]?.id ?? ''
+  productCId = products[2]?.id ?? ''
+  productIds = [productAId, productBId, productCId]
 
   const admin = await createTestUser({ role: 'ADMIN', email: `po-admin-${suffix}@test.local` })
   const managerA = await createTestUser({
@@ -173,7 +191,12 @@ afterAll(async () => {
     .delete(documentSequence)
     .where(inArray(documentSequence.branchId, [branchAId, branchBId]))
   await db.delete(auditLog).where(inArray(auditLog.branchId, [branchAId, branchBId]))
-  await db.delete(product).where(inArray(product.id, [productAId, productBId]))
+  await db.delete(stockReceiptLine).where(inArray(stockReceiptLine.productId, productIds))
+  await db.delete(stockReceipt).where(inArray(stockReceipt.branchId, [branchAId, branchBId]))
+  await db.delete(stockMovement).where(inArray(stockMovement.branchId, [branchAId, branchBId]))
+  await db.delete(stockLevel).where(inArray(stockLevel.branchId, [branchAId, branchBId]))
+  await db.delete(supplierProduct).where(eq(supplierProduct.supplierId, supplierId))
+  await db.delete(product).where(inArray(product.id, productIds))
   await db.delete(supplier).where(eq(supplier.id, supplierId))
   for (const id of [adminId, managerAId, managerBId]) {
     if (id) await deleteTestUser(id)
@@ -499,5 +522,185 @@ describe.skipIf(!available)('purchase orders', () => {
     } finally {
       await deleteTestUser(cashier.id)
     }
+  })
+})
+
+describe.skipIf(!available)('receiving against an order', () => {
+  async function approvedOrder(quantity: number, unitCostMinor: number, productId = productAId) {
+    const created = await app.request('/api/procurement/orders', {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        idempotencyKey: randomUUID(),
+        lines: [{ productId, quantity, unitCostMinor }],
+      }),
+    })
+    const detail = await readJson<{ order: { id: string } }>(created)
+    orderIds.push(detail.order.id)
+    await app.request(`/api/procurement/orders/${detail.order.id}/submit`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+    })
+    const order = await app.request(`/api/procurement/orders/${detail.order.id}`, {
+      headers: authedHeaders(managerACookie),
+    })
+    const body = await readJson<{ lines: { id: string }[] }>(order)
+    return { orderId: detail.order.id, lineId: body.lines[0]?.id ?? '' }
+  }
+
+  async function receive(
+    orderId: string,
+    lineId: string,
+    quantity: number,
+    unitCostMinor: number,
+    extra: Record<string, unknown> = {},
+    cookie = managerACookie,
+    idempotencyKey = randomUUID(),
+  ) {
+    return app.request(`/api/procurement/orders/${orderId}/receive`, {
+      method: 'POST',
+      headers: authedHeaders(cookie),
+      body: JSON.stringify({
+        idempotencyKey,
+        lines: [{ purchaseOrderLineId: lineId, quantity, unitCostMinor, ...extra }],
+      }),
+    })
+  }
+
+  async function onHand(productId: string) {
+    const rows = await db
+      .select()
+      .from(stockLevel)
+      .where(and(eq(stockLevel.productId, productId), eq(stockLevel.branchId, branchAId)))
+      .limit(1)
+    return rows[0]
+  }
+
+  it('receives a full delivery and closes the order', async () => {
+    const { orderId, lineId } = await approvedOrder(10, 5_000)
+    const response = await receive(orderId, lineId, 10, 5_000)
+    expect(response.status, await response.clone().text()).toBe(201)
+
+    const body = await readJson<{
+      order: { status: string; lines: { receivedQuantity: number }[] }
+    }>(response)
+    expect(body.order.order.status).toBe('RECEIVED')
+    expect(body.order.lines[0]?.receivedQuantity).toBe(10)
+
+    const level = await onHand(productAId)
+    expect(level?.quantityOnHand).toBeGreaterThanOrEqual(10)
+    expect(level?.avgCostMinor).toBe(5_000)
+
+    const [productRow] = await db.select().from(product).where(eq(product.id, productAId))
+    expect(productRow?.costPriceMinor).toBe(5_000)
+  })
+
+  it('creates the supplier-product link on the first receipt', async () => {
+    const rows = await db
+      .select()
+      .from(supplierProduct)
+      .where(
+        and(eq(supplierProduct.supplierId, supplierId), eq(supplierProduct.productId, productAId)),
+      )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.lastCostMinor).toBe(5_000)
+    expect(rows[0]?.leadTimeDays).toBeNull()
+  })
+
+  it('leaves the order partly received after a short delivery', async () => {
+    const { orderId, lineId } = await approvedOrder(10, 1_000)
+    const first = await receive(orderId, lineId, 6, 1_000)
+    expect(first.status).toBe(201)
+    const firstBody = await readJson<{
+      order: { status: string; lines: { outstandingQuantity: number }[] }
+    }>(first)
+    expect(firstBody.order.order.status).toBe('PARTIALLY_RECEIVED')
+    expect(firstBody.order.lines[0]?.outstandingQuantity).toBe(4)
+
+    const second = await receive(orderId, lineId, 4, 1_000)
+    const secondBody = await readJson<{ order: { status: string } }>(second)
+    expect(secondBody.order.order.status).toBe('RECEIVED')
+  })
+
+  it('refuses an over-delivery without a reason and records one with it', async () => {
+    const { orderId, lineId } = await approvedOrder(10, 500)
+
+    const blocked = await receive(orderId, lineId, 11, 500)
+    expect(blocked.status).toBe(400)
+
+    const allowed = await receive(orderId, lineId, 11, 500, {
+      overReceiptReason: 'SUPPLIER_SENT_MORE',
+      overReceiptNote: 'Supplier sent a spare',
+    })
+    expect(allowed.status).toBe(201)
+
+    const receiptLines = await db
+      .select()
+      .from(stockReceiptLine)
+      .where(eq(stockReceiptLine.purchaseOrderLineId, lineId))
+    expect(receiptLines[0]?.overReceiptReason).toBe('SUPPLIER_SENT_MORE')
+    expect(receiptLines[0]?.quantity).toBe(11)
+  })
+
+  it('refuses to receive an order that is not approved', async () => {
+    const created = await app.request('/api/procurement/orders', {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        supplierId,
+        idempotencyKey: randomUUID(),
+        lines: [{ productId: productAId, quantity: 1, unitCostMinor: 100 }],
+      }),
+    })
+    const detail = await readJson<{ order: { id: string } }>(created)
+    orderIds.push(detail.order.id)
+    const lineResponse = await app.request(`/api/procurement/orders/${detail.order.id}`, {
+      headers: authedHeaders(managerACookie),
+    })
+    const lineBody = await readJson<{ lines: { id: string }[] }>(lineResponse)
+
+    const response = await receive(detail.order.id, lineBody.lines[0]?.id ?? '', 1, 100)
+    expect(response.status).toBe(409)
+  })
+
+  it('replays a receipt with the same idempotency key', async () => {
+    const { orderId, lineId } = await approvedOrder(5, 200)
+    const idempotencyKey = randomUUID()
+
+    const first = await receive(orderId, lineId, 5, 200, {}, managerACookie, idempotencyKey)
+    const second = await receive(orderId, lineId, 5, 200, {}, managerACookie, idempotencyKey)
+
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(200)
+
+    const rows = await db
+      .select()
+      .from(stockReceiptLine)
+      .where(eq(stockReceiptLine.purchaseOrderLineId, lineId))
+    expect(rows).toHaveLength(1)
+  })
+
+  it('blends average cost across two receipts', async () => {
+    const first = await approvedOrder(10, 100, productCId)
+    await receive(first.orderId, first.lineId, 10, 100)
+
+    const second = await approvedOrder(10, 200, productCId)
+    await receive(second.orderId, second.lineId, 10, 200)
+
+    const level = await onHand(productCId)
+    expect(level?.quantityOnHand).toBe(20)
+    expect(level?.avgCostMinor).toBe(150)
+
+    const [productRow] = await db.select().from(product).where(eq(product.id, productCId))
+    expect(productRow?.costPriceMinor).toBe(200)
+  })
+
+  it('keeps another branch out of the receipt', async () => {
+    const { orderId, lineId } = await approvedOrder(1, 100)
+    const response = await receive(orderId, lineId, 1, 100, {}, managerBCookie)
+    expect(response.status).toBe(403)
   })
 })

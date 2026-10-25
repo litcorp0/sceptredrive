@@ -9,6 +9,7 @@ import {
   validateOrderIdParam,
   validateOrderListQuery,
   validateOrderUpdate,
+  validateReceiveOrder,
 } from './procurement.validation.ts'
 
 export const procurementRoutes = factory.createApp()
@@ -78,4 +79,13 @@ procurementRoutes.post(
   validateOrderIdParam,
   validateOrderClose,
   (c) => procurementController.closeOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+procurementRoutes.post(
+  '/api/procurement/orders/:id/receive',
+  requireSession,
+  requirePermission('procurement.receive'),
+  validateOrderIdParam,
+  validateReceiveOrder,
+  (c) => procurementController.receiveOrder(c, c.req.valid('param').id, c.req.valid('json')),
 )

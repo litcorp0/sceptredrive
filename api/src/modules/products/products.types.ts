@@ -25,7 +25,6 @@ export interface ProductCreateInput {
   categoryId: string
   brandId?: string | null | undefined
   uomId: string
-  costPriceMinor?: number | undefined
   basePriceMinor: number
   taxCategory?: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | undefined
   barcodes?: string[] | undefined
@@ -38,7 +37,6 @@ export interface ProductUpdateInput {
   categoryId?: string | undefined
   brandId?: string | null | undefined
   uomId?: string | undefined
-  costPriceMinor?: number | undefined
   basePriceMinor?: number | undefined
   taxCategory?: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | undefined
 }

@@ -136,6 +136,8 @@ export async function insertReceipt(
     supplierName: string | null
     supplierInvoiceNumber: string | null
     note: string | null
+    purchaseOrderId: string | null
+    idempotencyKey: string | null
     createdBy: string | null
   },
   executor: DbExecutor,
@@ -151,10 +153,49 @@ export async function insertReceiptLine(
     quantity: number
     unitCostMinor: number
     movementId: string
+    purchaseOrderLineId: string | null
+    overReceiptReason: 'SUPPLIER_SENT_MORE' | 'ORDER_ROUNDING' | 'SUBSTITUTE' | 'OTHER' | null
+    overReceiptNote: string | null
   },
   executor: DbExecutor,
 ): Promise<void> {
   await executor.insert(stockReceiptLine).values(values)
+}
+
+/**
+ * Catalogue cost follows the latest goods receipt (P11-D13).
+ *
+ * This is the one deliberate cross-module **write** in the codebase:
+ * `products.service` already imports `inventory.service`, so the reverse import
+ * would be a module cycle. The column is derived — no screen writes it, and a
+ * transfer-in must not touch it (a transfer says nothing about what the business
+ * pays for the part).
+ */
+export async function updateDerivedCost(
+  productId: string,
+  costMinor: number,
+  executor: DbExecutor,
+): Promise<void> {
+  await executor
+    .update(product)
+    .set({ costPriceMinor: costMinor, updatedAt: sql`now()` })
+    .where(eq(product.id, productId))
+}
+
+/** Replay lookup for a purchase-order receipt (P11-D20). */
+export async function findReceiptByIdempotency(
+  branchId: string,
+  idempotencyKey: string,
+  executor: DbExecutor = db,
+): Promise<{ id: string } | null> {
+  const rows = await executor
+    .select({ id: stockReceipt.id })
+    .from(stockReceipt)
+    .where(
+      and(eq(stockReceipt.branchId, branchId), eq(stockReceipt.idempotencyKey, idempotencyKey)),
+    )
+    .limit(1)
+  return rows[0] ?? null
 }
 
 function receiptConditions(filters: ReceiptListFilters) {

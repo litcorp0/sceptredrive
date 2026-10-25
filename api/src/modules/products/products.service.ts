@@ -161,7 +161,8 @@ export async function createProduct(
           categoryId,
           brandId,
           uomId,
-          costPriceMinor: input.costPriceMinor ?? 0,
+          // Derived from the latest receipt and never typed (P11-D13).
+          costPriceMinor: 0,
           basePriceMinor: input.basePriceMinor,
           taxCategory: input.taxCategory ?? 'STANDARD',
           createdBy: actor.actorId,
@@ -254,9 +255,6 @@ export async function updateProduct(
       }
       if (input.uomId !== undefined && input.uomId !== existing.uomId) {
         patch.uomId = await validateUomRef(input.uomId, tx)
-      }
-      if (input.costPriceMinor !== undefined && input.costPriceMinor !== existing.costPriceMinor) {
-        patch.costPriceMinor = input.costPriceMinor
       }
       if (input.basePriceMinor !== undefined && input.basePriceMinor !== existing.basePriceMinor) {
         patch.basePriceMinor = input.basePriceMinor

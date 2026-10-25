@@ -66,6 +66,10 @@ export async function createReceipt(
   transaction. Every existing statement inside (`allocateFromSequence('inventory.receiptSequence',
   tx)`, `insertReceipt`, `postMovements(..., { executor: tx })`, `insertReceiptLine`,
   `writeAudit`) is unchanged.
+- **The final read must use the same executor.** `loadReceipt` used the pool, so a receipt created
+  inside the caller's transaction was invisible to it and the endpoint answered 404 — found by the
+  first receiving test. `loadReceipt(receiptId, executor = db)` now takes the executor and
+  `createReceipt` passes `options.executor ?? db`.
 - The public route `POST /api/inventory/receipts` passes **no** options and keeps its schema, so
   a console receipt cannot pretend to be a PO receipt. Only `procurement.service` passes
   `purchaseOrderId`.
@@ -153,7 +157,9 @@ One transaction:
    anything else → **409** with a sentence naming the status.
 2. `assertBranchAccess(user, order.branchId)`.
 3. Idempotency: an existing `stock_receipt` with this `(branch_id, idempotency_key)` returns that
-   receipt and the order unchanged (`replayed: true`).
+   receipt and the order unchanged (`replayed: true`). **This check runs before the status guard**
+   — after a full receipt the order is `RECEIVED`, so a retried request would otherwise be refused
+   as an illegal transition instead of replayed.
 4. Every input line must belong to this order; duplicate `purchaseOrderLineId` → 400; quantity
    `> 0`.
 5. `receivedBefore = selectReceivedByOrderLine(order.id, tx)`; for each line

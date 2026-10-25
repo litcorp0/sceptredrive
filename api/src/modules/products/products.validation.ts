@@ -34,7 +34,6 @@ export const productCreateSchema = z
     categoryId: z.uuid(),
     brandId: z.uuid().nullish(),
     uomId: z.uuid(),
-    costPriceMinor: priceMinorSchema.optional(),
     basePriceMinor: priceMinorSchema,
     taxCategory: taxCategorySchema.optional(),
     barcodes: z.array(barcodeCodeSchema).max(10).optional(),
@@ -67,7 +66,6 @@ export const productUpdateSchema = z
     categoryId: z.uuid().optional(),
     brandId: z.uuid().nullish(),
     uomId: z.uuid().optional(),
-    costPriceMinor: priceMinorSchema.optional(),
     basePriceMinor: priceMinorSchema.optional(),
     taxCategory: taxCategorySchema.optional(),
   })

@@ -106,3 +106,20 @@ export interface OrderActionBody {
 export interface OrderCancelBody {
   reason: string
 }
+
+export type OverReceiptReason = 'SUPPLIER_SENT_MORE' | 'ORDER_ROUNDING' | 'SUBSTITUTE' | 'OTHER'
+
+export interface ReceiveLineBody {
+  purchaseOrderLineId: string
+  quantity: number
+  unitCostMinor: number
+  overReceiptReason?: OverReceiptReason
+  overReceiptNote?: string
+}
+
+export interface ReceiveOrderBody {
+  idempotencyKey: string
+  supplierInvoiceNumber?: string
+  note?: string
+  lines: ReceiveLineBody[]
+}

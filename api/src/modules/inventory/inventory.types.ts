@@ -60,7 +60,21 @@ export interface ReceiptCreateInput {
   supplierName?: string
   supplierInvoiceNumber?: string
   note?: string
+  /** The purchase order this delivery fulfils (Phase 11); absent for a bare receipt. */
+  purchaseOrderId?: string
+  /** Replay guard for a console retry (P11-D20). */
+  idempotencyKey?: string
   lines: ReceiptLineInput[]
+}
+
+export interface ReceiptLineInput {
+  productId: string
+  quantity: number
+  unitCostMinor: number
+  /** The ordered line this quantity satisfies. */
+  purchaseOrderLineId?: string
+  overReceiptReason?: 'SUPPLIER_SENT_MORE' | 'ORDER_ROUNDING' | 'SUBSTITUTE' | 'OTHER'
+  overReceiptNote?: string
 }
 
 export interface ReceiptListQuery {

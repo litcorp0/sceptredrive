@@ -9,6 +9,7 @@ import type {
   OrderCreateBody,
   OrderListQuery,
   OrderUpdateBody,
+  ReceiveOrderBody,
 } from './procurement.types.ts'
 
 export async function listOrders(c: Context<AppEnv>, query: OrderListQuery) {
@@ -59,4 +60,11 @@ export async function closeOrder(c: Context<AppEnv>, id: string, input: OrderAct
   const user = currentUser(c)
   const actor = actorFromContext(c)
   return c.json(await procurementService.closeOrder(user, actor, id, input))
+}
+
+export async function receiveOrder(c: Context<AppEnv>, id: string, input: ReceiveOrderBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await procurementService.receiveOrder(user, actor, id, input)
+  return c.json(result, result.replayed ? 200 : 201)
 }

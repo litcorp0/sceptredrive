@@ -223,6 +223,31 @@ export async function insertSupplierProduct(
   return rows[0] ?? null
 }
 
+/**
+ * Inserts the supplier-product link only when it is missing. Returns the row and
+ * whether this call created it, so the caller can audit a first receipt without
+ * re-checking.
+ */
+export async function insertSupplierProductIfAbsent(
+  values: typeof supplierProduct.$inferInsert,
+  executor: DbExecutor,
+): Promise<{ row: SupplierProductRow; created: boolean }> {
+  const inserted = await executor
+    .insert(supplierProduct)
+    .values(values)
+    .onConflictDoNothing()
+    .returning()
+  if (inserted[0]) return { row: inserted[0], created: true }
+
+  const existing = await findSupplierProduct(
+    String(values.supplierId),
+    String(values.productId),
+    executor,
+  )
+  if (!existing) throw new Error('Failed to read the supplier-product link')
+  return { row: existing, created: false }
+}
+
 export async function findSupplierProductById(
   id: string,
   executor: DbExecutor = db,

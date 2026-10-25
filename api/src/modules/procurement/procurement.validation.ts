@@ -69,3 +69,33 @@ export const validateOrderListQuery = validateQuery(orderListQuerySchema)
 export const validateOrderIdParam = validateParam(orderIdParamSchema)
 export const validateOrderCancel = validateJson(orderCancelSchema)
 export const validateOrderClose = validateJson(orderCloseSchema)
+
+export const receiveOrderSchema = z
+  .object({
+    idempotencyKey: z.uuid(),
+    supplierInvoiceNumber: z.string().trim().min(1).max(60).optional(),
+    note: z.string().trim().min(1).max(300).optional(),
+    lines: z
+      .array(
+        z
+          .object({
+            purchaseOrderLineId: z.uuid(),
+            quantity: z.number().int().min(1).max(1_000_000),
+            unitCostMinor: z.number().int().min(0).max(100_000_000_000),
+            overReceiptReason: z
+              .enum(['SUPPLIER_SENT_MORE', 'ORDER_ROUNDING', 'SUBSTITUTE', 'OTHER'])
+              .optional(),
+            overReceiptNote: z.string().trim().min(1).max(300).optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100)
+      .refine(
+        (lines) => new Set(lines.map((line) => line.purchaseOrderLineId)).size === lines.length,
+        { message: 'Each order line may appear only once in a receipt' },
+      ),
+  })
+  .strict()
+
+export const validateReceiveOrder = validateJson(receiveOrderSchema)

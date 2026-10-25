@@ -33,6 +33,7 @@ import {
   selectThresholdRows,
   sumMovementsByProduct,
   sumMovementsForProduct,
+  updateDerivedCost,
   updateLevel,
   upsertThresholdRow,
 } from './inventory.repository.ts'
@@ -169,6 +170,11 @@ export async function postMovements(
       )
       if (!movement) throw new AppError(500, 'INTERNAL', 'Failed to append the stock movement')
 
+      // Catalogue cost follows the latest goods receipt and nothing else (P11-D13).
+      if (input.type === 'RECEIPT') {
+        await updateDerivedCost(input.productId, unitCostMinor, executor)
+      }
+
       movements.push(movement)
       levels.set(input.productId, updated)
     }
@@ -251,10 +257,10 @@ async function requireActiveBranch(user: SessionUser, branchId: string) {
   return found
 }
 
-async function loadReceipt(receiptId: string): Promise<ReceiptDetail> {
-  const base = await findReceiptBase(receiptId)
+async function loadReceipt(receiptId: string, executor: DbExecutor = db): Promise<ReceiptDetail> {
+  const base = await findReceiptBase(receiptId, executor)
   if (!base) throw new NotFoundError('Receipt not found')
-  const lines = await selectReceiptLines(receiptId)
+  const lines = await selectReceiptLines(receiptId, executor)
   return {
     ...base,
     lineCount: lines.length,
@@ -314,6 +320,7 @@ export async function createReceipt(
   user: SessionUser,
   actor: AuditActor,
   input: ReceiptCreateInput,
+  options: { executor?: DbExecutor } = {},
 ): Promise<ReceiptDetail> {
   await requireActiveBranch(user, input.branchId)
   const supplier = input.supplierId ? await requireSupplier(input.supplierId) : null
@@ -324,7 +331,7 @@ export async function createReceipt(
     productNames.set(line.productId, found.name)
   }
 
-  const receiptId = await db.transaction(async (tx) => {
+  const run = async (tx: DbExecutor): Promise<string> => {
     const number = await allocateFromSequence('inventory.receiptSequence', tx)
     const receipt = await insertReceipt(
       {
@@ -334,6 +341,8 @@ export async function createReceipt(
         supplierName: supplier ? supplier.name : (input.supplierName ?? null),
         supplierInvoiceNumber: input.supplierInvoiceNumber ?? null,
         note: input.note ?? null,
+        purchaseOrderId: input.purchaseOrderId ?? null,
+        idempotencyKey: input.idempotencyKey ?? null,
         createdBy: actorLabel(actor),
       },
       tx,
@@ -367,6 +376,9 @@ export async function createReceipt(
           quantity: line.quantity,
           unitCostMinor: line.unitCostMinor,
           movementId,
+          purchaseOrderLineId: line.purchaseOrderLineId ?? null,
+          overReceiptReason: line.overReceiptReason ?? null,
+          overReceiptNote: line.overReceiptNote ?? null,
         },
         tx,
       )
@@ -391,9 +403,12 @@ export async function createReceipt(
     )
 
     return receipt.id
-  })
+  }
 
-  return loadReceipt(receiptId)
+  const receiptId = options.executor ? await run(options.executor) : await db.transaction(run)
+  // Read through the caller's transaction when there is one: an uncommitted
+  // receipt is invisible to another connection, and this is the caller's fact.
+  return loadReceipt(receiptId, options.executor ?? db)
 }
 
 export async function listReceipts(

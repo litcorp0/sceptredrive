@@ -195,7 +195,6 @@ describe.skipIf(!available)('products API', () => {
       categoryId: activeCategoryId,
       brandId: activeBrandId,
       uomId: activeUomId,
-      costPriceMinor: 5_000,
       basePriceMinor: 10_000,
       ...overrides,
     }
@@ -379,7 +378,8 @@ describe.skipIf(!available)('products API', () => {
         | undefined
       expect(after?.barcodes).toEqual([barcodeOne, barcodeTwo])
       expect(after?.basePriceMinor).toBe(10_000)
-      expect(after?.costPriceMinor).toBe(5_000)
+      // Phase 11 (P11-D13): cost is derived from receipts, so a new product starts at zero.
+      expect(after?.costPriceMinor).toBe(0)
     })
 
     it('rejects a duplicate SKU with 409', async () => {
