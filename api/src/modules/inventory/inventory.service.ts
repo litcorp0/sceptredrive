@@ -608,17 +608,40 @@ export async function setThreshold(
   user: SessionUser,
   actor: AuditActor,
   input: ThresholdInput,
-): Promise<{ id: string; productId: string; branchId: string; threshold: number }> {
+): Promise<{
+  id: string
+  productId: string
+  branchId: string
+  threshold: number
+  maxQuantity: number | null
+  minOrderQuantity: number
+}> {
   await requireActiveBranch(user, input.branchId)
   await requireActiveProduct(input.productId)
 
   return db.transaction(async (tx) => {
     const existing = await findThreshold(input.productId, input.branchId, tx)
+
+    // P11-D3: an omitted field keeps what is stored; a new row tops up to twice
+    // its reorder point, which is the backfill rule the migration applied.
+    const maxQuantity =
+      input.maxQuantity !== undefined
+        ? input.maxQuantity
+        : existing
+          ? existing.maxQuantity
+          : input.threshold * 2
+    const minOrderQuantity =
+      input.minOrderQuantity !== undefined
+        ? input.minOrderQuantity
+        : (existing?.minOrderQuantity ?? 0)
+
     const saved = await upsertThresholdRow(
       {
         productId: input.productId,
         branchId: input.branchId,
         threshold: input.threshold,
+        maxQuantity,
+        minOrderQuantity,
         updatedBy: actor.actorId,
       },
       tx,
@@ -632,8 +655,19 @@ export async function setThreshold(
         entity: 'stock_threshold',
         entityId: saved.id,
         branchId: input.branchId,
-        before: existing ? { threshold: existing.threshold } : null,
-        after: { productId: input.productId, threshold: saved.threshold },
+        before: existing
+          ? {
+              threshold: existing.threshold,
+              maxQuantity: existing.maxQuantity,
+              minOrderQuantity: existing.minOrderQuantity,
+            }
+          : null,
+        after: {
+          productId: input.productId,
+          threshold: saved.threshold,
+          maxQuantity: saved.maxQuantity,
+          minOrderQuantity: saved.minOrderQuantity,
+        },
       },
       tx,
     )
@@ -643,6 +677,8 @@ export async function setThreshold(
       productId: input.productId,
       branchId: input.branchId,
       threshold: saved.threshold,
+      maxQuantity: saved.maxQuantity,
+      minOrderQuantity: saved.minOrderQuantity,
     }
   })
 }

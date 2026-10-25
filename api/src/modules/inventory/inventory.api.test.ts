@@ -482,6 +482,64 @@ describe.skipIf(!available)('inventory API', () => {
     expect(remove.status).toBe(200)
   })
 
+  it('stores a top-up level and a supplier minimum beside the reorder point', async () => {
+    const created = await app.request('/api/inventory/thresholds', {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ branchId: branchAId, productId: productBId, threshold: 12 }),
+    })
+    expect(created.status).toBe(200)
+    const createdBody = await readJson<{
+      threshold: { threshold: number; maxQuantity: number | null; minOrderQuantity: number }
+    }>(created)
+    // P11-D3: an omitted maximum on a new row tops up to twice the reorder point.
+    expect(createdBody.threshold.maxQuantity).toBe(24)
+    expect(createdBody.threshold.minOrderQuantity).toBe(0)
+
+    const explicit = await app.request('/api/inventory/thresholds', {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId: productBId,
+        threshold: 12,
+        maxQuantity: 30,
+        minOrderQuantity: 5,
+      }),
+    })
+    const explicitBody = await readJson<{
+      threshold: { maxQuantity: number | null; minOrderQuantity: number }
+    }>(explicit)
+    expect(explicitBody.threshold.maxQuantity).toBe(30)
+    expect(explicitBody.threshold.minOrderQuantity).toBe(5)
+
+    // Omitting the two fields keeps what is stored rather than erasing it.
+    const again = await app.request('/api/inventory/thresholds', {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ branchId: branchAId, productId: productBId, threshold: 15 }),
+    })
+    const againBody = await readJson<{
+      threshold: { threshold: number; maxQuantity: number | null; minOrderQuantity: number }
+    }>(again)
+    expect(againBody.threshold.threshold).toBe(15)
+    expect(againBody.threshold.maxQuantity).toBe(30)
+    expect(againBody.threshold.minOrderQuantity).toBe(5)
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, 'stock_threshold'), eq(auditLog.branchId, branchAId)))
+    const latest = audits.at(-1)
+    expect(latest?.action).toBe('stock_threshold.updated')
+    expect(latest?.after).toMatchObject({ threshold: 15, maxQuantity: 30, minOrderQuantity: 5 })
+
+    await app.request(`/api/inventory/thresholds/${productBId}?branchId=${branchAId}`, {
+      method: 'DELETE',
+      headers: authedHeaders(adminCookie),
+    })
+  })
+
   it('lists receipts with branch scoping', async () => {
     const adminList = await app.request(`/api/inventory/receipts?branchId=${branchAId}`, {
       headers: authedHeaders(adminCookie),

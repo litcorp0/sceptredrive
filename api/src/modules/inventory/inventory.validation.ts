@@ -84,6 +84,9 @@ export const thresholdUpdateSchema = z
     branchId: z.uuid(),
     productId: z.uuid(),
     threshold: z.number().int().min(0).max(1_000_000),
+    /** Omitted means "keep what is stored", or `2 × threshold` on a new row. */
+    maxQuantity: z.number().int().min(0).max(1_000_000).nullish(),
+    minOrderQuantity: z.number().int().min(0).max(1_000_000).optional(),
   })
   .strict()
 

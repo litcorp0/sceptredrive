@@ -218,6 +218,10 @@ export interface ThresholdInput {
   branchId: string
   productId: string
   threshold: number
+  /** Top-up level (P11-D3); omitted on a new row defaults to `2 × threshold`. */
+  maxQuantity?: number | null
+  /** A supplier's minimum order quantity: a floor on the suggestion. */
+  minOrderQuantity?: number
 }
 
 export interface ThresholdRow {
@@ -227,6 +231,8 @@ export interface ThresholdRow {
   productName: string
   branchId: string
   threshold: number
+  maxQuantity: number | null
+  minOrderQuantity: number
   updatedBy: string | null
   updatedAt: Date
 }

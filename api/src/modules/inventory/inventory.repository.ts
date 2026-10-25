@@ -433,9 +433,19 @@ export async function findThreshold(
   productId: string,
   branchId: string,
   executor: DbExecutor = db,
-): Promise<{ id: string; threshold: number } | null> {
+): Promise<{
+  id: string
+  threshold: number
+  maxQuantity: number | null
+  minOrderQuantity: number
+} | null> {
   const rows = await executor
-    .select({ id: stockThreshold.id, threshold: stockThreshold.threshold })
+    .select({
+      id: stockThreshold.id,
+      threshold: stockThreshold.threshold,
+      maxQuantity: stockThreshold.maxQuantity,
+      minOrderQuantity: stockThreshold.minOrderQuantity,
+    })
     .from(stockThreshold)
     .where(and(eq(stockThreshold.productId, productId), eq(stockThreshold.branchId, branchId)))
     .limit(1)
@@ -454,6 +464,8 @@ export async function selectThresholdRows(
       productName: product.name,
       branchId: stockThreshold.branchId,
       threshold: stockThreshold.threshold,
+      maxQuantity: stockThreshold.maxQuantity,
+      minOrderQuantity: stockThreshold.minOrderQuantity,
       updatedBy: stockThreshold.updatedBy,
       updatedAt: stockThreshold.updatedAt,
     })
@@ -464,17 +476,39 @@ export async function selectThresholdRows(
 }
 
 export async function upsertThresholdRow(
-  input: { productId: string; branchId: string; threshold: number; updatedBy: string | null },
+  input: {
+    productId: string
+    branchId: string
+    threshold: number
+    maxQuantity: number | null
+    minOrderQuantity: number
+    updatedBy: string | null
+  },
   executor: DbExecutor,
-): Promise<{ id: string; threshold: number } | null> {
+): Promise<{
+  id: string
+  threshold: number
+  maxQuantity: number | null
+  minOrderQuantity: number
+} | null> {
   const rows = await executor
     .insert(stockThreshold)
     .values(input)
     .onConflictDoUpdate({
       target: [stockThreshold.productId, stockThreshold.branchId],
-      set: { threshold: input.threshold, updatedBy: input.updatedBy },
+      set: {
+        threshold: input.threshold,
+        maxQuantity: input.maxQuantity,
+        minOrderQuantity: input.minOrderQuantity,
+        updatedBy: input.updatedBy,
+      },
     })
-    .returning({ id: stockThreshold.id, threshold: stockThreshold.threshold })
+    .returning({
+      id: stockThreshold.id,
+      threshold: stockThreshold.threshold,
+      maxQuantity: stockThreshold.maxQuantity,
+      minOrderQuantity: stockThreshold.minOrderQuantity,
+    })
   return rows[0] ?? null
 }
 
