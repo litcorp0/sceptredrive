@@ -346,6 +346,31 @@ describe.skipIf(!available)('audit and settings API', () => {
     expect(emptyFooter.status).toBe(400)
   })
 
+  it('refuses an ABC threshold pair where A is not below B', async () => {
+    const aAtB = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'inventory.abcAThresholdBp', value: 9_500 }),
+    })
+    expect(aAtB.status).toBe(400)
+
+    const bAtA = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'inventory.abcBThresholdBp', value: 8_000 }),
+    })
+    expect(bAtA.status).toBe(400)
+
+    const valid = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ key: 'inventory.abcAThresholdBp', value: 7_000 }),
+    })
+    expect(valid.status).toBe(200)
+
+    await db.delete(setting).where(eq(setting.key, 'inventory.abcAThresholdBp'))
+  })
+
   it('allocates inventory document numbers from their sequences', async () => {
     const first = await allocateFromSequence('inventory.receiptSequence', db)
     const second = await allocateFromSequence('inventory.receiptSequence', db)
