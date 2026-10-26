@@ -50,6 +50,10 @@ export function SupplierPerformancePage() {
 	if (activeBranchId === null) {
 		return (
 			<section>
+				<PageHeader
+					title="Which suppliers deliver"
+					description="Rates, lead times and cost drift are measured per purchase-order line at one branch."
+				/>
 				<p className="text-sm text-muted-foreground">
 					Choose a branch from the header to see how its suppliers deliver.
 				</p>

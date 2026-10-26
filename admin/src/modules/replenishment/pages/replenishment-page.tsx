@@ -92,6 +92,10 @@ export function ReplenishmentPage() {
 	if (activeBranchId === null) {
 		return (
 			<section>
+				<PageHeader
+					title="What to order"
+					description="Computed per branch. Choose a branch from the header to see what this branch needs."
+				/>
 				<p className="text-sm text-muted-foreground">
 					Choose a branch from the header to see what to order.
 				</p>
