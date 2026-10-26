@@ -18,7 +18,7 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
-import { movementListOptions, stockDetailOptions } from "../api/inventory"
+import { movementListOptions, stockDetailOptions, thresholdListOptions } from "../api/inventory"
 import { ThresholdDialog } from "../components/threshold-dialog"
 import { MOVEMENT_META } from "../utils/stock"
 
@@ -50,12 +50,21 @@ export function StockDetailPage() {
 		enabled: activeBranchId !== null,
 	})
 
+	// The dialog owns all three levels; the threshold read is the only place that returns the
+	// stored maximum and minimum order quantity for the branch.
+	const thresholdQuery = useQuery({
+		...thresholdListOptions({ branchId: activeBranchId ?? undefined }),
+		enabled: activeBranchId !== null && canThreshold,
+	})
+
 	const movementsQuery = useQuery({
 		...movementListOptions(productId, activeBranchId, offset, PAGE_SIZE),
 		enabled: activeBranchId !== null,
 	})
 
 	const stock = detailQuery.data?.stock
+	const currentThresholdRow =
+		thresholdQuery.data?.thresholds.find((row) => row.productId === productId) ?? null
 	const movements = movementsQuery.data?.movements ?? []
 	const total = movementsQuery.data?.total ?? 0
 
@@ -84,7 +93,7 @@ export function StockDetailPage() {
 							<Button
 								size="sm"
 								variant="outline"
-								disabled={!stock}
+								disabled={!stock || thresholdQuery.isLoading || thresholdQuery.isError}
 								onClick={() => setThresholdOpen(true)}
 							>
 								{stock?.threshold === null || stock?.threshold === undefined
@@ -204,7 +213,9 @@ export function StockDetailPage() {
 						branchId={activeBranchId}
 						productId={productId}
 						productName={stock.productName}
-						currentThreshold={stock.threshold}
+						currentThreshold={currentThresholdRow?.threshold ?? stock.threshold}
+						currentMaxQuantity={currentThresholdRow?.maxQuantity ?? null}
+						currentMinOrderQuantity={currentThresholdRow?.minOrderQuantity ?? 0}
 					/>
 				</>
 			)}

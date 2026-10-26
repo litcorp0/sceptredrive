@@ -17,6 +17,13 @@ import { toastApiError } from "#/lib/toast"
 import { removeThreshold, setThreshold as setStockThreshold } from "../api/inventory"
 import { inventoryKeys } from "../api/keys"
 
+/**
+ * The one stock-level dialog, reached from a product's stock page and from a replenishment row.
+ *
+ * The minimum is the reorder point, the maximum is the level to top up to, and the minimum order
+ * quantity is the supplier's floor. The suggestion reads all three; saving here changes what the
+ * API computes next, and the caller may invalidate its own read through `onSaved`.
+ */
 export function ThresholdDialog({
 	open,
 	onOpenChange,
@@ -24,6 +31,9 @@ export function ThresholdDialog({
 	productId,
 	productName,
 	currentThreshold,
+	currentMaxQuantity,
+	currentMinOrderQuantity,
+	onSaved,
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
@@ -31,16 +41,24 @@ export function ThresholdDialog({
 	productId: string
 	productName: string
 	currentThreshold: number | null
+	currentMaxQuantity: number | null
+	currentMinOrderQuantity: number
+	/** Called after a successful save or removal, before the dialog closes. */
+	onSaved?: () => void
 }) {
 	const queryClient = useQueryClient()
 	const [threshold, setThreshold] = useState("0")
+	const [maxQuantity, setMaxQuantity] = useState("")
+	const [minOrderQuantity, setMinOrderQuantity] = useState("0")
 	const [formError, setFormError] = useState<string | null>(null)
 
 	useEffect(() => {
 		if (!open) return
 		setThreshold(currentThreshold === null ? "0" : String(currentThreshold))
+		setMaxQuantity(currentMaxQuantity === null ? "" : String(currentMaxQuantity))
+		setMinOrderQuantity(String(currentMinOrderQuantity))
 		setFormError(null)
-	}, [open, currentThreshold])
+	}, [open, currentThreshold, currentMaxQuantity, currentMinOrderQuantity])
 
 	async function invalidate() {
 		await Promise.all([
@@ -50,15 +68,22 @@ export function ThresholdDialog({
 	}
 
 	const saveMutation = useMutation({
-		mutationFn: (value: number) =>
+		mutationFn: (input: {
+			threshold: number
+			maxQuantity: number | null
+			minOrderQuantity: number
+		}) =>
 			setStockThreshold({
 				branchId: branchId as string,
 				productId,
-				threshold: value,
+				threshold: input.threshold,
+				maxQuantity: input.maxQuantity,
+				minOrderQuantity: input.minOrderQuantity,
 			}),
 		onSuccess: async () => {
-			toast.success("Low-stock threshold saved")
+			toast.success("Stock levels saved")
 			await invalidate()
+			onSaved?.()
 			onOpenChange(false)
 		},
 		onError: (error) => {
@@ -78,6 +103,7 @@ export function ThresholdDialog({
 		onSuccess: async () => {
 			toast.success("Threshold removed")
 			await invalidate()
+			onSaved?.()
 			onOpenChange(false)
 		},
 		onError: (error) => toastApiError(error),
@@ -90,33 +116,78 @@ export function ThresholdDialog({
 			setFormError("Select a branch first.")
 			return
 		}
-		const parsed = Number.parseInt(threshold, 10)
-		if (!Number.isSafeInteger(parsed) || parsed < 0) {
-			setFormError("Enter a whole threshold of zero or more.")
+
+		const parsedThreshold = Number.parseInt(threshold, 10)
+		if (!Number.isSafeInteger(parsedThreshold) || parsedThreshold < 0) {
+			setFormError("Enter a whole minimum of zero or more.")
 			return
 		}
-		saveMutation.mutate(parsed)
+
+		const parsedMax = maxQuantity.trim() === "" ? null : Number.parseInt(maxQuantity, 10)
+		if (parsedMax !== null && (!Number.isSafeInteger(parsedMax) || parsedMax < 0)) {
+			setFormError("Enter a whole maximum of zero or more, or leave it blank.")
+			return
+		}
+
+		const parsedMinOrder = Number.parseInt(minOrderQuantity, 10)
+		if (!Number.isSafeInteger(parsedMinOrder) || parsedMinOrder < 0) {
+			setFormError("Enter a whole minimum order quantity of zero or more.")
+			return
+		}
+
+		saveMutation.mutate({
+			threshold: parsedThreshold,
+			maxQuantity: parsedMax,
+			minOrderQuantity: parsedMinOrder,
+		})
 	}
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>Low-stock threshold</DialogTitle>
+					<DialogTitle>Stock levels</DialogTitle>
 					<DialogDescription>
-						Flag {productName} when on-hand is at or below this quantity at this branch.
+						Set the reorder point, top-up level and supplier minimum for {productName} at this
+						branch.
 					</DialogDescription>
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="grid gap-4">
 					<div className="grid gap-1.5">
-						<Label htmlFor="threshold-value">Threshold (units)</Label>
+						<Label htmlFor="threshold-value">Minimum (reorder point, units)</Label>
 						<Input
 							id="threshold-value"
 							inputMode="numeric"
 							value={threshold}
 							onChange={(event) => setThreshold(event.target.value)}
 						/>
+					</div>
+
+					<div className="grid gap-1.5">
+						<Label htmlFor="threshold-max">Maximum (top-up level, units)</Label>
+						<Input
+							id="threshold-max"
+							inputMode="numeric"
+							value={maxQuantity}
+							onChange={(event) => setMaxQuantity(event.target.value)}
+						/>
+						<p className="text-xs text-muted-foreground">
+							Leave blank for no stored maximum. A new row defaults to twice the reorder point.
+						</p>
+					</div>
+
+					<div className="grid gap-1.5">
+						<Label htmlFor="threshold-min-order">Minimum order quantity (units)</Label>
+						<Input
+							id="threshold-min-order"
+							inputMode="numeric"
+							value={minOrderQuantity}
+							onChange={(event) => setMinOrderQuantity(event.target.value)}
+						/>
+						<p className="text-xs text-muted-foreground">
+							The supplier's minimum. A suggestion never goes below this quantity.
+						</p>
 					</div>
 
 					{formError ? (
@@ -134,7 +205,7 @@ export function ThresholdDialog({
 								disabled={removeMutation.isPending}
 								onClick={() => removeMutation.mutate()}
 							>
-								Remove threshold
+								Remove levels
 							</Button>
 						) : (
 							<span />
@@ -144,7 +215,7 @@ export function ThresholdDialog({
 								Cancel
 							</Button>
 							<Button type="submit" disabled={saveMutation.isPending || !branchId}>
-								{saveMutation.isPending ? "Saving…" : "Save threshold"}
+								{saveMutation.isPending ? "Saving…" : "Save levels"}
 							</Button>
 						</div>
 					</DialogFooter>

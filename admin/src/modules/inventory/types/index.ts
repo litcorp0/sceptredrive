@@ -138,6 +138,10 @@ export interface StockThreshold {
 	productName: string
 	branchId: string
 	threshold: number
+	/** Top-up level; `null` when the branch has not set one. */
+	maxQuantity: number | null
+	/** A supplier's minimum order quantity: a floor on the suggestion. */
+	minOrderQuantity: number
 	updatedBy: string | null
 	updatedAt: string
 }
@@ -146,6 +150,9 @@ export interface ThresholdInput {
 	branchId: string
 	productId: string
 	threshold: number
+	/** Omitted keeps the stored maximum; `null` removes it. */
+	maxQuantity?: number | null
+	minOrderQuantity?: number
 }
 
 export type TransferStatus = "DRAFT" | "DISPATCHED" | "RECEIVED" | "SHORT_CLOSED" | "CANCELLED"
