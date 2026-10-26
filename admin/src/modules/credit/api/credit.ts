@@ -4,6 +4,8 @@ import type {
 	AgingResult,
 	CreditEntryCreateInput,
 	CreditEntryListResult,
+	CreditLimitRequestInput,
+	CreditLimitRequestResult,
 	CreditPostingResult,
 	CreditProfile,
 	CreditProfileListRow,
@@ -59,6 +61,20 @@ export function updateCreditProfile(customerId: string, input: CreditProfileUpda
 		method: "PUT",
 		body: input,
 	})
+}
+
+/**
+ * `POST /api/credit/profiles/:customerId/limit-requests` — a manager raises an increase.
+ *
+ * The body carries only the proposed limit and the reason; the branch and the current limit are
+ * the server's. An admin is refused here (their direct path is the `PUT`), so the console never
+ * offers the request to one.
+ */
+export function requestCreditLimitIncrease(customerId: string, input: CreditLimitRequestInput) {
+	return apiRequest<CreditLimitRequestResult>(
+		`/api/credit/profiles/${customerId}/limit-requests`,
+		{ method: "POST", body: input },
+	)
 }
 
 /** `GET /api/credit/entries` — the ledger, newest first. */

@@ -36,6 +36,7 @@ import {
 	CreditEntryDialog,
 	CreditLedgerTable,
 	CreditProfileDialog,
+	PendingLimitNote,
 	profileListOptions,
 	RepaymentDialog,
 } from "#/modules/credit"
@@ -308,6 +309,7 @@ export function CustomerDetailPage() {
 									{selectedProfile.hold ? (
 										<StatusBadge tone="red">On hold — new charges need an override</StatusBadge>
 									) : null}
+									<PendingLimitNote profileId={selectedProfile.id} />
 									{selectedProfile.notes ? (
 										<p className="text-sm text-muted-foreground">{selectedProfile.notes}</p>
 									) : null}
@@ -411,6 +413,7 @@ export function CustomerDetailPage() {
 				branchId={effectiveBranchId}
 				branchName={selectedBranch?.name ?? null}
 				profile={selectedProfile}
+				isAdmin={session.user.role === "ADMIN"}
 			/>
 			<RepaymentDialog
 				open={repaymentOpen}

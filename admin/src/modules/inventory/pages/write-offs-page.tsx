@@ -1,12 +1,15 @@
 import { formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
-import { ClipboardList } from "lucide-react"
+import { ClipboardList, PlusIcon } from "lucide-react"
+import { useState } from "react"
 import { EmptyState } from "#/components/common/empty-state"
 import { PageHeader } from "#/components/common/page-header"
 import { Pagination } from "#/components/common/pagination"
 import { StatusBadge } from "#/components/common/status-badge"
+import { StatusNote } from "#/components/common/status-note"
 import { TableMessage } from "#/components/common/table-message"
+import { Button } from "#/components/ui/button"
 import { Label } from "#/components/ui/label"
 import {
 	Select,
@@ -26,7 +29,9 @@ import {
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
+import { hasPermission } from "#/lib/role"
 import { writeOffListOptions } from "../api/writeoffs"
+import { AdjustDialog } from "../components/adjust-dialog"
 import type { WriteOffStatus } from "../types"
 import {
 	type WriteOffSearch,
@@ -36,7 +41,8 @@ import {
 	writeOffStatusTone,
 } from "../utils/writeoff"
 
-const routeApi = getRouteApi("/_authenticated/inventory/write-offs")
+const routeApi = getRouteApi("/_authenticated/inventory/write-offs/")
+const authenticatedRoute = getRouteApi("/_authenticated")
 const PAGE_SIZE = 25
 const ALL = "all"
 
@@ -48,10 +54,15 @@ const ALL = "all"
  * paging are in the URL so the operations card can link to the exact queue it counted.
  */
 export function WriteOffsPage() {
+	const { session } = authenticatedRoute.useRouteContext()
 	const search = routeApi.useSearch()
 	const navigate = routeApi.useNavigate()
-	const { branches, canSelectBranch } = useBranch()
+	const { branches, canSelectBranch, activeBranch, activeBranchId } = useBranch()
 	const offset = search.offset ?? 0
+
+	const isAdmin = session.user.role === "ADMIN"
+	const canAdjust = hasPermission(session.user.role, "inventory.adjust")
+	const [adjustOpen, setAdjustOpen] = useState(false)
 
 	const query = {
 		branchId: search.branchId,
@@ -85,6 +96,13 @@ export function WriteOffsPage() {
 				/>
 			) : (
 				<>
+					{isAdmin ? (
+						<StatusNote tone="info" title="Administrators adjust directly">
+							A write-off request is for branch managers. You post a negative adjustment with a
+							reason code, and the ledger records it immediately.
+						</StatusNote>
+					) : null}
+
 					<div className="flex flex-wrap items-end gap-3">
 						<div className="grid gap-1.5">
 							<Label htmlFor="write-off-status" className="text-xs text-muted-foreground">
@@ -141,6 +159,28 @@ export function WriteOffsPage() {
 								</Select>
 							</div>
 						) : null}
+
+						{canAdjust ? (
+							isAdmin ? (
+								<div className="ml-auto flex flex-wrap items-center gap-2">
+									{!activeBranchId ? (
+										<span className="text-xs text-muted-foreground">
+											Choose a branch to adjust stock.
+										</span>
+									) : null}
+									<Button disabled={!activeBranchId} onClick={() => setAdjustOpen(true)}>
+										Adjust stock
+									</Button>
+								</div>
+							) : (
+								<Button size="sm" className="ml-auto" asChild>
+									<Link to="/inventory/write-offs/new">
+										<PlusIcon className="size-4" aria-hidden="true" />
+										New write-off
+									</Link>
+								</Button>
+							)
+						) : null}
 					</div>
 
 					<div className="min-w-0 rounded-md border">
@@ -154,7 +194,7 @@ export function WriteOffsPage() {
 									<TableHead className="text-right">Frozen value</TableHead>
 									<TableHead>Requested by</TableHead>
 									<TableHead>Raised</TableHead>
-									<TableHead className="w-20" />
+									<TableHead className="w-32" />
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -193,16 +233,26 @@ export function WriteOffsPage() {
 												{formatDay(row.createdAt)}
 											</TableCell>
 											<TableCell>
-												{row.approvalId ? (
+												<div className="flex items-center gap-3">
 													<Link
-														to="/approvals/$approvalId"
-														params={{ approvalId: row.approvalId }}
+														to="/inventory/write-offs/$writeOffId"
+														params={{ writeOffId: row.id }}
 														className="text-sm font-medium text-primary hover:underline"
-														aria-label={`Review write-off ${row.number}`}
+														aria-label={`View write-off ${row.number}`}
 													>
-														Review
+														View
 													</Link>
-												) : null}
+													{row.approvalId ? (
+														<Link
+															to="/approvals/$approvalId"
+															params={{ approvalId: row.approvalId }}
+															className="text-sm text-muted-foreground hover:underline"
+															aria-label={`Review write-off ${row.number}`}
+														>
+															Review
+														</Link>
+													) : null}
+												</div>
 											</TableCell>
 										</TableRow>
 									))
@@ -221,6 +271,13 @@ export function WriteOffsPage() {
 					) : null}
 				</>
 			)}
+
+			<AdjustDialog
+				open={adjustOpen}
+				onOpenChange={setAdjustOpen}
+				branchId={activeBranchId}
+				branchName={activeBranch?.name ?? null}
+			/>
 		</div>
 	)
 }

@@ -21,6 +21,15 @@ export interface SuggestCode {
 	adjusted: boolean
 }
 
+/**
+ * `GET /api/branches/directory` — every active branch, unscoped.
+ *
+ * The branch switcher keeps using `/api/branches` (a manager sees only their own branch). A
+ * transfer request needs to name any active source, so the API publishes this deliberately
+ * unscoped list to callers with `branch.read`.
+ */
+export type BranchDirectoryEntry = Pick<Branch, "id" | "code" | "name" | "type">
+
 export interface BranchCreateInput {
 	code: string
 	name: string

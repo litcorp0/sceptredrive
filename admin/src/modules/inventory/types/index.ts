@@ -185,6 +185,19 @@ export interface TransferLine {
 	toOnHand: number
 }
 
+/**
+ * The request behind a transfer, if one was raised. An admin-created `DRAFT` has none; a
+ * manager's request always does. Mirrors `TransferApproval` in the API.
+ */
+export interface TransferApproval {
+	id: string
+	status: ApprovalStatus
+	requestedBy: string
+	decidedBy: string | null
+	decidedAt: string | null
+	decisionReasonCode: ApprovalReasonCode | null
+}
+
 export interface Transfer {
 	id: string
 	number: string
@@ -195,6 +208,10 @@ export interface Transfer {
 	toBranchCode: string
 	toBranchName: string
 	status: TransferStatus
+	/** The decision on a manager's request; absent on list rows, `null` for an admin's draft. */
+	approval?: TransferApproval | null
+	/** Server-computed dispatch rule; present on the detail, so the console never re-implements it. */
+	canDispatch?: boolean
 	note: string | null
 	createdBy: string | null
 	dispatchedBy: string | null
@@ -323,6 +340,20 @@ export interface WriteOffListQuery {
 	status?: WriteOffStatus
 	limit?: number
 	offset?: number
+}
+
+/** One line of a write-off request. The branch and the cost are decided server-side. */
+export interface WriteOffLineInput {
+	productId: string
+	quantity: number
+	reason: WriteOffReason
+	/** Required by the server for `THEFT` and `OTHER`. */
+	note?: string
+}
+
+export interface WriteOffCreateInput {
+	lines: WriteOffLineInput[]
+	note?: string
 }
 
 export interface WriteOffLineDetail {

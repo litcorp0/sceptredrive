@@ -1,10 +1,12 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
 import { type FormEvent, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { PageHeader } from "#/components/common/page-header"
+import { StatusNote } from "#/components/common/status-note"
 import { Button } from "#/components/ui/button"
+import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import {
 	Select,
@@ -17,6 +19,7 @@ import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { toastApiError } from "#/lib/toast"
+import { branchDirectoryOptions } from "#/modules/branches"
 import { transferKeys } from "../api/keys"
 import { createTransfer } from "../api/transfers"
 import {
@@ -27,21 +30,54 @@ import {
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 
+/**
+ * An admin drafts a transfer; a manager asks the source branch for stock.
+ *
+ * The manager's destination is fixed to their own branch because that is the only request the
+ * API accepts (P12-D10). The `from` choice is the manager's, and the source branch decides before
+ * anything moves — the note below the picker says so, and the detail repeats it while the
+ * request is pending.
+ */
 export function TransferNewPage() {
 	const { session } = authenticatedRoute.useRouteContext()
-	const { branches, activeBranchId, isLoading } = useBranch()
+	const { branches, activeBranch, activeBranchId, isLoading } = useBranch()
 	const navigate = useNavigate()
 	const queryClient = useQueryClient()
 
+	const isAdmin = session.user.role === "ADMIN"
+	const managerBranchId = session.user.branchId ?? activeBranchId ?? ""
+
 	const selectableBranches = useMemo(() => branches.filter((branch) => branch.isActive), [branches])
 
+	/**
+	 * A manager's `/api/branches` is scoped to their own branch, so the source picker reads the
+	 * deliberately unscoped active-branch directory. An admin already sees every branch in the
+	 * shell context and does not need a second request.
+	 */
+	const directoryQuery = useQuery({
+		...branchDirectoryOptions(),
+		enabled: !isAdmin,
+	})
+	const sourceBranches = useMemo(() => {
+		const choices = isAdmin ? selectableBranches : (directoryQuery.data?.branches ?? [])
+		return choices.filter((branch) => branch.id !== managerBranchId)
+	}, [isAdmin, selectableBranches, managerBranchId, directoryQuery.data])
+
 	const [fromBranchId, setFromBranchId] = useState<string>(
-		session.user.branchId ?? activeBranchId ?? "",
+		isAdmin ? (session.user.branchId ?? activeBranchId ?? "") : "",
 	)
-	const [toBranchId, setToBranchId] = useState<string>("")
+	const [toBranchId, setToBranchId] = useState<string>(
+		isAdmin ? "" : (session.user.branchId ?? activeBranchId ?? ""),
+	)
 	const [note, setNote] = useState("")
 	const [rows, setRows] = useState<TransferLineDraft[]>([newTransferLine()])
 	const [formError, setFormError] = useState<string | null>(null)
+
+	const selectedSourceType = isAdmin
+		? undefined
+		: directoryQuery.data?.branches.find((branch) => branch.id === fromBranchId)?.type
+	const sourceIsWarehouse = selectedSourceType === "WAREHOUSE"
+	const loadingBranches = isLoading || (!isAdmin && directoryQuery.isLoading)
 
 	const createMutation = useMutation({
 		mutationFn: (input: {
@@ -51,7 +87,11 @@ export function TransferNewPage() {
 			lines: { productId: string; quantityRequested: number }[]
 		}) => createTransfer(input),
 		onSuccess: async (data) => {
-			toast.success(`Transfer ${data.transfer.number} drafted`)
+			toast.success(
+				isAdmin
+					? `Transfer ${data.transfer.number} drafted`
+					: `Transfer ${data.transfer.number} requested`,
+			)
 			await queryClient.invalidateQueries({ queryKey: transferKeys.all })
 			await navigate({
 				to: "/inventory/transfers/$transferId",
@@ -71,11 +111,12 @@ export function TransferNewPage() {
 		event.preventDefault()
 		setFormError(null)
 
-		if (!fromBranchId || !toBranchId) {
+		const destination = isAdmin ? toBranchId : managerBranchId
+		if (!fromBranchId || !destination) {
 			setFormError("Choose both the source and destination branches.")
 			return
 		}
-		if (fromBranchId === toBranchId) {
+		if (fromBranchId === destination) {
 			setFormError("Source and destination must differ.")
 			return
 		}
@@ -100,7 +141,7 @@ export function TransferNewPage() {
 
 		createMutation.mutate({
 			fromBranchId,
-			toBranchId,
+			toBranchId: destination,
 			...(note.trim() ? { note: note.trim() } : {}),
 			lines,
 		})
@@ -109,8 +150,12 @@ export function TransferNewPage() {
 	return (
 		<section className="mx-auto max-w-3xl">
 			<PageHeader
-				title="New transfer"
-				description="Draft a stock transfer between branches. Nothing moves until the source dispatches."
+				title={isAdmin ? "New transfer" : "Request transfer"}
+				description={
+					isAdmin
+						? "Draft a stock transfer between branches. Nothing moves until the source dispatches."
+						: "Ask another branch for stock. The source branch decides before anything moves."
+				}
 				actions={
 					<Button asChild variant="outline" size="sm">
 						<Link to="/inventory/transfers">
@@ -127,10 +172,10 @@ export function TransferNewPage() {
 						<Label htmlFor="from-branch">From branch</Label>
 						<Select value={fromBranchId || undefined} onValueChange={setFromBranchId}>
 							<SelectTrigger id="from-branch">
-								<SelectValue placeholder={isLoading ? "Loading…" : "Choose source"} />
+								<SelectValue placeholder={loadingBranches ? "Loading…" : "Choose source"} />
 							</SelectTrigger>
 							<SelectContent>
-								{selectableBranches.map((branch) => (
+								{sourceBranches.map((branch) => (
 									<SelectItem key={branch.id} value={branch.id}>
 										{branch.code} · {branch.name}
 									</SelectItem>
@@ -140,20 +185,48 @@ export function TransferNewPage() {
 					</div>
 					<div className="grid gap-1.5">
 						<Label htmlFor="to-branch">To branch</Label>
-						<Select value={toBranchId || undefined} onValueChange={setToBranchId}>
-							<SelectTrigger id="to-branch">
-								<SelectValue placeholder={isLoading ? "Loading…" : "Choose destination"} />
-							</SelectTrigger>
-							<SelectContent>
-								{selectableBranches.map((branch) => (
-									<SelectItem key={branch.id} value={branch.id}>
-										{branch.code} · {branch.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						{isAdmin ? (
+							<Select value={toBranchId || undefined} onValueChange={setToBranchId}>
+								<SelectTrigger id="to-branch">
+									<SelectValue placeholder={isLoading ? "Loading…" : "Choose destination"} />
+								</SelectTrigger>
+								<SelectContent>
+									{selectableBranches.map((branch) => (
+										<SelectItem key={branch.id} value={branch.id}>
+											{branch.code} · {branch.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						) : (
+							<Input
+								id="to-branch"
+								readOnly
+								aria-readonly="true"
+								value={
+									activeBranch
+										? `${activeBranch.code} · ${activeBranch.name}`
+										: "Your branch"
+								}
+							/>
+						)}
 					</div>
 				</div>
+
+				{!isAdmin ? (
+					directoryQuery.isError ? (
+						<StatusNote tone="danger" title="Couldn't load the branch directory">
+							The source branches could not be listed. Refresh the page and try again before raising
+							the request.
+						</StatusNote>
+					) : (
+						<StatusNote tone="info">
+							{sourceIsWarehouse
+								? "An administrator approves a request from a warehouse before stock moves. You can withdraw it while it is waiting."
+								: "The source branch's manager approves this request before stock moves. You can withdraw it while it is waiting."}
+						</StatusNote>
+					)
+				) : null}
 
 				<div className="grid gap-2">
 					<Label>Lines</Label>
@@ -161,7 +234,9 @@ export function TransferNewPage() {
 				</div>
 
 				<div className="grid gap-1.5">
-					<Label htmlFor="transfer-note">Note (optional)</Label>
+					<Label htmlFor="transfer-note">
+						Note <span className="font-normal text-muted-foreground">(optional)</span>
+					</Label>
 					<Textarea
 						id="transfer-note"
 						value={note}
@@ -181,8 +256,18 @@ export function TransferNewPage() {
 					<Button asChild variant="outline">
 						<Link to="/inventory/transfers">Cancel</Link>
 					</Button>
-					<Button type="submit" disabled={createMutation.isPending}>
-						{createMutation.isPending ? "Saving…" : "Save draft"}
+					<Button
+						type="submit"
+						disabled={
+							createMutation.isPending ||
+							(!isAdmin && (directoryQuery.isLoading || directoryQuery.isError))
+						}
+					>
+						{createMutation.isPending
+							? "Saving…"
+							: isAdmin
+								? "Save draft"
+								: "Request transfer"}
 					</Button>
 				</div>
 			</form>

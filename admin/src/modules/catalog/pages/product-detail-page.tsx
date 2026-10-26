@@ -38,6 +38,10 @@ export function ProductDetailPage() {
 	const canUpdate = hasPermission(session.user.role, "catalog.update")
 	const canArchive = hasPermission(session.user.role, "catalog.archive")
 	const canOverride = hasPermission(session.user.role, "price.override")
+	const isAdmin = session.user.role === "ADMIN"
+	const visibleBranches = isAdmin
+		? branches
+		: branches.filter((branch) => branch.id === session.user.branchId)
 
 	const productQuery = useQuery(productDetailOptions(id))
 	const latestReceiptQuery = useQuery(latestReceiptCostOptions(id))
@@ -178,8 +182,9 @@ export function ProductDetailPage() {
 				<PriceOverrides
 					productId={id}
 					basePriceMinor={product.basePriceMinor}
-					branches={branches}
+					branches={visibleBranches}
 					canOverride={canOverride}
+					isAdmin={isAdmin}
 					disabled={!product.isActive}
 				/>
 			</div>

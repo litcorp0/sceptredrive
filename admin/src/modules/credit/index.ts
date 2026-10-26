@@ -23,6 +23,7 @@ export {
 	entryListOptions,
 	overLimitListOptions,
 	profileListOptions,
+	requestCreditLimitIncrease,
 	statementOptions,
 	updateCreditProfile,
 } from "./api/credit"
@@ -31,6 +32,7 @@ export { AgingTable } from "./components/aging-table"
 export { CreditEntryDialog } from "./components/credit-entry-dialog"
 export { CreditLedgerTable } from "./components/credit-ledger-table"
 export { CreditProfileDialog } from "./components/credit-profile-dialog"
+export { PendingLimitNote } from "./components/pending-limit-note"
 export { RepaymentDialog } from "./components/repayment-dialog"
 export { StatementView } from "./components/statement-view"
 export { CreditAgingPage } from "./pages/credit-aging-page"
@@ -47,6 +49,8 @@ export type {
 	CreditEntryKind,
 	CreditEntryListQuery,
 	CreditEntryListResult,
+	CreditLimitRequestInput,
+	CreditLimitRequestResult,
 	CreditMethod,
 	CreditOverrideReason,
 	CreditPostingResult,

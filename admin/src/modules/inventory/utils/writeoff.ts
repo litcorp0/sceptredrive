@@ -40,6 +40,24 @@ export function writeOffReasonLabel(reason: WriteOffReason): string {
 	return WRITE_OFF_REASON_LABELS[reason]
 }
 
+/** The order the form offers them, matching the API's enum. */
+export const WRITE_OFF_REASONS: readonly WriteOffReason[] = [
+	"DAMAGE",
+	"EXPIRY",
+	"OBSOLESCENCE",
+	"THEFT",
+	"SUPPLIER_FAULT",
+	"OTHER",
+]
+
+/**
+ * The server refuses a `THEFT` or `OTHER` line without a note, because "not otherwise
+ * explained" needs an explanation (P12-D16). The form mirrors it and names the product.
+ */
+export function writeOffReasonNeedsNote(reason: WriteOffReason): boolean {
+	return reason === "THEFT" || reason === "OTHER"
+}
+
 /** The statuses the list offers, in the order a document moves through them. */
 export const WRITE_OFF_STATUSES: readonly WriteOffStatus[] = [
 	"PENDING_APPROVAL",

@@ -1,6 +1,11 @@
 import { queryOptions } from "@tanstack/react-query"
 import { apiRequest } from "#/lib/api"
-import type { WriteOffDetail, WriteOffListQuery, WriteOffListResult } from "../types"
+import type {
+	WriteOffCreateInput,
+	WriteOffDetail,
+	WriteOffListQuery,
+	WriteOffListResult,
+} from "../types"
 import { writeOffKeys } from "./keys"
 
 /**
@@ -30,4 +35,20 @@ export function writeOffDetailOptions(id: string) {
 		queryKey: writeOffKeys.detail(id),
 		queryFn: () => getWriteOff(id),
 	})
+}
+
+/**
+ * `POST /api/write-offs` — raises a complete document at the caller's branch.
+ *
+ * There is no branch or status in the body: the server takes the branch from the session and
+ * always writes `PENDING_APPROVAL`. The frozen value is computed from the branch's own average
+ * cost, never from a client figure.
+ */
+export function createWriteOff(input: WriteOffCreateInput) {
+	return apiRequest<WriteOffDetail>("/api/write-offs", { method: "POST", body: input })
+}
+
+/** `POST /api/write-offs/:id/cancel` — the requester withdraws a pending document. */
+export function cancelWriteOff(id: string) {
+	return apiRequest<{ ok: true }>(`/api/write-offs/${id}/cancel`, { method: "POST" })
 }

@@ -1,7 +1,8 @@
 import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi } from "@tanstack/react-router"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { useState } from "react"
+import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import {
@@ -88,6 +89,15 @@ export function CreditAgingPage() {
 						onChange={(event) => setAsOf(event.target.value)}
 					/>
 				</div>
+
+				<Button asChild variant="outline" size="sm" className="ml-auto">
+					<Link
+						to="/customers/over-limit"
+						search={{ branchId: effectiveBranchId ?? undefined }}
+					>
+						Customers over their limit
+					</Link>
+				</Button>
 			</div>
 
 			<div className="hidden print:block">

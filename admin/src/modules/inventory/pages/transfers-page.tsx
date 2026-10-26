@@ -44,6 +44,7 @@ export function TransfersPage() {
 	const navigateSearch = listRoute.useNavigate()
 	const search = listRoute.useSearch()
 	const canTransfer = hasPermission(session.user.role, "inventory.transfer")
+	const isAdmin = session.user.role === "ADMIN"
 
 	const status = search.status ?? ALL
 	const [direction, setDirection] = useState<"all" | "from" | "to">("all")
@@ -115,7 +116,7 @@ export function TransfersPage() {
 						onClick={() => void navigate({ to: "/inventory/transfers/new" })}
 					>
 						<PlusIcon className="size-4" aria-hidden="true" />
-						New transfer
+						{isAdmin ? "New transfer" : "Request transfer"}
 					</Button>
 				) : null}
 			</div>

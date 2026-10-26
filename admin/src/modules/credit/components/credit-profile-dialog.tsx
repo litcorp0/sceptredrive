@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
 import { type FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { StatusNote } from "#/components/common/status-note"
 import { Button } from "#/components/ui/button"
 import {
 	Dialog,
@@ -15,16 +17,19 @@ import { Label } from "#/components/ui/label"
 import { Switch } from "#/components/ui/switch"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
-import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
+import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { updateCreditProfile } from "../api/credit"
+import { approvalKeys } from "#/modules/approvals"
+import { updateCreditProfile, requestCreditLimitIncrease } from "../api/credit"
 import { creditKeys } from "../api/keys"
 import type { CreditProfileListRow } from "../types"
 
 /**
- * Credit settings for one customer at one branch. Saving creates the profile
- * when none exists yet (the API insert-or-locks it) — the balance is never
- * settable from here; it always follows the ledger.
+ * Credit settings for one customer at one branch.
+ *
+ * A manager lowers a limit directly and raises any increase as a `CREDIT_LIMIT_CHANGE` request
+ * with a reason (P12-D21). An admin changes either direction directly. The dialog never guesses
+ * the actor's branch: the API takes it from the session.
  */
 export function CreditProfileDialog({
 	open,
@@ -33,6 +38,7 @@ export function CreditProfileDialog({
 	branchId,
 	branchName,
 	profile,
+	isAdmin,
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
@@ -40,6 +46,7 @@ export function CreditProfileDialog({
 	branchId: string | null
 	branchName: string | null
 	profile: CreditProfileListRow | null
+	isAdmin: boolean
 }) {
 	const queryClient = useQueryClient()
 
@@ -47,6 +54,7 @@ export function CreditProfileDialog({
 	const [termDays, setTermDays] = useState("0")
 	const [hold, setHold] = useState(false)
 	const [notes, setNotes] = useState("")
+	const [reason, setReason] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 
 	useEffect(() => {
@@ -55,8 +63,22 @@ export function CreditProfileDialog({
 		setTermDays(String(profile?.paymentTermDays ?? 0))
 		setHold(profile?.hold ?? false)
 		setNotes(profile?.notes ?? "")
+		setReason("")
 		setFormError(null)
 	}, [open, profile])
+
+	const currentLimitMinor = profile?.limitMinor ?? 0
+	const parsedLimitMinor = parseGhsToMinor(limit)
+	const requestMode =
+		!isAdmin && parsedLimitMinor !== null && parsedLimitMinor > currentLimitMinor
+
+	async function invalidate() {
+		await queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) })
+		// The customers profile key, spelled literally: importing the customers barrel here
+		// would close the customers ↔ credit cycle (that module already imports this one).
+		await queryClient.invalidateQueries({ queryKey: ["customer", customerId] })
+		await queryClient.invalidateQueries({ queryKey: approvalKeys.all })
+	}
 
 	const saveMutation = useMutation({
 		mutationFn: (input: {
@@ -71,10 +93,7 @@ export function CreditProfileDialog({
 			}),
 		onSuccess: async () => {
 			toast.success("Credit settings saved")
-			await queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) })
-			// The customers profile key, spelled literally: importing the customers barrel here
-			// would close the customers ↔ credit cycle (that module already imports this one).
-			await queryClient.invalidateQueries({ queryKey: ["customer", customerId] })
+			await invalidate()
 			onOpenChange(false)
 		},
 		onError: (error) => {
@@ -86,6 +105,35 @@ export function CreditProfileDialog({
 		},
 	})
 
+	const requestMutation = useMutation({
+		mutationFn: (input: { proposedLimitMinor: number; reason: string }) =>
+			requestCreditLimitIncrease(customerId, input),
+		onSuccess: async (result) => {
+			toast.success("Credit limit increase requested", {
+				description: (
+					<Link
+						to="/approvals/$approvalId"
+						params={{ approvalId: result.approvalId }}
+						className="font-medium text-primary hover:underline"
+					>
+						Review the request
+					</Link>
+				),
+			})
+			await invalidate()
+			onOpenChange(false)
+		},
+		onError: (error) => {
+			if (error instanceof ApiError && (error.status === 400 || error.status === 403 || error.status === 409)) {
+				setFormError(error.message)
+				return
+			}
+			toastApiError(error)
+		},
+	})
+
+	const pending = saveMutation.isPending || requestMutation.isPending
+
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setFormError(null)
@@ -93,6 +141,16 @@ export function CreditProfileDialog({
 		const limitMinor = parseGhsToMinor(limit)
 		if (limitMinor === null) {
 			setFormError("Enter the credit limit in GHS, for example 500 or 500.50.")
+			return
+		}
+
+		if (!isAdmin && limitMinor > currentLimitMinor) {
+			const trimmed = reason.trim()
+			if (trimmed.length < 3) {
+				setFormError("Say why the limit should increase; the admin deciding it needs a reason.")
+				return
+			}
+			requestMutation.mutate({ proposedLimitMinor: limitMinor, reason: trimmed })
 			return
 		}
 
@@ -133,9 +191,38 @@ export function CreditProfileDialog({
 							onChange={(event) => setLimit(event.target.value)}
 						/>
 						<p className="text-xs text-muted-foreground">
-							Charges that would push the balance past this limit need a manager override.
+							{isAdmin
+								? "Charges that would push the balance past this limit need a manager override."
+								: `Current limit: ${formatGhs(currentLimitMinor)}. A decrease applies immediately; an increase is a request.`}
 						</p>
 					</div>
+
+					{requestMode ? (
+						<>
+							<StatusNote tone="info">
+								Only the limit increase is requested. Payment terms, hold and notes are saved
+								directly, so change them in a separate save.
+							</StatusNote>
+							<div className="grid gap-1.5">
+								<Label htmlFor="credit-limit-reason">
+									Reason for the increase{" "}
+									<span className="font-normal text-muted-foreground">(required)</span>
+								</Label>
+								<Textarea
+									id="credit-limit-reason"
+									required
+									rows={3}
+									maxLength={300}
+									value={reason}
+									onChange={(event) => setReason(event.target.value)}
+									aria-describedby="credit-limit-reason-hint"
+								/>
+								<p id="credit-limit-reason-hint" className="text-xs text-muted-foreground">
+									An admin decides the request. Explain the trading need or the customer's history.
+								</p>
+							</div>
+						</>
+					) : null}
 
 					<div className="grid gap-1.5">
 						<Label htmlFor="credit-term-days">Payment terms (days)</Label>
@@ -146,6 +233,7 @@ export function CreditProfileDialog({
 							max={365}
 							step={1}
 							required
+							disabled={requestMode}
 							value={termDays}
 							onChange={(event) => setTermDays(event.target.value)}
 						/>
@@ -155,7 +243,12 @@ export function CreditProfileDialog({
 					</div>
 
 					<div className="flex items-center gap-2">
-						<Switch id="credit-hold" checked={hold} onCheckedChange={setHold} />
+						<Switch
+							id="credit-hold"
+							checked={hold}
+							onCheckedChange={setHold}
+							disabled={requestMode}
+						/>
 						<Label htmlFor="credit-hold" className="text-sm">
 							On hold — blocks new charges (collections still allowed)
 						</Label>
@@ -169,6 +262,7 @@ export function CreditProfileDialog({
 							id="credit-notes"
 							rows={2}
 							maxLength={300}
+							disabled={requestMode}
 							value={notes}
 							onChange={(event) => setNotes(event.target.value)}
 						/>
@@ -184,8 +278,12 @@ export function CreditProfileDialog({
 						<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
 							Cancel
 						</Button>
-						<Button type="submit" disabled={saveMutation.isPending}>
-							{saveMutation.isPending ? "Saving…" : "Save settings"}
+						<Button type="submit" disabled={pending}>
+							{pending
+								? "Saving…"
+								: requestMode
+									? "Request increase"
+									: "Save settings"}
 						</Button>
 					</DialogFooter>
 				</form>

@@ -69,6 +69,32 @@ export interface PriceOverride {
 	updatedAt: string
 }
 
+/** The window a manager may set a price in, derived server-side (P12-D18). */
+export interface PriceBandBounds {
+	minMinor: number
+	maxMinor: number
+}
+
+/** One override row plus the band the console warns with. */
+export interface ProductPriceBandRow extends PriceOverride {
+	bounds: PriceBandBounds
+}
+
+/**
+ * `GET /api/products/:id/prices` — the base price, the manager band percentage and every
+ * override the caller may see, each with its own bounds. The console never re-derives the band.
+ */
+export interface ProductPriceList {
+	basePriceMinor: number
+	managerBandPercent: number
+	overrides: ProductPriceBandRow[]
+}
+
+/** One endpoint, two honest outcomes (P12-D19). */
+export type PriceWriteResult =
+	| { status: "APPLIED"; priceMinor: number }
+	| { status: "PENDING_APPROVAL"; approvalId: string }
+
 export interface ProductWithBarcodes extends ProductRow {
 	barcodes: Barcode[]
 }

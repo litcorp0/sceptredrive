@@ -44,7 +44,6 @@ import { Route as AuthenticatedCustomersAgingRouteImport } from './routes/_authe
 import { Route as AuthenticatedCustomersOverLimitRouteImport } from './routes/_authenticated/customers/over-limit'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedInventoryStockRouteImport } from './routes/_authenticated/inventory/stock'
-import { Route as AuthenticatedInventoryWriteOffsRouteImport } from './routes/_authenticated/inventory/write-offs'
 import { Route as AuthenticatedProcurementIndexRouteImport } from './routes/_authenticated/procurement/index'
 import { Route as AuthenticatedProcurementReplenishmentRouteImport } from './routes/_authenticated/procurement/replenishment'
 import { Route as AuthenticatedProcurementSuppliersRouteImport } from './routes/_authenticated/procurement/suppliers'
@@ -67,6 +66,9 @@ import { Route as AuthenticatedInventoryStockProductIdRouteImport } from './rout
 import { Route as AuthenticatedInventoryTransfersIndexRouteImport } from './routes/_authenticated/inventory/transfers/index'
 import { Route as AuthenticatedInventoryTransfersTransferIdRouteImport } from './routes/_authenticated/inventory/transfers/$transferId'
 import { Route as AuthenticatedInventoryTransfersNewRouteImport } from './routes/_authenticated/inventory/transfers/new'
+import { Route as AuthenticatedInventoryWriteOffsIndexRouteImport } from './routes/_authenticated/inventory/write-offs/index'
+import { Route as AuthenticatedInventoryWriteOffsWriteOffIdRouteImport } from './routes/_authenticated/inventory/write-offs/$writeOffId'
+import { Route as AuthenticatedInventoryWriteOffsNewRouteImport } from './routes/_authenticated/inventory/write-offs/new'
 import { Route as AuthenticatedProcurementOrdersIndexRouteImport } from './routes/_authenticated/procurement/orders/index'
 import { Route as AuthenticatedProcurementOrdersOrderIdRouteImport } from './routes/_authenticated/procurement/orders/$orderId'
 import { Route as AuthenticatedProcurementOrdersNewRouteImport } from './routes/_authenticated/procurement/orders/new'
@@ -271,12 +273,6 @@ const AuthenticatedInventoryStockRoute =
     path: '/stock',
     getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
-const AuthenticatedInventoryWriteOffsRoute =
-  AuthenticatedInventoryWriteOffsRouteImport.update({
-    id: '/write-offs',
-    path: '/write-offs',
-    getParentRoute: () => AuthenticatedInventoryRouteRoute,
-  } as any)
 const AuthenticatedProcurementIndexRoute =
   AuthenticatedProcurementIndexRouteImport.update({
     id: '/',
@@ -409,6 +405,24 @@ const AuthenticatedInventoryTransfersNewRoute =
     path: '/transfers/new',
     getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
+const AuthenticatedInventoryWriteOffsIndexRoute =
+  AuthenticatedInventoryWriteOffsIndexRouteImport.update({
+    id: '/write-offs/',
+    path: '/write-offs/',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryWriteOffsWriteOffIdRoute =
+  AuthenticatedInventoryWriteOffsWriteOffIdRouteImport.update({
+    id: '/write-offs/$writeOffId',
+    path: '/write-offs/$writeOffId',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryWriteOffsNewRoute =
+  AuthenticatedInventoryWriteOffsNewRouteImport.update({
+    id: '/write-offs/new',
+    path: '/write-offs/new',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
 const AuthenticatedProcurementOrdersIndexRoute =
   AuthenticatedProcurementOrdersIndexRouteImport.update({
     id: '/orders/',
@@ -488,7 +502,6 @@ export interface FileRoutesByFullPath {
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
   '/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
   '/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
-  '/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
@@ -510,6 +523,8 @@ export interface FileRoutesByFullPath {
   '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
   '/inventory/transfers/new': typeof AuthenticatedInventoryTransfersNewRoute
+  '/inventory/write-offs/$writeOffId': typeof AuthenticatedInventoryWriteOffsWriteOffIdRoute
+  '/inventory/write-offs/new': typeof AuthenticatedInventoryWriteOffsNewRoute
   '/procurement/orders/$orderId': typeof AuthenticatedProcurementOrdersOrderIdRoute
   '/procurement/orders/new': typeof AuthenticatedProcurementOrdersNewRoute
   '/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
@@ -521,6 +536,7 @@ export interface FileRoutesByFullPath {
   '/inventory/receipts/': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
   '/inventory/transfers/': typeof AuthenticatedInventoryTransfersIndexRoute
+  '/inventory/write-offs/': typeof AuthenticatedInventoryWriteOffsIndexRoute
   '/procurement/orders/': typeof AuthenticatedProcurementOrdersIndexRoute
   '/suppliers/invoices/': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/suppliers/payments/': typeof AuthenticatedSuppliersPaymentsIndexRoute
@@ -546,7 +562,6 @@ export interface FileRoutesByTo {
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
   '/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
-  '/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
@@ -568,6 +583,8 @@ export interface FileRoutesByTo {
   '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
   '/inventory/transfers/new': typeof AuthenticatedInventoryTransfersNewRoute
+  '/inventory/write-offs/$writeOffId': typeof AuthenticatedInventoryWriteOffsWriteOffIdRoute
+  '/inventory/write-offs/new': typeof AuthenticatedInventoryWriteOffsNewRoute
   '/procurement/orders/$orderId': typeof AuthenticatedProcurementOrdersOrderIdRoute
   '/procurement/orders/new': typeof AuthenticatedProcurementOrdersNewRoute
   '/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
@@ -579,6 +596,7 @@ export interface FileRoutesByTo {
   '/inventory/receipts': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/inventory/stock': typeof AuthenticatedInventoryStockIndexRoute
   '/inventory/transfers': typeof AuthenticatedInventoryTransfersIndexRoute
+  '/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsIndexRoute
   '/procurement/orders': typeof AuthenticatedProcurementOrdersIndexRoute
   '/suppliers/invoices': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/suppliers/payments': typeof AuthenticatedSuppliersPaymentsIndexRoute
@@ -615,7 +633,6 @@ export interface FileRoutesById {
   '/_authenticated/customers/aging': typeof AuthenticatedCustomersAgingRoute
   '/_authenticated/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
   '/_authenticated/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
-  '/_authenticated/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/_authenticated/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/_authenticated/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/_authenticated/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
@@ -637,6 +654,8 @@ export interface FileRoutesById {
   '/_authenticated/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/_authenticated/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
   '/_authenticated/inventory/transfers/new': typeof AuthenticatedInventoryTransfersNewRoute
+  '/_authenticated/inventory/write-offs/$writeOffId': typeof AuthenticatedInventoryWriteOffsWriteOffIdRoute
+  '/_authenticated/inventory/write-offs/new': typeof AuthenticatedInventoryWriteOffsNewRoute
   '/_authenticated/procurement/orders/$orderId': typeof AuthenticatedProcurementOrdersOrderIdRoute
   '/_authenticated/procurement/orders/new': typeof AuthenticatedProcurementOrdersNewRoute
   '/_authenticated/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
@@ -648,6 +667,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory/receipts/': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/_authenticated/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
   '/_authenticated/inventory/transfers/': typeof AuthenticatedInventoryTransfersIndexRoute
+  '/_authenticated/inventory/write-offs/': typeof AuthenticatedInventoryWriteOffsIndexRoute
   '/_authenticated/procurement/orders/': typeof AuthenticatedProcurementOrdersIndexRoute
   '/_authenticated/suppliers/invoices/': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/_authenticated/suppliers/payments/': typeof AuthenticatedSuppliersPaymentsIndexRoute
@@ -684,7 +704,6 @@ export interface FileRouteTypes {
     | '/customers/aging'
     | '/customers/over-limit'
     | '/inventory/stock'
-    | '/inventory/write-offs'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
     | '/suppliers/$supplierId'
@@ -706,6 +725,8 @@ export interface FileRouteTypes {
     | '/inventory/stock/$productId'
     | '/inventory/transfers/$transferId'
     | '/inventory/transfers/new'
+    | '/inventory/write-offs/$writeOffId'
+    | '/inventory/write-offs/new'
     | '/procurement/orders/$orderId'
     | '/procurement/orders/new'
     | '/suppliers/invoices/$invoiceId'
@@ -717,6 +738,7 @@ export interface FileRouteTypes {
     | '/inventory/receipts/'
     | '/inventory/stock/'
     | '/inventory/transfers/'
+    | '/inventory/write-offs/'
     | '/procurement/orders/'
     | '/suppliers/invoices/'
     | '/suppliers/payments/'
@@ -742,7 +764,6 @@ export interface FileRouteTypes {
     | '/catalog/units'
     | '/customers/aging'
     | '/customers/over-limit'
-    | '/inventory/write-offs'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
     | '/suppliers/$supplierId'
@@ -764,6 +785,8 @@ export interface FileRouteTypes {
     | '/inventory/stock/$productId'
     | '/inventory/transfers/$transferId'
     | '/inventory/transfers/new'
+    | '/inventory/write-offs/$writeOffId'
+    | '/inventory/write-offs/new'
     | '/procurement/orders/$orderId'
     | '/procurement/orders/new'
     | '/suppliers/invoices/$invoiceId'
@@ -775,6 +798,7 @@ export interface FileRouteTypes {
     | '/inventory/receipts'
     | '/inventory/stock'
     | '/inventory/transfers'
+    | '/inventory/write-offs'
     | '/procurement/orders'
     | '/suppliers/invoices'
     | '/suppliers/payments'
@@ -810,7 +834,6 @@ export interface FileRouteTypes {
     | '/_authenticated/customers/aging'
     | '/_authenticated/customers/over-limit'
     | '/_authenticated/inventory/stock'
-    | '/_authenticated/inventory/write-offs'
     | '/_authenticated/procurement/replenishment'
     | '/_authenticated/procurement/suppliers'
     | '/_authenticated/suppliers/$supplierId'
@@ -832,6 +855,8 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory/stock/$productId'
     | '/_authenticated/inventory/transfers/$transferId'
     | '/_authenticated/inventory/transfers/new'
+    | '/_authenticated/inventory/write-offs/$writeOffId'
+    | '/_authenticated/inventory/write-offs/new'
     | '/_authenticated/procurement/orders/$orderId'
     | '/_authenticated/procurement/orders/new'
     | '/_authenticated/suppliers/invoices/$invoiceId'
@@ -843,6 +868,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory/receipts/'
     | '/_authenticated/inventory/stock/'
     | '/_authenticated/inventory/transfers/'
+    | '/_authenticated/inventory/write-offs/'
     | '/_authenticated/procurement/orders/'
     | '/_authenticated/suppliers/invoices/'
     | '/_authenticated/suppliers/payments/'
@@ -1103,13 +1129,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryStockRouteImport
       parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
-    '/_authenticated/inventory/write-offs': {
-      id: '/_authenticated/inventory/write-offs'
-      path: '/write-offs'
-      fullPath: '/inventory/write-offs'
-      preLoaderRoute: typeof AuthenticatedInventoryWriteOffsRouteImport
-      parentRoute: typeof AuthenticatedInventoryRouteRoute
-    }
     '/_authenticated/procurement/': {
       id: '/_authenticated/procurement/'
       path: '/'
@@ -1262,6 +1281,27 @@ declare module '@tanstack/react-router' {
       path: '/transfers/new'
       fullPath: '/inventory/transfers/new'
       preLoaderRoute: typeof AuthenticatedInventoryTransfersNewRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/write-offs/': {
+      id: '/_authenticated/inventory/write-offs/'
+      path: '/write-offs'
+      fullPath: '/inventory/write-offs/'
+      preLoaderRoute: typeof AuthenticatedInventoryWriteOffsIndexRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/write-offs/$writeOffId': {
+      id: '/_authenticated/inventory/write-offs/$writeOffId'
+      path: '/write-offs/$writeOffId'
+      fullPath: '/inventory/write-offs/$writeOffId'
+      preLoaderRoute: typeof AuthenticatedInventoryWriteOffsWriteOffIdRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/write-offs/new': {
+      id: '/_authenticated/inventory/write-offs/new'
+      path: '/write-offs/new'
+      fullPath: '/inventory/write-offs/new'
+      preLoaderRoute: typeof AuthenticatedInventoryWriteOffsNewRouteImport
       parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
     '/_authenticated/procurement/orders/': {
@@ -1441,23 +1481,24 @@ const AuthenticatedInventoryStockRouteWithChildren =
 
 interface AuthenticatedInventoryRouteRouteChildren {
   AuthenticatedInventoryStockRoute: typeof AuthenticatedInventoryStockRouteWithChildren
-  AuthenticatedInventoryWriteOffsRoute: typeof AuthenticatedInventoryWriteOffsRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInventoryCountsCountIdRoute: typeof AuthenticatedInventoryCountsCountIdRoute
   AuthenticatedInventoryCountsNewRoute: typeof AuthenticatedInventoryCountsNewRoute
   AuthenticatedInventoryReceiptsReceiptIdRoute: typeof AuthenticatedInventoryReceiptsReceiptIdRoute
   AuthenticatedInventoryTransfersTransferIdRoute: typeof AuthenticatedInventoryTransfersTransferIdRoute
   AuthenticatedInventoryTransfersNewRoute: typeof AuthenticatedInventoryTransfersNewRoute
+  AuthenticatedInventoryWriteOffsWriteOffIdRoute: typeof AuthenticatedInventoryWriteOffsWriteOffIdRoute
+  AuthenticatedInventoryWriteOffsNewRoute: typeof AuthenticatedInventoryWriteOffsNewRoute
   AuthenticatedInventoryCountsIndexRoute: typeof AuthenticatedInventoryCountsIndexRoute
   AuthenticatedInventoryReceiptsIndexRoute: typeof AuthenticatedInventoryReceiptsIndexRoute
   AuthenticatedInventoryTransfersIndexRoute: typeof AuthenticatedInventoryTransfersIndexRoute
+  AuthenticatedInventoryWriteOffsIndexRoute: typeof AuthenticatedInventoryWriteOffsIndexRoute
 }
 
 const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRouteChildren =
   {
     AuthenticatedInventoryStockRoute:
       AuthenticatedInventoryStockRouteWithChildren,
-    AuthenticatedInventoryWriteOffsRoute: AuthenticatedInventoryWriteOffsRoute,
     AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
     AuthenticatedInventoryCountsCountIdRoute:
       AuthenticatedInventoryCountsCountIdRoute,
@@ -1468,12 +1509,18 @@ const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRoute
       AuthenticatedInventoryTransfersTransferIdRoute,
     AuthenticatedInventoryTransfersNewRoute:
       AuthenticatedInventoryTransfersNewRoute,
+    AuthenticatedInventoryWriteOffsWriteOffIdRoute:
+      AuthenticatedInventoryWriteOffsWriteOffIdRoute,
+    AuthenticatedInventoryWriteOffsNewRoute:
+      AuthenticatedInventoryWriteOffsNewRoute,
     AuthenticatedInventoryCountsIndexRoute:
       AuthenticatedInventoryCountsIndexRoute,
     AuthenticatedInventoryReceiptsIndexRoute:
       AuthenticatedInventoryReceiptsIndexRoute,
     AuthenticatedInventoryTransfersIndexRoute:
       AuthenticatedInventoryTransfersIndexRoute,
+    AuthenticatedInventoryWriteOffsIndexRoute:
+      AuthenticatedInventoryWriteOffsIndexRoute,
   }
 
 const AuthenticatedInventoryRouteRouteWithChildren =

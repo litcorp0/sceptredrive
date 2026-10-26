@@ -3,6 +3,7 @@ import { apiRequest } from "#/lib/api"
 import type {
 	Branch,
 	BranchCreateInput,
+	BranchDirectoryEntry,
 	BranchListQuery,
 	BranchType,
 	BranchUpdateInput,
@@ -14,6 +15,20 @@ export function branchListOptions(query: BranchListQuery = {}) {
 	return queryOptions({
 		queryKey: branchKeys.list(query),
 		queryFn: () => apiRequest<{ branches: Branch[] }>("/api/branches", { query }),
+	})
+}
+
+/**
+ * The unscoped active-branch directory. Not for the branch switcher: this is the list a transfer
+ * request names a source from, and the API deliberately includes branches a manager cannot switch
+ * to. Only requested on the manager's transfer form.
+ */
+export function branchDirectoryOptions() {
+	return queryOptions({
+		queryKey: branchKeys.directory(),
+		queryFn: () =>
+			apiRequest<{ branches: BranchDirectoryEntry[] }>("/api/branches/directory"),
+		staleTime: 60_000,
 	})
 }
 

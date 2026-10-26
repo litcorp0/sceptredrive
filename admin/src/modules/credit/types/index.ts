@@ -41,6 +41,17 @@ export interface CreditProfileUpdateInput {
 	notes?: string | null
 }
 
+/** A manager's limit increase: the proposed limit and the reason the admin deciding it needs. */
+export interface CreditLimitRequestInput {
+	proposedLimitMinor: number
+	reason: string
+}
+
+export interface CreditLimitRequestResult {
+	approvalId: string
+	status: "PENDING"
+}
+
 export type CreditOverrideReason =
 	| "TEMPORARY_APPROVAL"
 	| "TRUSTED_CUSTOMER"

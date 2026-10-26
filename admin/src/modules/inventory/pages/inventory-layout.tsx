@@ -6,13 +6,14 @@ const TAB_LINKS = {
 	stock: "/inventory/stock",
 	receipts: "/inventory/receipts",
 	transfers: "/inventory/transfers",
+	writeOffs: "/inventory/write-offs",
 	counts: "/inventory/counts",
 } as const
 
 type InventoryTab = keyof typeof TAB_LINKS
 
 /**
- * The inventory section shell: header, the four tabs, and the tab's outlet.
+ * The inventory section shell: header, the section tabs, and the tab's outlet.
  *
  * Section layout is page markup (Phase 8, decision D6), so it lives in the owning module and the
  * route renders `InventoryLayout` and nothing else. Tab order and labels are unchanged.
@@ -29,7 +30,7 @@ export function InventoryLayout() {
 		<div className="mx-auto max-w-6xl">
 			<PageHeader
 				title="Inventory"
-				description="Stock levels, goods receipts, adjustments, transfers, and counts."
+				description="Stock levels, goods receipts, adjustments, transfers, write-offs and counts."
 			/>
 
 			<Tabs
@@ -45,6 +46,9 @@ export function InventoryLayout() {
 					</TabsTrigger>
 					<TabsTrigger value="transfers" onClick={() => void navigate({ to: TAB_LINKS.transfers })}>
 						Transfers
+					</TabsTrigger>
+					<TabsTrigger value="writeOffs" onClick={() => void navigate({ to: TAB_LINKS.writeOffs })}>
+						Write-offs
 					</TabsTrigger>
 					<TabsTrigger value="counts" onClick={() => void navigate({ to: TAB_LINKS.counts })}>
 						Counts

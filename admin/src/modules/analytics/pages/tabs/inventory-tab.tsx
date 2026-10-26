@@ -1,8 +1,8 @@
-import { formatBucket, formatCount } from "@sceptre/shared"
+import { formatBasisPoints, formatBucket, formatCount } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -69,6 +69,7 @@ export function InventoryTab() {
 		sold: point.soldUnits,
 		adjusted: point.adjustedUnits,
 	}))
+	const accuracy = data.countAccuracy
 	const branches = data.byBranch.map((row) => ({
 		name: row.code,
 		value: row.stockValueMinor,
@@ -98,6 +99,41 @@ export function InventoryTab() {
 				/>
 				<KpiTile label="Out of stock" value={formatCount(data.totals.outOfStockCount)} />
 			</KpiRow>
+
+			<Card>
+				<CardHeader>
+					<CardDescription>Count accuracy</CardDescription>
+					<CardTitle className="font-display text-2xl tabular-nums">
+						{accuracy.accuracyBp === null ? "—" : formatBasisPoints(accuracy.accuracyBp)}
+					</CardTitle>
+				</CardHeader>
+				<CardContent className="grid gap-3">
+					{accuracy.accuracyBp === null ? (
+						<p className="text-sm text-muted-foreground">No count posted in this period.</p>
+					) : (
+						<p className="text-sm text-muted-foreground">
+							{formatCount(accuracy.matchedLines)} of {formatCount(accuracy.countedLines)} counted
+							lines matched.
+						</p>
+					)}
+					<dl className="grid gap-3 text-sm sm:grid-cols-3">
+						<div>
+							<dt className="text-xs text-muted-foreground">Counts posted</dt>
+							<dd className="font-medium tabular-nums">{formatCount(accuracy.countsPosted)}</dd>
+						</div>
+						<div>
+							<dt className="text-xs text-muted-foreground">Counts on time</dt>
+							<dd className="font-medium tabular-nums">{formatCount(accuracy.countsOnTime)}</dd>
+						</div>
+						<div>
+							<dt className="text-xs text-muted-foreground">Variance value</dt>
+							<dd className="font-medium tabular-nums">
+								{formatGhs(accuracy.varianceValueMinor)}
+							</dd>
+						</div>
+					</dl>
+				</CardContent>
+			</Card>
 
 			<ChartCard
 				title="Stock movements"

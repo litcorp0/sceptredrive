@@ -2,14 +2,15 @@ import { queryOptions } from "@tanstack/react-query"
 import { apiRequest } from "#/lib/api"
 import type {
 	Barcode,
-	PriceOverride,
 	Product,
 	ProductCreateInput,
 	ProductDetail,
 	ProductListQuery,
+	ProductPriceList,
 	ProductRow,
 	ProductUpdateInput,
 	ProductWithBarcodes,
+	PriceWriteResult,
 } from "../types"
 import { catalogKeys } from "./keys"
 
@@ -95,22 +96,19 @@ export function removeProductBarcode(id: string, barcodeId: string) {
 export function productPricesOptions(id: string) {
 	return queryOptions({
 		queryKey: catalogKeys.productPrices(id),
-		queryFn: () =>
-			apiRequest<{ basePriceMinor: number; overrides: PriceOverride[] }>(
-				`/api/products/${id}/prices`,
-			),
+		queryFn: () => apiRequest<ProductPriceList>(`/api/products/${id}/prices`),
 	})
 }
 
 export function setProductPrice(id: string, input: { branchId: string; priceMinor: number }) {
-	return apiRequest<{ override: PriceOverride }>(`/api/products/${id}/prices`, {
+	return apiRequest<PriceWriteResult>(`/api/products/${id}/prices`, {
 		method: "PUT",
 		body: input,
 	})
 }
 
 export function removeProductPrice(id: string, branchId: string) {
-	return apiRequest<{ removed: true }>(`/api/products/${id}/prices/${branchId}`, {
+	return apiRequest<PriceWriteResult>(`/api/products/${id}/prices/${branchId}`, {
 		method: "DELETE",
 	})
 }

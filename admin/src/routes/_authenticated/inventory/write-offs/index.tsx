@@ -5,7 +5,7 @@ import {
 	writeOffSearchSchema,
 } from "#/modules/inventory"
 
-export const Route = createFileRoute("/_authenticated/inventory/write-offs")({
+export const Route = createFileRoute("/_authenticated/inventory/write-offs/")({
 	validateSearch: writeOffSearchSchema,
 	search: { middlewares: [stripSearchParams(writeOffSearchDefaults)] },
 	component: WriteOffsPage,

@@ -13,6 +13,7 @@
 
 export {
 	branchDetailOptions,
+	branchDirectoryOptions,
 	branchListOptions,
 	createBranch,
 	deactivateBranch,
@@ -27,6 +28,7 @@ export { BranchesPage } from "./pages/branches-page"
 export type {
 	Branch,
 	BranchCreateInput,
+	BranchDirectoryEntry,
 	BranchListQuery,
 	BranchType,
 	BranchUpdateInput,

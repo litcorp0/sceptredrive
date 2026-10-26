@@ -6,6 +6,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "#/components/common/confirm-dialog"
 import { PageHeader } from "#/components/common/page-header"
+import { StatusNote } from "#/components/common/status-note"
 import { Button } from "#/components/ui/button"
 import {
 	Table,
@@ -20,14 +21,23 @@ import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
 import { transferKeys } from "../api/keys"
 import { cancelTransfer, transferDetailOptions } from "../api/transfers"
+import { ApprovalSummaryCard } from "../components/approval-summary-card"
 import { EditTransferDialog } from "../components/edit-transfer-dialog"
 import { ShortCloseDialog } from "../components/short-close-dialog"
 import { TransferQuantityDialog } from "../components/transfer-quantity-dialog"
 import { TransferStatusBadge } from "../components/transfer-status-badge"
+import { approvalReasonLabel } from "../utils/approval"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 const transferRoute = getRouteApi("/_authenticated/inventory/transfers/$transferId")
 
+/**
+ * One transfer, its lines and — when it came from a branch request — the decision behind it.
+ *
+ * Dispatch is offered from `transfer.canDispatch`, computed by the API for this actor and this
+ * status; the console does not reconstruct the rule. A `REQUESTED` document offers Withdraw
+ * instead of Cancel, and a `REJECTED` one offers no transition at all.
+ */
 export function TransferDetailPage() {
 	const { transferId } = transferRoute.useParams()
 	const { session } = authenticatedRoute.useRouteContext()
@@ -45,11 +55,12 @@ export function TransferDetailPage() {
 	const transferQuery = useQuery(transferDetailOptions(transferId))
 
 	const transfer = transferQuery.data?.transfer
+	const approval = transfer?.approval ?? null
 
 	const cancelMutation = useMutation({
 		mutationFn: () => cancelTransfer(transferId),
 		onSuccess: async () => {
-			toast.success("Transfer cancelled")
+			toast.success(transfer?.status === "REQUESTED" ? "Request withdrawn" : "Transfer cancelled")
 			await queryClient.invalidateQueries({ queryKey: transferKeys.all })
 			await queryClient.invalidateQueries({ queryKey: transferKeys.detail(transferId) })
 			setCancelOpen(false)
@@ -70,9 +81,11 @@ export function TransferDetailPage() {
 	const isSource = isAdmin || session.user.branchId === transfer.fromBranchId
 	const isDestination = isAdmin || session.user.branchId === transfer.toBranchId
 	const canEdit = canTransfer && transfer.status === "DRAFT" && (isSource || isDestination)
-	const canDispatch = canTransfer && transfer.status === "DRAFT" && isSource
+	const canDispatch = canTransfer && transfer.canDispatch
+	const canWithdraw = canTransfer && transfer.status === "REQUESTED" && (isSource || isDestination)
 	const canReceive = canTransfer && transfer.status === "DISPATCHED" && isDestination
 	const canShortClose = canReceive
+	const requesting = transfer.status === "REQUESTED"
 
 	return (
 		<section>
@@ -107,6 +120,11 @@ export function TransferDetailPage() {
 								Close short
 							</Button>
 						) : null}
+						{canWithdraw ? (
+							<Button size="sm" variant="ghost" onClick={() => setCancelOpen(true)}>
+								Withdraw request
+							</Button>
+						) : null}
 						{canEdit ? (
 							<Button
 								size="sm"
@@ -134,6 +152,28 @@ export function TransferDetailPage() {
 					<span>Last receipt {formatDateTime(transfer.receivedAt)}</span>
 				) : null}
 				{transfer.closedAt ? <span>Short-closed {formatDateTime(transfer.closedAt)}</span> : null}
+			</div>
+
+			<div className="mb-4 grid gap-3">
+				{requesting ? (
+					<StatusNote tone="info">
+						Waiting for the source branch, {transfer.fromBranchName}, to decide this request. Stock
+						has not moved; the destination may withdraw it until a decision is recorded.
+					</StatusNote>
+				) : null}
+				{transfer.status === "REJECTED" && approval ? (
+					<StatusNote tone="danger" title="This request was rejected">
+						{approvalReasonLabel(approval.decisionReasonCode)}. No stock moved, and the transfer
+						cannot be dispatched from here.
+					</StatusNote>
+				) : null}
+				{approval ? (
+					<ApprovalSummaryCard
+						title="Approval"
+						approval={approval}
+						branchName={transfer.fromBranchName}
+					/>
+				) : null}
 			</div>
 
 			{transfer.note ? (
@@ -194,9 +234,13 @@ export function TransferDetailPage() {
 			<ConfirmDialog
 				open={cancelOpen}
 				onOpenChange={setCancelOpen}
-				title="Cancel this transfer?"
-				description="The draft is kept for history but can no longer be edited or dispatched."
-				confirmLabel="Cancel transfer"
+				title={requesting ? "Withdraw this request?" : "Cancel this transfer?"}
+				description={
+					requesting
+						? `The request is withdrawn from ${transfer.fromBranchName}'s queue and no stock moves. You can raise a new request if it is still needed.`
+						: "The draft is kept for history but can no longer be edited or dispatched."
+				}
+				confirmLabel={requesting ? "Withdraw request" : "Cancel transfer"}
 				destructive
 				pending={cancelMutation.isPending}
 				onConfirm={() => cancelMutation.mutate()}

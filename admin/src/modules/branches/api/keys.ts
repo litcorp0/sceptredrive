@@ -11,4 +11,9 @@ export const branchKeys = {
 	all: SHELL_KEYS.branches,
 	list: (query: BranchListQuery) => [...branchKeys.all, query] as const,
 	detail: (id: string) => [...branchKeys.all, id] as const,
+	/**
+	 * The unscoped directory for a transfer source picker. Keyed under the branches root, so a
+	 * create/deactivate refresh reaches both the switcher and the directory.
+	 */
+	directory: () => [...branchKeys.all, "directory"] as const,
 }
