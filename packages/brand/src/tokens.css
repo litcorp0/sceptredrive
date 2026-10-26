@@ -251,13 +251,21 @@
     outline-offset: 2px;
   }
 
+  /*
+   * Reduced motion must beat component animations, including ones set inline or with higher
+   * specificity, so these four declarations are the one place `!important` is correct.
+   */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override component animations */
       animation-duration: 0.01ms !important;
+      /* biome-ignore lint/complexity/noImportantStyles: one iteration is the reduced-motion contract */
       animation-iteration-count: 1 !important;
+      /* biome-ignore lint/complexity/noImportantStyles: transitions must not outlast the animation */
       transition-duration: 0.01ms !important;
+      /* biome-ignore lint/complexity/noImportantStyles: smooth scrolling is motion */
       scroll-behavior: auto !important;
     }
   }
