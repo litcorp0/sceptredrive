@@ -1,9 +1,9 @@
 import type { DbExecutor, DbTransaction } from '@sceptre/db'
 import { db } from '@sceptre/db'
 import {
+  APPROVAL_DECIDER_ROLE,
   type ApprovalReasonCode,
   type ApprovalType,
-  approvalDeciderRole,
   isDecided,
 } from '@sceptre/shared'
 import { assertBranchAccess, hasPermission, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
@@ -137,7 +137,7 @@ export async function decideApproval(
     note?: string
   },
 ): Promise<ApprovalDetail> {
-  if (!hasPermission(user, 'procurement.approve')) {
+  if (!hasPermission(user, 'approval.decide')) {
     throw new ForbiddenError('Only an admin can decide this request')
   }
   if (input.decision === 'REJECTED' && !input.reasonCode) {
@@ -153,7 +153,7 @@ export async function decideApproval(
     if (isDecided(current.status)) {
       throw new AppError(409, 'CONFLICT', 'This request has already been decided')
     }
-    if (roleOf(user) !== approvalDeciderRole(current.type)) {
+    if (roleOf(user) !== APPROVAL_DECIDER_ROLE[current.type]) {
       throw new ForbiddenError('Your role cannot decide this request')
     }
 
@@ -291,8 +291,8 @@ function buildDetail(user: SessionUser, actor: AuditActor, approval: ApprovalRow
   const canDecide =
     !isDecided(approval.status) &&
     !self &&
-    hasPermission(user, 'procurement.approve') &&
-    roleOf(user) === approvalDeciderRole(approval.type)
+    hasPermission(user, 'approval.decide') &&
+    roleOf(user) === APPROVAL_DECIDER_ROLE[approval.type]
 
   return {
     approval,

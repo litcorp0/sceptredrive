@@ -29,7 +29,7 @@ approvalsRoutes.get(
 approvalsRoutes.post(
   '/api/approvals/:id/decide',
   requireSession,
-  requirePermission('procurement.approve'),
+  requirePermission('approval.decide'),
   validateApprovalIdParam,
   validateApprovalDecision,
   (c) => approvalsController.decideApproval(c, c.req.valid('param').id, c.req.valid('json')),
