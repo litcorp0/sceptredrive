@@ -363,6 +363,10 @@ ordering, receiving, returns, and replenishment.
 with one queue, one audit trail, and no path where stock, price, credit, or cash changes
 without a decision that names the person who made it.
 
+**Status:** 🔷 Planned (13 plans, 2026-10-26 — see
+`phases/12-branch-ops-approvals/README.md`; decisions in `00-DECISIONS.md`, sources in
+`01-RESEARCH.md`)
+
 **Dependencies:** Phases 11, 10
 **Requirements:** APR-01…06, BRN-01…05, CC-01…05
 

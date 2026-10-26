@@ -5,17 +5,18 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-26
-**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is complete and verified
-(11/11 plans).** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
-2026-10-24: four interface phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics
-& Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a
-later audit the same day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch
-Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
-**Next action:** plan **Phase 12 — Branch Operations & Approval Workflow** (transfer requests,
-the unified approval inbox, write-offs, price bands, credit-limit changes, shift variance review,
-cycle counts, the manager's queue). Phase 11's verification is
-`phases/11-procurement-replenishment/11-VERIFICATION.md`; `00-DECISIONS.md` P11-D1…D21 records what
-was decided and where each decision was exercised.
+**Status:** **Phase 12 (Branch Operations & Approval Workflow) is planned: 13 plans, context
+locked, decisions recorded.** Phase 11 is complete and verified (11/11 plans); Phase 10 is
+complete and verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface
+phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop
+Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same
+day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals).
+The former 7/8/9 became Phases 13/14/15.
+**Next action:** execute **Phase 12, Plan 01 — Shared vocabulary** (`01-PLAN.md`), then Plans
+02–10 in the api lane, 11–12 in the admin lane, and 13 for verification. Phase 12's planning set is
+`README.md` (index, lanes, execution shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md`
+(sources + 38 verified repository facts) and `01…13-PLAN.md`. Phase 11's verification is
+`phases/11-procurement-replenishment/11-VERIFICATION.md`.
 
 ---
 
@@ -35,10 +36,77 @@ was decided and where each decision was exercised.
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
-| 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
+| 12 | Branch Operations & Approval Workflow | 🔷 Plans written (13 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 12 planning notes (2026-10-26)
+
+- Thirteen plans written to `phases/12-branch-ops-approvals/`: `README.md` (index, lanes, execution
+  shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md` (official sources + 38 verified
+  repository facts), and `01…13-PLAN.md`. Research is folded into `01-RESEARCH.md` so the next
+  session does not repeat it. The context's nine-plan sketch became thirteen because the authority
+  layer, the operations read model and the two console plans each needed their own prompt.
+- **Five decisions were put to the operator and answered**: `approval.read`/`approval.decide`
+  replace `procurement.approve`, with per-row decider role and branch (D1/D2); managers lower a
+  credit limit directly and request any increase (D21); managers must route shrinkage through a
+  write-off request (D13); shift review is a separate `review_status` column plus an approval row,
+  not a new `shift_status` value (D24); ABC classes are per branch (D29).
+- **Seven defects in the locked context were found and resolved rather than worked around**:
+  `APPROVAL_DECIDER_ROLE` maps every type to ADMIN, so D4's source-branch manager cannot exist
+  (D2); `procurement.approve` is admin-only, so managers could decide nothing (D1); D9's
+  `REVIEW_REQUIRED` shift status would drop shifts out of the reconciliation query, which filters
+  `status = 'CLOSED'` (D24); "increases beyond the requester's own authority" was undefined (D21);
+  `scopeId` in D15 could not express a half-configured schedule (D28); D17's oversell trigger inside
+  `applySale` could reject a sale that already happened at the till (D32); `selectSnapshotRows`
+  cannot see a never-stocked part, which Phase 10 carried forward (D31).
+- **Two unapproved paths already existed and are closed**: a manager's direct price override
+  (`products.service.ts:416`) and direct shrinkage adjustment (`inventory.service.ts:438`). Without
+  D13 and D18 the workflows would be advisory.
+- **Schema additions**: `stock_write_off`, `stock_write_off_line`, `count_schedule`,
+  `stock_abc_class`; extensions to `approval` (`decider_role`, `decider_branch_id`), `stock_count`
+  (`count_type`, `scope`, `scope_key`, `due_at`, `assigned_to`, `schedule_id`, `trigger_*`), `shift`
+  (`review_status`, `reviewed_by`, `reviewed_at`, `review_note`), plus indexes on
+  `sync_conflict(type, created_at)`. New enum values: `transfer_status` (`REQUESTED`, `APPROVED`,
+  `REJECTED`), both movement enums (`WRITE_OFF`), `stock_adjustment_reason` (`THEFT`,
+  `OBSOLESCENCE`, `SUPPLIER_FAULT`), in **their own migration file** because PG 17 cannot use an
+  added enum value in the transaction that added it (verified in the official docs).
+- **Six new settings**: `pricing.managerBandPercent` (10), `pos.shiftVarianceToleranceMinor`
+  (2 000), `inventory.countVarianceToleranceMinor` (1 000), `inventory.writeOffPrefix` (`WO`),
+  `inventory.abcAThresholdBp` (8 000) and `inventory.abcBThresholdBp` (9 500).
+- **Three pg-boss schedules**, all Africa/Accra with `missed: 'once'`: count schedules at 02:00, ABC
+  recompute at 03:00, oversell trigger scan at 03:30. The oversell scan is a job rather than inline
+  in `applySale` on purpose: a failure there would reject a sale the till has already completed.
+- **Execution shape**: `packages/**` alone first; `api/**` is one lane for plans 02–10, so they are
+  serial; `admin/**` for 11–12; verification last. The only parallelism considered is 06 ∥ 07
+  (`products/**` versus `credit/**`) and it is optional.
+- **The phase touches no client that sells.** No `desktop/**` file, no `sync-config.yaml`, no local
+  schema, no outbox change — the `shift` table is not synced, so even the review columns are
+  server-only. Plan 13 proves it with an empty `git diff --stat` and the desktop suite still at 421.
+- **Known limits recorded now**: approval expiry is still not implemented (age is displayed);
+  there is no shift list in the console (Phase 14's oversight screens own it); the `REFUND` type
+  exists and stays undecidable until Phase 13 registers its handler; and a manager can still post a
+  negative `CORRECTION` adjustment directly, which is a documented hole with an audit row rather
+  than a silent one.
+
+### Phase 12 plan progress
+
+| Plan | Title | Status |
+|---|---|---|
+| 01 | Shared vocabulary: approval permissions, authority, band and count arithmetic | ⏳ Planned |
+| 02 | Schema, enum migrations, settings, document kind, seeds | ⏳ Planned |
+| 03 | Approvals core: per-row authority, subject registry, inbox and summary | ⏳ Planned |
+| 04 | Transfer requests: request, decide, dispatch guard, withdraw | ⏳ Planned |
+| 05 | Stock write-offs: document, approval, posted `WRITE_OFF` movement | ⏳ Planned |
+| 06 | Price band and price-change requests | ⏳ Planned |
+| 07 | Credit limit change requests and the over-limit list | ⏳ Planned |
+| 08 | Shift variance review | ⏳ Planned |
+| 09 | Cycle counts: schedules, ABC, trigger counts, accuracy | ⏳ Planned |
+| 10 | The operations summary read model | ⏳ Planned |
+| 11 | Console: unified approval inbox and the manager's operations view | ⏳ Planned |
+| 12 | Console: request screens for transfers, write-offs, price and credit | ⏳ Planned |
+| 13 | Verification, evidence, state update | ⏳ Planned |
 
 ### Phase 11 planning notes (2026-10-25)
 
