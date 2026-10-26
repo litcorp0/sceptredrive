@@ -1,13 +1,8 @@
-import {
-  ApiError,
-  DeviceRevokedError,
-  fetchSession,
-  setAccessToken,
-  setTokenRefresher,
-} from '../api/client'
+import { DeviceRevokedError, fetchSession, setAccessToken, setTokenRefresher } from '../api/client'
 import type { PosSessionPayload } from '../api/types'
 import { desktopApi, isDesktopAvailable } from '../desktop-api'
 import { getDatabase } from '../powersync/database'
+import { classifySessionFailure, type SessionState } from './session-state'
 
 /**
  * Device session lifecycle.
@@ -18,7 +13,7 @@ import { getDatabase } from '../powersync/database'
  * for enrolment, startup, and refresh.
  */
 
-export type SessionState = 'unknown' | 'active' | 'missing' | 'revoked'
+export type { SessionState } from './session-state'
 
 let current: PosSessionPayload | null = null
 let state: SessionState = 'unknown'
@@ -113,11 +108,22 @@ export async function establishSession(deviceToken: string): Promise<PosSessionP
   return adopt(session)
 }
 
-/** Startup path: no token → `missing`; revoked → `revoked`. */
+/** Startup path: no token → `missing`; a refused token → `rejected`; no verdict → `unknown`. */
 export async function ensureSession(): Promise<PosSessionPayload | null> {
   if (current) return current
 
-  const deviceToken = await getDeviceToken()
+  let deviceToken: string | null
+  try {
+    deviceToken = await getDeviceToken()
+  } catch {
+    // The keychain is unavailable or the stored secret cannot be decrypted. That is a local
+    // problem, not proof this terminal was never enrolled: keep the local data and let the
+    // sign-in screen explain it instead of demanding an enrolment code.
+    state = 'unknown'
+    emit()
+    return null
+  }
+
   if (!deviceToken) {
     state = 'missing'
     emit()
@@ -131,13 +137,20 @@ export async function ensureSession(): Promise<PosSessionPayload | null> {
       await markDeviceRevoked()
       return null
     }
-    // Offline start: keep the last known state and let the caller decide.
-    if (error instanceof ApiError && error.status === 0) {
-      state = 'unknown'
+
+    const failure = classifySessionFailure(error)
+    if (failure === 'rejected') {
+      // The server does not know this token (a reset database, a restored backup, or a device
+      // deleted in the console). Keep the token: re-enrolment is an explicit choice, and the
+      // sales already on this terminal are still valid.
+      state = 'rejected'
       emit()
       return null
     }
-    state = 'missing'
+
+    // Offline start, timeout, 5xx, or anything else without a verdict. The terminal stays
+    // usable and retries; it must never be sent to enrolment on this basis.
+    state = 'unknown'
     emit()
     return null
   }

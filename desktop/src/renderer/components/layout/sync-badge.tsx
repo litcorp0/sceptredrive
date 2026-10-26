@@ -71,6 +71,11 @@ export function SyncBadge() {
     // instead of) an upload, so the badge owns this state too.
     state = 'action'
     label = 'Enrol again'
+  } else if (sessionState === 'rejected') {
+    // The server refused the stored device token: the credential is dead but the
+    // local sales are not. Say what to do, not just that something is wrong.
+    state = 'action'
+    label = 'Re-enrol terminal'
   } else if (needsAction) {
     state = 'action'
     label = highOpen > 0 ? `${highOpen} conflict${highOpen === 1 ? '' : 's'}` : 'Action needed'

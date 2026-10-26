@@ -35,6 +35,8 @@ const PAUSE_TEXT: Record<string, string> = {
   OFFLINE: 'Offline — uploads resume when the network returns',
   AUTH: 'Session expired — sign in again or wait for the token refresh',
   REVOKED: 'This terminal was revoked — enrol it again',
+  REJECTED:
+    'The server does not recognise this terminal — re-enrol from the sign-in screen. Saved sales are safe',
   THROTTLED: 'The server asked us to slow down',
   SERVER: 'The server could not accept the last batch — retrying with backoff',
   NO_SESSION: 'No device session — enrol this terminal',
@@ -166,9 +168,11 @@ export function SyncScreen({
           }
         />
 
-        {upload.pauseReason || sessionState === 'revoked' ? (
+        {upload.pauseReason || sessionState === 'revoked' || sessionState === 'rejected' ? (
           <StatusNote tone="notice" className="mb-3" data-testid="sync-pause">
-            {PAUSE_TEXT[upload.pauseReason ?? 'REVOKED'] ?? upload.pauseReason}
+            {PAUSE_TEXT[
+              upload.pauseReason ?? (sessionState === 'rejected' ? 'REJECTED' : 'REVOKED')
+            ] ?? upload.pauseReason}
             {upload.lastError ? ` — ${upload.lastError}` : ''}
           </StatusNote>
         ) : null}

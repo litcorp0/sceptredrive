@@ -15,7 +15,8 @@ import {
   verifyOfflinePin,
 } from '@/lib/auth/bindings'
 import type { LockoutPolicy } from '@/lib/auth/pin'
-import { establishSession, persistDeviceToken } from '@/lib/auth/session'
+import { establishSession, persistDeviceToken, signOut } from '@/lib/auth/session'
+import { credentialProblemFor } from '@/lib/auth/session-state'
 import { startStaffSession } from '@/lib/auth/staff-session'
 import { desktopApi, isDesktopAvailable } from '@/lib/desktop-api'
 import { lockoutPolicyFor, readCachedConfig } from '@/lib/pos-config'
@@ -80,9 +81,11 @@ export function LoginRoute() {
 
   const selected = bindings.find((binding) => binding.id === selectedId) ?? null
 
-  // An enrolled device whose sync is unreachable is still usable offline; only
-  // a missing or revoked credential forces enrolment.
-  const needsEnrollment = sessionState === 'missing' || sessionState === 'revoked'
+  // Only a terminal with no credential at all is unenrolled. A token the server refuses is a
+  // different state with its own screen: the local data is still valid and re-enrolment is a
+  // choice, not something a transient error can force.
+  const needsEnrollment = sessionState === 'missing'
+  const credentialProblem = credentialProblemFor(sessionState)
 
   async function signIn() {
     if (!db || !selected) return
@@ -154,6 +157,17 @@ export function LoginRoute() {
       <EnrollmentScreen
         onEnrolled={async () => {
           if (db) await refresh(db)
+        }}
+      />
+    )
+  }
+
+  if (credentialProblem) {
+    return (
+      <CredentialProblemScreen
+        kind={credentialProblem}
+        onReenrol={async () => {
+          await signOut()
         }}
       />
     )
@@ -523,6 +537,75 @@ function ChangePinForm({
         </StatusNote>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * A terminal whose credential the server refuses.
+ *
+ * This is **not** a first install: the encrypted local database, the sales in it and the staff
+ * bindings are intact. Re-enrolment deletes the dead token, and the enrolment screen follows.
+ * The copy names the likely cause because "enrol this terminal" on a terminal that was enrolled
+ * yesterday is the message that produced this fix.
+ */
+function CredentialProblemScreen({
+  kind,
+  onReenrol,
+}: {
+  kind: 'revoked' | 'rejected'
+  onReenrol: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const revoked = kind === 'revoked'
+
+  async function reenrol() {
+    setBusy(true)
+    setError(null)
+    try {
+      await onReenrol()
+    } catch (reenrolError) {
+      setError(
+        reenrolError instanceof Error ? reenrolError.message : 'Could not reset this terminal',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <main
+      className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground"
+      data-testid="credential-problem"
+      data-kind={kind}
+    >
+      <div className="w-full max-w-md">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Sceptre Drive POS
+        </p>
+        <h1 className="mt-2 text-2xl font-semibold">
+          {revoked ? 'This terminal was revoked' : 'This terminal is not recognised'}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {revoked
+            ? 'An administrator revoked this terminal’s access. Ask for a new enrolment code only if the console still expects this till.'
+            : 'The server no longer knows this terminal’s credential — the database may have been reset or restored. Re-enrol to keep selling here.'}
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Sales already saved on this terminal are not deleted.
+        </p>
+
+        {error ? (
+          <StatusNote tone="danger" role="alert" className="mt-3">
+            {error}
+          </StatusNote>
+        ) : null}
+
+        <Button type="button" onClick={reenrol} disabled={busy} className="mt-4 h-12 w-full">
+          {busy ? 'Resetting…' : 'Re-enrol this terminal'}
+        </Button>
+      </div>
+    </main>
   )
 }
 
