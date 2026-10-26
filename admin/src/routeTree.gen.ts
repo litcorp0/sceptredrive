@@ -41,6 +41,8 @@ import { Route as AuthenticatedCustomersAgingRouteImport } from './routes/_authe
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedInventoryStockRouteImport } from './routes/_authenticated/inventory/stock'
 import { Route as AuthenticatedProcurementIndexRouteImport } from './routes/_authenticated/procurement/index'
+import { Route as AuthenticatedProcurementReplenishmentRouteImport } from './routes/_authenticated/procurement/replenishment'
+import { Route as AuthenticatedProcurementSuppliersRouteImport } from './routes/_authenticated/procurement/suppliers'
 import { Route as AuthenticatedSuppliersIndexRouteImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSuppliersSupplierIdRouteImport } from './routes/_authenticated/suppliers/$supplierId'
 import { Route as AuthenticatedSuppliersAgingRouteImport } from './routes/_authenticated/suppliers/aging'
@@ -247,6 +249,18 @@ const AuthenticatedProcurementIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedProcurementRouteRoute,
   } as any)
+const AuthenticatedProcurementReplenishmentRoute =
+  AuthenticatedProcurementReplenishmentRouteImport.update({
+    id: '/replenishment',
+    path: '/replenishment',
+    getParentRoute: () => AuthenticatedProcurementRouteRoute,
+  } as any)
+const AuthenticatedProcurementSuppliersRoute =
+  AuthenticatedProcurementSuppliersRouteImport.update({
+    id: '/suppliers',
+    path: '/suppliers',
+    getParentRoute: () => AuthenticatedProcurementRouteRoute,
+  } as any)
 const AuthenticatedSuppliersIndexRoute =
   AuthenticatedSuppliersIndexRouteImport.update({
     id: '/',
@@ -437,6 +451,8 @@ export interface FileRoutesByFullPath {
   '/customers/$id': typeof AuthenticatedCustomersIdRouteWithChildren
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
   '/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
+  '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
+  '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/branches/': typeof AuthenticatedBranchesIndexRoute
@@ -488,6 +504,8 @@ export interface FileRoutesByTo {
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
+  '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
+  '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
@@ -550,6 +568,8 @@ export interface FileRoutesById {
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRouteWithChildren
   '/_authenticated/customers/aging': typeof AuthenticatedCustomersAgingRoute
   '/_authenticated/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
+  '/_authenticated/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
+  '/_authenticated/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/_authenticated/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/_authenticated/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
@@ -612,6 +632,8 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/customers/aging'
     | '/inventory/stock'
+    | '/procurement/replenishment'
+    | '/procurement/suppliers'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
     | '/branches/'
@@ -663,6 +685,8 @@ export interface FileRouteTypes {
     | '/catalog/categories'
     | '/catalog/units'
     | '/customers/aging'
+    | '/procurement/replenishment'
+    | '/procurement/suppliers'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
     | '/branches'
@@ -724,6 +748,8 @@ export interface FileRouteTypes {
     | '/_authenticated/customers/$id'
     | '/_authenticated/customers/aging'
     | '/_authenticated/inventory/stock'
+    | '/_authenticated/procurement/replenishment'
+    | '/_authenticated/procurement/suppliers'
     | '/_authenticated/suppliers/$supplierId'
     | '/_authenticated/suppliers/aging'
     | '/_authenticated/branches/'
@@ -990,6 +1016,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/procurement/'
       preLoaderRoute: typeof AuthenticatedProcurementIndexRouteImport
+      parentRoute: typeof AuthenticatedProcurementRouteRoute
+    }
+    '/_authenticated/procurement/replenishment': {
+      id: '/_authenticated/procurement/replenishment'
+      path: '/replenishment'
+      fullPath: '/procurement/replenishment'
+      preLoaderRoute: typeof AuthenticatedProcurementReplenishmentRouteImport
+      parentRoute: typeof AuthenticatedProcurementRouteRoute
+    }
+    '/_authenticated/procurement/suppliers': {
+      id: '/_authenticated/procurement/suppliers'
+      path: '/suppliers'
+      fullPath: '/procurement/suppliers'
+      preLoaderRoute: typeof AuthenticatedProcurementSuppliersRouteImport
       parentRoute: typeof AuthenticatedProcurementRouteRoute
     }
     '/_authenticated/suppliers/': {
@@ -1339,6 +1379,8 @@ const AuthenticatedInventoryRouteRouteWithChildren =
   )
 
 interface AuthenticatedProcurementRouteRouteChildren {
+  AuthenticatedProcurementReplenishmentRoute: typeof AuthenticatedProcurementReplenishmentRoute
+  AuthenticatedProcurementSuppliersRoute: typeof AuthenticatedProcurementSuppliersRoute
   AuthenticatedProcurementIndexRoute: typeof AuthenticatedProcurementIndexRoute
   AuthenticatedProcurementOrdersOrderIdRoute: typeof AuthenticatedProcurementOrdersOrderIdRoute
   AuthenticatedProcurementOrdersNewRoute: typeof AuthenticatedProcurementOrdersNewRoute
@@ -1347,6 +1389,10 @@ interface AuthenticatedProcurementRouteRouteChildren {
 
 const AuthenticatedProcurementRouteRouteChildren: AuthenticatedProcurementRouteRouteChildren =
   {
+    AuthenticatedProcurementReplenishmentRoute:
+      AuthenticatedProcurementReplenishmentRoute,
+    AuthenticatedProcurementSuppliersRoute:
+      AuthenticatedProcurementSuppliersRoute,
     AuthenticatedProcurementIndexRoute: AuthenticatedProcurementIndexRoute,
     AuthenticatedProcurementOrdersOrderIdRoute:
       AuthenticatedProcurementOrdersOrderIdRoute,

@@ -107,6 +107,25 @@ export function updateSupplierProduct(
 	)
 }
 
+/**
+ * Mark the supplier's existing link to a product preferred.
+ *
+ * The API updates a mapping by id, so this resolves the mapping from the supplier's detail first.
+ * Marking one preferred clears any other preferred link for the product server-side (the partial
+ * unique). A supplier that does not list the product is refused by name rather than silently
+ * gaining a mapping.
+ */
+export async function setPreferredSupplier(supplierId: string, productId: string) {
+	const detail = await getSupplier(supplierId)
+	const mapping = detail.products.find((row) => row.productId === productId)
+	if (!mapping) {
+		throw new Error(
+			`${detail.supplier.name} does not list this product yet. Add it on the supplier's page, then choose the supplier again.`,
+		)
+	}
+	return updateSupplierProduct(supplierId, mapping.id, { isPreferred: true })
+}
+
 export function removeSupplierProduct(id: string, mappingId: string) {
 	return apiRequest<{ ok: true }>(`/api/suppliers/${id}/products/${mappingId}`, {
 		method: "DELETE",

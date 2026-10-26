@@ -34,6 +34,7 @@ export {
 	listSuppliers,
 	reactivateSupplier,
 	removeSupplierProduct,
+	setPreferredSupplier,
 	supplierDetailOptions,
 	supplierListOptions,
 	updateSupplier,
