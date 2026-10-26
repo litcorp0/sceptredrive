@@ -25,11 +25,7 @@ import { hasPermission } from "#/lib/role"
 import { transferListOptions } from "../api/transfers"
 import { TransferStatusBadge } from "../components/transfer-status-badge"
 import type { TransferStatus } from "../types"
-import {
-	type TransferSearch,
-	TRANSFER_STATUSES,
-	TRANSFER_STATUS_LABELS,
-} from "../utils/transfer"
+import { TRANSFER_STATUS_LABELS, TRANSFER_STATUSES, type TransferSearch } from "../utils/transfer"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 const listRoute = getRouteApi("/_authenticated/inventory/transfers/")

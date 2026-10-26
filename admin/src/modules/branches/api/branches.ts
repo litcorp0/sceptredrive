@@ -26,8 +26,7 @@ export function branchListOptions(query: BranchListQuery = {}) {
 export function branchDirectoryOptions() {
 	return queryOptions({
 		queryKey: branchKeys.directory(),
-		queryFn: () =>
-			apiRequest<{ branches: BranchDirectoryEntry[] }>("/api/branches/directory"),
+		queryFn: () => apiRequest<{ branches: BranchDirectoryEntry[] }>("/api/branches/directory"),
 		staleTime: 60_000,
 	})
 }

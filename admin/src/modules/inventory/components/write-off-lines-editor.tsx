@@ -13,11 +13,7 @@ import {
 } from "#/components/ui/select"
 import { formatGhs } from "#/lib/format"
 import type { WriteOffReason } from "../types"
-import {
-	WRITE_OFF_REASONS,
-	writeOffReasonLabel,
-	writeOffReasonNeedsNote,
-} from "../utils/writeoff"
+import { WRITE_OFF_REASONS, writeOffReasonLabel, writeOffReasonNeedsNote } from "../utils/writeoff"
 
 export interface WriteOffLineDraft {
 	key: string
@@ -117,9 +113,7 @@ export function WriteOffLinesEditor({
 								</Label>
 								<Select
 									value={row.reason}
-									onValueChange={(value) =>
-										update(row.key, { reason: value as WriteOffReason })
-									}
+									onValueChange={(value) => update(row.key, { reason: value as WriteOffReason })}
 								>
 									<SelectTrigger id={`write-off-reason-${row.key}`}>
 										<SelectValue />

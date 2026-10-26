@@ -91,10 +91,7 @@ export function CreditAgingPage() {
 				</div>
 
 				<Button asChild variant="outline" size="sm" className="ml-auto">
-					<Link
-						to="/customers/over-limit"
-						search={{ branchId: effectiveBranchId ?? undefined }}
-					>
+					<Link to="/customers/over-limit" search={{ branchId: effectiveBranchId ?? undefined }}>
 						Customers over their limit
 					</Link>
 				</Button>

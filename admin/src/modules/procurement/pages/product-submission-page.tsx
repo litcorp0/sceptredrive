@@ -20,9 +20,9 @@ import { ApiError } from "#/lib/api"
 import { formatGhs, parseGhsToMinor } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import { approvalKeys } from "#/modules/approvals"
 // The catalogue owns the reference data a proposal names; the approval is procurement's.
 import { brandListOptions, categoryListOptions, unitListOptions } from "#/modules/catalog"
-import { approvalKeys } from "#/modules/approvals"
 import { submitProductProposal } from "../api/submissions"
 import type { ProductSubmissionInput } from "../types"
 

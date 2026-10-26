@@ -46,8 +46,8 @@ export function WriteOffNewPage() {
 				/>
 
 				<StatusNote tone="info" title="No approval needed">
-					Write-off requests are for branch managers. Your direct path is a negative adjustment
-					with a reason code, recorded in the stock ledger as one audited movement.
+					Write-off requests are for branch managers. Your direct path is a negative adjustment with
+					a reason code, recorded in the stock ledger as one audited movement.
 				</StatusNote>
 
 				<Card className="mt-4">

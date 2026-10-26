@@ -39,7 +39,10 @@ export function StatusNote({
 				className,
 			)}
 		>
-			<span aria-hidden="true" className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", styles.dot)} />
+			<span
+				aria-hidden="true"
+				className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", styles.dot)}
+			/>
 			<div className="min-w-0">
 				{title ? <p className="font-medium">{title}</p> : null}
 				<div className={cn(title ? "mt-0.5 text-muted-foreground" : undefined)}>{children}</div>

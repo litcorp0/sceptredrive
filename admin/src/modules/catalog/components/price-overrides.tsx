@@ -9,11 +9,7 @@ import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import {
-	approvalKeys,
-	approvalListOptions,
-	type ApprovalListRow,
-} from "#/modules/approvals"
+import { type ApprovalListRow, approvalKeys, approvalListOptions } from "#/modules/approvals"
 import type { Branch } from "#/modules/branches"
 import { catalogKeys } from "../api/keys"
 import { productPricesOptions, removeProductPrice, setProductPrice } from "../api/products"
@@ -243,7 +239,11 @@ function OverrideRow({
 						type="submit"
 						size="sm"
 						disabled={
-							!canOverride || disabled || lockRow || value.trim().length === 0 || proposedMinor === null
+							!canOverride ||
+							disabled ||
+							lockRow ||
+							value.trim().length === 0 ||
+							proposedMinor === null
 						}
 					>
 						{busy ? "Saving…" : outsideBand ? "Request price change" : "Save price"}

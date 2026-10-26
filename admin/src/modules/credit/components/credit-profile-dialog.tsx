@@ -20,7 +20,7 @@ import { ApiError } from "#/lib/api"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import { approvalKeys } from "#/modules/approvals"
-import { updateCreditProfile, requestCreditLimitIncrease } from "../api/credit"
+import { requestCreditLimitIncrease, updateCreditProfile } from "../api/credit"
 import { creditKeys } from "../api/keys"
 import type { CreditProfileListRow } from "../types"
 
@@ -69,8 +69,7 @@ export function CreditProfileDialog({
 
 	const currentLimitMinor = profile?.limitMinor ?? 0
 	const parsedLimitMinor = parseGhsToMinor(limit)
-	const requestMode =
-		!isAdmin && parsedLimitMinor !== null && parsedLimitMinor > currentLimitMinor
+	const requestMode = !isAdmin && parsedLimitMinor !== null && parsedLimitMinor > currentLimitMinor
 
 	async function invalidate() {
 		await queryClient.invalidateQueries({ queryKey: creditKeys.profileList(customerId) })
@@ -124,7 +123,10 @@ export function CreditProfileDialog({
 			onOpenChange(false)
 		},
 		onError: (error) => {
-			if (error instanceof ApiError && (error.status === 400 || error.status === 403 || error.status === 409)) {
+			if (
+				error instanceof ApiError &&
+				(error.status === 400 || error.status === 403 || error.status === 409)
+			) {
 				setFormError(error.message)
 				return
 			}
@@ -279,11 +281,7 @@ export function CreditProfileDialog({
 							Cancel
 						</Button>
 						<Button type="submit" disabled={pending}>
-							{pending
-								? "Saving…"
-								: requestMode
-									? "Request increase"
-									: "Save settings"}
+							{pending ? "Saving…" : requestMode ? "Request increase" : "Save settings"}
 						</Button>
 					</DialogFooter>
 				</form>

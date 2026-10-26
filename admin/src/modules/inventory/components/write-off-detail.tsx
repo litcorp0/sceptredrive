@@ -55,8 +55,8 @@ export function WriteOffDetail({
 
 			{writeOff.status === "PENDING_APPROVAL" ? (
 				<StatusNote tone="info">
-					Waiting for an admin's decision. Approving posts one stock movement per line at the
-					frozen cost below; rejecting posts nothing.
+					Waiting for an admin's decision. Approving posts one stock movement per line at the frozen
+					cost below; rejecting posts nothing.
 				</StatusNote>
 			) : writeOff.status === "APPROVED" ? (
 				<StatusNote tone="ok">

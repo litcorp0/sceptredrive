@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query"
 import { apiRequest } from "#/lib/api"
 import type {
 	Barcode,
+	PriceWriteResult,
 	Product,
 	ProductCreateInput,
 	ProductDetail,
@@ -10,7 +11,6 @@ import type {
 	ProductRow,
 	ProductUpdateInput,
 	ProductWithBarcodes,
-	PriceWriteResult,
 } from "../types"
 import { catalogKeys } from "./keys"
 

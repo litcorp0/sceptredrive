@@ -203,11 +203,7 @@ export function TransferNewPage() {
 								id="to-branch"
 								readOnly
 								aria-readonly="true"
-								value={
-									activeBranch
-										? `${activeBranch.code} · ${activeBranch.name}`
-										: "Your branch"
-								}
+								value={activeBranch ? `${activeBranch.code} · ${activeBranch.name}` : "Your branch"}
 							/>
 						)}
 					</div>
@@ -263,11 +259,7 @@ export function TransferNewPage() {
 							(!isAdmin && (directoryQuery.isLoading || directoryQuery.isError))
 						}
 					>
-						{createMutation.isPending
-							? "Saving…"
-							: isAdmin
-								? "Save draft"
-								: "Request transfer"}
+						{createMutation.isPending ? "Saving…" : isAdmin ? "Save draft" : "Request transfer"}
 					</Button>
 				</div>
 			</form>

@@ -72,8 +72,7 @@ export function WriteOffDetailPage() {
 	const branchName =
 		branches.find((branch) => branch.id === writeOff.branchId)?.name ?? writeOff.branchName
 	const actorLabel = session.user.staffId ?? session.user.id
-	const canWithdraw =
-		writeOff.status === "PENDING_APPROVAL" && writeOff.requestedBy === actorLabel
+	const canWithdraw = writeOff.status === "PENDING_APPROVAL" && writeOff.requestedBy === actorLabel
 
 	return (
 		<section>

@@ -127,9 +127,7 @@ export function InventoryTab() {
 						</div>
 						<div>
 							<dt className="text-xs text-muted-foreground">Variance value</dt>
-							<dd className="font-medium tabular-nums">
-								{formatGhs(accuracy.varianceValueMinor)}
-							</dd>
+							<dd className="font-medium tabular-nums">{formatGhs(accuracy.varianceValueMinor)}</dd>
 						</div>
 					</dl>
 				</CardContent>

@@ -1,5 +1,5 @@
-import { formatDateTime } from "@sceptre/shared"
 import type { ApprovalReasonCode, ApprovalStatus } from "@sceptre/shared"
+import { formatDateTime } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { StatusBadge } from "#/components/common/status-badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
@@ -55,9 +55,7 @@ export function ApprovalSummaryCard({
 					</div>
 					<div className="flex flex-wrap justify-between gap-2">
 						<dt className="text-muted-foreground">Decided by</dt>
-						<dd className="max-w-96 text-right font-mono text-xs">
-							{approval.decidedBy ?? "—"}
-						</dd>
+						<dd className="max-w-96 text-right font-mono text-xs">{approval.decidedBy ?? "—"}</dd>
 					</div>
 					<div className="flex flex-wrap justify-between gap-2">
 						<dt className="text-muted-foreground">Decided at</dt>

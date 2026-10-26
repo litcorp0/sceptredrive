@@ -34,9 +34,9 @@ import { writeOffListOptions } from "../api/writeoffs"
 import { AdjustDialog } from "../components/adjust-dialog"
 import type { WriteOffStatus } from "../types"
 import {
-	type WriteOffSearch,
-	WRITE_OFF_STATUSES,
 	WRITE_OFF_STATUS_LABELS,
+	WRITE_OFF_STATUSES,
+	type WriteOffSearch,
 	writeOffStatusLabel,
 	writeOffStatusTone,
 } from "../utils/writeoff"

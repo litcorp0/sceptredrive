@@ -5,8 +5,9 @@
  * each already branch-scoped by the API. A section the caller may not see is absent from the
  * response and is not rendered; the console never turns absence into a zero card.
  */
-export { operationsSummaryOptions } from "./api/operations"
+
 export { operationsKeys } from "./api/keys"
+export { operationsSummaryOptions } from "./api/operations"
 export { QueueCard } from "./components/queue-card"
 export { OperationsPage } from "./pages/operations-page"
 export type {

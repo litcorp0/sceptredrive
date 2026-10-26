@@ -71,10 +71,10 @@ export function updateCreditProfile(customerId: string, input: CreditProfileUpda
  * offers the request to one.
  */
 export function requestCreditLimitIncrease(customerId: string, input: CreditLimitRequestInput) {
-	return apiRequest<CreditLimitRequestResult>(
-		`/api/credit/profiles/${customerId}/limit-requests`,
-		{ method: "POST", body: input },
-	)
+	return apiRequest<CreditLimitRequestResult>(`/api/credit/profiles/${customerId}/limit-requests`, {
+		method: "POST",
+		body: input,
+	})
 }
 
 /** `GET /api/credit/entries` — the ledger, newest first. */

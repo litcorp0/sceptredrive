@@ -6,9 +6,9 @@ import { PageHeader } from "#/components/common/page-header"
 import { Pagination } from "#/components/common/pagination"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { approvalListOptions } from "../api/approvals"
 import { ApprovalFilters } from "../components/approval-filters"
 import { ApprovalTable } from "../components/approval-table"
-import { approvalListOptions } from "../api/approvals"
 import type { ApprovalSearch } from "../utils/approval"
 
 const routeApi = getRouteApi("/_authenticated/approvals/")

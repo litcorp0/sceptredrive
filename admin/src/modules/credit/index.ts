@@ -36,8 +36,8 @@ export { PendingLimitNote } from "./components/pending-limit-note"
 export { RepaymentDialog } from "./components/repayment-dialog"
 export { StatementView } from "./components/statement-view"
 export { CreditAgingPage } from "./pages/credit-aging-page"
-export { OverLimitPage } from "./pages/over-limit-page"
 export { CreditStatementPage } from "./pages/credit-statement-page"
+export { OverLimitPage } from "./pages/over-limit-page"
 export type {
 	AgingChargeRow,
 	AgingCustomerRow,
@@ -75,8 +75,8 @@ export {
 	CREDIT_METHOD_LABELS,
 	CREDIT_OVERRIDE_LABELS,
 	CREDIT_REASON_LABELS,
+	type OverLimitSearch,
 	overLimitSearchDefaults,
 	overLimitSearchSchema,
-	type OverLimitSearch,
 	signedGhs,
 } from "./utils/credit"

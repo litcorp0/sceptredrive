@@ -30,7 +30,13 @@ import {
  * average cost, shown so the requester can see what the admin will approve — the server
  * recomputes and freezes it on submit, so nothing here decides money.
  */
-export function WriteOffForm({ branchId, branchName }: { branchId: string; branchName: string | null }) {
+export function WriteOffForm({
+	branchId,
+	branchName,
+}: {
+	branchId: string
+	branchName: string | null
+}) {
 	const navigate = useNavigate()
 	const queryClient = useQueryClient()
 
@@ -143,8 +149,8 @@ export function WriteOffForm({ branchId, branchName }: { branchId: string; branc
 					Value at average cost: {formatGhs(valueMinor)}
 				</p>
 				<p className="mt-1 text-xs text-muted-foreground">
-					This is the value the admin will approve. The figure is frozen when you submit; later
-					cost changes do not alter it.
+					This is the value the admin will approve. The figure is frozen when you submit; later cost
+					changes do not alter it.
 				</p>
 			</div>
 
@@ -177,8 +183,8 @@ export function WriteOffForm({ branchId, branchName }: { branchId: string; branc
 			</div>
 
 			<p className="text-xs text-muted-foreground">
-				{formatCount(rows.length)} {rows.length === 1 ? "line" : "lines"} · the document is
-				numbered and its value frozen when submitted.
+				{formatCount(rows.length)} {rows.length === 1 ? "line" : "lines"} · the document is numbered
+				and its value frozen when submitted.
 			</p>
 		</form>
 	)
