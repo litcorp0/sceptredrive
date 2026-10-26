@@ -9,6 +9,7 @@ import type {
   CreditLedgerEntryRow,
   CreditProfileListRow,
   CreditProfileRow,
+  OverLimitRow,
 } from './credit.types.ts'
 
 /**
@@ -48,6 +49,48 @@ export async function findProfile(
     .from(creditProfile)
     .where(and(eq(creditProfile.customerId, customerId), eq(creditProfile.branchId, branchId)))
     .limit(1)
+  return rows[0] ?? null
+}
+
+/** One profile by id — the approval subject is addressed by profile id (P12-D22). */
+export async function findProfileById(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<CreditProfileRow | null> {
+  const rows = await executor.select().from(creditProfile).where(eq(creditProfile.id, id)).limit(1)
+  return rows[0] ?? null
+}
+
+/**
+ * Locks one profile by id for the decision handler. The row lock is what makes
+ * the stale-request check (`limit_minor` still equals the value the request was
+ * valued against) race-free: a concurrent direct change waits, then this handler
+ * sees it and refuses with a 409 (P12-D22).
+ */
+export async function lockProfileById(
+  id: string,
+  executor: DbExecutor,
+): Promise<CreditProfileRow | null> {
+  const rows = await executor
+    .select()
+    .from(creditProfile)
+    .where(eq(creditProfile.id, id))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
+/** The limit is an entitlement, not money owed: no ledger entry accompanies it. */
+export async function updateProfileLimit(
+  id: string,
+  limitMinor: number,
+  executor: DbExecutor = db,
+): Promise<CreditProfileRow | null> {
+  const rows = await executor
+    .update(creditProfile)
+    .set({ limitMinor })
+    .where(eq(creditProfile.id, id))
+    .returning()
   return rows[0] ?? null
 }
 
@@ -291,4 +334,62 @@ export async function listBranchIdsWithProfiles(): Promise<
     .from(creditProfile)
     .innerJoin(branch, eq(branch.id, creditProfile.branchId))
     .orderBy(asc(branch.code))
+}
+
+/**
+ * The one over-limit predicate, character for character the one analytics counts
+ * (`analytics.repository.ts` `selectAttention`): `limit_minor > 0 AND
+ * balance_minor > limit_minor`. A profile at exactly the limit is inside it, and a
+ * zero limit is excluded so a brand-new profile with no entitlement is not
+ * reported as over its limit (P12-D23).
+ *
+ * Kept as SQL text rather than column helpers so the two definitions read the same
+ * and the parity test has something to hold on to.
+ */
+const OVER_LIMIT_PREDICATE = sql`${creditProfile.limitMinor} > 0 and ${creditProfile.balanceMinor} > ${creditProfile.limitMinor}`
+
+function overLimitCondition(branchId: string | null): SQL {
+  return branchId
+    ? (and(OVER_LIMIT_PREDICATE, eq(creditProfile.branchId, branchId)) ?? OVER_LIMIT_PREDICATE)
+    : OVER_LIMIT_PREDICATE
+}
+
+const overByMinor =
+  sql<number>`${creditProfile.balanceMinor} - ${creditProfile.limitMinor}`.mapWith(Number)
+
+/**
+ * Rows for the manager's view, biggest exposure first — the customer most likely
+ * to cost the branch money is at the top, and the order is stable across pages
+ * because `id` breaks the tie.
+ */
+export async function listOverLimitProfiles(filters: {
+  branchId: string | null
+  limit: number
+  offset: number
+}): Promise<OverLimitRow[]> {
+  return db
+    .select({
+      customerId: creditProfile.customerId,
+      customerName: customer.name,
+      phone: customer.phone,
+      branchId: creditProfile.branchId,
+      limitMinor: creditProfile.limitMinor,
+      balanceMinor: creditProfile.balanceMinor,
+      overByMinor,
+    })
+    .from(creditProfile)
+    .innerJoin(customer, eq(customer.id, creditProfile.customerId))
+    .where(overLimitCondition(filters.branchId))
+    .orderBy(desc(overByMinor), asc(customer.name), asc(creditProfile.id))
+    .limit(filters.limit)
+    .offset(filters.offset)
+}
+
+/** The same predicate as a count, so `total` and the page can never disagree. */
+export async function countOverLimitProfiles(branchId: string | null): Promise<number> {
+  const rows = await db
+    .select({ total: count() })
+    .from(creditProfile)
+    .where(overLimitCondition(branchId))
+  return Number(rows[0]?.total ?? 0)
 }

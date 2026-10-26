@@ -9,19 +9,30 @@ import {
   uniqueSuffix,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import {
+  AppError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { selectAttention } from '../analytics/analytics.repository.ts'
+import { approval } from '../approvals/approvals.schema.ts'
+import { decideApproval } from '../approvals/approvals.service.ts'
 import { customer } from '../customers/customers.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
-import { sumForCustomerBranch } from './credit.repository.ts'
+import { findProfile, sumForCustomerBranch } from './credit.repository.ts'
 import { creditLedgerEntry, creditProfile } from './credit.schema.ts'
 import {
   getAging,
   getStatement,
+  listOverLimit,
   postEntry,
+  requestCreditLimitIncrease,
   settleCharges,
   updateProfile,
 } from './credit.service.ts'
@@ -46,6 +57,7 @@ describe.skipIf(!available)('credit service', () => {
   let branchAId = ''
   let branchBId = ''
   let branchCId = ''
+  let branchDId = ''
   let managerUser: SessionUser
   let managerCUser: SessionUser
   let adminUser: SessionUser
@@ -53,10 +65,22 @@ describe.skipIf(!available)('credit service', () => {
 
   const actorId = `credit-actor-${suffix}`
   const actorStaffId = `GA-CREDIT-${suffix}`
+  // A second actor for decisions: `canDecideApproval` refuses self-approval for
+  // every role, so the admin deciding cannot be the manager requesting.
+  const adminActorId = `credit-admin-actor-${suffix}`
+  const adminActorStaffId = `GA-CREDIT-ADMIN-${suffix}`
 
   const actor: AuditActor = {
     actorId,
     actorStaffId,
+    ip: null,
+    userAgent: null,
+    requestId: null,
+  }
+
+  const adminActor: AuditActor = {
+    actorId: adminActorId,
+    actorStaffId: adminActorStaffId,
     ip: null,
     userAgent: null,
     requestId: null,
@@ -115,6 +139,47 @@ describe.skipIf(!available)('credit service', () => {
     return rows[0]?.balanceMinor ?? null
   }
 
+  /**
+   * Fixtures raise limits as an admin. Since P12-D21 a manager's increase is a
+   * `CREDIT_LIMIT_CHANGE` request, so a fixture that tried it as a manager would
+   * exercise the 403 instead of the thing it is setting up.
+   */
+  function setLimit(
+    customerId: string,
+    limitMinor: number,
+    branchId = branchAId,
+    paymentTermDays?: number,
+  ) {
+    return updateProfile(actor, adminUser, customerId, {
+      branchId,
+      limitMinor,
+      ...(paymentTermDays === undefined ? {} : { paymentTermDays }),
+    })
+  }
+
+  /** Every `CREDIT_LIMIT_CHANGE` row raised for one profile. */
+  async function limitApprovals(profileId: string) {
+    return db
+      .select()
+      .from(approval)
+      .where(and(eq(approval.type, 'CREDIT_LIMIT_CHANGE'), eq(approval.entityId, profileId)))
+  }
+
+  /** The `via` values written to `credit.profile_updated` for one profile. */
+  async function limitAuditVias(profileId: string): Promise<(string | null)[]> {
+    const rows = await db
+      .select({ after: auditLog.after })
+      .from(auditLog)
+      .where(and(eq(auditLog.action, 'credit.profile_updated'), eq(auditLog.entityId, profileId)))
+    return rows.map((row) => (row.after as { via?: string | null } | null)?.via ?? null)
+  }
+
+  async function requireProfile(customerId: string, branchId = branchAId) {
+    const profile = await findProfile(customerId, branchId)
+    if (!profile) throw new Error('credit profile fixture missing')
+    return profile
+  }
+
   beforeAll(async () => {
     const branches = await db
       .insert(branch)
@@ -122,12 +187,14 @@ describe.skipIf(!available)('credit service', () => {
         { code: `CRD-${suffix}-A`, name: `Credit A ${suffix}`, type: 'RETAIL', city: 'Accra' },
         { code: `CRD-${suffix}-B`, name: `Credit B ${suffix}`, type: 'RETAIL', city: 'Kumasi' },
         { code: `CRD-${suffix}-C`, name: `Credit C ${suffix}`, type: 'RETAIL', city: 'Takoradi' },
+        { code: `CRD-${suffix}-D`, name: `Credit D ${suffix}`, type: 'RETAIL', city: 'Tamale' },
       ])
       .returning({ id: branch.id })
     branchAId = branches[0]?.id ?? ''
     branchBId = branches[1]?.id ?? ''
     branchCId = branches[2]?.id ?? ''
-    branchIds.push(branchAId, branchBId, branchCId)
+    branchDId = branches[3]?.id ?? ''
+    branchIds.push(branchAId, branchBId, branchCId, branchDId)
 
     managerUser = makeUser({ role: 'MANAGER', branchId: branchAId })
     managerCUser = makeUser({ role: 'MANAGER', branchId: branchCId })
@@ -136,7 +203,12 @@ describe.skipIf(!available)('credit service', () => {
   })
 
   afterAll(async () => {
-    await db.delete(auditLog).where(eq(auditLog.actorId, actorId))
+    await db.delete(auditLog).where(inArray(auditLog.actorId, [actorId, adminActorId]))
+    // `approval.branch_id` restricts the branch delete, and these fixtures own
+    // every approval raised on their own branches.
+    if (branchIds.length > 0) {
+      await db.delete(approval).where(inArray(approval.branchId, branchIds))
+    }
     if (customerIds.length > 0) {
       for (const id of customerIds) {
         await db.delete(creditLedgerEntry).where(eq(creditLedgerEntry.customerId, id))
@@ -224,7 +296,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('posts a mixed sequence keeping balance equal to the entry sum', async () => {
     const customerId = await createCustomerRow('Mixed')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 1_000_000 })
+    await setLimit(customerId, 1_000_000)
 
     const chargeA = await post({
       customerId,
@@ -269,7 +341,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('blocks charges while on hold and allows collections', async () => {
     const customerId = await createCustomerRow('Hold')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 50_000, paymentTermDays: 14 })
+    await setLimit(customerId, 50_000, branchAId, 14)
     await updateProfile(actor, managerUser, customerId, { hold: true })
 
     const blocked = await captureError(() =>
@@ -300,7 +372,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('passes at the limit and blocks over-limit charges without an override', async () => {
     const customerId = await createCustomerRow('Limit')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 6_000 })
+    await setLimit(customerId, 6_000)
 
     const atLimit = await post({
       customerId,
@@ -324,7 +396,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('records a reason-coded override with the approver on the entry', async () => {
     const customerId = await createCustomerRow('Override')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 5_000 })
+    await setLimit(customerId, 5_000)
     await post({ customerId, kind: 'CHARGE', amountMinor: 5_000, reasonCode: 'SALE' })
 
     const over = await post({
@@ -348,7 +420,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('fails closed when the actor lacks the credit.override permission', async () => {
     const customerId = await createCustomerRow('NoPermission')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 1_000 })
+    await setLimit(customerId, 1_000)
     await post({ customerId, kind: 'CHARGE', amountMinor: 1_000, reasonCode: 'SALE' })
 
     const denied = await captureError(() =>
@@ -399,7 +471,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('replays idempotent postings without a second row or balance change', async () => {
     const customerId = await createCustomerRow('Idempotent')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 10_000 })
+    await setLimit(customerId, 10_000)
     const input = {
       customerId,
       kind: 'CHARGE',
@@ -418,7 +490,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('serializes a simultaneous replay of the same idempotency key', async () => {
     const customerId = await createCustomerRow('Race')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 10_000 })
+    await setLimit(customerId, 10_000)
     const input = {
       customerId,
       kind: 'CHARGE',
@@ -435,7 +507,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('serializes two parallel refunds below the balance', async () => {
     const customerId = await createCustomerRow('RefundRace')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 100_000 })
+    await setLimit(customerId, 100_000)
     await post({ customerId, kind: 'CHARGE', amountMinor: 10_000, reasonCode: 'OPENING_BALANCE' })
 
     const [first, second] = await Promise.all([
@@ -506,10 +578,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('derives due dates from payment terms and honors explicit due dates', async () => {
     const customerId = await createCustomerRow('Terms')
-    await updateProfile(actor, managerUser, customerId, {
-      paymentTermDays: 30,
-      limitMinor: 100_000,
-    })
+    await setLimit(customerId, 100_000, branchAId, 30)
 
     const occurredAt = new Date('2026-09-01T10:00:00Z')
     const charge = await post({
@@ -534,15 +603,17 @@ describe.skipIf(!available)('credit service', () => {
 
   it('updates profile settings only, audits them, and never touches the balance', async () => {
     const customerId = await createCustomerRow('Settings')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 20_000 })
+    await setLimit(customerId, 20_000)
     await post({ customerId, kind: 'CHARGE', amountMinor: 1_200, reasonCode: 'OPENING_BALANCE' })
 
+    // A manager may lower the limit but not raise it (P12-D21): this is the
+    // decrease half; the increase half has its own test below.
     const updated = await updateProfile(actor, managerUser, customerId, {
-      limitMinor: 25_000,
+      limitMinor: 18_000,
       paymentTermDays: 7,
       notes: 'Watch closely',
     })
-    expect(updated.limitMinor).toBe(25_000)
+    expect(updated.limitMinor).toBe(18_000)
     expect(updated.paymentTermDays).toBe(7)
     expect(updated.notes).toBe('Watch closely')
     expect(updated.balanceMinor).toBe(1_200)
@@ -574,8 +645,8 @@ describe.skipIf(!available)('credit service', () => {
 
   it('keeps branch credit profiles isolated', async () => {
     const customerId = await createCustomerRow('Isolation')
-    await updateProfile(actor, managerUser, customerId, { limitMinor: 50_000 })
-    await updateProfile(actor, adminUser, customerId, { branchId: branchBId, limitMinor: 50_000 })
+    await setLimit(customerId, 50_000)
+    await setLimit(customerId, 50_000, branchBId)
 
     await post({ customerId, kind: 'CHARGE', amountMinor: 5_000, reasonCode: 'SALE' })
     await postEntry(actor, adminUser, {
@@ -612,10 +683,7 @@ describe.skipIf(!available)('credit service', () => {
   it('ages charges into fixed buckets from their due dates', async () => {
     const asOf = new Date('2026-10-16T09:00:00Z')
     const customerId = await createCustomerRow('Aging')
-    await updateProfile(actor, managerCUser, customerId, {
-      limitMinor: 1_000_000,
-      paymentTermDays: 30,
-    })
+    await setLimit(customerId, 1_000_000, branchCId, 30)
 
     // Due 2026-07-01 → 107 days past due → over90 (10_000).
     await postEntry(actor, managerCUser, {
@@ -709,10 +777,7 @@ describe.skipIf(!available)('credit service', () => {
 
   it('reconciles statements: opening + ranged = closing = balance', async () => {
     const customerId = await createCustomerRow('Statement')
-    await updateProfile(actor, managerCUser, customerId, {
-      limitMinor: 1_000_000,
-      paymentTermDays: 14,
-    })
+    await setLimit(customerId, 1_000_000, branchCId, 14)
 
     // Before the range.
     await postEntry(actor, managerCUser, {
@@ -796,6 +861,299 @@ describe.skipIf(!available)('credit service', () => {
     const noBranch = await captureError(() => getStatement(adminUser, customerId, {}))
     expect(noBranch).toBeInstanceOf(ValidationError)
   })
+
+  it('lets a manager lower a limit directly and refuses an increase at the service', async () => {
+    const customerId = await createCustomerRow('Authority')
+    await setLimit(customerId, 5_000)
+    const profile = await requireProfile(customerId)
+
+    const lowered = await updateProfile(actor, managerUser, customerId, { limitMinor: 4_000 })
+    expect(lowered.limitMinor).toBe(4_000)
+    expect(
+      (await limitAuditVias(profile.id)).filter((via) => via === 'DIRECT_DECREASE'),
+    ).toHaveLength(1)
+
+    const refused = await captureError(() =>
+      updateProfile(actor, managerUser, customerId, { limitMinor: 6_000 }),
+    )
+    expect(refused).toBeInstanceOf(ForbiddenError)
+    if (!(refused instanceof ForbiddenError)) throw new Error('expected ForbiddenError')
+    // The 403 names the endpoint, so the console has one instruction to show.
+    expect(refused.message).toContain('Request limit increase')
+
+    expect((await requireProfile(customerId)).limitMinor).toBe(4_000)
+    expect(await limitApprovals(profile.id)).toHaveLength(0)
+
+    // `hold`, terms and notes are not exposure and stay direct for a manager.
+    const settings = await updateProfile(actor, managerUser, customerId, {
+      hold: true,
+      paymentTermDays: 21,
+      notes: 'Lowered after review',
+    })
+    expect(settings.limitMinor).toBe(4_000)
+    expect(settings.hold).toBe(true)
+    expect(settings.paymentTermDays).toBe(21)
+  })
+
+  it('lets an admin raise a limit directly without an approval', async () => {
+    const customerId = await createCustomerRow('AdminDirect')
+    await setLimit(customerId, 5_000)
+    const profile = await requireProfile(customerId)
+
+    const raised = await updateProfile(actor, adminUser, customerId, {
+      branchId: branchAId,
+      limitMinor: 6_000,
+    })
+    expect(raised.limitMinor).toBe(6_000)
+    expect(await limitApprovals(profile.id)).toHaveLength(0)
+    expect(await limitAuditVias(profile.id)).toContain('DIRECT')
+  })
+
+  it('raises a limit only through an approved request, leaving the ledger alone', async () => {
+    const customerId = await createCustomerRow('RequestFlow')
+    await setLimit(customerId, 5_000)
+    await post({ customerId, kind: 'CHARGE', amountMinor: 2_000, reasonCode: 'OPENING_BALANCE' })
+    const profile = await requireProfile(customerId)
+    const entriesBefore = await entryCount(customerId)
+
+    const request = await requestCreditLimitIncrease(managerUser, actor, customerId, {
+      proposedLimitMinor: 8_000,
+      reason: 'Hotel orders every week',
+    })
+    expect(request.status).toBe('PENDING')
+
+    const [pending] = await limitApprovals(profile.id)
+    expect(pending?.id).toBe(request.approvalId)
+    expect(pending?.status).toBe('PENDING')
+    expect(pending?.entityId).toBe(profile.id)
+    expect(pending?.amountMinor).toBe(8_000)
+    expect(pending?.requestNote).toBe('Hotel orders every week')
+    expect(pending?.deciderRole).toBe('ADMIN')
+    expect(pending?.deciderBranchId).toBeNull()
+    expect(pending?.payload).toMatchObject({
+      customerId,
+      branchId: branchAId,
+      currentLimitMinor: 5_000,
+      proposedLimitMinor: 8_000,
+      balanceMinor: 2_000,
+    })
+
+    // The request is a request: nothing about the entitlement moved yet.
+    expect((await requireProfile(customerId)).limitMinor).toBe(5_000)
+
+    await decideApproval(adminUser, adminActor, request.approvalId, { decision: 'APPROVED' })
+
+    const approved = await requireProfile(customerId)
+    expect(approved.limitMinor).toBe(8_000)
+    expect(approved.balanceMinor).toBe(2_000)
+    // A limit is an entitlement, not money owed: no entry, no sum change.
+    expect(await entryCount(customerId)).toBe(entriesBefore)
+    expect(await sumForCustomerBranch(customerId, branchAId)).toBe(2_000)
+    expect((await limitAuditVias(profile.id)).filter((via) => via === 'approval')).toHaveLength(1)
+
+    const again = await captureError(() =>
+      decideApproval(adminUser, adminActor, request.approvalId, { decision: 'APPROVED' }),
+    )
+    expect(again).toBeInstanceOf(AppError)
+    if (!(again instanceof AppError)) throw new Error('expected AppError')
+    expect(again.statusCode).toBe(409)
+    expect((await requireProfile(customerId)).limitMinor).toBe(8_000)
+  })
+
+  it('refuses a stale approval and leaves the request pending', async () => {
+    const customerId = await createCustomerRow('Stale')
+    await setLimit(customerId, 5_000)
+    const profile = await requireProfile(customerId)
+
+    const request = await requestCreditLimitIncrease(managerUser, actor, customerId, {
+      proposedLimitMinor: 8_000,
+      reason: 'Season demand',
+    })
+
+    // Another admin moves the limit while the request waits: applying the
+    // proposal now would overwrite a value nobody approved (P12-D22).
+    await updateProfile(actor, adminUser, customerId, { branchId: branchAId, limitMinor: 6_000 })
+
+    const stale = await captureError(() =>
+      decideApproval(adminUser, adminActor, request.approvalId, { decision: 'APPROVED' }),
+    )
+    expect(stale).toBeInstanceOf(ConflictError)
+
+    expect((await requireProfile(customerId)).limitMinor).toBe(6_000)
+    const [row] = await limitApprovals(profile.id)
+    expect(row?.status).toBe('PENDING')
+  })
+
+  it('rejects a limit request without touching the limit', async () => {
+    const customerId = await createCustomerRow('RejectLimit')
+    await setLimit(customerId, 5_000)
+    const profile = await requireProfile(customerId)
+
+    const request = await requestCreditLimitIncrease(managerUser, actor, customerId, {
+      proposedLimitMinor: 9_000,
+      reason: 'Asks for more every month',
+    })
+    await decideApproval(adminUser, adminActor, request.approvalId, {
+      decision: 'REJECTED',
+      reasonCode: 'OUT_OF_POLICY',
+    })
+
+    expect((await requireProfile(customerId)).limitMinor).toBe(5_000)
+    const [row] = await limitApprovals(profile.id)
+    expect(row?.status).toBe('REJECTED')
+  })
+
+  it('refuses a decrease, a no-op and an admin request with a 400', async () => {
+    const customerId = await createCustomerRow('RequestGuards')
+    await setLimit(customerId, 5_000)
+    const profile = await requireProfile(customerId)
+
+    const decrease = await captureError(() =>
+      requestCreditLimitIncrease(managerUser, actor, customerId, {
+        proposedLimitMinor: 4_000,
+        reason: 'Too much exposure',
+      }),
+    )
+    expect(decrease).toBeInstanceOf(ValidationError)
+
+    const unchanged = await captureError(() =>
+      requestCreditLimitIncrease(managerUser, actor, customerId, {
+        proposedLimitMinor: 5_000,
+        reason: 'Same limit again',
+      }),
+    )
+    expect(unchanged).toBeInstanceOf(ValidationError)
+
+    // P12-D3: an admin never raises a request for work an admin can do directly.
+    const admin = await captureError(() =>
+      requestCreditLimitIncrease(adminUser, actor, customerId, {
+        proposedLimitMinor: 9_000,
+        reason: 'Admin direct path',
+      }),
+    )
+    expect(admin).toBeInstanceOf(ValidationError)
+    if (!(admin instanceof ValidationError)) throw new Error('expected ValidationError')
+    expect(admin.message).toContain('directly')
+
+    expect((await requireProfile(customerId)).limitMinor).toBe(5_000)
+    expect(await limitApprovals(profile.id)).toHaveLength(0)
+  })
+
+  it('allows one pending limit request per profile, not one per customer', async () => {
+    const customerId = await createCustomerRow('Pending')
+    await setLimit(customerId, 5_000)
+    const profileA = await requireProfile(customerId)
+
+    const first = await requestCreditLimitIncrease(managerUser, actor, customerId, {
+      proposedLimitMinor: 8_000,
+      reason: 'First ask',
+    })
+
+    const second = await captureError(() =>
+      requestCreditLimitIncrease(managerUser, actor, customerId, {
+        proposedLimitMinor: 9_000,
+        reason: 'Second ask',
+      }),
+    )
+    expect(second).toBeInstanceOf(ConflictError)
+
+    // The same customer's limit at another branch is a different profile, so it is
+    // a different decision: branch A's pending request does not block branch C.
+    const elsewhere = await requestCreditLimitIncrease(managerCUser, actor, customerId, {
+      proposedLimitMinor: 7_000,
+      reason: 'The Takoradi branch asks too',
+    })
+    expect(elsewhere.approvalId).not.toBe(first.approvalId)
+
+    const profileC = await requireProfile(customerId, branchCId)
+    expect(profileC.id).not.toBe(profileA.id)
+    // Created at limit 0 before the request was valued.
+    expect(profileC.limitMinor).toBe(0)
+    const [rowC] = await limitApprovals(profileC.id)
+    expect(rowC?.payload).toMatchObject({ currentLimitMinor: 0, proposedLimitMinor: 7_000 })
+
+    expect(await limitApprovals(profileA.id)).toHaveLength(1)
+  })
+
+  it('lists over-limit customers with the analytics predicate and branch scoping', async () => {
+    const overId = await createCustomerRow('Over')
+    const biggerId = await createCustomerRow('Over Bigger')
+    const atLimitId = await createCustomerRow('At Limit')
+    const zeroLimitId = await createCustomerRow('Zero Limit')
+
+    // Over by 5 000. An over-limit profile is created by a charge a manager
+    // overrode — the state a POS offline sale leaves — not by a charge the
+    // service would refuse.
+    await setLimit(biggerId, 10_000, branchDId)
+    await postEntry(actor, adminUser, {
+      customerId: biggerId,
+      branchId: branchDId,
+      kind: 'CHARGE',
+      amountMinor: 15_000,
+      reasonCode: 'OPENING_BALANCE',
+      override: { reasonCode: 'TRUSTED_CUSTOMER' },
+    })
+    // Over by 2 500.
+    await setLimit(overId, 5_000, branchDId)
+    await postEntry(actor, adminUser, {
+      customerId: overId,
+      branchId: branchDId,
+      kind: 'CHARGE',
+      amountMinor: 7_500,
+      reasonCode: 'SALE',
+      override: { reasonCode: 'TRUSTED_CUSTOMER' },
+    })
+    // Exactly at the limit: inside it, never listed.
+    await setLimit(atLimitId, 5_000, branchDId)
+    await postEntry(actor, adminUser, {
+      customerId: atLimitId,
+      branchId: branchDId,
+      kind: 'CHARGE',
+      amountMinor: 5_000,
+      reasonCode: 'SALE',
+    })
+    // No entitlement, but a debt: `limit_minor > 0` keeps it out of the list. A
+    // correction posts the debt because the limit check covers charges only.
+    await postEntry(actor, adminUser, {
+      customerId: zeroLimitId,
+      branchId: branchDId,
+      kind: 'ADJUSTMENT',
+      amountMinor: 300,
+      reasonCode: 'CORRECTION',
+    })
+
+    const list = await listOverLimit(adminUser, { branchId: branchDId, limit: 50, offset: 0 })
+    expect(list.branchId).toBe(branchDId)
+    expect(list.total).toBe(2)
+    // Biggest exposure first.
+    expect(list.customers.map((row) => row.customerId)).toEqual([biggerId, overId])
+    expect(list.customers[0]?.overByMinor).toBe(5_000)
+    expect(list.customers[1]?.overByMinor).toBe(2_500)
+    expect(list.customers[1]?.balanceMinor).toBe(7_500)
+    expect(list.customers[1]?.limitMinor).toBe(5_000)
+    expect(list.customers[1]?.phone).toBeNull()
+    expect(list.customers.map((row) => row.customerId)).not.toContain(atLimitId)
+    expect(list.customers.map((row) => row.customerId)).not.toContain(zeroLimitId)
+
+    // The definition cannot drift from the dashboard tile (P12-D23).
+    const attention = await selectAttention(db, branchDId)
+    expect(attention.overLimitCreditCount).toBe(list.total)
+
+    // A scoped manager's own list agrees too, and a foreign branch is a 403.
+    const ownBranch = await listOverLimit(managerCUser, { limit: 50, offset: 0 })
+    expect(ownBranch.branchId).toBe(branchCId)
+    expect(ownBranch.total).toBe((await selectAttention(db, branchCId)).overLimitCreditCount)
+
+    const foreign = await captureError(() =>
+      listOverLimit(managerCUser, { branchId: branchDId, limit: 50, offset: 0 }),
+    )
+    expect(foreign).toBeInstanceOf(ForbiddenError)
+
+    // Pagination keeps `total` whole while the page is bounded.
+    const page = await listOverLimit(adminUser, { branchId: branchDId, limit: 1, offset: 1 })
+    expect(page.total).toBe(2)
+    expect(page.customers.map((row) => row.customerId)).toEqual([overId])
+  })
 })
 
 describe.skipIf(!available)('credit HTTP surface', () => {
@@ -869,8 +1227,13 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       await db.delete(auditLog).where(inArray(auditLog.actorId, createdUserIds))
       await db.delete(userTable).where(inArray(userTable.id, createdUserIds))
     }
-    for (const id of [branchAId, branchBId]) {
-      if (id) await db.delete(branch).where(eq(branch.id, id))
+    // `approval.branch_id` restricts the branch delete below.
+    const ownedBranches = [branchAId, branchBId].filter((id) => id !== '')
+    if (ownedBranches.length > 0) {
+      await db.delete(approval).where(inArray(approval.branchId, ownedBranches))
+    }
+    for (const id of ownedBranches) {
+      await db.delete(branch).where(eq(branch.id, id))
     }
   })
 
@@ -907,36 +1270,66 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       }),
     })
     expect(entry.status).toBe(403)
+
+    // A limit increase is a decision about money: no cashier reaches the request.
+    const limitRequest = await app.request(
+      `/api/credit/profiles/${crypto.randomUUID()}/limit-requests`,
+      {
+        method: 'POST',
+        headers: authedHeaders(cashierCookie),
+        body: JSON.stringify({ proposedLimitMinor: 9_000, reason: 'Cashier should not ask' }),
+      },
+    )
+    expect(limitRequest.status).toBe(403)
+
+    const overLimit = await app.request('/api/credit/over-limit', {
+      headers: authedHeaders(cashierCookie),
+    })
+    expect(overLimit.status).toBe(403)
   })
 
   it('lets a manager manage a profile, charge, and collect at their branch', async () => {
     const customerId = await createCustomerRow('HTTP Flow')
 
-    const put = await app.request(`/api/credit/profiles/${customerId}`, {
+    // The limit is raised by an admin: since P12-D21 a manager's increase is a
+    // `CREDIT_LIMIT_CHANGE` request, asserted in its own test below.
+    const putLimit = await app.request(`/api/credit/profiles/${customerId}`, {
       method: 'PUT',
-      headers: authedHeaders(managerCookie),
+      headers: authedHeaders(adminCookie),
       body: JSON.stringify({
+        branchId: branchAId,
         limitMinor: 40_000,
         paymentTermDays: 14,
         hold: false,
         notes: 'HTTP test',
       }),
     })
-    expect(put.status).toBe(200)
+    expect(putLimit.status).toBe(200)
     const profile = (
       await readJson<{
         profile: { id: string; limitMinor: number; paymentTermDays: number; notes: string | null }
-      }>(put)
+      }>(putLimit)
     ).profile
     expect(profile.limitMinor).toBe(40_000)
     expect(profile.paymentTermDays).toBe(14)
     expect(profile.notes).toBe('HTTP test')
 
+    // A manager may still lower it, and that is audited as a direct decrease.
+    const putDecrease = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ limitMinor: 38_000 }),
+    })
+    expect(putDecrease.status).toBe(200)
+    expect(
+      (await readJson<{ profile: { limitMinor: number } }>(putDecrease)).profile.limitMinor,
+    ).toBe(38_000)
+
     const profileAudits = await db
       .select({ id: auditLog.id })
       .from(auditLog)
       .where(and(eq(auditLog.action, 'credit.profile_updated'), eq(auditLog.entityId, profile.id)))
-    expect(profileAudits).toHaveLength(1)
+    expect(profileAudits).toHaveLength(2)
 
     const charge = await app.request('/api/credit/entries', {
       method: 'POST',
@@ -1028,8 +1421,8 @@ describe.skipIf(!available)('credit HTTP surface', () => {
     const customerId = await createCustomerRow('HTTP Override')
     const put = await app.request(`/api/credit/profiles/${customerId}`, {
       method: 'PUT',
-      headers: authedHeaders(managerCookie),
-      body: JSON.stringify({ limitMinor: 1_000 }),
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 1_000 }),
     })
     expect(put.status).toBe(200)
 
@@ -1130,8 +1523,8 @@ describe.skipIf(!available)('credit HTTP surface', () => {
     const customerId = await createCustomerRow('HTTP Report')
     await app.request(`/api/credit/profiles/${customerId}`, {
       method: 'PUT',
-      headers: authedHeaders(managerCookie),
-      body: JSON.stringify({ limitMinor: 20_000, paymentTermDays: 0 }),
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 20_000, paymentTermDays: 0 }),
     })
     await app.request('/api/credit/entries', {
       method: 'POST',
@@ -1207,8 +1600,8 @@ describe.skipIf(!available)('credit HTTP surface', () => {
     const customerId = await createCustomerRow('HTTP Kind Filter')
     await app.request(`/api/credit/profiles/${customerId}`, {
       method: 'PUT',
-      headers: authedHeaders(managerCookie),
-      body: JSON.stringify({ limitMinor: 20_000, paymentTermDays: 0 }),
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 20_000, paymentTermDays: 0 }),
     })
     await app.request('/api/credit/entries', {
       method: 'POST',
@@ -1252,5 +1645,130 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       headers: authedHeaders(managerCookie),
     })
     expect(bogus.status).toBe(400)
+  })
+
+  it('accepts a raise as a request and refuses the direct path, a decrease and an admin', async () => {
+    const customerId = await createCustomerRow('HTTP Request')
+    await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 5_000 }),
+    })
+
+    // A manager raising the limit directly is refused at the route's service, not
+    // hidden in the console (OWASP A01).
+    const direct = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ limitMinor: 6_000 }),
+    })
+    expect(direct.status).toBe(403)
+
+    const request = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ proposedLimitMinor: 8_000, reason: 'New contract with the hotel' }),
+    })
+    expect(request.status).toBe(201)
+    const requestBody = await readJson<{ approvalId: string; status: string }>(request)
+    expect(requestBody.status).toBe('PENDING')
+    expect(requestBody.approvalId).toMatch(/^[0-9a-f-]{36}$/)
+
+    const stillLimit = await app.request(`/api/credit/profiles?customerId=${customerId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    const profiles = await readJson<{ profiles: { limitMinor: number }[] }>(stillLimit)
+    expect(profiles.profiles[0]?.limitMinor).toBe(5_000)
+
+    const noReason = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ proposedLimitMinor: 9_000 }),
+    })
+    expect(noReason.status).toBe(400)
+
+    // `.strict()`: a smuggled branchId is a 400, not a silently ignored field.
+    const smuggled = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchBId,
+        proposedLimitMinor: 9_000,
+        reason: 'Try another branch',
+      }),
+    })
+    expect(smuggled.status).toBe(400)
+
+    const decrease = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ proposedLimitMinor: 4_000, reason: 'Lower it' }),
+    })
+    expect(decrease.status).toBe(400)
+
+    const asAdmin = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ proposedLimitMinor: 12_000, reason: 'Admin asks' }),
+    })
+    expect(asAdmin.status).toBe(400)
+  })
+
+  it('serves the over-limit list to the branch and refuses a foreign branch', async () => {
+    const customerId = await createCustomerRow('HTTP Over Limit')
+    await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 1_000 }),
+    })
+    const over = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        customerId,
+        kind: 'CHARGE',
+        amountMinor: 1_500,
+        reasonCode: 'SALE',
+        override: { reasonCode: 'TRUSTED_CUSTOMER' },
+      }),
+    })
+    expect(over.status).toBe(201)
+
+    const list = await app.request('/api/credit/over-limit', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(list.status).toBe(200)
+    const body = await readJson<{
+      customers: {
+        customerId: string
+        branchId: string
+        limitMinor: number
+        balanceMinor: number
+        overByMinor: number
+      }[]
+      total: number
+      branchId: string | null
+    }>(list)
+    expect(body.branchId).toBe(branchAId)
+    expect(body.total).toBeGreaterThanOrEqual(1)
+    const row = body.customers.find((entry) => entry.customerId === customerId)
+    expect(row?.branchId).toBe(branchAId)
+    expect(row?.limitMinor).toBe(1_000)
+    expect(row?.balanceMinor).toBe(1_500)
+    expect(row?.overByMinor).toBe(500)
+    // Biggest exposure first.
+    const excess = body.customers.map((entry) => entry.overByMinor)
+    expect([...excess].sort((a, b) => b - a)).toEqual(excess)
+
+    const foreign = await app.request(`/api/credit/over-limit?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(foreign.status).toBe(403)
+
+    const adminAll = await app.request('/api/credit/over-limit', {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(adminAll.status).toBe(200)
+    expect((await readJson<{ branchId: string | null }>(adminAll)).branchId).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import type { ApprovalSubject } from '../approvals/approvals.types.ts'
 import type {
   creditEntryKindEnum,
   creditLedgerEntry,
@@ -9,8 +10,11 @@ import type {
 } from './credit.schema.ts'
 import type {
   agingQuerySchema,
+  creditLimitPayloadSchema,
+  creditLimitRequestSchema,
   entryCreateSchema,
   entryListQuerySchema,
+  overLimitQuerySchema,
   profileListQuerySchema,
   profileUpdateSchema,
   repaymentCreateSchema,
@@ -32,6 +36,65 @@ export type EntryListQuery = z.infer<typeof entryListQuerySchema>
 export type ProfileListQuery = z.infer<typeof profileListQuerySchema>
 export type AgingQuery = z.infer<typeof agingQuerySchema>
 export type StatementQuery = z.infer<typeof statementQuerySchema>
+export type CreditLimitRequestBody = z.infer<typeof creditLimitRequestSchema>
+export type CreditLimitChangePayload = z.infer<typeof creditLimitPayloadSchema>
+export type OverLimitQuery = z.infer<typeof overLimitQuerySchema>
+
+/** What a manager gets back: the id of the row an admin will decide. */
+export interface CreditLimitChangeRequestResult {
+  approvalId: string
+  status: 'PENDING'
+}
+
+/**
+ * How the limit was changed. `DIRECT` is an admin, `DIRECT_DECREASE` a manager
+ * lowering exposure, `approval` an approved request. It is written to the audit
+ * row so "who raised this limit, and how" is one query (P12-D21, P12-D22).
+ */
+export type CreditLimitChangeVia = 'DIRECT' | 'DIRECT_DECREASE' | 'approval'
+
+/** Where the customer stands if the requested limit is approved (P12-D21). */
+export interface CreditLimitPosition {
+  limitMinor: number
+  balanceMinor: number
+  /** Zero when there is headroom; the positive excess otherwise. */
+  overByMinor: number
+  /** `limit - balance` when positive, zero when the customer is over. */
+  headroomMinor: number
+  overLimit: boolean
+  /** True when the next positive charge would exceed the limit. */
+  blocksNewCredit: boolean
+}
+
+/**
+ * The `credit_limit_change` subject arm plus the identity and the resulting
+ * position the decider needs. The extra fields live here — not in
+ * `approvals.types.ts` — because the generic module must not grow a credit shape
+ * for every consumer; the arm stays the shared contract.
+ */
+export type CreditLimitChangeSubject = Extract<ApprovalSubject, { kind: 'credit_limit_change' }> & {
+  customerName: string
+  phone: string | null
+  /** `ratioBp(balance, proposedLimit)`; null only if the proposal is zero. */
+  utilisationBp: number | null
+  resultingPosition: CreditLimitPosition
+}
+
+export interface OverLimitRow {
+  customerId: string
+  customerName: string
+  phone: string | null
+  branchId: string
+  limitMinor: number
+  balanceMinor: number
+  overByMinor: number
+}
+
+export interface OverLimitListResult {
+  customers: OverLimitRow[]
+  total: number
+  branchId: string | null
+}
 
 /** Signed input for the single write path: the amount is the stored ledger sign. */
 export interface PostEntryInput {

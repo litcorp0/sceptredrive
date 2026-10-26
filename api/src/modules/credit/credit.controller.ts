@@ -5,8 +5,10 @@ import type { AppEnv } from '../../http/factory.ts'
 import * as creditService from './credit.service.ts'
 import type {
   AgingQuery,
+  CreditLimitRequestBody,
   EntryCreateBody,
   EntryListQuery,
+  OverLimitQuery,
   ProfileListQuery,
   ProfileUpdateBody,
   RepaymentCreateBody,
@@ -27,6 +29,22 @@ export async function updateProfile(
   const user = currentUser(c)
   const profile = await creditService.updateProfile(actor, user, customerId, input)
   return c.json({ profile })
+}
+
+export async function requestLimitIncrease(
+  c: Context<AppEnv>,
+  customerId: string,
+  input: CreditLimitRequestBody,
+) {
+  const actor = actorFromContext(c)
+  const user = currentUser(c)
+  const request = await creditService.requestCreditLimitIncrease(user, actor, customerId, input)
+  return c.json(request, 201)
+}
+
+export async function listOverLimit(c: Context<AppEnv>, query: OverLimitQuery) {
+  const user = currentUser(c)
+  return c.json(await creditService.listOverLimit(user, query))
 }
 
 export async function createRepayment(c: Context<AppEnv>, input: RepaymentCreateBody) {

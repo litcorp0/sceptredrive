@@ -1,5 +1,6 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { hasPermission, resolveBranchFilter } from '../../auth/scope.ts'
+import { ratioBp } from '@sceptre/shared'
+import { branchScope, hasPermission, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import {
   AppError,
@@ -9,6 +10,11 @@ import {
   ValidationError,
 } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import {
+  registerDecisionHandler,
+  registerSubjectLoader,
+  requestApproval,
+} from '../approvals/approvals.service.ts'
 import { requireCustomer } from '../customers/customers.service.ts'
 import { getBranch, listBranches } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
@@ -16,18 +22,23 @@ import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
 import {
   countEntryRows,
+  countOverLimitProfiles,
   findEntryByIdempotencyKey,
   findProfile,
+  findProfileById,
   insertEntry,
   listEntryRows,
+  listOverLimitProfiles,
   listProfilesByBranch,
   listProfilesByCustomer,
   listSettlementEntries,
   listSettlementEntriesByBranch,
   lockOrCreateProfile,
+  lockProfileById,
   sumEntriesBefore,
   sumForCustomerBranch,
   updateProfileBalance,
+  updateProfileLimit,
   updateProfileSettings,
 } from './credit.repository.ts'
 import type {
@@ -40,6 +51,11 @@ import type {
   ChargeSettlement,
   CreditEntryListResult,
   CreditLedgerEntryRow,
+  CreditLimitChangeRequestResult,
+  CreditLimitChangeSubject,
+  CreditLimitChangeVia,
+  CreditLimitPosition,
+  CreditLimitRequestBody,
   CreditOverrideReason,
   CreditPostingResult,
   CreditProfileListResult,
@@ -47,6 +63,8 @@ import type {
   CreditStatement,
   EntryCreateBody,
   EntryListQuery,
+  OverLimitListResult,
+  OverLimitQuery,
   PostEntryInput,
   ProfileListQuery,
   ProfileUpdateBody,
@@ -60,6 +78,7 @@ import {
   ADJUSTMENT_REASON_CODES,
   CHARGE_REASON_CODES,
   CREDIT_METHODS,
+  creditLimitPayloadSchema,
 } from './credit.validation.ts'
 
 const AUDIT_ACTIONS = {
@@ -428,7 +447,16 @@ export function settleCharges(entries: SettleableEntry[]): SettlementResult {
   return { charges, unappliedCreditMinor }
 }
 
-/** Profile settings are a separate, audited path — never the balance. */
+/**
+ * Profile settings are a separate, audited path — never the balance.
+ *
+ * A limit change is an authority question, not a shape question, so the rule
+ * lives here and only here (P12-D21): a manager may lower a limit (that reduces
+ * exposure) and is refused an increase with a 403 naming the request endpoint; an
+ * admin changes a limit directly. `hold`, `paymentTermDays` and `notes` do not
+ * increase exposure and stay direct for both. A client that hides the field must
+ * still hit this 403 if it sends one (OWASP A01).
+ */
 export async function updateProfile(
   actor: AuditActor,
   user: SessionUser,
@@ -446,7 +474,17 @@ export async function updateProfile(
     const profile = await lockOrCreateProfile(tx, customerId, branchId)
 
     const patch: Partial<typeof profile> = {}
-    if (input.limitMinor !== undefined) patch.limitMinor = input.limitMinor
+    let limitVia: CreditLimitChangeVia | null = null
+    if (input.limitMinor !== undefined && input.limitMinor !== profile.limitMinor) {
+      const raising = input.limitMinor > profile.limitMinor
+      if (raising && roleOf(user) !== 'ADMIN') {
+        throw new ForbiddenError(
+          'A credit limit increase is requested and approved. Use Request limit increase.',
+        )
+      }
+      limitVia = raising || roleOf(user) === 'ADMIN' ? 'DIRECT' : 'DIRECT_DECREASE'
+      patch.limitMinor = input.limitMinor
+    }
     if (input.hold !== undefined) patch.hold = input.hold
     if (input.paymentTermDays !== undefined) patch.paymentTermDays = input.paymentTermDays
     if (input.notes !== undefined) patch.notes = input.notes ?? null
@@ -473,6 +511,10 @@ export async function updateProfile(
           hold: updated.hold,
           paymentTermDays: updated.paymentTermDays,
           notes: updated.notes,
+          // Null when this update did not move the limit. `DIRECT` is an admin,
+          // `DIRECT_DECREASE` a manager lowering exposure (P12-D21), `approval`
+          // is written by the decision handler below.
+          via: limitVia,
         },
       },
       tx,
@@ -480,6 +522,100 @@ export async function updateProfile(
 
     return updated
   })
+}
+
+/**
+ * A manager asks an admin to raise a limit (P12-D21, P12-D22).
+ *
+ * The profile is locked (and created at limit 0 when this customer has none at
+ * the branch) *before* the request is valued, so `currentLimitMinor` is the limit
+ * the admin will be asked to replace, not a value read from somewhere else. The
+ * request stores the profile id as its entity: that is what makes the partial
+ * unique index mean "one pending limit change per customer per branch" — the same
+ * customer's limit at another branch is a different decision.
+ */
+export async function requestCreditLimitIncrease(
+  user: SessionUser,
+  actor: AuditActor,
+  customerId: string,
+  input: CreditLimitRequestBody,
+): Promise<CreditLimitChangeRequestResult> {
+  // P12-D3: an admin never raises a request for work an admin can do directly.
+  if (roleOf(user) === 'ADMIN') {
+    throw new ValidationError(
+      'An admin changes a credit limit directly (PUT /api/credit/profiles/:customerId)',
+    )
+  }
+
+  const branchId = branchScope(user)
+  if (!branchId) throw new ValidationError('Your account is not assigned to a branch')
+  await getBranch(user, branchId)
+  await requireCustomer(customerId)
+
+  try {
+    return await db.transaction(async (tx): Promise<CreditLimitChangeRequestResult> => {
+      const profile = await lockOrCreateProfile(tx, customerId, branchId)
+
+      if (input.proposedLimitMinor <= profile.limitMinor) {
+        throw new ValidationError(
+          'A limit increase must be greater than the current limit; a decrease applies immediately',
+        )
+      }
+
+      const approval = await requestApproval(
+        actor,
+        {
+          type: 'CREDIT_LIMIT_CHANGE',
+          entityId: profile.id,
+          branchId,
+          amountMinor: input.proposedLimitMinor,
+          deciderRole: 'ADMIN',
+          deciderBranchId: null,
+          note: input.reason,
+          payload: {
+            customerId,
+            branchId,
+            currentLimitMinor: profile.limitMinor,
+            proposedLimitMinor: input.proposedLimitMinor,
+            balanceMinor: profile.balanceMinor,
+          },
+        },
+        tx,
+      )
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'credit.limit_change_requested',
+          entity: 'credit_profile',
+          entityId: profile.id,
+          branchId,
+          before: {
+            limitMinor: profile.limitMinor,
+            balanceMinor: profile.balanceMinor,
+          },
+          after: {
+            limitMinor: input.proposedLimitMinor,
+            balanceMinor: profile.balanceMinor,
+            approvalId: approval.id,
+            reason: input.reason,
+          },
+        },
+        tx,
+      )
+
+      return { approvalId: approval.id, status: 'PENDING' as const }
+    })
+  } catch (error) {
+    // The partial unique index on (type, entity_id) WHERE status = 'PENDING' is
+    // the guard, not a pre-check: two concurrent submits cannot both queue.
+    if (isUniqueViolation(error)) {
+      throw new ConflictError(
+        'A credit limit change for this customer is already waiting for an admin decision',
+      )
+    }
+    throw error
+  }
 }
 
 function requirePostingBranch(user: SessionUser, requested: string | null | undefined): string {
@@ -748,3 +884,134 @@ export async function getStatement(
     aging,
   }
 }
+
+/**
+ * The manager's over-limit list: the rows behind analytics' count (P12-D23).
+ *
+ * The predicate is analytics' predicate — `limit_minor > 0 AND balance_minor >
+ * limit_minor` — so a dashboard tile and the list it opens can never disagree;
+ * the parity test in `credit.test.ts` holds the two together. Branch scoping
+ * happens twice, as P11-D17 requires: the route demands `credit.read` and this
+ * function runs `resolveBranchFilter`, which refuses a manager asking for another
+ * branch with a 403.
+ */
+export async function listOverLimit(
+  user: SessionUser,
+  query: OverLimitQuery,
+): Promise<OverLimitListResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const [customers, total] = await Promise.all([
+    listOverLimitProfiles({ branchId, limit: query.limit, offset: query.offset }),
+    countOverLimitProfiles(branchId),
+  ])
+  return { customers, total, branchId }
+}
+
+/** Where the customer stands at a given limit — headroom or the excess. */
+function limitPosition(limitMinor: number, balanceMinor: number): CreditLimitPosition {
+  const overByMinor = balanceMinor > limitMinor ? balanceMinor - limitMinor : 0
+  return {
+    limitMinor,
+    balanceMinor,
+    overByMinor,
+    headroomMinor: limitMinor > balanceMinor ? limitMinor - balanceMinor : 0,
+    // Same shape as the over-limit list, without the `limit > 0` arm: the
+    // position is about this proposal, so a zero limit with a debt is over it.
+    overLimit: balanceMinor > limitMinor,
+    blocksNewCredit: balanceMinor >= limitMinor,
+  }
+}
+
+/**
+ * Plan 07's half of the decision registry (P12-D8).
+ *
+ * A limit is an entitlement, not money owed: this writes `limit_minor` and an
+ * audit row, and **no** ledger entry — `balance_minor` stays a projection of
+ * `credit_ledger_entry` and is untouched here. The stale check is P12-D22: the
+ * profile is locked and its limit must still equal the value the request was
+ * valued against, or the decision fails with a 409 and rolls back (the approval
+ * stays `PENDING` so the admin can reject it).
+ *
+ * `REJECTED` is handled before the payload is parsed, as in `PRODUCT_CREATE`: an
+ * admin must always be able to reject a request whose stored payload is
+ * unreadable, and a rejection writes nothing to the subject.
+ */
+registerDecisionHandler('CREDIT_LIMIT_CHANGE', async (tx, approval, actor, decision) => {
+  if (decision === 'REJECTED') return undefined
+
+  if (!approval.entityId) {
+    throw new AppError(500, 'INTERNAL', 'A credit limit approval has no credit profile')
+  }
+  const payload = creditLimitPayloadSchema.parse(approval.payload)
+
+  const profile = await lockProfileById(approval.entityId, tx)
+  if (!profile) throw new NotFoundError('Credit profile not found')
+  if (profile.limitMinor !== payload.currentLimitMinor) {
+    throw new ConflictError(
+      'The limit changed while this request was waiting. Reject it and raise a new one.',
+    )
+  }
+
+  const updated = await updateProfileLimit(profile.id, payload.proposedLimitMinor, tx)
+  if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update the credit profile')
+
+  const via: CreditLimitChangeVia = 'approval'
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'credit.profile_updated',
+      entity: 'credit_profile',
+      entityId: profile.id,
+      branchId: profile.branchId,
+      before: { limitMinor: profile.limitMinor },
+      after: {
+        limitMinor: payload.proposedLimitMinor,
+        via,
+        approvalId: approval.id,
+      },
+    },
+    tx,
+  )
+
+  return undefined
+})
+
+/**
+ * Plan 07's half of the subject registry (P12-D4): the admin sees the current
+ * limit, the proposed one, the balance and the resulting position — including the
+ * case where the approved limit still leaves the customer over it, which P12-D21
+ * allows and which must be visible now rather than discovered at the next sale.
+ * Read-only and transaction-free.
+ */
+registerSubjectLoader('CREDIT_LIMIT_CHANGE', async (approval) => {
+  if (!approval.entityId) return { kind: 'other' }
+
+  const profile = await findProfileById(approval.entityId)
+  if (!profile) throw new NotFoundError('Credit profile not found')
+  const customerRow = await requireCustomer(profile.customerId)
+
+  // The request captured the limit it was valued against; the profile carries the
+  // live balance. A payload that cannot be read (an older row, a hand-edited
+  // value) falls back to the profile so the decider can still see and reject it
+  // rather than facing a 500 on the detail screen.
+  const payload = creditLimitPayloadSchema.safeParse(approval.payload)
+  const currentLimitMinor = payload.success ? payload.data.currentLimitMinor : profile.limitMinor
+  const proposedLimitMinor = payload.success
+    ? payload.data.proposedLimitMinor
+    : (approval.amountMinor ?? profile.limitMinor)
+
+  const subject: CreditLimitChangeSubject = {
+    kind: 'credit_limit_change',
+    customerId: profile.customerId,
+    branchId: profile.branchId,
+    currentLimitMinor,
+    proposedLimitMinor,
+    balanceMinor: profile.balanceMinor,
+    customerName: customerRow.name,
+    phone: customerRow.phone,
+    utilisationBp: ratioBp(profile.balanceMinor, proposedLimitMinor),
+    resultingPosition: limitPosition(proposedLimitMinor, profile.balanceMinor),
+  }
+  return subject
+})

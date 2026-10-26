@@ -50,6 +50,42 @@ export const profileListQuerySchema = z
   })
 
 /**
+ * A credit limit increase is a request, so the reason is part of the shape: it is
+ * money, and the admin deciding it needs to know why (P12-D22). Strict, because a
+ * smuggled `branchId` or `limitMinor` must be a 400 rather than silently ignored
+ * (OWASP A01).
+ */
+export const creditLimitRequestSchema = z
+  .object({
+    proposedLimitMinor: z.number().int().min(1).max(100_000_000_000),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .strict()
+
+/**
+ * The frozen values a limit request was valued against. Written by
+ * `requestCreditLimitIncrease` and re-read by the decision handler, which refuses
+ * the decision when the live limit no longer matches `currentLimitMinor`
+ * (P12-D22).
+ */
+export const creditLimitPayloadSchema = z
+  .object({
+    customerId: z.uuid(),
+    branchId: z.uuid(),
+    currentLimitMinor: z.number().int().min(0),
+    proposedLimitMinor: z.number().int().min(1),
+    balanceMinor: z.number().int(),
+  })
+  .strict()
+
+/** The over-limit list: same predicate as analytics, biggest exposure first. */
+export const overLimitQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+/**
  * Repayments are entered as positive amounts ("customer paid GHS 60") and
  * stored negative in the ledger; the transform keeps the service signed-only.
  */
@@ -169,6 +205,8 @@ export const statementQuerySchema = z.object({
 export const validateCreditProfileParam = validateParam(creditProfileParamSchema)
 export const validateProfileUpdate = validateJson(profileUpdateSchema)
 export const validateProfileListQuery = validateQuery(profileListQuerySchema)
+export const validateCreditLimitRequest = validateJson(creditLimitRequestSchema)
+export const validateOverLimitQuery = validateQuery(overLimitQuerySchema)
 export const validateRepaymentCreate = validateJson(repaymentCreateSchema)
 export const validateEntryCreate = validateJson(entryCreateSchema)
 export const validateEntryListQuery = validateQuery(entryListQuerySchema)

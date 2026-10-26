@@ -4,9 +4,11 @@ import { requireSession } from '../../http/session.ts'
 import * as creditController from './credit.controller.ts'
 import {
   validateAgingQuery,
+  validateCreditLimitRequest,
   validateCreditProfileParam,
   validateEntryCreate,
   validateEntryListQuery,
+  validateOverLimitQuery,
   validateProfileListQuery,
   validateProfileUpdate,
   validateRepaymentCreate,
@@ -15,6 +17,14 @@ import {
 } from './credit.validation.ts'
 
 export const creditRoutes = factory.createApp()
+
+creditRoutes.get(
+  '/api/credit/over-limit',
+  requireSession,
+  requirePermission('credit.read'),
+  validateOverLimitQuery,
+  (c) => creditController.listOverLimit(c, c.req.valid('query')),
+)
 
 creditRoutes.get(
   '/api/credit/profiles',
@@ -31,6 +41,16 @@ creditRoutes.put(
   validateCreditProfileParam,
   validateProfileUpdate,
   (c) => creditController.updateProfile(c, c.req.valid('param').customerId, c.req.valid('json')),
+)
+
+creditRoutes.post(
+  '/api/credit/profiles/:customerId/limit-requests',
+  requireSession,
+  requirePermission('credit.profile.manage'),
+  validateCreditProfileParam,
+  validateCreditLimitRequest,
+  (c) =>
+    creditController.requestLimitIncrease(c, c.req.valid('param').customerId, c.req.valid('json')),
 )
 
 creditRoutes.post(

@@ -31,6 +31,7 @@ const BOOT_LIST = [
   'TRANSFER_REQUEST',
   'STOCK_WRITE_OFF',
   'PRICE_CHANGE',
+  'CREDIT_LIMIT_CHANGE',
 ]
 
 let branchId = ''
