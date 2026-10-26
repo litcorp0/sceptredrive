@@ -1,0 +1,181 @@
+
+-- admin sign-in --
+  ok   admin lands on the dashboard
+
+-- every section --
+  ok   / renders "Today at"
+  ok   /analytics renders "Analytics"
+  ok   /branches renders "Branches"
+  ok   /terminals renders "Terminals"
+  ok   /staff renders "Staff"
+  ok   /catalog/products renders "Products"
+  ok   /catalog/products/new renders "New product"
+  ok   /catalog/categories renders "Categories"
+  ok   /catalog/brands renders "Brands"
+  ok   /catalog/units renders "Units"
+  ok   /inventory/stock renders "Stock"
+  ok   /inventory/receipts renders "Receipts"
+  ok   /inventory/transfers renders "Transfers"
+  ok   /inventory/transfers/new renders "New transfer"
+  ok   /inventory/counts renders "Counts"
+  ok   /inventory/counts/new renders "New stock count"
+  ok   /customers renders "Customers"
+  ok   /customers/aging renders "Aging"
+  ok   /loyalty renders "Loyalty"
+  ok   /suppliers renders "Suppliers"
+  ok   /suppliers/invoices renders "Invoices"
+  ok   /suppliers/invoices/new renders "New supplier invoice"
+  ok   /suppliers/payments renders "Payments"
+  ok   /suppliers/aging renders "Aging"
+  ok   /procurement/orders renders "Purchase orders"
+  ok   /procurement/replenishment renders "What to order"
+  ok   /procurement/suppliers renders "Which suppliers deliver"
+  ok   /audit renders "Audit"
+  ok   /settings renders "Settings"
+
+-- detail screens --
+  ok   /branches/cb019c64-aded-4541-ac03-611780d3ebc2 renders "Updated"
+  ok   /catalog/products/874adae9-61d4-4c1a-bc51-a71a1066cccb renders
+  ok   /inventory/stock/874adae9-61d4-4c1a-bc51-a71a1066cccb renders
+  ok   /inventory/receipts/24ba77f2-076e-49a3-9e50-3fbc4471e197 renders
+  ok   /suppliers/dd72a892-2163-4131-ae1d-9390c30b6e26 renders
+  ok   /suppliers/invoices/new renders
+  ok   /suppliers/payments/0180fef1-c389-4b87-a9b1-4818a70d25af renders
+  ok   /customers/120b2355-8993-4eff-a340-5b6f272829ac renders
+  ok   /customers/120b2355-8993-4eff-a340-5b6f272829ac/statement renders
+
+-- analytics charts and export --
+  ok   /analytics?tab=sales renders
+  ok   /analytics?tab=sales renders at least one chart
+  ok   /analytics?tab=sales: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=products renders
+  ok   /analytics?tab=products renders at least one chart
+  ok   /analytics?tab=products: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=inventory renders
+  ok   /analytics?tab=inventory renders at least one chart
+  ok   /analytics?tab=inventory: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=credit renders
+  ok   /analytics?tab=credit renders at least one chart
+  ok   /analytics?tab=credit: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=loyalty renders
+  ok   /analytics?tab=loyalty renders at least one chart
+  ok   /analytics?tab=loyalty: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=payables renders
+  ok   /analytics?tab=payables renders at least one chart
+  ok   /analytics?tab=payables: every chart has a caption, an aria-label, axes, and a data table
+  ok   /analytics?tab=tax&granularity=month renders
+  ok   /analytics?tab=tax&granularity=month renders at least one chart
+  ok   /analytics?tab=tax&granularity=month: every chart has a caption, an aria-label, axes, and a data table
+  ok   sales CSV starts with a UTF-8 BOM
+  ok   sales CSV carries the expected header row
+  ok   sales CSV uses CRLF line endings
+  ok   sales CSV carries at least one data row
+
+-- manager role boundary --
+  ok   manager password already changed (re-run)
+  ok   manager lands on the dashboard
+  ok   manager has no "All branches" option
+  ok   manager branch control is a locked badge, not a select
+  ok   manager can open /
+  ok   manager can open /analytics
+  ok   manager can open /analytics?tab=payables
+  ok   manager can open /inventory/stock
+  ok   manager can open /customers
+  ok   manager can open /customers/aging
+  ok   manager can open /suppliers
+  ok   manager can open /audit
+  ok   a foreign branchId does not change a manager's analytics view
+  ok   manager analytics navigated
+  ok   a foreign branchId in the URL does not break the manager view
+  ok   manager staff list hides global admin accounts
+
+-- procurement (manager) --
+  ok   procurement fixtures exist in the demo branch
+  ok   manager raises an approved and a pending order
+  ok   the manager's order list is exactly their branch's orders
+  ok   a manager sees no branch column, so no other branch's orders
+  ok   a manager sees no approve action on the list
+  ok   the pending order says it is waiting
+  ok   a manager cannot approve an order from its detail
+
+-- procurement (admin) --
+  ok   the admin selects the demo branch for the procurement screens
+  ok   the admin approves the pending order in the console
+  ok   the approved order records who decided it
+  ok   the admin marks the order as sent
+  ok   an over-delivery reason unlocks the receive button
+  ok   receiving against the order posts a receipt
+  ok   the return dialog states what is still returnable
+  ok   the replenishment screen lists rows with a basis disclosure
+  ok   the basis breakdown prints the inputs the API used
+  ok   the performance screen states its definition in words
+  ok   the order renders a printable sheet
+
+-- analytics responsive matrix --
+  ok   320px light no-preference: charts rendered
+  ok   320px light no-preference: no horizontal scroll
+  ok   320px light no-preference: no zero-height chart
+  ok   320px light reduce: charts rendered
+  ok   320px light reduce: no horizontal scroll
+  ok   320px light reduce: no zero-height chart
+  ok   320px light reduce: no entrance animation
+  ok   320px dark no-preference: charts rendered
+  ok   320px dark no-preference: no horizontal scroll
+  ok   320px dark no-preference: no zero-height chart
+  ok   320px dark reduce: charts rendered
+  ok   320px dark reduce: no horizontal scroll
+  ok   320px dark reduce: no zero-height chart
+  ok   320px dark reduce: no entrance animation
+  ok   768px light no-preference: charts rendered
+  ok   768px light no-preference: no horizontal scroll
+  ok   768px light no-preference: no zero-height chart
+  ok   768px light reduce: charts rendered
+  ok   768px light reduce: no horizontal scroll
+  ok   768px light reduce: no zero-height chart
+  ok   768px light reduce: no entrance animation
+  ok   768px dark no-preference: charts rendered
+  ok   768px dark no-preference: no horizontal scroll
+  ok   768px dark no-preference: no zero-height chart
+  ok   768px dark reduce: charts rendered
+  ok   768px dark reduce: no horizontal scroll
+  ok   768px dark reduce: no zero-height chart
+  ok   768px dark reduce: no entrance animation
+  ok   1024px light no-preference: charts rendered
+  ok   1024px light no-preference: no horizontal scroll
+  ok   1024px light no-preference: no zero-height chart
+  ok   1024px light reduce: charts rendered
+  ok   1024px light reduce: no horizontal scroll
+  ok   1024px light reduce: no zero-height chart
+  ok   1024px light reduce: no entrance animation
+  ok   1024px dark no-preference: charts rendered
+  ok   1024px dark no-preference: no horizontal scroll
+  ok   1024px dark no-preference: no zero-height chart
+  ok   1024px dark reduce: charts rendered
+  ok   1024px dark reduce: no horizontal scroll
+  ok   1024px dark reduce: no zero-height chart
+  ok   1024px dark reduce: no entrance animation
+  ok   1440px light no-preference: charts rendered
+  ok   1440px light no-preference: no horizontal scroll
+  ok   1440px light no-preference: no zero-height chart
+  ok   1440px light reduce: charts rendered
+  ok   1440px light reduce: no horizontal scroll
+  ok   1440px light reduce: no zero-height chart
+  ok   1440px light reduce: no entrance animation
+  ok   1440px dark no-preference: charts rendered
+  ok   1440px dark no-preference: no horizontal scroll
+  ok   1440px dark no-preference: no zero-height chart
+  ok   1440px dark reduce: charts rendered
+  ok   1440px dark reduce: no horizontal scroll
+  ok   1440px dark reduce: no zero-height chart
+  ok   1440px dark reduce: no entrance animation
+  ok   first analytics series takes the brand orange
+  ok   first series clears 3:1 against its panel (SC 1.4.11)
+  ok   chart is readable by keyboard arrow keys
+
+-- console hygiene --
+  ok   no console errors across the whole walkthrough
+  ok   no failed requests across the whole walkthrough
+
+159/159 checks passed
+Exited with code 0
+exit=0

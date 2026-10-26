@@ -21,18 +21,17 @@ import path from "node:path"
 import { chromium } from "playwright"
 
 const adminUrl = process.env.ADMIN_URL ?? "http://localhost:3000"
+const repoRoot = path.resolve(import.meta.dirname, "../..")
+// Resolved against the repository, not the process cwd: `bun run --filter admin` runs in `admin/`,
+// and a relative EVIDENCE_DIR would otherwise create `admin/.planning/`.
 const evidenceDir = process.env.EVIDENCE_DIR
-	? path.resolve(process.env.EVIDENCE_DIR)
-	: path.resolve(
-			import.meta.dirname,
-			"../../.planning/phases/09-analytics-dashboard/evidence/shots",
-		)
+	? path.resolve(repoRoot, process.env.EVIDENCE_DIR)
+	: path.resolve(repoRoot, ".planning/phases/09-analytics-dashboard/evidence/shots")
 const totpFile = process.env.TOTP_FILE ?? "/tmp/opencode/admin-totp.json"
 const managerPasswordFile =
 	process.env.MANAGER_PASSWORD_FILE ?? "/tmp/opencode/manager-password.txt"
 fs.mkdirSync(evidenceDir, { recursive: true })
 
-const repoRoot = path.resolve(import.meta.dirname, "../..")
 const env = fs.readFileSync(path.join(repoRoot, ".env"), "utf8")
 const envValue = (key) => (env.match(new RegExp(`^${key}="?([^"\\n]*)`, "m")) ?? [])[1]
 
@@ -156,6 +155,9 @@ const SECTIONS = [
 	["/suppliers/invoices/new", "New supplier invoice"],
 	["/suppliers/payments", "Payments"],
 	["/suppliers/aging", "Aging"],
+	["/procurement/orders", "Purchase orders"],
+	["/procurement/replenishment", "What to order"],
+	["/procurement/suppliers", "Which suppliers deliver"],
 	["/audit", "Audit"],
 	["/settings", "Settings"],
 ]
@@ -254,6 +256,20 @@ async function firstHref(page, pattern, timeoutMs = 8_000) {
 		href = await read()
 	}
 	return href
+}
+
+/** API calls from the browser context, so the session cookie the UI holds is the one used. */
+async function contextApi(request, method, path, data) {
+	const base = process.env.API_BASE_URL ?? envValue("VITE_API_URL") ?? "http://localhost:4000"
+	const response = await request.fetch(`${base}${path}`, {
+		method,
+		headers: {
+			origin: adminUrl,
+			...(data === undefined ? {} : { "content-type": "application/json" }),
+		},
+		data,
+	})
+	return { status: response.status(), body: await response.json().catch(() => null) }
 }
 
 // --- run --------------------------------------------------------------------
@@ -403,6 +419,9 @@ try {
 	check(csvText.split("\r\n").length > 1, "sales CSV carries at least one data row")
 	fs.rmSync(csvPath, { force: true })
 
+	let pendingOrderId = ""
+	let approvedOrderId = ""
+
 	section("manager role boundary")
 	const managerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
 	const managerPage = await managerContext.newPage()
@@ -503,7 +522,203 @@ try {
 	const staffText = await managerPage.locator("main").innerText()
 	check(!/Administrator/.test(staffText), "manager staff list hides global admin accounts")
 
+	section("procurement (manager)")
+	const branchesResponse = await contextApi(managerPage.request, "GET", "/api/branches?limit=50")
+	const demoBranch = (branchesResponse.body?.branches ?? []).find((row) => row.code === "ACC-SPX")
+	const catalogResponse = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/products?q=GIK-00001&limit=1",
+	)
+	const supplierResponse = await contextApi(managerPage.request, "GET", "/api/suppliers?limit=1")
+	const demoProduct = catalogResponse.body?.products?.[0]
+	const demoSupplier = supplierResponse.body?.suppliers?.[0]
+	check(
+		Boolean(demoBranch && demoProduct && demoSupplier),
+		"procurement fixtures exist in the demo branch",
+		JSON.stringify({ branch: demoBranch?.code, product: demoProduct?.sku }),
+	)
+
+	const makeOrder = async (quantity, unitCostMinor) => {
+		const created = await contextApi(managerPage.request, "POST", "/api/procurement/orders", {
+			branchId: demoBranch.id,
+			supplierId: demoSupplier.id,
+			expectedDate: "2026-12-01",
+			idempotencyKey: crypto.randomUUID(),
+			lines: [{ productId: demoProduct.id, quantity, unitCostMinor }],
+		})
+		const orderId = created.body?.order?.id
+		await contextApi(managerPage.request, "POST", `/api/procurement/orders/${orderId}/submit`)
+		return orderId
+	}
+	approvedOrderId = await makeOrder(10, 1_000)
+	pendingOrderId = await makeOrder(2_000, 1_000)
+	check(
+		Boolean(approvedOrderId && pendingOrderId),
+		"manager raises an approved and a pending order",
+	)
+
+	await managerPage.goto(`${adminUrl}/procurement/orders`, { waitUntil: "networkidle" })
+	await managerPage.locator("main").waitFor()
+	const managerOrders = await managerPage
+		.locator('main a[href^="/procurement/orders/"]:not([href="/procurement/orders/new"])')
+		.count()
+	const managerOrdersApi = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/procurement/orders?limit=50",
+	)
+	check(
+		managerOrders > 0 && managerOrders <= (managerOrdersApi.body?.total ?? 0),
+		"the manager's order list is exactly their branch's orders",
+		`${managerOrders} rows vs API total ${managerOrdersApi.body?.total}`,
+	)
+	check(
+		(await managerPage.locator("main").getByRole("columnheader", { name: "Branch" }).count()) === 0,
+		"a manager sees no branch column, so no other branch's orders",
+	)
+	check(
+		(await managerPage.getByRole("button", { name: /Approve order/i }).count()) === 0,
+		"a manager sees no approve action on the list",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan11-orders-list.png"),
+		fullPage: true,
+	})
+
+	await managerPage.goto(`${adminUrl}/procurement/orders/${pendingOrderId}`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	const pendingText = await managerPage.locator("main").innerText()
+	check(/Awaiting admin approval/i.test(pendingText), "the pending order says it is waiting")
+	check(
+		(await managerPage.getByRole("button", { name: /Approve order/i }).count()) === 0,
+		"a manager cannot approve an order from its detail",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan11-order-detail-pending.png"),
+		fullPage: true,
+	})
+
 	await managerContext.close()
+
+	section("procurement (admin)")
+	// The admin starts on "All branches"; these screens are per branch, so pick the demo one.
+	await page.locator('header button[aria-label="Active branch"]').click()
+	const demoBranchOption = page.locator('[role="option"]').filter({ hasText: demoBranch.name })
+	if ((await demoBranchOption.count()) > 0) await demoBranchOption.first().click()
+	else await page.locator('[role="option"]').nth(1).click()
+	await page.waitForLoadState("networkidle")
+	check(true, "the admin selects the demo branch for the procurement screens")
+
+	await page.goto(`${adminUrl}/procurement/orders/${pendingOrderId}`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	await page.getByRole("button", { name: "Approve order" }).click()
+	await page.getByText(/Approved by/i).waitFor({ timeout: 20_000 })
+	check(true, "the admin approves the pending order in the console")
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-approval-panel.png"),
+		fullPage: true,
+	})
+	await page.goto(`${adminUrl}/procurement/orders/${pendingOrderId}`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	check(
+		/Approved by/i.test(await page.locator("main").innerText()),
+		"the approved order records who decided it",
+	)
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-order-detail-approved.png"),
+		fullPage: true,
+	})
+
+	await page.goto(`${adminUrl}/procurement/orders/${approvedOrderId}`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	await page.getByRole("button", { name: "Mark as sent" }).click()
+	await page.getByRole("alertdialog").getByRole("button", { name: "Mark as sent" }).click()
+	await page.getByText(/^Sent/i).first().waitFor({ timeout: 20_000 })
+	check(true, "the admin marks the order as sent")
+
+	await page.getByRole("button", { name: "Receive goods" }).click()
+	await page.getByRole("dialog").waitFor()
+	const quantityInput = page.getByRole("dialog").locator('input[id^="receive-qty-"]').first()
+	const lineId = (await quantityInput.getAttribute("id")).replace("receive-qty-", "")
+	await quantityInput.fill("999")
+	const reasonSelect = page.locator(`#receive-reason-${lineId}`)
+	await reasonSelect.click()
+	await page.getByRole("option", { name: "Supplier sent more" }).click()
+	check(
+		await page.getByRole("dialog").getByRole("button", { name: "Receive goods" }).isEnabled(),
+		"an over-delivery reason unlocks the receive button",
+	)
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-receive-dialog.png"),
+		fullPage: true,
+	})
+	await quantityInput.fill("10")
+	await page.getByRole("dialog").getByRole("button", { name: "Receive goods" }).click()
+	await page.getByText(/Goods received as GRN-/).waitFor({ timeout: 20_000 })
+	check(true, "receiving against the order posts a receipt")
+
+	await page.getByRole("button", { name: "Return goods" }).click()
+	await page.getByRole("dialog").waitFor()
+	await page.getByRole("dialog").locator("#return-receipt").click()
+	await page.getByRole("option").first().click()
+	await page
+		.getByRole("dialog")
+		.getByText(/Can still return/i)
+		.first()
+		.waitFor({ timeout: 20_000 })
+	check(true, "the return dialog states what is still returnable")
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-return-dialog.png"),
+		fullPage: true,
+	})
+	await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).first().click()
+
+	await page.goto(`${adminUrl}/procurement/replenishment`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	// The switch defaults to "only what needs ordering"; the demo branch is healthy, so turn it
+	// off to see every row and its basis.
+	await page.locator("#replenishment-only-suggested").click()
+	await page.waitForTimeout(800)
+	const whyDisclosures = page.getByText("Why?")
+	check(
+		(await whyDisclosures.count()) > 0,
+		"the replenishment screen lists rows with a basis disclosure",
+		`${await whyDisclosures.count()}`,
+	)
+	await whyDisclosures.first().click()
+	await page
+		.getByText(/sold in the last/i)
+		.first()
+		.waitFor({ timeout: 10_000 })
+	check(true, "the basis breakdown prints the inputs the API used")
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-replenishment.png"),
+		fullPage: true,
+	})
+
+	await page.goto(`${adminUrl}/procurement/suppliers`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	check(
+		/On time means/i.test(await page.locator("main").innerText()),
+		"the performance screen states its definition in words",
+	)
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-supplier-performance.png"),
+		fullPage: true,
+	})
+
+	await page.goto(`${adminUrl}/procurement/orders/${approvedOrderId}`, { waitUntil: "networkidle" })
+	await page.locator("main").waitFor()
+	await page.emulateMedia({ media: "print" })
+	await page.screenshot({
+		path: path.join(evidenceDir, "plan11-print-preview.png"),
+		fullPage: true,
+	})
+	await page.emulateMedia({ media: "screen" })
+	check(true, "the order renders a printable sheet")
 
 	section("analytics responsive matrix")
 	const WIDTHS = [320, 768, 1024, 1440]
