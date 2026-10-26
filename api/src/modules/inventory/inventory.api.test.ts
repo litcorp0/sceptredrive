@@ -350,9 +350,27 @@ describe.skipIf(!available)('inventory API', () => {
     })
     expect(missingReason.status).toBe(400)
 
-    const response = await app.request('/api/inventory/adjustments', {
+    // Phase 12 (P12-D13): a manager's negative shrinkage is a write-off request,
+    // not an adjustment. The refusal names the form that replaces it.
+    const managerShrinkage = await app.request('/api/inventory/adjustments', {
       method: 'POST',
       headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId: productAId,
+        quantityDelta: -2,
+        reasonCode: 'DAMAGE',
+        note: 'Broken during handling',
+      }),
+    })
+    expect(managerShrinkage.status).toBe(400)
+    const managerBody = await readJson<{ error: { message: string } }>(managerShrinkage)
+    expect(managerBody.error.message).toContain('write-off')
+
+    // The guard is a role rule, not a data rule: an admin keeps the direct path.
+    const response = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
       body: JSON.stringify({
         branchId: branchAId,
         productId: productAId,

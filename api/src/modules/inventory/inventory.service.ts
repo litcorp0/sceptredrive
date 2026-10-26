@@ -1,9 +1,9 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { averageCostAfterReceipt } from '@sceptre/shared'
 import { and, eq, isNull, sql } from 'drizzle-orm'
-import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
+import { assertBranchAccess, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
-import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
@@ -50,6 +50,7 @@ import type {
   ReceiptDetail,
   ReceiptForPayables,
   ReceiptListQuery,
+  StockAdjustmentReason,
   StockDetail,
   StockLevelRow,
   StockListQuery,
@@ -454,6 +455,23 @@ export async function createAdjustment(
 ): Promise<{ movement: PostMovementsResult['movements'][number]; level: StockLevelRow }> {
   await requireActiveBranch(user, input.branchId)
   await requireActiveProduct(input.productId)
+
+  // Shrinkage is a write-off, not an adjustment (P12-D13). Without this,
+  // `createAdjustment` is an unapproved write-off and the workflow is advisory.
+  // A negative CORRECTION stays direct on purpose: it is a data fix rather than
+  // a loss, it requires the manager to call a correction a correction, and the
+  // audit row records it. Positive adjustments (`FOUND`, `CORRECTION`) are
+  // unaffected, and an admin keeps the direct path (P12-D3).
+  const SHRINKAGE_REASONS = new Set<StockAdjustmentReason>(['DAMAGE', 'LOSS', 'EXPIRED', 'OTHER'])
+  if (
+    roleOf(user) !== 'ADMIN' &&
+    input.quantityDelta < 0 &&
+    SHRINKAGE_REASONS.has(input.reasonCode)
+  ) {
+    throw new ValidationError(
+      'Shrinkage is written off through a stock write-off request. Use Inventory → Write-offs.',
+    )
+  }
 
   return db.transaction(async (tx) => {
     const before = await findLevel(input.productId, input.branchId, tx)
