@@ -5,15 +5,16 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-26
-**Status:** **Phase 12 (Branch Operations & Approval Workflow) is in progress: plans 01–05 complete
-and verified (5/13).** Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
+**Status:** **Phase 12 (Branch Operations & Approval Workflow) is in progress: plans 01–10 complete
+and verified (10/13).** Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
 verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface phases (7
 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules &
 Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day added
 Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 12, Plan 06 — Price band and price-change requests**, then Plans
-07–10 in the api lane, 11–12 in the admin lane, and 13 for verification. Phase 12's planning set is
+**Next action:** execute **Phase 12, Plan 11 — Console: unified approval inbox and the manager's
+operations view**, then Plan 12 (request screens) in the admin lane, and Plan 13 for verification.
+Phase 12's planning set is
 `README.md` (index, lanes, execution shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md`
 (sources + 38 verified repository facts) and `01…13-PLAN.md`. Phase 11's verification is
 `phases/11-procurement-replenishment/11-VERIFICATION.md`.
@@ -36,7 +37,7 @@ Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approva
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
-| 12 | Branch Operations & Approval Workflow | 🔷 In progress (5/13 plans) |
+| 12 | Branch Operations & Approval Workflow | 🔷 In progress (10/13 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
@@ -91,6 +92,93 @@ Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approva
   once in a full API run and passed alone and on the next full run; `pin.test.ts` Argon2 tests
   timed out once under load and pass in 2 s alone. Both are timing-sensitive, and neither file was
   touched by this phase.
+
+### Phase 12 execution notes — plans 06–10 (2026-10-26)
+
+- **Plans 06–10 are complete.** Commits: `6a8297d` (price band), `1418052` (credit limits),
+  `40dfbab` (shift variance review), `3a00c41` (cycle counts), `2d35f1c` (operations summary).
+  Numbers: API **521 → 583** (+62: 14 price band, 10 credit, 11 shift review, 17 counting,
+  10 operations). Shared **239**, desktop **427**, admin unchanged. `check-types` 6/6, API suite
+  45 files green, brand gate over **990** tracked files, lint exit 0 with the same 19 warnings.
+- **The three wave-1 plans ran in parallel, which is a deviation the operator chose.** The README
+  says plans 04–09 are serial because they are one lane; the operator asked for maximum safe
+  parallelism instead. The shape that made it safe: three `api-lane` subagents in **one working
+  tree** with **disjoint directories** (`products/**`, `credit/**`, `pos/**`) and no shared file
+  available to any of them. Worktrees were rejected because a fresh worktree has no
+  `node_modules`, so no lane could run its tests.
+- **The controller owned the two shared files, and that is why every commit is green.**
+  `api/src/app.ts` and `approvals.registry.test.ts` are the only files all three plans must touch,
+  and three concurrent edits to one array is a lost update. Each lane was told to leave them alone;
+  the controller then landed one plan per commit, appending that plan's type to both boot lists in
+  its own commit. That is what the README's "in the same commit as their handler and loader" asks
+  for, and it is why the three commits are independently bisectable rather than one merged blob.
+- **The registry test is an exact-match assertion in both directions**, so a plan cannot commit its
+  handler before its boot entry: the four-type `BOOT_LIST` failed the moment one lane registered
+  five. That is the intended tripwire working, not an obstacle.
+- **Lanes wrote no git history.** Three agents sharing one index would have mixed each other's
+  files into the wrong commit (`git add` is not scoped to a process). The controller staged and
+  committed. The cost is that a plan's four or seven planned commits became one commit each, with
+  the plan's commit list enumerated in the body; this is the Phase 11 precedent.
+- **Plan 06.** `writeOrRequestPriceChange` is one decision shared by set and remove, so deleting an
+  override cannot escape the band — at 9 000 against a 10 000 base, removal is an **11.1%**
+  increase, and the pre-existing `products.test.ts` removal case had to be updated because it now
+  correctly becomes a request. The request path writes nothing to `product_price`; the decision
+  handler refuses a stale request with 409 and leaves the approval `PENDING`.
+- **Plan 07.** The authority table lives in `updateProfile`, not the route: a manager's increase is
+  a 403 that names the request endpoint even if the client sends the field anyway (OWASP A01). The
+  decision handler writes **no** ledger row — a limit is an entitlement, not money owed — and the
+  test asserts the ledger count and balance are untouched. The over-limit list shares analytics'
+  predicate and a parity test holds the two definitions together.
+- **Plan 08.** The review is raised inside the existing upload transaction with **strictly greater**
+  than tolerance, and `updateShiftReview` cannot represent a money column: the patch type has no
+  such key and a runtime guard refuses one reached by a cast. The three money columns are asserted
+  column by column before and after the decision. `ShiftApplyResult` is unchanged, so the till
+  never learns an approval exists (APR-06).
+- **Plan 09 is the largest of the phase** and the one place a plan's premise was wrong. §1 and §7
+  call `net_minor` "the ex-tax base"; it is not. `sale_line.base_minor` is, and it is what the
+  analytics revenue read model already sums. Using `net_minor` would have inflated every ABC score
+  by the 20% tax and disagreed with the seed. Corrected to `base_minor`.
+- **Three more plan defects were found and fixed rather than implemented as written.** (a) The
+  credit handler's §3 pseudocode parses the payload before handling `REJECTED`, which would make a
+  malformed request impossible to reject; rejection is now checked first. (b) `inventory.threshold`
+  is held by managers too, contrary to §7's "managers do not", so the ABC manual and recompute
+  paths also require `roleOf(user) === 'ADMIN'`. (c) "Return null on the partial unique" needs a
+  **savepoint**, not a bare catch: a unique violation aborts the caller's transaction and
+  `postCount` is one. `resolveScopeProducts` also gained an optional `frequency` argument, because
+  the published signature cannot pass what `rotationBatchSize(activeCount, frequency)` needs.
+- **Plan 10 composes, it does not query.** Every figure is another service's `total` with
+  `limit: 1`, so parity with the list endpoints is structural and there is no second predicate to
+  drift. A forbidden section is **absent, not zero** — zero is a statement about the branch,
+  absence about the caller.
+- **Indexes: none added, and the measurement is why.** `EXPLAIN (ANALYZE, BUFFERS)` on the dev
+  database gave rotation 0.963 ms and the oversell scan 1.865 ms, both under the plan's 50 ms bar.
+  `sync_conflict_type_created_idx` now has a real reader — the nightly trigger scan — so it stays.
+  The rotation figure is a **best case**: the demo seed carries no `stock_count_line` rows yet, so
+  the Phase 11 rule ("the index must have a reader") is satisfied but the volume claim is not
+  proven. A `stock_count_line(product_id)` index is worth revisiting once the seed carries count
+  history; no migration was written.
+- **Known limits recorded now, not discovered later.** (a) The `SHIFT_CLOSE` upload carries no
+  staff identity, so a variance review's requester is the shift's cashier: a manager signing off a
+  *cashier's* drawer would be allowed to review it, though the cashier themselves is blocked. That
+  case is tested. Closing it needs an upload-payload change, which P12-D27 forbids this phase.
+  (b) An admin who has chosen no branch receives **no** `lowStock` figure, because
+  `inventory.listLowStock` requires a branch by contract and an all-branch count would count a part
+  once per branch; the global question belongs in `inventory/**`. A manager always has a branch.
+  (c) `price_change` and `shift_variance` carry their extra detail in the approval **payload**, and
+  each module publishes a widened local type, because the shared `ApprovalSubject` arms are fixed
+  at the plan's five fields and `approvals.types.ts` belongs to Plan 03.
+- **Two new test suites each create an admin**, which surfaced a pre-existing fragility rather than
+  a defect: `identity/staff.test.ts` asserts it is the *only* active admin in the shared test
+  database, and a row left behind by an interrupted lane run made it fail. Removing the stale row
+  restored it. The suite is clean-database-dependent; `db:test:prepare` on a fresh database is the
+  supported state, and this is recorded rather than papered over with a weakened assertion.
+- **The POS is untouched.** `git diff --name-only 2b3f551..HEAD` lists only `api/**`; `desktop/`,
+  `powersync/`, `packages/` and `admin/` are all empty. Plan 13 still owes the desktop suite run
+  and the `git diff --stat` proof over `desktop/` and `powersync/` with the phase's own tag.
+- **Pre-existing, left alone:** `admin/src/modules/settings/pages/settings-page.tsx` and
+  `admin/src/modules/branches/pages/branch-detail-page.tsx` remain locally modified (a stray
+  formatter run). With them present, the formatter is the only `bun run lint` error; stashed, lint
+  exits 0 with the same 19 warnings. The phase did not author, fix or commit them.
 
 ### Phase 12 planning notes (2026-10-26)
 
@@ -150,11 +238,11 @@ Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approva
 | 03 | Approvals core: per-row authority, subject registry, inbox and summary | ✅ Complete |
 | 04 | Transfer requests: request, decide, dispatch guard, withdraw | ✅ Complete |
 | 05 | Stock write-offs: document, approval, posted `WRITE_OFF` movement | ✅ Complete |
-| 06 | Price band and price-change requests | ⏳ Planned |
-| 07 | Credit limit change requests and the over-limit list | ⏳ Planned |
-| 08 | Shift variance review | ⏳ Planned |
-| 09 | Cycle counts: schedules, ABC, trigger counts, accuracy | ⏳ Planned |
-| 10 | The operations summary read model | ⏳ Planned |
+| 06 | Price band and price-change requests | ✅ Complete |
+| 07 | Credit limit change requests and the over-limit list | ✅ Complete |
+| 08 | Shift variance review | ✅ Complete |
+| 09 | Cycle counts: schedules, ABC, trigger counts, accuracy | ✅ Complete |
+| 10 | The operations summary read model | ✅ Complete |
 | 11 | Console: unified approval inbox and the manager's operations view | ⏳ Planned |
 | 12 | Console: request screens for transfers, write-offs, price and credit | ⏳ Planned |
 | 13 | Verification, evidence, state update | ⏳ Planned |
