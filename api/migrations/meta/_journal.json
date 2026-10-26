@@ -78,6 +78,13 @@
       "when": 1792953412401,
       "tag": "0010_procurement",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793015191609,
+      "tag": "0011_enum_branch_ops",
+      "breakpoints": true
     }
   ]
 }
