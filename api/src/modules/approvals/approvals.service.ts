@@ -39,6 +39,7 @@ import type {
   ApprovalListQuery,
   ApprovalRow,
   ApprovalSubject,
+  SubjectLoader,
 } from './approvals.types.ts'
 
 /**
@@ -61,6 +62,7 @@ export type DecisionHandler = (
 ) => Promise<{ entityId?: string } | undefined>
 
 const HANDLERS = new Map<ApprovalType, DecisionHandler>()
+const SUBJECT_LOADERS = new Map<ApprovalType, SubjectLoader>()
 
 export function registerDecisionHandler(type: ApprovalType, handler: DecisionHandler): void {
   HANDLERS.set(type, handler)
@@ -76,6 +78,26 @@ export function assertDecisionHandlersRegistered(required: readonly ApprovalType
 /** Test seam: the registry is module state, so a test can inspect what is wired. */
 export function registeredDecisionTypes(): ApprovalType[] {
   return [...HANDLERS.keys()]
+}
+
+/**
+ * Registers the loader that renders one type's subject. Called by the owning
+ * service at module load; a loader is read-only and never opens a transaction.
+ */
+export function registerSubjectLoader(type: ApprovalType, loader: SubjectLoader): void {
+  SUBJECT_LOADERS.set(type, loader)
+}
+
+export function assertSubjectLoadersRegistered(required: readonly ApprovalType[]): void {
+  const missing = required.filter((type) => !SUBJECT_LOADERS.has(type))
+  if (missing.length > 0) {
+    throw new Error(`No approval subject loader registered for: ${missing.join(', ')}`)
+  }
+}
+
+/** Test seam, mirroring `registeredDecisionTypes`. */
+export function registeredSubjectTypes(): ApprovalType[] {
+  return [...SUBJECT_LOADERS.keys()]
 }
 
 export interface ApprovalRequestInput {
@@ -350,12 +372,16 @@ function assertApprovalReadable(user: SessionUser, approval: ApprovalRow): void 
   throw new ForbiddenError('You can only access your own branch')
 }
 
-function buildDetail(user: SessionUser, actor: AuditActor, approval: ApprovalRow): ApprovalDetail {
+async function buildDetail(
+  user: SessionUser,
+  actor: AuditActor,
+  approval: ApprovalRow,
+): Promise<ApprovalDetail> {
   const self = approval.requestedBy === (actorLabel(actor) ?? 'unknown')
 
   return {
     approval,
-    subject: subjectOf(approval),
+    subject: await loadSubject(approval),
     canDecide: canDecideApproval({
       approval: authorityOf(approval),
       user: deciderOf(user, actor),
@@ -384,14 +410,15 @@ function deciderOf(user: SessionUser, actor: AuditActor) {
   }
 }
 
-function subjectOf(approval: ApprovalRow): ApprovalSubject {
-  if (approval.type === 'PURCHASE_ORDER') {
-    return approval.entityId
-      ? { kind: 'purchase_order', purchaseOrderId: approval.entityId }
-      : { kind: 'other' }
+/**
+ * Runs the registered loader for this type. A missing loader is a 500: the boot
+ * assertion catches it for every type Phase 12 creates, and this is the belt for
+ * a type added later without one.
+ */
+async function loadSubject(approval: ApprovalRow): Promise<ApprovalSubject> {
+  const loader = SUBJECT_LOADERS.get(approval.type)
+  if (!loader) {
+    throw new AppError(500, 'INTERNAL', `No subject loader for ${approval.type}`)
   }
-  if (approval.type === 'PRODUCT_CREATE') {
-    return { kind: 'product', proposal: approval.payload as Record<string, unknown> }
-  }
-  return { kind: 'other' }
+  return loader(approval)
 }

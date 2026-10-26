@@ -20,6 +20,7 @@ import type { SessionUser } from '../../http/factory.ts'
 import { findApprovalById, withdrawApprovalRow } from '../approvals/approvals.repository.ts'
 import {
   registerDecisionHandler,
+  registerSubjectLoader,
   requestApproval,
   resolveApprovalThreshold,
 } from '../approvals/approvals.service.ts'
@@ -769,6 +770,16 @@ registerDecisionHandler('PURCHASE_ORDER', async (tx, approval, actor, decision, 
 
   return undefined
 })
+
+/**
+ * Plan 03's half of the subject registry: the console reads the order through
+ * its own endpoint, so the approval subject carries the id and nothing else.
+ */
+registerSubjectLoader('PURCHASE_ORDER', async (approval) =>
+  approval.entityId
+    ? { kind: 'purchase_order', purchaseOrderId: approval.entityId }
+    : { kind: 'other' },
+)
 
 async function withdrawPendingApproval(approvalId: string, tx: DbTransaction): Promise<void> {
   const approvalRow = await findApprovalById(approvalId, tx)

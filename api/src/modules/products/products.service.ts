@@ -5,7 +5,7 @@ import { branchScope, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as approvalsService from '../approvals/approvals.service.ts'
-import { registerDecisionHandler } from '../approvals/approvals.service.ts'
+import { registerDecisionHandler, registerSubjectLoader } from '../approvals/approvals.service.ts'
 import {
   findBrandById,
   findCategoryById,
@@ -691,3 +691,12 @@ registerDecisionHandler('PRODUCT_CREATE', async (tx, approval, actor, decision) 
   const created = await createProductFromSubmission(tx, actor, parsed.data, approval.id)
   return { entityId: created.id }
 })
+
+/**
+ * Plan 03's half of the subject registry: the proposal has no row yet, so the
+ * payload the manager submitted is the subject the admin decides on.
+ */
+registerSubjectLoader('PRODUCT_CREATE', async (approval) => ({
+  kind: 'product',
+  proposal: approval.payload,
+}))

@@ -10,7 +10,10 @@ import { loadSession } from './http/session.ts'
 import { logger } from './logger.ts'
 import { analyticsRoutes } from './modules/analytics/analytics.routes.ts'
 import { approvalsRoutes } from './modules/approvals/approvals.routes.ts'
-import { assertDecisionHandlersRegistered } from './modules/approvals/approvals.service.ts'
+import {
+  assertDecisionHandlersRegistered,
+  assertSubjectLoadersRegistered,
+} from './modules/approvals/approvals.service.ts'
 import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
 import { countsRoutes } from './modules/counts/counts.routes.ts'
 import { creditRoutes } from './modules/credit/credit.routes.ts'
@@ -36,9 +39,12 @@ import { authPolicyRoutes } from './routes/auth-policy.ts'
 import { healthRoutes } from './routes/health.ts'
 import { jwksRoutes } from './routes/jwks.ts'
 
-// Fail at boot, not at the first decision: a request type that can be created
-// but not decided is a programming error. Plan 04 adds PURCHASE_ORDER here.
+// Fail at boot, not at the first click: a request type that can be created but
+// neither decided nor rendered is a programming error. Plans 04–08 each add their
+// own type to both lists in the commit that registers its handler and loader;
+// asserting a type before either exists would fail every intermediate boot.
 assertDecisionHandlersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER'])
+assertSubjectLoadersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER'])
 
 export const app = factory.createApp()
 

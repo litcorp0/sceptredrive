@@ -27,8 +27,46 @@ export interface ApprovalDecisionBody {
 /** What the decision is about, rendered by the console without a second request. */
 export type ApprovalSubject =
   | { kind: 'purchase_order'; purchaseOrderId: string }
-  | { kind: 'product'; proposal: Record<string, unknown> }
+  | { kind: 'product'; proposal: unknown }
+  | {
+      kind: 'transfer'
+      transferId: string
+      fromBranchId: string
+      toBranchId: string
+      lineCount: number
+    }
+  | { kind: 'stock_write_off'; writeOffId: string; number: string; lineCount: number }
+  | {
+      kind: 'price_change'
+      productId: string
+      branchId: string
+      currentPriceMinor: number
+      proposedPriceMinor: number
+    }
+  | {
+      kind: 'credit_limit_change'
+      customerId: string
+      branchId: string
+      currentLimitMinor: number
+      proposedLimitMinor: number
+      balanceMinor: number
+    }
+  | {
+      kind: 'shift_variance'
+      shiftId: string
+      terminalName: string
+      expectedMinor: number
+      countedMinor: number
+      varianceMinor: number
+    }
   | { kind: 'other' }
+
+/**
+ * Loads the subject of one approval. Registered by the owning service at module
+ * load (`owner → approvals`), read-only, and never given a transaction: a detail
+ * read must not open one (P12-D4).
+ */
+export type SubjectLoader = (approval: ApprovalRow) => Promise<ApprovalSubject>
 
 export interface ApprovalDetail {
   approval: ApprovalRow
