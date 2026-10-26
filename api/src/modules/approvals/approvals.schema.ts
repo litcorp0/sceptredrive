@@ -69,6 +69,16 @@ export const approval = pgTable(
     requestedBy: text('requested_by').notNull(),
     requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
     requestNote: text('request_note'),
+    /**
+     * The lowest role that may decide this row, and the branch the decider must
+     * belong to (`null` = any branch, which is what an admin is). Stored on the
+     * row rather than derived from the type, because a transfer's authority
+     * depends on its source branch (P12-D2).
+     */
+    deciderRole: text('decider_role').notNull().default('ADMIN'),
+    deciderBranchId: uuid('decider_branch_id').references(() => branch.id, {
+      onDelete: 'restrict',
+    }),
     /** The value the decision is about: goods value for a PO, the price for a product. */
     amountMinor: integer('amount_minor'),
     /** The proposed document, for types that do not have a row yet. `{}` otherwise. */
@@ -94,5 +104,6 @@ export const approval = pgTable(
       table.requestedAt,
     ),
     index('approval_type_status_idx').on(table.type, table.status),
+    index('approval_decider_idx').on(table.deciderRole, table.deciderBranchId, table.status),
   ],
 )

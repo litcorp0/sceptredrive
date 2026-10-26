@@ -17,6 +17,13 @@ import { product } from '../products/products.schema.ts'
 
 export const shiftStatusEnum = pgEnum('shift_status', ['OPEN', 'CLOSED'])
 
+/**
+ * Variance review state (Phase 12, BRN-04). It is a column, not a `shift_status`
+ * value: the reconciliation query filters `status = 'CLOSED'`, so a review status
+ * would silently drop those shifts out of reconciliation (P12-D24).
+ */
+export const shiftReviewStatusEnum = pgEnum('shift_review_status', ['NONE', 'REQUIRED', 'REVIEWED'])
+
 export const cashMovementTypeEnum = pgEnum('cash_movement_type', ['CASH_IN', 'CASH_OUT'])
 
 export const saleTenderMethodEnum = pgEnum('sale_tender_method', ['CASH', 'CREDIT'])
@@ -78,6 +85,10 @@ export const shift = pgTable(
     clientExpectedCashMinor: integer('client_expected_cash_minor'),
     serverExpectedCashMinor: integer('server_expected_cash_minor'),
     varianceMinor: integer('variance_minor'),
+    reviewStatus: shiftReviewStatusEnum('review_status').notNull().default('NONE'),
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewNote: text('review_note'),
     closeNote: text('close_note'),
     openedBy: text('opened_by'),
     closedBy: text('closed_by'),
@@ -94,6 +105,7 @@ export const shift = pgTable(
       .where(sql`${table.status} = 'OPEN'`),
     index('shift_branch_opened_idx').on(table.branchId, table.openedAt),
     index('shift_terminal_opened_idx').on(table.terminalId, table.openedAt),
+    index('shift_review_idx').on(table.branchId, table.reviewStatus, table.closedAt),
   ],
 )
 
@@ -303,6 +315,8 @@ export const syncConflict = pgTable(
     index('sync_conflict_branch_status_idx').on(table.branchId, table.status, table.severity),
     index('sync_conflict_terminal_created_idx').on(table.terminalId, table.createdAt),
     index('sync_conflict_sale_idx').on(table.saleId),
+    // The nightly oversell scan reads one type over a 30-day window (P12-D32).
+    index('sync_conflict_type_created_idx').on(table.type, table.createdAt),
   ],
 )
 

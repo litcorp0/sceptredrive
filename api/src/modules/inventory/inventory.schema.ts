@@ -23,6 +23,8 @@ export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   // value added inside a transaction cannot be used until that transaction
   // commits, so it never travels with the tables that write it.
   'SUPPLIER_RETURN',
+  // Phase 12: a posted stock write-off (P12-D15). Same rule: its own migration.
+  'WRITE_OFF',
 ])
 
 export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
@@ -32,6 +34,7 @@ export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
   'COUNT',
   'SALE',
   'SUPPLIER_RETURN',
+  'WRITE_OFF',
 ])
 
 /** Why a delivery arrived with more than was ordered (Phase 11, PROC-03). */
@@ -49,6 +52,11 @@ export const stockAdjustmentReasonEnum = pgEnum('stock_adjustment_reason', [
   'CORRECTION',
   'EXPIRED',
   'OTHER',
+  // Phase 12: the write-off reasons that share the ledger's vocabulary. EXPIRY
+  // maps to EXPIRED when a write-off is posted (P12-D15, P12-D16).
+  'THEFT',
+  'OBSOLESCENCE',
+  'SUPPLIER_FAULT',
 ])
 
 /**

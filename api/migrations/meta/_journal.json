@@ -85,6 +85,13 @@
       "when": 1793015191609,
       "tag": "0011_enum_branch_ops",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793015458378,
+      "tag": "0012_branch_ops_schema",
+      "breakpoints": true
     }
   ]
 }

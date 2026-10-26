@@ -13,6 +13,11 @@ import { product } from '../products/products.schema.ts'
 
 export const transferStatusEnum = pgEnum('transfer_status', [
   'DRAFT',
+  // Phase 12: a destination-raised request waits for the source branch (or an
+  // admin) before it can be dispatched. Added by its own migration (P12-D9).
+  'REQUESTED',
+  'APPROVED',
+  'REJECTED',
   'DISPATCHED',
   'RECEIVED',
   'SHORT_CLOSED',
