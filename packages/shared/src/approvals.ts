@@ -55,24 +55,86 @@ export const APPROVAL_REASON_CODES = [
 export type ApprovalReasonCode = (typeof APPROVAL_REASON_CODES)[number]
 
 /**
- * Who may decide each type. Every type is an admin decision in v1; a branch
- * manager deciding their own request is the hole this table exists to keep
- * closed, and self-approval is refused regardless (the server compares the
- * requester to the decider).
+ * The role and branch a request type defaults to when nothing more specific is
+ * known. Stored on the row (`decider_role`, `decider_branch_id`), never derived
+ * from the type at decision time — P12-D2.
  */
-export const APPROVAL_DECIDER_ROLE = {
+export interface ApprovalAuthority {
+  role: Role
+  /** null = any branch (an admin); a uuid = that branch only (a manager). */
+  branchId: string | null
+}
+
+/**
+ * Defaults. A requesting service overrides them when the subject decides the
+ * authority (a transfer's source branch type; a shift's branch) — P12-D2.
+ *
+ * A `MANAGER` default binds the decision to the branch passed in; an `ADMIN`
+ * default is never branch-bound, because an admin may decide in any branch and
+ * that fallback is what P12-D3 depends on.
+ */
+export const APPROVAL_DECIDER_ROLE: Record<ApprovalType, Role> = {
   PURCHASE_ORDER: 'ADMIN',
   PRODUCT_CREATE: 'ADMIN',
-  TRANSFER_REQUEST: 'ADMIN',
+  TRANSFER_REQUEST: 'MANAGER', // overridden to ADMIN when the source is a warehouse
   STOCK_WRITE_OFF: 'ADMIN',
   PRICE_CHANGE: 'ADMIN',
   CREDIT_LIMIT_CHANGE: 'ADMIN',
-  SHIFT_VARIANCE_REVIEW: 'ADMIN',
+  SHIFT_VARIANCE_REVIEW: 'MANAGER',
   REFUND: 'ADMIN',
-} as const satisfies Record<ApprovalType, Role>
+}
 
-export function approvalDeciderRole(type: ApprovalType): Role {
-  return APPROVAL_DECIDER_ROLE[type]
+/**
+ * The authority a row is created with. `branchId` is the branch that owns the
+ * subject (a transfer's source, a shift's branch); it is ignored when the role
+ * is `ADMIN`.
+ *
+ * A `MANAGER` default with a null branch is returned as-is and is undecidable —
+ * `canDecideApproval` fails closed. `requestApproval` refuses that pairing when
+ * the row is written, so the state is never persisted.
+ */
+export function defaultApprovalAuthority(
+  type: ApprovalType,
+  branchId: string | null,
+): ApprovalAuthority {
+  const role = APPROVAL_DECIDER_ROLE[type]
+  return { role, branchId: role === 'MANAGER' ? branchId : null }
+}
+
+/**
+ * The one rule both the service and the console use to render a decision button.
+ *
+ * All four must hold: the row is pending, the actor holds `approval.decide`, the
+ * actor did not raise the request (no self-approval, any role), and the actor is
+ * either an admin or the manager of the branch the row names. A manager may never
+ * decide an `ADMIN`-authority row, even in their own branch.
+ */
+export function canDecideApproval(args: {
+  approval: {
+    status: ApprovalStatus
+    deciderRole: Role
+    deciderBranchId: string | null
+    requestedBy: string
+  }
+  user: {
+    role: Role
+    branchId: string | null
+    label: string
+    hasDecidePermission: boolean
+  }
+}): boolean {
+  const { approval, user } = args
+
+  if (approval.status !== 'PENDING') return false
+  if (!user.hasDecidePermission) return false
+  if (user.label === approval.requestedBy) return false
+  if (user.role === 'ADMIN') return true
+
+  return (
+    approval.deciderRole === 'MANAGER' &&
+    approval.deciderBranchId !== null &&
+    user.branchId === approval.deciderBranchId
+  )
 }
 
 /** A decided approval is immutable: no re-decide, no withdraw, no edit. */
