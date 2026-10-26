@@ -3,7 +3,11 @@ import { assertBranchAccess, branchScope, resolveBranchFilter, roleOf } from '..
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
-import { requestApproval } from '../approvals/approvals.service.ts'
+import {
+  registerDecisionHandler,
+  registerSubjectLoader,
+  requestApproval,
+} from '../approvals/approvals.service.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
 import { findBranchById } from '../org/branches.repository.ts'
 import { writeAudit } from '../platform/audit.service.ts'
@@ -173,6 +177,9 @@ export async function createTransfer(
 
     let approvalId: string | null = null
     if (status === 'REQUESTED') {
+      // Authority follows the branch that holds the stock (P12-D11): a retail
+      // source is decided by that branch's manager, a warehouse by an admin.
+      const retailSource = from.type === 'RETAIL'
       const approval = await requestApproval(
         actor,
         {
@@ -187,6 +194,8 @@ export async function createTransfer(
             lineCount: input.lines.length,
           },
           note: input.note ?? null,
+          deciderRole: retailSource ? 'MANAGER' : 'ADMIN',
+          deciderBranchId: retailSource ? from.id : null,
         },
         tx,
       )
@@ -600,3 +609,62 @@ export async function shortCloseTransfer(
 
   return loadTransferDetail(transferId)
 }
+
+/**
+ * Plan 04's half of the decision registry (P12-D8).
+ *
+ * Runs inside `decideApproval`'s transaction and before the approval's own
+ * status change, so a refusal rolls the whole decision back. `REJECTED` posts no
+ * movement and touches no level: the ledger is byte-identical after a rejection
+ * (P12-D12).
+ */
+registerDecisionHandler('TRANSFER_REQUEST', async (tx, approval, actor, decision, input) => {
+  if (!approval.entityId) {
+    throw new AppError(500, 'INTERNAL', 'A transfer approval has no transfer')
+  }
+
+  const transfer = await findTransferByIdForUpdate(approval.entityId, tx)
+  if (!transfer) throw new NotFoundError('Transfer not found')
+  if (transfer.status !== 'REQUESTED') {
+    throw new ConflictError('This transfer has already moved')
+  }
+
+  const status: TransferStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED'
+  const updated = await updateTransferRow(transfer.id, { status }, tx)
+  if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to record the transfer decision')
+
+  await writeAudit(
+    {
+      ...actor,
+      action: `transfer.${status.toLowerCase()}`,
+      entity: 'transfer',
+      entityId: transfer.id,
+      branchId: transfer.toBranchId,
+      before: { status: 'REQUESTED' },
+      after: { status, approvalId: approval.id, reasonCode: input.reasonCode ?? null },
+    },
+    tx,
+  )
+
+  return undefined
+})
+
+/**
+ * Plan 04's half of the subject registry: the decider is shown what is being
+ * asked for — both branches and the number of lines — and the console reads the
+ * lines themselves through `/api/transfers/:id`, which applies its own access
+ * check. Read-only and transaction-free (P12-D4).
+ */
+registerSubjectLoader('TRANSFER_REQUEST', async (approval) => {
+  if (!approval.entityId) return { kind: 'other' }
+  const transfer = await findTransferById(approval.entityId)
+  if (!transfer) throw new NotFoundError('Transfer not found')
+  const lines = await selectTransferLines(transfer.id)
+  return {
+    kind: 'transfer',
+    transferId: transfer.id,
+    fromBranchId: transfer.fromBranchId,
+    toBranchId: transfer.toBranchId,
+    lineCount: lines.length,
+  }
+})

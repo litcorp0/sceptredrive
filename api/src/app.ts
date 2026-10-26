@@ -43,8 +43,8 @@ import { jwksRoutes } from './routes/jwks.ts'
 // neither decided nor rendered is a programming error. Plans 04–08 each add their
 // own type to both lists in the commit that registers its handler and loader;
 // asserting a type before either exists would fail every intermediate boot.
-assertDecisionHandlersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER'])
-assertSubjectLoadersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER'])
+assertDecisionHandlersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER', 'TRANSFER_REQUEST'])
+assertSubjectLoadersRegistered(['PRODUCT_CREATE', 'PURCHASE_ORDER', 'TRANSFER_REQUEST'])
 
 export const app = factory.createApp()
 

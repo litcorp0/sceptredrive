@@ -24,8 +24,8 @@ if (!available) console.warn('[approvals.registry.test] database unavailable; te
 
 const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
 
-/** What Plan 03 leaves wired; Plans 04–08 append their own type in their commit. */
-const BOOT_LIST = ['PRODUCT_CREATE', 'PURCHASE_ORDER']
+/** What Plan 04 leaves wired; Plans 05–08 append their own type in their commit. */
+const BOOT_LIST = ['PRODUCT_CREATE', 'PURCHASE_ORDER', 'TRANSFER_REQUEST']
 
 let branchId = ''
 let adminId = ''
@@ -62,10 +62,12 @@ describe.skipIf(!available)('approval registries', () => {
   })
 
   it('answers 500 when a type has no decision handler', async () => {
+    // `REFUND` is the honest unregistered type: Phase 13 registers it, so this
+    // assertion does not need editing when Plans 05–08 land their handlers.
     const [row] = await db
       .insert(approval)
       .values({
-        type: 'TRANSFER_REQUEST',
+        type: 'REFUND',
         branchId,
         requestedBy: 'someone-else',
         deciderRole: 'ADMIN',
