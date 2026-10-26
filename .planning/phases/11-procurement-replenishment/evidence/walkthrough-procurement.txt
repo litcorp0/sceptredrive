@@ -1,0 +1,122 @@
+
+## fixtures (created through the API)
+
+## 1–9: the order lifecycle and the threshold
+PASS 1  1a manager can raise a DRAFT order
+PASS 2  1b the number is branch-month-sequential
+PASS 3  1c the goods value is Σ quantity × unit cost
+PASS 4  1d an order with no human decision has no approval row
+PASS 5  2a a below-limit order submits to APPROVED
+PASS 6  2b it was approved without a human
+PASS 7  3a an admin's own order is approved regardless of value
+PASS 8  3b it writes no approval row
+PASS 9  4a exactly at the limit waits for a decision
+PASS 10  4b the approval carries the goods value
+PASS 11  5 a manager cannot decide an order
+PASS 12  6a the admin decides it
+PASS 13  6b the decider is not the requester
+PASS 14  7 deciding twice is a conflict
+PASS 15  8 an approved order cannot be edited
+
+## 9–13: sending and receiving
+PASS 16  9a sending records SENT
+PASS 17  9b it stamps sent_at
+PASS 18  10a 6 of 10 leaves the order partly received
+PASS 19  10b 4 are still outstanding
+PASS 20  10c the receipt is numbered GRN-
+PASS 21  10d stock rose by 6
+PASS 22  10e the first delivery created the supplier-product cost
+PASS 23  11a the balance arrives and the order is RECEIVED
+PASS 24  11b stock rose by 10 in total
+PASS 25  12 an over-delivery without a reason is refused
+PASS 26  13a an over-delivery with a reason is accepted
+PASS 27  13b the excess is recorded, not clamped
+
+## 14–17: invoice matching
+PASS 28  14a a matched invoice posts
+PASS 29  14b it is MATCHED against the order
+PASS 30  15a a higher price is flagged
+PASS 31  15b and the payable still posts
+PASS 32  15c both values are visible
+PASS 33  16a more than received is a quantity variance
+PASS 34  16b and it still posts
+PASS 35  17 invoicing a cancelled order is refused
+
+## 18–20: purchase returns and the credit they create
+PASS 36  18a-pre the returnable read answers
+PASS 37  18a the returnable read caps at received − returned
+PASS 38  18b a return starts as a DRAFT
+PASS 39  18c a draft return moves no stock
+PASS 40  18d posting creates the credit note
+PASS 41  18e the credit is 2 × the receipted unit cost
+PASS 42  18f a negative SUPPLIER_RETURN movement posts
+PASS 43  18g the supplier balance dropped by exactly the credit
+PASS 44  19 returning more than was received is refused
+PASS 45  20 owed = invoice outstanding − credit notes
+
+## 21–22: the ledger and the derived catalogue cost
+PASS 46  21a the stock ledger equals on hand
+PASS 47  22a the catalogue cost is the latest receipt cost
+PASS 48  22b a warehouse receipt is still a receipt
+PASS 49  22c a transfer-in does not change the catalogue cost
+
+## 23–24: suggestions, by hand
+PASS 50  23a the suggestion's inputs are the database's facts
+PASS 51  23b coverage is the published formula
+PASS 52  23c suggested is target − position, floored by the MOQ
+PASS 53  23d a never-stocked part appears with on hand 0
+PASS 54  23e a part with no preferred supplier is unassigned
+PASS 55  24 an open order stops the same part being suggested again
+PASS 56  24b a suggestion becomes a DRAFT at the supplier's last cost
+PASS 57  24c the suggested order does not submit itself
+
+## 25: product submission and approval
+PASS 58  25a a manager can submit a product
+PASS 59  25b it is not a product yet
+PASS 60  25c it waits as a PRODUCT_CREATE approval
+PASS 61  25d the admin decides it
+PASS 62  25e approval created exactly one product
+PASS 63  25f the new product's cost is derived, so it starts at zero
+PASS 64  25g a rejected proposal creates nothing
+
+## 26–27: deny by default
+PASS 65  26a a foreign branch cannot read an order
+PASS 66  26b a foreign branch cannot receive against it
+PASS 67  26c a foreign branch cannot return its goods
+PASS 68  26d a foreign branch cannot decide its approvals
+PASS 69  26e a foreign branch filter is refused
+PASS 70  27 a cashier is refused every procurement and replenishment route
+
+## 28: strict bodies
+PASS 71  28 order create rejects an unknown field
+PASS 72  28 receive rejects an unknown field
+PASS 73  28 return create rejects an unknown field
+PASS 74  28 from suggestions rejects an unknown field
+PASS 75  28 approval decide rejects an unknown field
+
+## A09: every state change is audited
+PASS 76  audit has purchase_order.created
+PASS 77  audit has purchase_order.auto_approved
+PASS 78  audit has purchase_order.submitted
+PASS 79  audit has purchase_order.approved
+PASS 80  audit has purchase_order.sent
+PASS 81  audit has purchase_order.received
+PASS 82  audit has purchase_order.cancelled
+PASS 83  audit has supplier_return.created
+PASS 84  audit has supplier_return.posted
+PASS 85  audit has stock_threshold.updated
+  approval.decided: 3
+  approval.requested: 3
+  product.submitted: 2
+  purchase_order.approved: 1
+  purchase_order.auto_approved: 6
+  purchase_order.cancelled: 1
+  purchase_order.created: 9
+  purchase_order.received: 5
+  purchase_order.sent: 3
+  purchase_order.submitted: 1
+  stock_threshold.updated: 3
+  supplier_return.created: 1
+  supplier_return.posted: 1
+
+85 passed, 0 failed
