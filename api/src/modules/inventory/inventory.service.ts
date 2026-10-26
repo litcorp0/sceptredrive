@@ -96,6 +96,16 @@ function validateInput(input: MovementInput): void {
   if (input.type === 'ADJUSTMENT' && !input.reasonCode) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Adjustments require a reason code')
   }
+
+  // An outbound caller may pin the cost it approved (a write-off posts the cost
+  // frozen at request time, P12-D17). Without one the projection's average is
+  // the cost basis, which is what every Phase 1–11 outbound path relies on.
+  if (!inbound && input.unitCostMinor !== undefined) {
+    assertSafeInteger(input.unitCostMinor, 'Unit cost')
+    if (input.unitCostMinor < 0) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Unit cost must not be negative')
+    }
+  }
 }
 
 function insufficientStockMessage(input: MovementInput, level: StockLevelRow): string {
@@ -147,7 +157,9 @@ export async function postMovements(
             input.quantityDelta,
           )
         : level.avgCostMinor
-      const unitCostMinor = inbound ? (input.unitCostMinor as number) : level.avgCostMinor
+      const unitCostMinor = inbound
+        ? (input.unitCostMinor as number)
+        : (input.unitCostMinor ?? level.avgCostMinor)
 
       const updated = await updateLevel(level.id, { quantityOnHand, avgCostMinor }, executor)
       if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update the stock level')

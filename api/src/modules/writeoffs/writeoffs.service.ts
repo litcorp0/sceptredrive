@@ -13,7 +13,14 @@ import {
   findPendingApprovalForEntity,
   withdrawApprovalRow,
 } from '../approvals/approvals.repository.ts'
-import { listApprovals, requestApproval } from '../approvals/approvals.service.ts'
+import {
+  listApprovals,
+  registerDecisionHandler,
+  registerSubjectLoader,
+  requestApproval,
+} from '../approvals/approvals.service.ts'
+import * as inventoryService from '../inventory/inventory.service.ts'
+import type { PostMovementsResult, StockAdjustmentReason } from '../inventory/inventory.types.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -32,6 +39,7 @@ import {
   updateWriteOffRow,
 } from './writeoffs.repository.ts'
 import type {
+  StockWriteOffReason,
   WriteOffApproval,
   WriteOffCreateInput,
   WriteOffDetail,
@@ -51,6 +59,20 @@ import type {
  * movement carries that stored cost, so the approved value and the ledger value
  * are the same number even if a receipt moves the average in between (P12-D17).
  */
+
+/**
+ * The one value that differs between the form's vocabulary and the ledger's.
+ * The lists stay separate on purpose: `EXPIRED` describes a date that passed,
+ * `EXPIRY` describes why the goods left (P12-D15).
+ */
+const MOVEMENT_REASON: Record<StockWriteOffReason, StockAdjustmentReason> = {
+  DAMAGE: 'DAMAGE',
+  EXPIRY: 'EXPIRED',
+  OBSOLESCENCE: 'OBSOLESCENCE',
+  THEFT: 'THEFT',
+  SUPPLIER_FAULT: 'SUPPLIER_FAULT',
+  OTHER: 'OTHER',
+}
 
 function assertLinesUnique(lines: readonly { productId: string }[]): void {
   if (new Set(lines.map((line) => line.productId)).size !== lines.length) {
@@ -313,3 +335,128 @@ export async function cancelWriteOff(
     )
   })
 }
+
+/**
+ * Plan 05's half of the decision registry (P12-D8).
+ *
+ * Runs inside `decideApproval`'s transaction, before the approval's own status
+ * change, so a refusal rolls the whole decision back. `REJECTED` writes the
+ * status and nothing else: no movement, no level change, no `posted_at` — the
+ * ledger is byte-identical after a rejection (P12-D12, P12-D14).
+ *
+ * `APPROVED` posts every line through the one movement writer with the **stored**
+ * line cost, then stamps `posted_at`. A line that would drive stock negative is
+ * refused with a 409 by that writer, and the message tells the manager to
+ * re-raise the request for the quantity actually on hand (P12-D17).
+ */
+registerDecisionHandler('STOCK_WRITE_OFF', async (tx, approval, actor, decision) => {
+  if (!approval.entityId) {
+    throw new AppError(500, 'INTERNAL', 'A stock write-off approval has no write-off')
+  }
+
+  const writeOff = await lockWriteOffForUpdate(approval.entityId, tx)
+  if (!writeOff) throw new NotFoundError('Stock write-off not found')
+  if (writeOff.status !== 'PENDING_APPROVAL') {
+    throw new ConflictError('This write-off has already moved')
+  }
+
+  if (decision === 'REJECTED') {
+    const rejected = await updateWriteOffRow(writeOff.id, { status: 'REJECTED' }, tx)
+    if (!rejected) throw new AppError(500, 'INTERNAL', 'Failed to reject the stock write-off')
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'stock_write_off.rejected',
+        entity: 'stock_write_off',
+        entityId: writeOff.id,
+        branchId: writeOff.branchId,
+        before: { status: 'PENDING_APPROVAL' },
+        after: { status: 'REJECTED', approvalId: approval.id },
+      },
+      tx,
+    )
+    return undefined
+  }
+
+  const lines = await selectWriteOffLines(writeOff.id, tx)
+  if (lines.length === 0) {
+    throw new ConflictError('This write-off has no lines to post')
+  }
+
+  let posted: PostMovementsResult
+  try {
+    posted = await inventoryService.postMovements(
+      actor,
+      lines.map((line) => ({
+        productId: line.productId,
+        branchId: writeOff.branchId,
+        type: 'WRITE_OFF' as const,
+        quantityDelta: -line.quantity,
+        // The stored line cost, not today's average: the ledger value equals the
+        // value the admin approved (P12-D17).
+        unitCostMinor: line.unitCostMinor,
+        referenceType: 'WRITE_OFF' as const,
+        referenceId: writeOff.id,
+        referenceNumber: writeOff.number,
+        reasonCode: MOVEMENT_REASON[line.reason],
+        note: line.note ?? undefined,
+        productName: line.productName,
+      })),
+      { executor: tx },
+    )
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      throw new ConflictError(
+        `${error.message}. Re-raise the write-off for the quantity actually on hand.`,
+      )
+    }
+    throw error
+  }
+
+  const approved = await updateWriteOffRow(
+    writeOff.id,
+    { status: 'APPROVED', postedAt: new Date() },
+    tx,
+  )
+  if (!approved) throw new AppError(500, 'INTERNAL', 'Failed to approve the stock write-off')
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'stock_write_off.approved',
+      entity: 'stock_write_off',
+      entityId: writeOff.id,
+      branchId: writeOff.branchId,
+      before: { status: 'PENDING_APPROVAL' },
+      after: {
+        status: 'APPROVED',
+        approvalId: approval.id,
+        valueMinor: writeOff.valueMinor,
+        movementIds: posted.movements.map((movement) => movement.id),
+      },
+    },
+    tx,
+  )
+
+  return undefined
+})
+
+/**
+ * Plan 05's half of the subject registry: the decider is shown the document's
+ * number and how many lines it holds, and reads the lines themselves through
+ * `/api/write-offs/:id`, which applies its own branch check. Read-only and
+ * transaction-free (P12-D4).
+ */
+registerSubjectLoader('STOCK_WRITE_OFF', async (approval) => {
+  if (!approval.entityId) return { kind: 'other' }
+  const writeOff = await findWriteOffById(approval.entityId)
+  if (!writeOff) throw new NotFoundError('Stock write-off not found')
+  const lines = await selectWriteOffLines(writeOff.id)
+  return {
+    kind: 'stock_write_off',
+    writeOffId: writeOff.id,
+    number: writeOff.number,
+    lineCount: lines.length,
+  }
+})

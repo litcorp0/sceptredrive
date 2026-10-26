@@ -19,7 +19,7 @@ export interface MovementInput {
   branchId: string
   type: StockMovementType
   quantityDelta: number
-  /** Required for inbound types (receipt, transfer-in); ignored otherwise. */
+  /** Required for inbound types (receipt, transfer-in). An outbound caller may pin it (a write-off posts the approved cost); otherwise the projection's average is used. */
   unitCostMinor?: number
   referenceType: StockMovementReference
   referenceId?: string | null
