@@ -34,6 +34,7 @@ import { replenishmentRoutes } from './modules/replenishment/replenishment.route
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { syncRoutes } from './modules/sync/sync.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
+import { writeOffsRoutes } from './modules/writeoffs/writeoffs.routes.ts'
 import { authRoutes } from './routes/auth.ts'
 import { authPolicyRoutes } from './routes/auth-policy.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -69,6 +70,7 @@ app.route('/', catalogRoutes)
 app.route('/', productsRoutes)
 app.route('/', inventoryRoutes)
 app.route('/', transfersRoutes)
+app.route('/', writeOffsRoutes)
 app.route('/', countsRoutes)
 app.route('/', customersRoutes)
 app.route('/', creditRoutes)
