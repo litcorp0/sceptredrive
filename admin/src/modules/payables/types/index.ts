@@ -40,6 +40,15 @@ export interface SupplierInvoiceLine {
 	lineTotalMinor: number
 }
 
+/** The API's `invoice_match_status`; a variance is advisory, never a block (P11-D5). */
+export type InvoiceMatchStatus =
+	| "UNMATCHED"
+	| "MATCHED"
+	| "PRICE_VARIANCE"
+	| "QUANTITY_VARIANCE"
+	| "PRICE_AND_QUANTITY_VARIANCE"
+	| "NOT_ON_ORDER"
+
 /** Invoice row on list responses (supplier and branch names joined in). */
 export interface SupplierInvoice {
 	id: string
@@ -54,6 +63,10 @@ export interface SupplierInvoice {
 	invoiceDate: string
 	dueDate: string
 	receiptId: string | null
+	purchaseOrderId: string | null
+	purchaseOrderNumber: string | null
+	/** True when any line carries a purchase-order variance. */
+	hasVariance: boolean
 	subtotalMinor: number
 	vatMinor: number
 	nhilMinor: number
@@ -112,6 +125,30 @@ export interface SupplierInvoiceDetail {
 	receipt: { id: string; number: string; branchId: string } | null
 	lines: SupplierInvoiceLine[]
 	allocations: SupplierInvoiceAllocation[]
+	/** Null when the invoice was not recorded against a purchase order. */
+	match: InvoiceMatch | null
+}
+
+export interface InvoiceMatchLine {
+	lineNumber: number
+	productId: string | null
+	sku: string
+	name: string
+	invoicedQuantity: number
+	invoicedUnitCostMinor: number
+	orderedQuantity: number | null
+	orderedUnitCostMinor: number | null
+	receivedQuantity: number
+	previouslyInvoicedQuantity: number
+	matchStatus: InvoiceMatchStatus
+}
+
+export interface InvoiceMatch {
+	purchaseOrderId: string
+	orderNumber: string
+	/** The worst status across the lines: what the invoice's badge should say. */
+	status: InvoiceMatchStatus
+	lines: InvoiceMatchLine[]
 }
 
 export type SupplierInvoiceListQuery = {
@@ -120,6 +157,8 @@ export type SupplierInvoiceListQuery = {
 	receiptId?: string
 	status?: SupplierInvoiceStatus
 	overdue?: boolean
+	/** Only invoices with at least one purchase-order variance (PROC-04). */
+	variance?: boolean
 	from?: string
 	to?: string
 	limit?: number
@@ -151,6 +190,8 @@ export interface InvoiceCreateInput {
 	invoiceDate: string
 	dueDate?: string
 	receiptId?: string
+	/** The purchase order this invoice settles (PROC-04); the API matches by product. */
+	purchaseOrderId?: string
 	copyFromReceipt?: boolean
 	lines?: InvoiceLineInput[]
 	vatMinor?: number

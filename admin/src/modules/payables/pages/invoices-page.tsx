@@ -4,6 +4,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { InvoiceStatusBadge } from "#/components/common/invoice-status-badge"
+import { InvoiceVarianceBadge } from "#/components/common/match-status-badge"
 import { Pagination } from "#/components/common/pagination"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { TableMessage } from "#/components/common/table-message"
@@ -59,6 +60,7 @@ export function InvoicesPage() {
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
 	const [overdue, setOverdue] = useState(false)
+	const [varianceOnly, setVarianceOnly] = useState(false)
 	const [offset, setOffset] = useState(0)
 
 	const initialSupplierQuery = useQuery({
@@ -83,6 +85,7 @@ export function InvoicesPage() {
 		branchId: canSelectBranch && branchFilter !== "all" ? branchFilter : undefined,
 		status: status === "ALL" ? undefined : status,
 		overdue: overdue ? true : undefined,
+		variance: varianceOnly ? true : undefined,
 		from: from || undefined,
 		to: to || undefined,
 		limit: PAGE_SIZE,
@@ -218,6 +221,20 @@ export function InvoicesPage() {
 					</Label>
 				</div>
 
+				<div className="flex items-center gap-2">
+					<Switch
+						id="invoice-variance-filter"
+						checked={varianceOnly}
+						onCheckedChange={(checked) => {
+							setVarianceOnly(checked)
+							resetOffset()
+						}}
+					/>
+					<Label htmlFor="invoice-variance-filter" className="text-sm text-muted-foreground">
+						Variance to check
+					</Label>
+				</div>
+
 				{canManage ? (
 					<Button size="sm" className="ml-auto" asChild>
 						<Link to="/suppliers/invoices/new" search={{ supplierId: effectiveSupplierId }}>
@@ -235,6 +252,7 @@ export function InvoicesPage() {
 							<TableHead className="w-28">Number</TableHead>
 							<TableHead>Supplier</TableHead>
 							<TableHead className="w-32">Supplier inv #</TableHead>
+							<TableHead className="w-28">PO</TableHead>
 							{canSelectBranch ? <TableHead className="w-28">Branch</TableHead> : null}
 							<TableHead className="w-28">Invoiced</TableHead>
 							<TableHead className="w-28">Due</TableHead>
@@ -242,17 +260,18 @@ export function InvoicesPage() {
 							<TableHead className="w-24 text-right">Paid</TableHead>
 							<TableHead className="w-28 text-right">Outstanding</TableHead>
 							<TableHead className="w-32">Status</TableHead>
+							<TableHead className="w-40">Match</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{invoicesQuery.isLoading ? (
-							<TableMessage colSpan={canSelectBranch ? 10 : 9}>Loading invoices…</TableMessage>
+							<TableMessage colSpan={canSelectBranch ? 12 : 11}>Loading invoices…</TableMessage>
 						) : invoicesQuery.isError ? (
-							<TableMessage colSpan={canSelectBranch ? 10 : 9} tone="error">
+							<TableMessage colSpan={canSelectBranch ? 12 : 11} tone="error">
 								Couldn't load supplier invoices.
 							</TableMessage>
 						) : invoices.length === 0 ? (
-							<TableMessage colSpan={canSelectBranch ? 10 : 9}>
+							<TableMessage colSpan={canSelectBranch ? 12 : 11}>
 								No invoices match these filters.
 							</TableMessage>
 						) : (
@@ -279,6 +298,19 @@ export function InvoicesPage() {
 									<TableCell className="text-muted-foreground">
 										{invoice.supplierInvoiceNumber}
 									</TableCell>
+									<TableCell>
+										{invoice.purchaseOrderId && invoice.purchaseOrderNumber ? (
+											<Link
+												to="/procurement/orders/$orderId"
+												params={{ orderId: invoice.purchaseOrderId }}
+												className="font-mono text-xs hover:underline"
+											>
+												{invoice.purchaseOrderNumber}
+											</Link>
+										) : (
+											<span className="text-muted-foreground">—</span>
+										)}
+									</TableCell>
 									{canSelectBranch ? (
 										<TableCell className="text-muted-foreground">{invoice.branchCode}</TableCell>
 									) : null}
@@ -301,6 +333,12 @@ export function InvoicesPage() {
 										<InvoiceStatusBadge
 											status={invoice.status}
 											overdue={isOverdue(invoice, today)}
+										/>
+									</TableCell>
+									<TableCell>
+										<InvoiceVarianceBadge
+											hasVariance={invoice.hasVariance}
+											purchaseOrderId={invoice.purchaseOrderId}
 										/>
 									</TableCell>
 								</TableRow>

@@ -4,6 +4,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
 import { useState } from "react"
 import { InvoiceStatusBadge } from "#/components/common/invoice-status-badge"
+import { MatchStatusBadge } from "#/components/common/match-status-badge"
 import { StatusBadge } from "#/components/common/status-badge"
 import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
@@ -182,6 +183,86 @@ export function InvoiceDetailPage() {
 					) : null}
 				</CardContent>
 			</Card>
+
+			{detail.match ? (
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex flex-wrap items-center gap-2">
+							Purchase order{" "}
+							<Link
+								to="/procurement/orders/$orderId"
+								params={{ orderId: detail.match.purchaseOrderId }}
+								className="font-mono text-base hover:underline"
+							>
+								{detail.match.orderNumber || "Order"}
+							</Link>
+							<MatchStatusBadge status={detail.match.status} />
+						</CardTitle>
+						<CardDescription>
+							A difference is recorded, not blocked — this invoice still posts to the supplier
+							balance.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<div className="overflow-x-auto rounded-lg border">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-10 text-right">#</TableHead>
+										<TableHead>Product</TableHead>
+										<TableHead className="w-24 text-right">Invoiced</TableHead>
+										<TableHead className="w-24 text-right">Received</TableHead>
+										<TableHead className="w-24 text-right">Ordered</TableHead>
+										<TableHead className="w-28 text-right">Invoiced cost</TableHead>
+										<TableHead className="w-28 text-right">Ordered cost</TableHead>
+										<TableHead className="w-44">Variance</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{detail.match.lines.map((line) => (
+										<TableRow key={`${line.lineNumber}-${line.sku}`}>
+											<TableCell className="text-right tabular-nums">{line.lineNumber}</TableCell>
+											<TableCell>
+												<p className="font-medium">{line.name || "—"}</p>
+												<p className="font-mono text-xs text-muted-foreground">{line.sku}</p>
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{line.invoicedQuantity}
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{line.receivedQuantity}
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{line.orderedQuantity === null ? "—" : line.orderedQuantity}
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{formatGhs(line.invoicedUnitCostMinor)}
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{line.orderedUnitCostMinor === null
+													? "—"
+													: formatGhs(line.orderedUnitCostMinor)}
+											</TableCell>
+											<TableCell>
+												<MatchStatusBadge status={line.matchStatus} />
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						</div>
+					</CardContent>
+				</Card>
+			) : (
+				<Card>
+					<CardHeader>
+						<CardTitle>Purchase order</CardTitle>
+						<CardDescription>
+							Not matched to a purchase order. A difference would be recorded, never blocked.
+						</CardDescription>
+					</CardHeader>
+				</Card>
+			)}
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<Card>

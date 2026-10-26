@@ -83,9 +83,18 @@ export function toInvoiceLineInputs(lines: InvoiceLineDraft[]): InvoiceLineInput
 export function InvoiceLinesEditor({
 	lines,
 	onChange,
+	orderedCostHint,
 }: {
 	lines: InvoiceLineDraft[]
 	onChange: (lines: InvoiceLineDraft[]) => void
+	/**
+	 * The selected purchase order's line for a product, when there is one.
+	 *
+	 * It is rendered as a hint beside the unit-cost input, never as its value: a prefilled price
+	 * would hide the variance this screen exists to surface. When a hint exists the product picker
+	 * also stops prefilling the catalogue cost, so the clerk types what the invoice says.
+	 */
+	orderedCostHint?: (productId: string) => { unitCostMinor: number; quantity: number } | null
 }) {
 	function updateLine(key: string, patch: Partial<InvoiceLineDraft>) {
 		onChange(lines.map((line) => (line.key === key ? { ...line, ...patch } : line)))
@@ -102,7 +111,8 @@ export function InvoiceLinesEditor({
 	}
 
 	function handleProduct(line: InvoiceLineDraft, product: PickedProduct | null) {
-		const shouldPrefill = product !== null && line.unitCost.trim() === ""
+		const hint = product ? (orderedCostHint?.(product.id) ?? null) : null
+		const shouldPrefill = product !== null && line.unitCost.trim() === "" && hint === null
 		updateLine(line.key, {
 			product,
 			...(shouldPrefill ? { unitCost: formatMinorPlain(product.costPriceMinor) } : {}),
@@ -124,80 +134,91 @@ export function InvoiceLinesEditor({
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{lines.map((line) => (
-							<TableRow key={line.key} className="align-top">
-								<TableCell>
-									<Select
-										value={line.kind}
-										onValueChange={(value) => setKind(line, value as "product" | "text")}
-									>
-										<SelectTrigger aria-label="Line type" className="h-8">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="product">Product</SelectItem>
-											<SelectItem value="text">Free text</SelectItem>
-										</SelectContent>
-									</Select>
-								</TableCell>
-								<TableCell>
-									{line.kind === "product" ? (
-										<ProductPicker
-											value={line.product}
-											onSelect={(product) => handleProduct(line, product)}
-											placeholder="Search products by name or SKU…"
-										/>
-									) : (
+						{lines.map((line) => {
+							const hint =
+								line.kind === "product" && line.product
+									? (orderedCostHint?.(line.product.id) ?? null)
+									: null
+							return (
+								<TableRow key={line.key} className="align-top">
+									<TableCell>
+										<Select
+											value={line.kind}
+											onValueChange={(value) => setKind(line, value as "product" | "text")}
+										>
+											<SelectTrigger aria-label="Line type" className="h-8">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="product">Product</SelectItem>
+												<SelectItem value="text">Free text</SelectItem>
+											</SelectContent>
+										</Select>
+									</TableCell>
+									<TableCell>
+										{line.kind === "product" ? (
+											<ProductPicker
+												value={line.product}
+												onSelect={(product) => handleProduct(line, product)}
+												placeholder="Search products by name or SKU…"
+											/>
+										) : (
+											<Input
+												placeholder="e.g. Transport, installation"
+												maxLength={200}
+												value={line.description}
+												onChange={(event) =>
+													updateLine(line.key, { description: event.target.value })
+												}
+												aria-label="Line description"
+											/>
+										)}
+									</TableCell>
+									<TableCell>
 										<Input
-											placeholder="e.g. Transport, installation"
-											maxLength={200}
-											value={line.description}
-											onChange={(event) =>
-												updateLine(line.key, { description: event.target.value })
-											}
-											aria-label="Line description"
+											type="number"
+											min={1}
+											max={1_000_000}
+											step={1}
+											className="h-8"
+											value={line.quantity}
+											onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
+											aria-label="Quantity"
 										/>
-									)}
-								</TableCell>
-								<TableCell>
-									<Input
-										type="number"
-										min={1}
-										max={1_000_000}
-										step={1}
-										className="h-8"
-										value={line.quantity}
-										onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
-										aria-label="Quantity"
-									/>
-								</TableCell>
-								<TableCell>
-									<Input
-										inputMode="decimal"
-										placeholder="0.00"
-										className="h-8"
-										value={line.unitCost}
-										onChange={(event) => updateLine(line.key, { unitCost: event.target.value })}
-										aria-label="Unit cost in GHS"
-									/>
-								</TableCell>
-								<TableCell className="pt-3 text-right tabular-nums">
-									{formatGhs(invoiceLineDraftTotal(line))}
-								</TableCell>
-								<TableCell className="pt-2">
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										aria-label="Remove line"
-										disabled={lines.length === 1}
-										onClick={() => onChange(lines.filter((row) => row.key !== line.key))}
-									>
-										<XIcon className="size-4" aria-hidden="true" />
-									</Button>
-								</TableCell>
-							</TableRow>
-						))}
+									</TableCell>
+									<TableCell>
+										<Input
+											inputMode="decimal"
+											placeholder="0.00"
+											className="h-8"
+											value={line.unitCost}
+											onChange={(event) => updateLine(line.key, { unitCost: event.target.value })}
+											aria-label="Unit cost in GHS"
+										/>
+										{hint ? (
+											<p className="mt-1 text-xs text-muted-foreground">
+												Ordered at {formatGhs(hint.unitCostMinor)} × {hint.quantity}
+											</p>
+										) : null}
+									</TableCell>
+									<TableCell className="pt-3 text-right tabular-nums">
+										{formatGhs(invoiceLineDraftTotal(line))}
+									</TableCell>
+									<TableCell className="pt-2">
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											aria-label="Remove line"
+											disabled={lines.length === 1}
+											onClick={() => onChange(lines.filter((row) => row.key !== line.key))}
+										>
+											<XIcon className="size-4" aria-hidden="true" />
+										</Button>
+									</TableCell>
+								</TableRow>
+							)
+						})}
 					</TableBody>
 				</Table>
 			</div>

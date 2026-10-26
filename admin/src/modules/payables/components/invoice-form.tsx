@@ -27,6 +27,10 @@ import { getReceipt, type InventoryReceipt } from "#/modules/inventory"
 // Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); it
 // never reaches into the supplier store.
 import { getSupplier, supplierKeys } from "#/modules/suppliers"
+// Invoices are matched to purchase orders (PROC-04), so payables reads the matchable list and the
+// chosen order's lines through the procurement barrel. It never sends a purchase-order line id:
+// the API matches by product, so the screen cannot invent a link the order does not have.
+import { matchableOrderOptions, orderDetailOptions, statusLabel } from "#/modules/procurement"
 import { payablesKeys } from "../api/keys"
 import {
 	createInvoice,
@@ -75,6 +79,7 @@ export function InvoiceForm({
 	const [supplier, setSupplier] = useState<PickedSupplier | null>(null)
 	const [receipt, setReceipt] = useState<InventoryReceipt | null>(null)
 	const [receiptPick, setReceiptPick] = useState<string>("none")
+	const [purchaseOrderId, setPurchaseOrderId] = useState<string>("none")
 	const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("")
 	const [invoiceDate, setInvoiceDate] = useState(isoToday())
 	const [dueDate, setDueDate] = useState("")
@@ -117,6 +122,17 @@ export function InvoiceForm({
 	const initialReceiptQuery = useQuery(receiptSourceOptions(receiptId))
 
 	const initialSupplierQuery = useQuery(invoiceSupplierOptions(supplierId, receiptId))
+
+	// The matchable orders are the API's approved/sent orders for this supplier and branch.
+	const matchableOrdersQuery = useQuery({
+		...matchableOrderOptions(supplier?.id ?? null, effectiveBranchId || null),
+		enabled: Boolean(supplier) && effectiveBranchId !== "",
+	})
+	const selectedOrderId = purchaseOrderId === "none" ? null : purchaseOrderId
+	const selectedOrderQuery = useQuery({
+		...orderDetailOptions(selectedOrderId ?? ""),
+		enabled: selectedOrderId !== null,
+	})
 
 	const applySupplier = useCallback(
 		(next: { id: string; code: string; name: string; paymentTermDays: number }) => {
@@ -212,6 +228,15 @@ export function InvoiceForm({
 	}
 
 	const lineSumMinor = invoiceLineDraftsSum(lines)
+	const orderedLineByProduct = new Map(
+		(selectedOrderQuery.data?.lines ?? []).map((line) => [line.productId, line]),
+	)
+
+	function orderedCostHint(productId: string) {
+		const line = orderedLineByProduct.get(productId)
+		return line ? { unitCostMinor: line.unitCostMinor, quantity: line.quantity } : null
+	}
+
 	const standard = taxBreakdown(lineSumMinor, "STANDARD", "INCLUSIVE")
 	const manualVatMinor = parseTaxInput(manualVat) ?? 0
 	const manualNhilMinor = parseTaxInput(manualNhil) ?? 0
@@ -359,6 +384,7 @@ export function InvoiceForm({
 						...(receipt ? { receiptId: receipt.id } : {}),
 						lines: toInvoiceLineInputs(lines),
 					}),
+			...(selectedOrderId ? { purchaseOrderId: selectedOrderId } : {}),
 			...taxFields,
 			note: note.trim() || undefined,
 			idempotencyKey: takeIdempotencyKey(),
@@ -466,7 +492,14 @@ export function InvoiceForm({
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="grid gap-1.5">
 							<Label>Supplier</Label>
-							<SupplierCombobox value={supplier} onSelect={setSupplier} />
+							<SupplierCombobox
+								value={supplier}
+								onSelect={(next) => {
+									setSupplier(next)
+									// The matchable list is supplier-specific; a stale choice would be wrong.
+									setPurchaseOrderId("none")
+								}}
+							/>
 							{supplier && supplier.paymentTermDays >= 0 ? (
 								<p className="text-xs text-muted-foreground">
 									Terms: {supplier.paymentTermDays} days
@@ -484,6 +517,51 @@ export function InvoiceForm({
 								onChange={(event) => setSupplierInvoiceNumber(event.target.value)}
 							/>
 						</div>
+					</div>
+
+					<div className="grid gap-1.5">
+						<Label htmlFor="invoice-purchase-order">Purchase order (optional)</Label>
+						<Select
+							value={purchaseOrderId}
+							onValueChange={setPurchaseOrderId}
+							disabled={!supplier || effectiveBranchId === "" || matchableOrdersQuery.isLoading}
+						>
+							<SelectTrigger id="invoice-purchase-order" className="w-full sm:max-w-md">
+								<SelectValue
+									placeholder={
+										!supplier
+											? "Choose a supplier first"
+											: effectiveBranchId === ""
+												? "Choose a branch first"
+												: "Choose an order"
+									}
+								/>
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="none">No purchase order — standalone invoice</SelectItem>
+								{(matchableOrdersQuery.data?.orders ?? []).map((option) => (
+									<SelectItem key={option.id} value={option.id}>
+										{option.number} · {statusLabel(option.status)} ·{" "}
+										{formatGhs(option.goodsValueMinor)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<p className="text-xs text-muted-foreground">
+							Matching records price and quantity differences; it never blocks the invoice. The
+							ordered unit cost appears as a hint beside each line, so type what the invoice says.
+						</p>
+						{selectedOrderQuery.data ? (
+							<Button variant="link" size="sm" className="h-auto justify-start px-0" asChild>
+								<Link
+									to="/procurement/orders/$orderId"
+									params={{ orderId: selectedOrderQuery.data.order.id }}
+									target="_blank"
+								>
+									Open {selectedOrderQuery.data.order.number}
+								</Link>
+							</Button>
+						) : null}
 					</div>
 
 					<div className="grid gap-4 sm:grid-cols-2">
@@ -531,6 +609,7 @@ export function InvoiceForm({
 							setLines(next)
 							setLinesTouched(true)
 						}}
+						orderedCostHint={orderedCostHint}
 					/>
 
 					<div className="ml-auto w-full max-w-sm rounded-lg border bg-muted/30 p-3 text-sm">
