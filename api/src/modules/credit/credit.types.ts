@@ -53,32 +53,14 @@ export interface CreditLimitChangeRequestResult {
  */
 export type CreditLimitChangeVia = 'DIRECT' | 'DIRECT_DECREASE' | 'approval'
 
-/** Where the customer stands if the requested limit is approved (P12-D21). */
-export interface CreditLimitPosition {
-  limitMinor: number
-  balanceMinor: number
-  /** Zero when there is headroom; the positive excess otherwise. */
-  overByMinor: number
-  /** `limit - balance` when positive, zero when the customer is over. */
-  headroomMinor: number
-  overLimit: boolean
-  /** True when the next positive charge would exceed the limit. */
-  blocksNewCredit: boolean
-}
-
 /**
- * The `credit_limit_change` subject arm plus the identity and the resulting
- * position the decider needs. The extra fields live here — not in
- * `approvals.types.ts` — because the generic module must not grow a credit shape
- * for every consumer; the arm stays the shared contract.
+ * The `credit_limit_change` subject arm, exactly as the shared contract declares
+ * it: identity, utilisation, and the position the proposal would create.
  */
-export type CreditLimitChangeSubject = Extract<ApprovalSubject, { kind: 'credit_limit_change' }> & {
-  customerName: string
-  phone: string | null
-  /** `ratioBp(balance, proposedLimit)`; null only if the proposal is zero. */
-  utilisationBp: number | null
-  resultingPosition: CreditLimitPosition
-}
+export type CreditLimitChangeSubject = Extract<ApprovalSubject, { kind: 'credit_limit_change' }>
+
+/** Where the customer stands if the requested limit is approved (P12-D21). */
+export type CreditLimitPosition = CreditLimitChangeSubject['resultingPosition']
 
 export interface OverLimitRow {
   customerId: string

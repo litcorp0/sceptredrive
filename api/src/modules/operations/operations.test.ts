@@ -97,8 +97,7 @@ interface QueueTotals {
   approvals: number
   transferRequests: number
   writeOffs: number
-  /** `null` when the list itself cannot be read unscoped (no branch chosen). */
-  lowStock: number | null
+  lowStock: number
   overLimitCredit: number
 }
 
@@ -141,11 +140,7 @@ describe.skipIf(!available)('operations summary', () => {
   }
 
   /** Every list the summary counts, read through the endpoint the console opens. */
-  async function listTotals(
-    cookie: string,
-    scope = '',
-    includeLowStock = true,
-  ): Promise<QueueTotals> {
+  async function listTotals(cookie: string, scope = ''): Promise<QueueTotals> {
     const read = async (path: string, query: string): Promise<number> => {
       const suffixQuery = scope ? `&${scope}` : ''
       const response = await app.request(`${path}?${query}${suffixQuery}`, {
@@ -159,10 +154,9 @@ describe.skipIf(!available)('operations summary', () => {
       approvals: await read('/api/approvals', 'status=PENDING&limit=1'),
       transferRequests: await read('/api/transfers', 'status=REQUESTED&limit=1'),
       writeOffs: await read('/api/write-offs', 'status=PENDING_APPROVAL&limit=1'),
-      // The list is branch-scoped by contract: an admin with no branch chosen
-      // gets a 400 from `/api/inventory/low-stock`, which is why the summary has
-      // no low-stock figure for that caller either.
-      lowStock: includeLowStock ? await read('/api/inventory/low-stock', 'limit=1') : null,
+      // An admin with no branch chosen reads every branch's low stock; a manager
+      // is scoped to their own branch by the service. Both are one `total`.
+      lowStock: await read('/api/inventory/low-stock', 'limit=1'),
       overLimitCredit: await read('/api/credit/over-limit', 'limit=1'),
     }
   }
@@ -520,7 +514,7 @@ describe.skipIf(!available)('operations summary', () => {
     const admin = await summaryOf(adminCookie)
     expect(admin.branchId).toBeNull()
 
-    const totals = await listTotals(adminCookie, '', false)
+    const totals = await listTotals(adminCookie)
     expect(admin.approvals?.count).toBe(totals.approvals)
     expect(admin.transferRequests?.count).toBe(totals.transferRequests)
     expect(admin.writeOffs?.count).toBe(totals.writeOffs)
@@ -536,10 +530,15 @@ describe.skipIf(!available)('operations summary', () => {
       (managerA.writeOffs?.count ?? 0) + (managerB.writeOffs?.count ?? 0),
     )
 
-    // `inventory.listLowStock` is branch-scoped by contract (`stock_level` is one
-    // row per product per branch), so an admin who has chosen no branch gets no
-    // low-stock figure rather than a number that counts a part once per branch.
-    expect(admin.lowStock).toBeUndefined()
+    // An admin who has chosen no branch still gets a low-stock figure: the
+    // unscoped list reads every branch and the summary count is exactly its
+    // `total`. The same part at two branches is two rows, which is the honest
+    // answer to "what is low anywhere".
+    expect(admin.lowStock).toBeDefined()
+    expect(admin.lowStock?.count).toBe(totals.lowStock)
+    expect(admin.lowStock?.count).toBeGreaterThanOrEqual(
+      (managerA.lowStock?.count ?? 0) + (managerB.lowStock?.count ?? 0),
+    )
 
     // Choosing a branch narrows the same read.
     const scoped = await summaryOf(adminCookie, `?branchId=${branchAId}`)

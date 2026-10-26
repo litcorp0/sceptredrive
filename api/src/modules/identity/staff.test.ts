@@ -52,6 +52,12 @@ describe.skipIf(!available)('staff management API', () => {
   const createdBranchIds: string[] = []
   const createdTerminalIds: string[] = []
   const createdDeviceIds: string[] = []
+  /**
+   * Active admins this suite parked so the "last active admin" rule is real, not
+   * vacuous. They are restored by id and never deleted: they belong to whoever
+   * created them (often an interrupted earlier run).
+   */
+  const parkedAdminIds: string[] = []
   let adminCookie = ''
   let managerCookie = ''
   let adminId = ''
@@ -97,6 +103,23 @@ describe.skipIf(!available)('staff management API', () => {
     adminId = admin.id
     adminCookie = await signIn(admin.email)
 
+    // The rule is global, not per-branch: any other active admin would make the
+    // "last admin cannot be demoted" assertion pass for the wrong reason. Park
+    // them for this suite and restore exactly these rows in `afterAll`.
+    const activeAdmins = await db
+      .select({ id: userTable.id })
+      .from(userTable)
+      .where(and(eq(userTable.role, 'ADMIN'), eq(userTable.isActive, true)))
+    for (const row of activeAdmins) {
+      if (row.id !== adminId) parkedAdminIds.push(row.id)
+    }
+    if (parkedAdminIds.length > 0) {
+      await db
+        .update(userTable)
+        .set({ isActive: false })
+        .where(inArray(userTable.id, parkedAdminIds))
+    }
+
     branchAId = await createBranchAsAdmin(`T${suffix}-A`, 'Staff Branch A')
     branchBId = await createBranchAsAdmin(`T${suffix}-B`, 'Staff Branch B')
 
@@ -111,6 +134,12 @@ describe.skipIf(!available)('staff management API', () => {
 
   afterAll(async () => {
     for (const id of createdUserIds) await deleteTestUser(id)
+    if (parkedAdminIds.length > 0) {
+      await db
+        .update(userTable)
+        .set({ isActive: true })
+        .where(inArray(userTable.id, parkedAdminIds))
+    }
     if (createdDeviceIds.length > 0) {
       await db.delete(posStaffBinding).where(inArray(posStaffBinding.deviceId, createdDeviceIds))
       await db.delete(device).where(inArray(device.id, createdDeviceIds))
@@ -462,6 +491,7 @@ describe.skipIf(!available)('staff management API', () => {
       role: 'CASHIER',
       branchId: branchAId,
     })
+    expect(created.status).toBe(201)
     const id = created.body.staff.id
     const staffId = created.body.staff.staffId ?? ''
 
@@ -587,6 +617,16 @@ describe.skipIf(!available)('staff management API', () => {
   })
 
   it('protects the last active admin', async () => {
+    // Parked in `beforeAll`, this admin is the only active one.
+    expect(
+      (
+        await db
+          .select({ id: userTable.id })
+          .from(userTable)
+          .where(and(eq(userTable.role, 'ADMIN'), eq(userTable.isActive, true)))
+      ).map((row) => row.id),
+    ).toEqual([adminId])
+
     const demote = await app.request(`/api/staff/${adminId}`, {
       method: 'PATCH',
       headers: authedHeaders(adminCookie),

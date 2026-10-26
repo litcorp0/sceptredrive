@@ -51,6 +51,9 @@ interface StockRowResponse {
   productId: string
   sku: string
   productName: string
+  branchId: string
+  branchCode: string
+  branchName: string
   quantityOnHand: number
   avgCostMinor: number
   valueMinor: number
@@ -498,6 +501,72 @@ describe.skipIf(!available)('inventory API', () => {
       { method: 'DELETE', headers: authedHeaders(adminCookie) },
     )
     expect(remove.status).toBe(200)
+  })
+
+  it('serves an unscoped low-stock read to an admin and still scopes managers', async () => {
+    // Two branches, each with a part at or below its threshold.
+    const thresholds: [string, string, number][] = [
+      [branchAId, productAId, 12],
+      [branchBId, productBId, 100],
+    ]
+    for (const [branchId, productId, threshold] of thresholds) {
+      const set = await app.request('/api/inventory/thresholds', {
+        method: 'PUT',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ branchId, productId, threshold }),
+      })
+      expect(set.status).toBe(200)
+    }
+
+    // Branch B has no level yet: one unit found there is below its threshold.
+    const adjust = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchBId,
+        productId: productBId,
+        quantityDelta: 1,
+        reasonCode: 'FOUND',
+      }),
+    })
+    expect(adjust.status).toBe(201)
+
+    const adminRead = await app.request(`/api/inventory/low-stock?q=${suffix}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(adminRead.status).toBe(200)
+    const adminBody = await readJson<{
+      stock: StockRowResponse[]
+      total: number
+      branchId: string | null
+    }>(adminRead)
+    expect(adminBody.branchId).toBeNull()
+    expect(adminBody.total).toBe(adminBody.stock.length)
+    expect(new Set(adminBody.stock.map((row) => row.branchId))).toEqual(
+      new Set([branchAId, branchBId]),
+    )
+    for (const row of adminBody.stock) {
+      expect(row.branchCode).toBeTruthy()
+      expect(row.branchName).toBeTruthy()
+    }
+
+    // A manager who names no branch is still scoped to their own branch.
+    const managerRead = await app.request(`/api/inventory/low-stock?q=${suffix}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(managerRead.status).toBe(200)
+    const managerBody = await readJson<{
+      stock: StockRowResponse[]
+      branchId: string | null
+    }>(managerRead)
+    expect(managerBody.branchId).toBe(branchAId)
+    expect(managerBody.stock.every((row) => row.branchId === branchAId)).toBe(true)
+
+    // Naming another branch is still a 403, not an unscoped bypass.
+    const foreign = await app.request(`/api/inventory/low-stock?branchId=${branchBId}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(foreign.status).toBe(403)
   })
 
   it('stores a top-up level and a supplier minimum beside the reorder point', async () => {

@@ -85,18 +85,19 @@ export async function getOperationsSummary(
         summary.writeOffs = { count: total }
       }),
     )
-    // `inventory.listLowStock` is branch-scoped by contract (`stock_level` is one
-    // row per product per branch, so an all-branch count would count the same
-    // part once per branch). An admin who has chosen no branch therefore gets no
-    // low-stock figure rather than a made-up one; a manager always has a branch.
-    if (branchId) {
-      const scope = branchId
-      tasks.push(
-        listLowStock(user, { branchId: scope, limit: 1, offset: 0 }).then(({ total }) => {
-          summary.lowStock = { count: total }
-        }),
-      )
-    }
+    // `inventory.listLowStock` accepts an unscoped read for an admin: every
+    // branch's low stock, one row per branch, when no branch is chosen. A manager
+    // still resolves to their own branch inside the service. The count is that
+    // list's `total`, so it can never include a branch the caller may not see.
+    tasks.push(
+      listLowStock(user, {
+        branchId: branchId ?? undefined,
+        limit: 1,
+        offset: 0,
+      }).then(({ total }) => {
+        summary.lowStock = { count: total }
+      }),
+    )
     const today = accraIsoDay()
     tasks.push(
       getCountAccuracy(user, {

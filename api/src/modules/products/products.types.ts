@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import type { ApprovalSubject } from '../approvals/approvals.types.ts'
 import type { barcode, product, productPrice } from './products.schema.ts'
 import type {
   barcodeCreateSchema,
@@ -65,21 +66,11 @@ export interface ProductPriceList {
 }
 
 /**
- * The `price_change` subject with the figures an approver needs: the product, the
- * band the request was judged against, and its bounds. `ApprovalSubject` keeps the
- * four money fields; the rest are additive and rendered as-is.
+ * The `price_change` subject with the figures an approver needs. It is exactly the
+ * shared arm, not a module-local widening: Plans 11 and 12 read the console from
+ * `ApprovalSubject`, so a parallel interface would be a second contract to drift.
  */
-export interface PriceChangeSubject {
-  kind: 'price_change'
-  productId: string
-  branchId: string
-  currentPriceMinor: number
-  proposedPriceMinor: number
-  productName: string
-  sku: string
-  bandPercent: number
-  bounds: PriceBandBounds
-}
+export type PriceChangeSubject = Extract<ApprovalSubject, { kind: 'price_change' }>
 
 export interface ProductCreateInput {
   sku?: string | undefined

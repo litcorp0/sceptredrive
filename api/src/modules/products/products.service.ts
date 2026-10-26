@@ -490,6 +490,34 @@ async function applyPriceChange(
 }
 
 /**
+ * Maps a unique violation raised while writing a price to the honest 409.
+ *
+ * Two managers can target the same product and branch at once. The band check
+ * then sees no row, both transactions try to insert, and PostgreSQL lets exactly
+ * one win: the loser hits `product_price_product_branch_unique`. That is a race,
+ * not a server fault — the caller re-reads and retries. A second *request* for the
+ * same product is different: `approval_open_entity_unique` says a decision is
+ * already queued, and retrying would only duplicate it.
+ *
+ * Extracted so the mapping is unit-testable without claiming a deterministic race
+ * test that the database cannot promise.
+ */
+export function priceWriteConflict(error: unknown): ConflictError | null {
+  if (!isUniqueViolation(error)) return null
+
+  const constraint = uniqueViolationConstraint(error) ?? ''
+  if (constraint.includes('approval_open_entity_unique')) {
+    return new ConflictError('A price change for this product is already waiting for a decision')
+  }
+  if (constraint.includes('product_price_product_branch_unique')) {
+    return new ConflictError(
+      'The price changed while this request was being saved. Retry the change.',
+    )
+  }
+  return null
+}
+
+/**
  * One decision shared by setting and removing an override (P12-D19).
  *
  * An admin may move a price anywhere: the band is a manager rule (P12-D18). A
@@ -575,12 +603,8 @@ async function writeOrRequestPriceChange(
       return { status: 'PENDING_APPROVAL', approvalId: approval.id }
     })
   } catch (error) {
-    if (
-      isUniqueViolation(error) &&
-      (uniqueViolationConstraint(error) ?? '').includes('approval_open_entity_unique')
-    ) {
-      throw new ConflictError('A price change for this product is already waiting for a decision')
-    }
+    const conflict = priceWriteConflict(error)
+    if (conflict) throw conflict
     throw error
   }
 }

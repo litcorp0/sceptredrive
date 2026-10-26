@@ -17,6 +17,7 @@ import { category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import { product, productPrice } from './products.schema.ts'
+import { priceWriteConflict } from './products.service.ts'
 
 /**
  * Plan 06: a manager may move a price 10%, and not 11%.
@@ -66,6 +67,45 @@ describe('priceBandBounds', () => {
     expect(withinPriceBand(10_000, 11_001, 10)).toBe(false)
     expect(withinPriceBand(10_000, 9_000, 10)).toBe(true)
     expect(withinPriceBand(10_000, 8_999, 10)).toBe(false)
+  })
+})
+
+/**
+ * The race itself is not driven: two concurrent transactions produce exactly one
+ * `product_price_product_branch_unique` violation, but the database will not
+ * promise which side loses or when. The mapping is what made the loser a 500, so
+ * the mapping is what this proves.
+ */
+describe('priceWriteConflict', () => {
+  function uniqueViolation(constraint: string) {
+    return { code: '23505', constraint }
+  }
+
+  it('maps a concurrent branch-price write to a retryable 409', () => {
+    const conflict = priceWriteConflict(uniqueViolation('product_price_product_branch_unique'))
+    expect(conflict?.statusCode).toBe(409)
+    expect(conflict?.message).toMatch(/price changed/i)
+    expect(conflict?.message).toMatch(/retry/i)
+  })
+
+  it('keeps the existing 409 for a duplicate pending request', () => {
+    const conflict = priceWriteConflict(uniqueViolation('approval_open_entity_unique'))
+    expect(conflict?.statusCode).toBe(409)
+    expect(conflict?.message).toBe(
+      'A price change for this product is already waiting for a decision',
+    )
+  })
+
+  it('reads a wrapped constraint and leaves other errors alone', () => {
+    expect(
+      priceWriteConflict({
+        code: '23505',
+        cause: { constraint: 'product_price_product_branch_unique' },
+      })?.statusCode,
+    ).toBe(409)
+    expect(priceWriteConflict(uniqueViolation('some_other_unique'))).toBeNull()
+    expect(priceWriteConflict({ code: '23503' })).toBeNull()
+    expect(priceWriteConflict(new Error('boom'))).toBeNull()
   })
 })
 

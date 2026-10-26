@@ -288,6 +288,31 @@ describe.skipIf(!available)('shift variance review', () => {
     expect(audits).toHaveLength(1)
   })
 
+  it('renders the variance subject with the close-time facts, not the payload shape', async () => {
+    const created = await shiftAwaitingReview()
+
+    const response = await app.request(`/api/approvals/${created.approval.id}`, {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(response.status).toBe(200)
+    const body = await readJson<{ subject: Record<string, unknown> }>(response)
+
+    expect(body.subject).toEqual({
+      kind: 'shift_variance',
+      shiftId: created.shiftId,
+      terminalName: created.terminalName,
+      expectedMinor: floatMinor,
+      countedMinor: floatMinor + tolerance + 1,
+      varianceMinor: tolerance + 1,
+      shiftNumber: created.number,
+      cashierName: 'Test User',
+      openedAt: '2026-10-26T08:00:00.000Z',
+      closedAt: '2026-10-26T18:00:00.000Z',
+      saleCount: 0,
+      clientExpectedMinor: floatMinor,
+    })
+  })
+
   it('triggers on a shortfall too, and records the absolute value as the amount', async () => {
     const created = await openReviewShift()
     const shortfall = -(tolerance + 1)

@@ -1,4 +1,5 @@
 import type { Role } from '@sceptre/shared'
+import type { ApprovalSubject } from '../approvals/approvals.types.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 
 /** The staff identity a terminal may bind to, with the columns needed to verify a PIN. */
@@ -76,6 +77,12 @@ export interface ShiftApplyResult {
   varianceMinor?: number
   conflictId?: string
 }
+
+/**
+ * The `shift_variance` subject the review detail returns. It is the shared arm,
+ * not a second shape: the console reads the same contract for every request type.
+ */
+export type ShiftVarianceSubject = Extract<ApprovalSubject, { kind: 'shift_variance' }>
 
 /** Everything needed to compute a shift's expected cash at the server. */
 export interface ShiftCashTotals {

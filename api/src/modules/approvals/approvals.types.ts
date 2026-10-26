@@ -84,6 +84,13 @@ export type ApprovalSubject =
       branchId: string
       currentPriceMinor: number
       proposedPriceMinor: number
+      /** The product the prices belong to, so the console needs no second read. */
+      productName: string
+      sku: string
+      /** The band the request was judged against, from its stored payload. */
+      bandPercent: number
+      /** Inclusive window `bandPercent` allows around `currentPriceMinor`. */
+      bounds: { minMinor: number; maxMinor: number }
     }
   | {
       kind: 'credit_limit_change'
@@ -92,6 +99,23 @@ export type ApprovalSubject =
       currentLimitMinor: number
       proposedLimitMinor: number
       balanceMinor: number
+      /** The customer identity the decider is deciding about. */
+      customerName: string
+      phone: string | null
+      /** `ratioBp(balance, proposedLimit)`; null only if the proposal is zero. */
+      utilisationBp: number | null
+      /** Where the customer stands if the proposal is approved (P12-D21). */
+      resultingPosition: {
+        limitMinor: number
+        balanceMinor: number
+        /** Zero when there is headroom; the positive excess otherwise. */
+        overByMinor: number
+        /** `limit - balance` when positive, zero when the customer is over. */
+        headroomMinor: number
+        overLimit: boolean
+        /** True when the next positive charge would exceed the limit. */
+        blocksNewCredit: boolean
+      }
     }
   | {
       kind: 'shift_variance'
@@ -100,6 +124,13 @@ export type ApprovalSubject =
       expectedMinor: number
       countedMinor: number
       varianceMinor: number
+      /** Close-time facts the reviewer needs; the payload is the fallback. */
+      shiftNumber: string
+      cashierName: string | null
+      openedAt: string
+      closedAt: string
+      saleCount: number
+      clientExpectedMinor: number
     }
   | { kind: 'other' }
 

@@ -1166,10 +1166,14 @@ describe.skipIf(!available)('credit HTTP surface', () => {
   let managerCookie = ''
   let cashierCookie = ''
 
-  async function createCustomerRow(name: string): Promise<string> {
+  async function createCustomerRow(name: string, phone?: string): Promise<string> {
     const rows = await db
       .insert(customer)
-      .values({ name: `${name} ${suffix}`, createdBranchId: branchAId })
+      .values({
+        name: `${name} ${suffix}`,
+        createdBranchId: branchAId,
+        ...(phone ? { phone } : {}),
+      })
       .returning({ id: customer.id })
     const id = rows[0]?.id
     if (!id) throw new Error('customer fixture insert failed')
@@ -1712,6 +1716,66 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       body: JSON.stringify({ proposedLimitMinor: 12_000, reason: 'Admin asks' }),
     })
     expect(asAdmin.status).toBe(400)
+  })
+
+  it('renders the credit limit subject with the customer and the resulting position', async () => {
+    const customerName = `Credit Subject ${suffix}`
+    const phone = `+233-${suffix}`
+    const customerId = await createCustomerRow('Credit Subject', phone)
+
+    const setLimit = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, limitMinor: 5_000 }),
+    })
+    expect(setLimit.status).toBe(200)
+
+    const charge = await app.request('/api/credit/entries', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        customerId,
+        kind: 'CHARGE',
+        amountMinor: 3_000,
+        reasonCode: 'SALE',
+      }),
+    })
+    expect(charge.status).toBe(201)
+
+    const request = await app.request(`/api/credit/profiles/${customerId}/limit-requests`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ proposedLimitMinor: 8_000, reason: 'New contract with the hotel' }),
+    })
+    expect(request.status).toBe(201)
+    const { approvalId } = await readJson<{ approvalId: string }>(request)
+
+    const detail = await app.request(`/api/approvals/${approvalId}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(detail.status).toBe(200)
+    const body = await readJson<{ subject: Record<string, unknown> }>(detail)
+
+    expect(body.subject).toEqual({
+      kind: 'credit_limit_change',
+      customerId,
+      branchId: branchAId,
+      currentLimitMinor: 5_000,
+      proposedLimitMinor: 8_000,
+      balanceMinor: 3_000,
+      customerName,
+      phone,
+      // 3 000 of 8 000 = 37.5%, in basis points.
+      utilisationBp: 3_750,
+      resultingPosition: {
+        limitMinor: 8_000,
+        balanceMinor: 3_000,
+        overByMinor: 0,
+        headroomMinor: 5_000,
+        overLimit: false,
+        blocksNewCredit: false,
+      },
+    })
   })
 
   it('serves the over-limit list to the branch and refuses a foreign branch', async () => {

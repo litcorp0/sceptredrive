@@ -547,6 +547,9 @@ function toStockRow(row: {
   sku: string
   productName: string
   categoryName: string
+  branchId: string
+  branchCode: string
+  branchName: string
   quantityOnHand: number
   avgCostMinor: number
   threshold: number | null
@@ -559,13 +562,22 @@ function toStockRow(row: {
   }
 }
 
+/**
+ * One stock query for both lists. `requireBranch` encodes the one difference the
+ * contract allows: `/stock` is a branch view and needs a branch id, while
+ * `/low-stock` answers an admin's "everywhere" question with one row per branch.
+ * A manager still resolves to their own branch in `resolveBranchFilter`, and a
+ * foreign branch is still a 403 there (P11-D17), so the unscoped read can never be
+ * obtained by editing a query string.
+ */
 async function queryStock(
   user: SessionUser,
   query: StockListQuery,
   forceLowStock: boolean,
-): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
+  requireBranch: boolean,
+): Promise<{ stock: StockRow[]; total: number; branchId: string | null }> {
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
-  if (!branchId) {
+  if (requireBranch && !branchId) {
     throw new AppError(400, 'VALIDATION_ERROR', 'branchId is required')
   }
 
@@ -583,15 +595,20 @@ async function queryStock(
 export async function listStock(
   user: SessionUser,
   query: StockListQuery,
-): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
-  return queryStock(user, query, false)
+): Promise<{ stock: StockRow[]; total: number; branchId: string | null }> {
+  return queryStock(user, query, false, true)
 }
 
+/**
+ * Low stock at one branch, or — for an admin who has chosen none — every branch's
+ * low stock with each row naming its branch. The summary's `lowStock` count is this
+ * list's `total`, so the two cannot drift.
+ */
 export async function listLowStock(
   user: SessionUser,
   query: StockListQuery,
-): Promise<{ stock: StockRow[]; total: number; branchId: string }> {
-  return queryStock(user, query, true)
+): Promise<{ stock: StockRow[]; total: number; branchId: string | null }> {
+  return queryStock(user, query, true, false)
 }
 
 export async function getStockDetail(

@@ -71,6 +71,7 @@ import type {
   ShiftCashTotals,
   ShiftClosePayload,
   ShiftOpenPayload,
+  ShiftVarianceSubject,
   StaffBindingResult,
   SyncConflictSeverity,
   SyncConflictType,
@@ -1524,11 +1525,41 @@ export async function countShiftsAwaitingReview(
 }
 
 /**
+ * The close-time extras the review payload carries. The shift row and the live
+ * staff/sales reads stay authoritative; this is the fallback for display facts
+ * that can outlive their row (a cashier renamed or removed after the close).
+ */
+function shiftVarianceFallbacks(payload: unknown): {
+  cashierName?: string | null
+  closedAt?: string
+  saleCount?: number
+  clientExpectedMinor?: number
+} {
+  if (typeof payload !== 'object' || payload === null) return {}
+  const record = payload as Record<string, unknown>
+  return {
+    ...(typeof record.cashierName === 'string' || record.cashierName === null
+      ? { cashierName: record.cashierName }
+      : {}),
+    ...(typeof record.closedAt === 'string' ? { closedAt: record.closedAt } : {}),
+    ...(typeof record.saleCount === 'number' && Number.isSafeInteger(record.saleCount)
+      ? { saleCount: record.saleCount }
+      : {}),
+    ...(typeof record.clientExpectedMinor === 'number' &&
+    Number.isSafeInteger(record.clientExpectedMinor)
+      ? { clientExpectedMinor: record.clientExpectedMinor }
+      : {}),
+  }
+}
+
+/**
  * The review's half of the subject registry: the reviewer sees the drawer's
  * arithmetic — what the server expected, what the cashier counted, and the
  * terminal's name — so a wrong drawer reads differently from a terminal and
- * server that disagreed (SHIFT_VARIANCE_MISMATCH). Read-only, no transaction
- * (P12-D4). The close-time figures also travel in the approval payload.
+ * server that disagreed (SHIFT_VARIANCE_MISMATCH). The close-time facts the
+ * payload carries (shift number, cashier, the open/close window, sale count, and
+ * the till's own expected cash) are returned on the subject too, so the console
+ * never reaches into `approval.payload`. Read-only, no transaction (P12-D4).
  */
 registerSubjectLoader('SHIFT_VARIANCE_REVIEW', async (approval) => {
   if (!approval.entityId) throw new NotFoundError('Shift not found')
@@ -1547,14 +1578,33 @@ registerSubjectLoader('SHIFT_VARIANCE_REVIEW', async (approval) => {
     throw new AppError(500, 'INTERNAL', 'This shift has no closed cash figures')
   }
 
-  return {
+  const [cashier, liveSaleCount] = await Promise.all([
+    findStaffById(row.cashierUserId),
+    countShiftSales(row.id),
+  ])
+  const fallback = shiftVarianceFallbacks(approval.payload)
+  const closedAt = row.closedAt?.toISOString() ?? fallback.closedAt
+  if (!closedAt) {
+    throw new AppError(500, 'INTERNAL', 'This shift has no closed cash figures')
+  }
+
+  const subject: ShiftVarianceSubject = {
     kind: 'shift_variance',
     shiftId: row.id,
     terminalName: found.terminalName,
     expectedMinor: row.serverExpectedCashMinor,
     countedMinor: row.countedCashMinor,
     varianceMinor: row.varianceMinor,
+    shiftNumber: row.number,
+    cashierName: cashier?.name ?? fallback.cashierName ?? null,
+    openedAt: row.openedAt.toISOString(),
+    closedAt,
+    // Sales are append-only, so the live count is the truth; the close-time
+    // snapshot is only a fallback for an explicitly zero live read.
+    saleCount: liveSaleCount > 0 ? liveSaleCount : (fallback.saleCount ?? 0),
+    clientExpectedMinor: row.clientExpectedCashMinor ?? fallback.clientExpectedMinor ?? 0,
   }
+  return subject
 })
 
 /**

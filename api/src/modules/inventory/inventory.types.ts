@@ -183,7 +183,8 @@ export interface StockListQuery {
 }
 
 export interface StockListFilters {
-  branchId: string
+  /** `null` reads every branch (admin only); scoped callers always pass one. */
+  branchId: string | null
   q?: string | undefined
   lowStock: boolean
   limit: number
@@ -195,6 +196,10 @@ export interface StockRow {
   sku: string
   productName: string
   categoryName: string
+  /** The branch this level belongs to; an unscoped read spans branches. */
+  branchId: string
+  branchCode: string
+  branchName: string
   quantityOnHand: number
   avgCostMinor: number
   valueMinor: number

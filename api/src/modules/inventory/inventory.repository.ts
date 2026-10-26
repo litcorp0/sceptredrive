@@ -356,7 +356,10 @@ export async function countMovements(
 }
 
 function stockConditions(filters: StockListFilters) {
-  const conditions = [eq(stockLevel.branchId, filters.branchId), eq(product.isActive, true)]
+  const conditions = [eq(product.isActive, true)]
+  // An admin who has chosen no branch reads the low-stock picture across every
+  // branch; each row carries its own branch so the console never guesses.
+  if (filters.branchId) conditions.push(eq(stockLevel.branchId, filters.branchId))
   if (filters.q) {
     const pattern = `%${filters.q}%`
     const prefix = `${filters.q}%`
@@ -382,6 +385,9 @@ export async function selectStockPage(
     sku: string
     productName: string
     categoryName: string
+    branchId: string
+    branchCode: string
+    branchName: string
     quantityOnHand: number
     avgCostMinor: number
     threshold: number | null
@@ -394,6 +400,9 @@ export async function selectStockPage(
       sku: product.sku,
       productName: product.name,
       categoryName: category.name,
+      branchId: stockLevel.branchId,
+      branchCode: branch.code,
+      branchName: branch.name,
       quantityOnHand: stockLevel.quantityOnHand,
       avgCostMinor: stockLevel.avgCostMinor,
       threshold: stockThreshold.threshold,
@@ -402,6 +411,7 @@ export async function selectStockPage(
     .from(stockLevel)
     .innerJoin(product, eq(product.id, stockLevel.productId))
     .innerJoin(category, eq(category.id, product.categoryId))
+    .innerJoin(branch, eq(branch.id, stockLevel.branchId))
     .leftJoin(
       stockThreshold,
       and(
