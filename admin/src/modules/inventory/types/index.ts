@@ -95,6 +95,7 @@ export interface InventoryReceipt {
 	branchId: string
 	branchCode: string
 	branchName: string
+	purchaseOrderId: string | null
 	supplierName: string | null
 	supplierId: string | null
 	supplierInvoiceNumber: string | null
@@ -117,6 +118,8 @@ export interface ReceiptCreateInput {
 
 export type ReceiptListQuery = {
 	branchId?: string
+	/** The purchase order a delivery fulfils (Phase 11). */
+	purchaseOrderId?: string
 	from?: string
 	to?: string
 	limit?: number

@@ -26,4 +26,5 @@ export const returnKeys = {
 	all: ["procurement-returns"] as const,
 	list: (query: ReturnListQuery) => [...returnKeys.all, "list", query] as const,
 	byId: (id: string) => [...returnKeys.all, "detail", id] as const,
+	returnable: (receiptId: string) => [...returnKeys.all, "returnable", receiptId] as const,
 }

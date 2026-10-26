@@ -258,6 +258,31 @@ export interface ReturnDetail {
 	canCancel: boolean
 }
 
+/** What can still be sent back against one receipt line (P11-D1's cap). */
+export interface ReturnableReceiptLine {
+	id: string
+	productId: string
+	sku: string
+	name: string
+	receivedQuantity: number
+	returnedQuantity: number
+	returnableQuantity: number
+	unitCostMinor: number
+}
+
+export interface ReturnableReceipt {
+	receipt: {
+		id: string
+		number: string
+		branchId: string
+		purchaseOrderId: string | null
+		supplierId: string | null
+		supplierName: string | null
+		createdAt: string
+	}
+	lines: ReturnableReceiptLine[]
+}
+
 export interface ReturnCreateInput {
 	branchId: string
 	supplierId: string

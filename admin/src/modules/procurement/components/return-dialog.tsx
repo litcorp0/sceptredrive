@@ -24,14 +24,9 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 // A return is built from receipt lines, and receipts are inventory's documents.
-import {
-	type InventoryReceipt,
-	inventoryKeys,
-	receiptDetailOptions,
-	receiptListOptions,
-} from "#/modules/inventory"
+import { type InventoryReceipt, inventoryKeys, receiptListOptions } from "#/modules/inventory"
 import { orderKeys, returnKeys } from "../api/keys"
-import { createReturn, postReturn } from "../api/returns"
+import { createReturn, postReturn, returnableReceiptOptions } from "../api/returns"
 import type { OrderDetail, ReturnDetail } from "../types"
 
 interface ReturnRowDraft {
@@ -40,6 +35,8 @@ interface ReturnRowDraft {
 	name: string
 	unitCostMinor: number
 	received: number
+	returned: number
+	returnable: number
 	quantity: string
 }
 
@@ -68,31 +65,41 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 	const [created, setCreated] = useState<ReturnDetail | null>(null)
 	const idempotencyKey = useRef<string>(crypto.randomUUID())
 
-	const receiptsQuery = useQuery(receiptListOptions({ branchId: order.order.branchId, limit: 50 }))
-	const receiptQuery = useQuery({
-		...receiptDetailOptions(receiptId),
+	const receiptsQuery = useQuery(
+		receiptListOptions({
+			branchId: order.order.branchId,
+			purchaseOrderId: order.order.id,
+			limit: 50,
+		}),
+	)
+	const returnableQuery = useQuery({
+		...returnableReceiptOptions(receiptId),
 		enabled: receiptId !== "",
 	})
 
 	useEffect(() => {
-		const receipt = receiptQuery.data?.receipt
-		if (!receipt || receipt.id === loadedReceiptId) return
-		setLoadedReceiptId(receipt.id)
+		const returnable = returnableQuery.data
+		if (!returnable || returnable.receipt.id === loadedReceiptId) return
+		setLoadedReceiptId(returnable.receipt.id)
 		setRows(
-			(receipt.lines ?? []).map((line) => ({
+			returnable.lines.map((line) => ({
 				receiptLineId: line.id,
 				sku: line.sku,
-				name: line.productName,
+				name: line.name,
 				unitCostMinor: line.unitCostMinor,
-				received: line.quantity,
+				received: line.receivedQuantity,
+				returned: line.returnedQuantity,
+				returnable: line.returnableQuantity,
 				quantity: "",
 			})),
 		)
 		setCreated(null)
 		setFormError(null)
-	}, [receiptQuery.data, loadedReceiptId])
+	}, [returnableQuery.data, loadedReceiptId])
 
-	const receipt: InventoryReceipt | undefined = receiptQuery.data?.receipt
+	const receipt: InventoryReceipt | undefined = returnableQuery.data?.receipt as
+		| InventoryReceipt
+		| undefined
 	const receiptOptions = (receiptsQuery.data?.receipts ?? []).filter(
 		(option) => option.supplierId === order.order.supplierId,
 	)
@@ -261,7 +268,7 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 								<SelectContent>
 									{receiptOptions.length === 0 ? (
 										<SelectItem value="none" disabled>
-											No receipts for this supplier yet
+											No receipts for this order yet
 										</SelectItem>
 									) : (
 										receiptOptions.map((option) => (
@@ -274,14 +281,14 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 								</SelectContent>
 							</Select>
 							<p className="text-xs text-muted-foreground">
-								Recent receipts for this branch and supplier. The server links the return to the
-								order the receipt line belongs to.
+								The deliveries recorded against this order. Each line is capped at what was received
+								and not already returned.
 							</p>
 						</div>
 
-						{receiptQuery.isLoading ? (
+						{returnableQuery.isLoading ? (
 							<p className="text-sm text-muted-foreground">Loading receipt lines…</p>
-						) : receiptQuery.isError ? (
+						) : returnableQuery.isError ? (
 							<p role="alert" className="text-sm text-destructive">
 								Couldn't load that receipt.
 							</p>
@@ -295,7 +302,7 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 									rows.map((row, index) => (
 										<div
 											key={row.receiptLineId}
-											className="grid items-start gap-2 rounded-md border p-2 sm:grid-cols-[minmax(0,1fr)_90px_110px_120px]"
+											className="grid items-start gap-2 rounded-md border p-2 sm:grid-cols-[minmax(0,1fr)_70px_70px_90px_90px_90px]"
 										>
 											<div className="min-w-0">
 												<p className="truncate text-sm font-medium">{row.name}</p>
@@ -306,6 +313,10 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 												<span className="py-2 text-sm tabular-nums">{row.received}</span>
 											</div>
 											<div className="grid gap-1">
+												<span className="text-xs text-muted-foreground">Returned</span>
+												<span className="py-2 text-sm tabular-nums">{row.returned}</span>
+											</div>
+											<div className="grid gap-1">
 												<Label className="text-xs" htmlFor={`return-qty-${row.receiptLineId}`}>
 													Return now
 												</Label>
@@ -313,8 +324,9 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 													id={`return-qty-${row.receiptLineId}`}
 													inputMode="numeric"
 													placeholder="0"
+													max={row.returnable}
 													value={row.quantity}
-													disabled={busy}
+													disabled={busy || row.returnable === 0}
 													onChange={(event) =>
 														setRows((current) =>
 															current.map((item) =>
@@ -326,6 +338,10 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 													}
 													aria-label={`Quantity to return for line ${index + 1}`}
 												/>
+											</div>
+											<div className="grid gap-1">
+												<span className="text-xs text-muted-foreground">Can still return</span>
+												<span className="py-2 text-sm tabular-nums">{row.returnable}</span>
 											</div>
 											<div className="grid gap-1">
 												<span className="text-xs text-muted-foreground">Unit cost</span>
