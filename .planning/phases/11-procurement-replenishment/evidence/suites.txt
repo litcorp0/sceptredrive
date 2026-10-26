@@ -1,0 +1,560 @@
+
+### lint
+$ bun run lint
+$ biome check .
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:76:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function freePort is unused.
+  
+    74 │ }
+    75 │ 
+  > 76 │ function freePort() {
+       │          ^^^^^^^^
+    77 │   return new Promise((resolve, reject) => {
+    78 │     const server = net.createServer()
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend freePort with an underscore.
+  
+     74  74 │   }
+     75  75 │   
+     76     │ - function·freePort()·{
+         76 │ + function·_freePort()·{
+     77  77 │     return new Promise((resolve, reject) => {
+     78  78 │       const server = net.createServer()
+  
+
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:89:16 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function waitForCdp is unused.
+  
+    87 │ }
+    88 │ 
+  > 89 │ async function waitForCdp(port, timeoutMs) {
+       │                ^^^^^^^^^^
+    90 │   const deadline = Date.now() + timeoutMs
+    91 │   while (Date.now() < deadline) {
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend waitForCdp with an underscore.
+  
+     87  87 │   }
+     88  88 │   
+     89     │ - async·function·waitForCdp(port,·timeoutMs)·{
+         89 │ + async·function·_waitForCdp(port,·timeoutMs)·{
+     90  90 │     const deadline = Date.now() + timeoutMs
+     91  91 │     while (Date.now() < deadline) {
+  
+
+.planning/phases/06-pos-offline-core/evidence/perf-pos.mjs:133:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function slug is unused.
+  
+    131 │ }
+    132 │ 
+  > 133 │ function slug(value) {
+        │          ^^^^
+    134 │   return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 │ }
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend slug with an underscore.
+  
+    131 131 │   }
+    132 132 │   
+    133     │ - function·slug(value)·{
+        133 │ + function·_slug(value)·{
+    134 134 │     return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 135 │   }
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-outbox.ts:215:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function outboxCounts is unused.
+  
+    213 │ }
+    214 │ 
+  > 215 │ function outboxCounts(db: SqlDb): { status: string; count: number }[] {
+        │          ^^^^^^^^^^^^
+    216 │   return db.sqlite
+    217 │     .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend outboxCounts with an underscore.
+  
+    213 213 │   }
+    214 214 │   
+    215     │ - function·outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+        215 │ + function·_outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+    216 216 │     return db.sqlite
+    217 217 │       .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:97:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    95 │ check('the barcode resolves to one product', scannedRow?.sku === 'GIK-00001')
+    96 │ 
+  > 97 │ const brakePads = toSellableProduct(scannedRow!, 11_000) // branch override price
+       │                                     ^^^^^^^^^^^
+    98 │ check('the branch override price wins', brakePads?.unitPriceMinor === 11_000)
+    99 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:104:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    102 │ const enterTarget = pickEnterTarget('oil', filtered)
+    103 │ check('Enter adds the only search result', enterTarget?.sku === 'GIK-00002')
+  > 104 │ const oilFilter = toSellableProduct(enterTarget!, null)
+        │                                     ^^^^^^^^^^^^
+    105 │ 
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:108:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+  > 108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+        │                                                         ^^^^^^^^^^
+    109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+    110 │ cart = cartReducer(cart, {
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:109:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+    108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+  > 109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+        │                                                         ^^^^^^^^^^
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:12 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:30 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │                              ^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:148:16 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    146 │ //    approves it at the till.
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+  > 148 │ const lineId = cart.lines[1]!.id
+        │                ^^^^^^^^^^^^^^
+    149 │ const lineDiscountMinor = discountAmountFromInput(
+    150 │   '2.00',
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    146 146 │   //    approves it at the till.
+    147 147 │   totals = computeCartTotals(cart, CONTEXT)
+    148     │ - const·lineId·=·cart.lines[1]!.id
+        148 │ + const·lineId·=·cart.lines[1]?.id
+    149 149 │   const lineDiscountMinor = discountAmountFromInput(
+    150 150 │     '2.00',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:149:27 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+    148 │ const lineId = cart.lines[1]!.id
+  > 149 │ const lineDiscountMinor = discountAmountFromInput(
+        │                           ^^^^^^^^^^^^^^^^^^^^^^^^
+  > 150 │   '2.00',
+  > 151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+  > 153 │ )!
+        │ ^^
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+    155 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:152:3 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    150 │   '2.00',
+    151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+        │   ^^^^^^^^^^^^^^^^^^^^^^^
+    153 │ )!
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    150 150 │     '2.00',
+    151 151 │     'AMOUNT',
+    152     │ - ··totals.priced.lines[1]!.grossMinor,
+        152 │ + ··totals.priced.lines[1]?.grossMinor,
+    153 153 │   )!
+    154 154 │   check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:292:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    290 │   'one credit tender for the full total',
+    291 │   draft.payload.tenders.length === 1 &&
+  > 292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 │ )
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    290 290 │     'one credit tender for the full total',
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292     │ - ····draft.payload.tenders[0]!.method·===·'CREDIT'·&&
+        292 │ + ····draft.payload.tenders[0]?.method·===·'CREDIT'·&&
+    293 293 │       draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 294 │   )
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:293:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    291 │   draft.payload.tenders.length === 1 &&
+    292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+  > 293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 │ )
+    295 │ check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292 292 │       draft.payload.tenders[0]!.method === 'CREDIT' &&
+    293     │ - ····draft.payload.tenders[0]!.amountMinor·===·draft.payload.totals.totalMinor,
+        293 │ + ····draft.payload.tenders[0]?.amountMinor·===·draft.payload.totals.totalMinor,
+    294 294 │   )
+    295 295 │   check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+
+.planning/phases/06-pos-offline-core/evidence/walkthrough-pos.mjs:606:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable cashierB is unused.
+  
+    604 │     body: { staffCode: cashierStaff.staff_id, pin: NEW_PIN },
+    605 │   })
+  > 606 │   const cashierB = cashierBResponse.body
+        │         ^^^^^^^^
+    607 │   check('the cashier authorizes on device B', cashierBResponse.status === 201)
+    608 │ 
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend cashierB with an underscore.
+  
+     604  604 │       body: { staffCode: cashierStaff.staff_id, pin: NEW_PIN },
+     605  605 │     })
+     606      │ - ··const·cashierB·=·cashierBResponse.body
+          606 │ + ··const·_cashierB·=·cashierBResponse.body
+     607  607 │     check('the cashier authorizes on device B', cashierBResponse.status === 201)
+     608  608 │   
+  
+
+.planning/phases/06-pos-offline-core/evidence/walkthrough-pos.mjs:753:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable akosuaLimit is unused.
+  
+    751 │   check('the demo credit and loyalty customers are present', Boolean(akosua && kwame))
+    752 │   const akosuaOpeningBalance = Number(akosua.balance_minor)
+  > 753 │   const akosuaLimit = Number(akosua.limit_minor)
+        │         ^^^^^^^^^^^
+    754 │ 
+    755 │   const stockBefore = Number(
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend akosuaLimit with an underscore.
+  
+     751  751 │     check('the demo credit and loyalty customers are present', Boolean(akosua && kwame))
+     752  752 │     const akosuaOpeningBalance = Number(akosua.balance_minor)
+     753      │ - ··const·akosuaLimit·=·Number(akosua.limit_minor)
+          753 │ + ··const·_akosuaLimit·=·Number(akosua.limit_minor)
+     754  754 │   
+     755  755 │     const stockBefore = Number(
+  
+
+.planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs:18:26 lint/correctness/noUnusedImports  FIXABLE  ━━━━━━━━━━
+
+  ! Several of these imports are unused.
+  
+    16 │ import fs from 'node:fs'
+    17 │ import path from 'node:path'
+  > 18 │ import { formatDateTime, formatDay } from '@sceptre/shared'
+       │                          ^^^^^^^^^
+    19 │ import { chromium } from 'playwright'
+    20 │ 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+    18 │ import·{·formatDateTime,·formatDay·}·from·'@sceptre/shared'
+       │                          ----------                        
+
+.planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs:342:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable customerId is unused.
+  
+    340 │     'customer ledger opens by keyboard',
+    341 │   )
+  > 342 │   const customerId = new URL(page.url()).pathname.split('/').pop()
+        │         ^^^^^^^^^^
+    343 │   await shot('plan07-04-admin-customer-ledger')
+    344 │ 
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend customerId with an underscore.
+  
+    340 340 │       'customer ledger opens by keyboard',
+    341 341 │     )
+    342     │ - ··const·customerId·=·new·URL(page.url()).pathname.split('/').pop()
+        342 │ + ··const·_customerId·=·new·URL(page.url()).pathname.split('/').pop()
+    343 343 │     await shot('plan07-04-admin-customer-ledger')
+    344 344 │   
+  
+
+packages/brand/src/tokens.css:258:34 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    256 │     *::before,
+    257 │     *::after {
+  > 258 │       animation-duration: 0.01ms !important;
+        │                                  ^^^^^^^^^^
+    259 │       animation-iteration-count: 1 !important;
+    260 │       transition-duration: 0.01ms !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    258 │ ······animation-duration:·0.01ms·!important;
+        │                                 ----------- 
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 5.
+Checked 965 files in 3s. No fixes applied.
+Found 25 warnings.
+[exit 0]
+
+### check-types
+$ bun run check-types
+$ bun run --if-present --filter '*' check-types
+@sceptre/brand check-types: Exited with code 0
+@sceptre/db check-types: Exited with code 0
+@sceptre/shared check-types: Exited with code 0
+desktop check-types: Exited with code 0
+api check-types: Exited with code 0
+admin check-types: Exited with code 0
+[exit 0]
+
+### shared tests
+$ bun run --filter @sceptre/shared test
+@sceptre/shared test: 
+@sceptre/shared test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+@sceptre/shared test: 
+@sceptre/shared test: 
+@sceptre/shared test:  Test Files  15 passed (15)
+@sceptre/shared test:       Tests  191 passed (191)
+@sceptre/shared test:    Start at  09:27:10
+@sceptre/shared test:    Duration  4.64s (import 86%, tests 9%, worker 2%, transform 2%)
+@sceptre/shared test: 
+@sceptre/shared test:     Isolate  15 workers spawned · ~237ms startup each (spawn + environment, per file)
+@sceptre/shared test:              at least ~948ms faster with isolate: false — reuses workers across files instead of one per file
+@sceptre/shared test: 
+@sceptre/shared test: Exited with code 0
+[exit 0]
+
+### api tests
+$ bun run --filter api test
+api test: 
+api test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+api test: 
+api test: 
+api test:  Test Files  37 passed (37)
+api test:       Tests  479 passed (479)
+api test:    Start at  09:27:15
+api test:    Duration  275.95s (import 58%, tests 39%, transform 3%)
+api test: 
+api test:      Import  254 modules were evaluated 6524 times · 152.47s total, 58% of tracked time
+api test:              ~146.53s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+api test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
+api test: 
+api test: Exited with code 0
+[exit 0]
+
+### desktop tests
+$ bun run --filter desktop test
+desktop test: 
+desktop test:  RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/desktop
+desktop test: 
+desktop test: 
+desktop test:  Test Files  50 passed (50)
+desktop test:       Tests  421 passed (421)
+desktop test:    Start at  09:31:52
+desktop test:    Duration  24.82s (import 92%, tests 6%, transform 1%, worker 1%)
+desktop test: 
+desktop test:      Import  139 modules were evaluated 287 times · 53.85s total, 92% of tracked time
+desktop test:              ~5.50s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+desktop test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
+desktop test: 
+desktop test: Exited with code 0
+[exit 0]
+
+### admin modules gate
+$ bun run modules:check
+$ node scripts/check-modules.mjs
+
+Modules
+  module      folders   status
+  analytics   6         migrated
+  auth        3         migrated
+  audit       4         migrated
+  branches    4         migrated
+  catalog     4         migrated
+  credit      5         migrated
+  customers   4         migrated
+  dashboard   2         migrated
+  inventory   5         migrated
+  loyalty     5         migrated
+  payables    4         migrated
+  procurement 6         migrated
+  replenishment6         migrated
+  settings    4         migrated
+  staff       4         migrated
+  suppliers   6         migrated
+  terminals   4         migrated
+
+modules:check OK — 17/17 modules migrated
+[exit 0]
+
+### admin modules gate (strict)
+$ bun run modules:check:strict
+$ node scripts/check-modules.mjs --strict && node scripts/check-desktop-modules.mjs --strict
+
+Modules
+  module      folders   status
+  analytics   6         migrated
+  auth        3         migrated
+  audit       4         migrated
+  branches    4         migrated
+  catalog     4         migrated
+  credit      5         migrated
+  customers   4         migrated
+  dashboard   2         migrated
+  inventory   5         migrated
+  loyalty     5         migrated
+  payables    4         migrated
+  procurement 6         migrated
+  replenishment6         migrated
+  settings    4         migrated
+  staff       4         migrated
+  suppliers   6         migrated
+  terminals   4         migrated
+
+modules:check OK — 17/17 modules migrated
+
+Modules
+  module      folders   status
+  auth        3         migrated
+  cart        1         migrated
+  catalog     1         migrated
+  credit      1         migrated
+  customers   1         migrated
+  home        6         migrated
+  loyalty     1         migrated
+  receipt     2         migrated
+  sales       2         migrated
+  sell        2         migrated
+  settings    1         migrated
+  shift       3         migrated
+  sync        3         migrated
+  tender      3         migrated
+
+modules:check:pos OK — 14/14 modules migrated
+[exit 0]
+
+### brand gate
+$ bun run brand:check
+$ node scripts/check-brand.mjs
+brand check OK (964 tracked files, old brand absent)
+[exit 0]
+
+### token gate
+$ bun run tokens:check
+$ node scripts/check-tokens.mjs
+token check OK
+  token source: packages/brand/src/tokens.css (both clients import it)
+  app sources scanned: 571 tracked files, no brand literal
+  tokens: 36 required in :root, 35 redefined in .dark
+  date-fns: date-fns@4.4.0
+  contrast (WCAG 2.2 relative luminance, measured from the token file):
+      5.41:1  min 4.5:1                      primary button label: brand-fg on brand (AA normal text) [light #1b1f23 on #f26a1b]
+      3.06:1  max 4.5:1 (must stay rejected) rejected pairing: white on brand stays below AA normal text [light #FFFFFF on #f26a1b]
+      5.53:1  min 4.5:1                      muted text: muted-ink on canvas [light #5c6470 on #f6f6f4]
+     15.32:1  min 7:1                        body text: ink on canvas (AAA) [light #1b1f23 on #f6f6f4]
+      4.56:1  min 4.5:1                      brand as text: brand-ink on surface [light #c25515 on #ffffff]
+     13.92:1  min 7:1                        dark body text: ink on surface (AAA) [dark #f6f6f4 on #22272c]
+      6.87:1  min 4.5:1                      dark muted text: muted-ink on surface [dark #a8b0b9 on #22272c]
+      6.57:1  min 4.5:1                      dark brand as text: brand-ink on surface [dark #f5934f on #22272c]
+      3.65:1  min 3:1                        light input boundary: line-strong on surface (SC 1.4.11) [light #7c8794 on #ffffff]
+      3.38:1  min 3:1                        light input boundary: line-strong on canvas (SC 1.4.11) [light #7c8794 on #f6f6f4]
+      3.11:1  min 3:1                        dark input boundary: line-strong on surface (SC 1.4.11) [dark #6b7280 on #22272c]
+      3.06:1  min 3:1                        light chart series: chart-1 on surface (SC 1.4.11) [light #f26a1b on #ffffff]
+     16.58:1  min 3:1                        light chart series: chart-2 on surface (SC 1.4.11) [light #1b1f23 on #ffffff]
+      3.11:1  min 3:1                        light chart series: chart-3 on surface (SC 1.4.11) [light #8a939f on #ffffff]
+      3.29:1  min 3:1                        light chart series: chart-4 on surface (SC 1.4.11) [light #c97b3d on #ffffff]
+      5.83:1  min 3:1                        light chart series: chart-5 on surface (SC 1.4.11) [light #2f6f6a on #ffffff]
+      4.95:1  min 3:1                        light chart series: chart-6 on surface (SC 1.4.11) [light #5b6ea8 on #ffffff]
+      5.28:1  min 3:1                        light chart series: chart-7 on surface (SC 1.4.11) [light #8c5a8f on #ffffff]
+      4.91:1  min 3:1                        dark chart series: chart-1 on surface (SC 1.4.11) [dark #f26a1b on #22272c]
+     13.92:1  min 3:1                        dark chart series: chart-2 on surface (SC 1.4.11) [dark #f6f6f4 on #22272c]
+       5.9:1  min 3:1                        dark chart series: chart-3 on surface (SC 1.4.11) [dark #9aa3ae on #22272c]
+      5.55:1  min 3:1                        dark chart series: chart-4 on surface (SC 1.4.11) [dark #d98b4b on #22272c]
+      4.57:1  min 3:1                        dark chart series: chart-5 on surface (SC 1.4.11) [dark #4e9a94 on #22272c]
+      6.02:1  min 3:1                        dark chart series: chart-6 on surface (SC 1.4.11) [dark #8fa3d8 on #22272c]
+      5.71:1  min 3:1                        dark chart series: chart-7 on surface (SC 1.4.11) [dark #c08fc4 on #22272c]
+[exit 0]
+
+ALL SUITES PASSED

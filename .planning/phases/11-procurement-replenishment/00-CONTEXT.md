@@ -53,14 +53,42 @@ short delivery is invisible. `supplier_product` already stores `lead_time_days`,
 - A suggestion is arithmetic on stored facts, never a cached forecast.
 - No procurement action can be initiated from, or block, the POS.
 
+## Amendments (2026-10-26)
+
+The locked table above is kept as written; where a decision taken during planning or execution
+contradicts it, the contradiction is named here rather than edited out of the history. The full
+reasoning is in `00-DECISIONS.md` (P11-D1…D21), which wins over this file.
+
+| Locked row | What changed | Why |
+|---|---|---|
+| D5 (invoice matching) | The line-level link `supplier_invoice_line.purchase_order_line_id` was added beside the header's `purchaseOrderId` | D5 asks for a price **or quantity** variance with both values. A header-only link cannot compare received quantity per line, which is the control that makes matching worth anything |
+| D7 (min/max) | `reorder_quantity` was dropped; `stock_threshold` gained `max_quantity` and `min_order_quantity` (P11-D3) | D7's `reorder_quantity` defaulted to `max − on hand`, a snapshot that is wrong by the next sale; D8 then computed the same concept independently. A supplier's minimum order quantity is the only quantity in this area that belongs in a column |
+| D8 (suggestion) | The target is `max(stored max, coverage)` and the answer is `max(gap, min_order_quantity)`; coverage rounds once at the end (P11-D12) | Unchanged in substance, but the formula is now one shared function with every input in its signature, so the screen and the API cannot disagree |
+| D11 (numbering) | Document numbers use a new `document_sequence` table (branch, kind, `YYYY-MM`), not the settings sequence machinery (P11-D15) | The settings sequences are one static prefix plus one counter in a single row; they cannot express per-branch-per-month numbers, and dynamic setting keys cannot be validated |
+| D12 (permissions) | A manager's product submission requires `procurement.create`, and `catalog.create` is **not** granted to the manager (P11-D21) | `catalog.create` also guards category, brand and unit creation, which have no approval flow. Granting it would hand catalogue structure to the branch |
+| D16 (manager products) | Approval creates the product from the submitted payload verbatim; there is no edit-in-place during the decision (P11-D7) | A decision that silently changes what was requested is not a decision |
+| D17 (new part) | Unchanged; the first receipt still creates the link and its cost (PROC-09, Plan 05) | — |
+| D18 (catalogue cost) | Written only by an inbound `RECEIPT` movement through `inventory.repository.updateDerivedCost` (P11-D13) | `products.service` already imports `inventory.service`, so the reverse import would be a module cycle; the cross-module write is deliberate and documented in the code |
+
+Three decisions went beyond the locked context and were put to the operator, who answered them
+before Plan 01: the credit note posts with the return in one transaction (P11-D1); the approval
+threshold compares the ex-tax goods value (P11-D2); `SENT` records a send and unlocks a printable
+sheet rather than sending email (P11-D4). A fifth, P11-D5, keeps the unified approval inbox in
+Phase 12 and ships a PO-filtered queue here.
+
 ## Planned Plans
 
-1. Schema, enums, settings, permissions, seed.
-2. Approvals core (shared with Phase 12) and threshold resolution, including `PRODUCT_CREATE`.
-3. Purchase order lifecycle API; manager product submission endpoint.
-4. Receiving against orders, supplier-product link auto-creation, discrepancy handling, invoice matching.
-5. Purchase returns and supplier credits.
-6. Replenishment service and suggestion arithmetic, including parts never stocked at a branch.
-7. Supplier performance read model and derived catalogue cost.
-8. Console UI: ordering, receiving, returns, replenishment.
-9. Verification, evidence, state update.
+The plans were written before execution and renumbered while planning; the executed set is
+`01-PLAN.md` … `11-PLAN.md`:
+
+1. Shared vocabulary: permissions, approval types, replenishment arithmetic.
+2. Schema, migration, threshold settings, document numbering, seeds.
+3. Approvals core, threshold resolution, product submission.
+4. Purchase order lifecycle.
+5. Receiving, supplier-product link, derived catalogue cost.
+6. Invoice matching against a purchase order.
+7. Purchase returns and supplier credit notes.
+8. Replenishment suggestions and supplier performance read model.
+9. Console: procurement module (orders, receiving, returns, submission, invoice matching).
+10. Console: replenishment and supplier performance.
+11. Verification, evidence, state update.

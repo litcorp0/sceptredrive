@@ -4,18 +4,18 @@
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-25
-**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is in progress — plans 01–08
-of 11 are complete.** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
+**Updated:** 2026-10-26
+**Status:** **Phase 11 (Procurement, Replenishment & Supplier Returns) is complete and verified
+(11/11 plans).** Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on
 2026-10-24: four interface phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics
 & Dashboard, 10 Desktop Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a
 later audit the same day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch
 Operations & Approvals). The former 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 11 Plan 09** — the console's `procurement` module (orders,
-receiving, returns, product submission, invoice matching). The plan set is
-`phases/11-procurement-replenishment/{README,00-DECISIONS,
-01-RESEARCH,01…11-PLAN}.md`; `00-DECISIONS.md` P11-D1…D21 refinements win over `00-CONTEXT.md`
-where the two disagree.
+**Next action:** plan **Phase 12 — Branch Operations & Approval Workflow** (transfer requests,
+the unified approval inbox, write-offs, price bands, credit-limit changes, shift variance review,
+cycle counts, the manager's queue). Phase 11's verification is
+`phases/11-procurement-replenishment/11-VERIFICATION.md`; `00-DECISIONS.md` P11-D1…D21 records what
+was decided and where each decision was exercised.
 
 ---
 
@@ -34,7 +34,7 @@ where the two disagree.
 | 8 | Admin Module Architecture & Shell | ✅ Complete (13/13 plans, verified) |
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
-| 11 | Procurement, Replenishment & Supplier Returns | 🔷 In progress (8/11 plans) |
+| 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
 | 12 | Branch Operations & Approval Workflow | 🔷 Context locked (9 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
@@ -88,9 +88,9 @@ where the two disagree.
 | 06 | Invoice matching against a purchase order | ✅ Complete |
 | 07 | Purchase returns and supplier credit notes | ✅ Complete |
 | 08 | Replenishment suggestions and supplier performance | ✅ Complete |
-| 09 | Console: procurement module | 🔷 Planned |
-| 10 | Console: replenishment and supplier performance | 🔷 Planned |
-| 11 | Verification, evidence, state update | 🔷 Planned |
+| 09 | Console: procurement module | ✅ Complete |
+| 10 | Console: replenishment and supplier performance | ✅ Complete |
+| 11 | Verification, evidence, state update | ✅ Complete |
 
 ### Phase 11 execution notes (2026-10-25)
 
@@ -148,6 +148,68 @@ where the two disagree.
   tree (a stray formatter run adding semicolons, and one removed `max-w-xl`). The formatter change
   is the only `bun run lint` error in the repository and is **not** from Phase 11; it was left
   untouched rather than reverted, and the Plan 08 gates were read with that failure named.
+
+- **Plan 09 complete** (commits `da472f8`, `aaac249`, `bade691`, `c0703d2`, `8b7aef2`,
+  `29132bd`, `8e0afee`, `2161083`, `0f13f07`, `2782cf3`). The console section is
+  `admin/src/modules/procurement/` with six thin routes, a nav entry and breadcrumbs; every
+  action button comes from the server's `canApply`, never a client guess. Gates: `check-types`,
+  `admin lint`, `admin build`, `modules:check:strict` **17/17** admin, and the browser walkthrough
+  at **159/159**.
+- **Two plan defects were resolved rather than worked around.** (a) The plan asked for a
+  `matchStatus` filter on the invoice list, but the API's list row carries `hasVariance`; the list
+  gets a `variance=true` filter and a variance badge, and the line-level status stays on the detail
+  where the payload has it. (b) Product submission had **no admin decision screen** anywhere in
+  the plan, so a submitted product could never become one; the products page gained a pending
+  submissions panel behind `procurement.approve`.
+- **Two API reads the plan assumed but did not exist** were added, because a screen cannot be
+  honest without them: `purchaseOrderId` on the receipt list (and as a filter), so an order can
+  show its deliveries, and `GET /api/procurement/receipts/:id/returnable`, so the return dialog
+  caps at `received − returned` instead of discovering the cap from a 400 (`a0df343`, `2782cf3`).
+- **Plan 10 complete** (commits `8f04a38`, `aec5505`). `admin/src/modules/replenishment/` holds
+  the suggestions table with a `Why?` breakdown that prints every input the API returned, the
+  raise-order dialog (DRAFT at the supplier's last cost, never submitted from the screen), the
+  Unassigned group with its "Choose supplier" action, and the supplier performance screen with its
+  stated definitions and exclusions. The threshold dialog is **one component with two doors**:
+  the stock page and the replenishment row both open it, and it now carries Maximum and Minimum
+  order quantity.
+- **Plan 11 complete.** `11-VERIFICATION.md` maps all ten roadmap criteria, the fifteen
+  requirements, the OWASP table and every defect to a command, a leg number or a screenshot.
+  Evidence: `suites.txt` (`ALL SUITES PASSED`), `walkthrough-procurement.txt` (**85 assertions**,
+  fixtures created through the API, three suggestion facts re-derived from SQL),
+  `walkthrough-console.txt` (**159/159**), `08-velocity-and-suggestion.md` and nine screenshots.
+- **Numbers.** shared **149 → 191**, API **394 → 479**, desktop **413 → 421** (the +8 are the two
+  local-API/CSP fixes committed during the phase's setup, before Plan 01 — no plan in this phase
+  touched `desktop/**`), `modules:check:strict` **17/17** admin and **14/14** POS, brand gate over
+  **964** tracked files, `tokens:check` OK, lint exit 0 with 25 pre-existing warnings.
+- **A fresh database cycle ran end to end**: `docker compose down -v`, `up -d`, `db:migrate` (all
+  files from zero, including the split enum migration), `db:test:prepare`, `db:seed --demo`,
+  `sync:init`, `seed:demo-sales` (168 shifts, 2 433 sales).
+- **Six mutations proved the gates can fail**, each applied, failed and reverted: the threshold
+  boundary (`>=` → `>`), `assertBranchAccess` removed from `getOrder` (IDOR leg 26a), the
+  over-receipt reason guard removed, the self-approval check removed, credit notes not subtracted
+  in `sumSupplierOwed`, and `.strict()` dropped from the order body.
+- **Mutation 5 found a gap rather than confirming one.** P11-D9 claims the archive rule is "a
+  tested invariant, not a comment", and no test exercised it; the first attempt at the mutation
+  failed nothing. `suppliers.test.ts` now proves a credit note offsets an invoice so a fully
+  returned supplier can be archived (`65e0136`).
+- **The POS is untouched in the way that matters.** `git diff --stat 8a0804a..HEAD --
+  powersync/` and the local schema, powersync client and outbox paths are all empty; the only
+  desktop changes are the two setup commits above, neither of which touches the selling path.
+- **Deviations, all deliberate.** Plan 09's eight commits became ten (the lane's six plus two
+  controller follow-ups after the API reads landed); Plan 10's six became two because the splits
+  would have committed the same generated files twice. The console screenshots are one viewport
+  (1440 px) rather than 1024 × 768 + 1440 × 900. Supplier performance does not name "the product
+  that drifted most": the row does not carry one, and the screen shows what the API returns.
+  The empty state's "last computed" time is the client's last successful fetch.
+- **Carry-forwards.** The top-drift product and a server compute timestamp are one-field API
+  additions; a supplier lead-time *spread* (not just the mean) is the next useful performance
+  figure; a 1024 × 768 console pass for the procurement screens; and the plan set's out-of-scope
+  items stay out (emailing a PO is Phase 15, approval expiry and the unified inbox are Phase 12,
+  PO-side E-VAT is Phase 14).
+- **Pre-existing, left alone:** `admin/src/modules/settings/pages/settings-page.tsx` and
+  `admin/src/modules/branches/pages/branch-detail-page.tsx` remain locally modified (a stray
+  formatter run and one removed class). They were stashed for the gate transcript and restored
+  afterwards; the phase did not author, fix or commit them.
 
 ### Phase 10 execution notes (2026-10-25)
 

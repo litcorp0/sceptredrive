@@ -421,3 +421,31 @@ it is wanted later it needs a field-level guard on price and tax in `products.se
 permission grant. The six API tests that encoded the old matrix changed deliberately: the supplier
 matrix now expects a manager's `POST /api/suppliers` to be **201** (MGR-01), and the catalogue and
 product tests are unchanged because those permissions did not move.
+
+---
+
+## Where each decision was exercised
+
+| Decision | Plan | Proof |
+|---|---|---|
+| P11-D1 return posts its credit note in one transaction | 07 | `procurement.service.postReturn`; walkthrough leg 18d–18g; `procurement.test.ts` "posting creates the credit note" |
+| P11-D2 the threshold compares ex-tax goods value | 03/04 | `goodsValueMinor`; walkthrough legs 1c, 2a, 4a |
+| P11-D3 reorder quantity → min order quantity | 02/08/10 | `stock_threshold` migration; `suggestReplenishment`; threshold dialog |
+| P11-D4 `SENT` records a send and prints | 04/09 | `sendOrder`; print sheet; walkthrough leg 9 |
+| P11-D5 a PO-filtered queue, not the unified inbox | 09 | order list status filter; approval panel on the detail page |
+| P11-D6 auto-approved order writes no approval row | 03/04 | walkthrough legs 2b, 3b |
+| P11-D7 approval creates the product as submitted | 03/09 | `PRODUCT_CREATE` handler; pending-submissions panel; walkthrough leg 25 |
+| P11-D8 write-offs stay in Phase 12 | — | no write-off route exists in this phase |
+| P11-D9 credit notes reduce owed, never the buckets | 07/11 | `sumSupplierOwed`; `suppliers.test.ts` credit-offset archive test; walkthrough leg 20 |
+| P11-D10 preferred supplier and lead time are global | 08/10 | `selectReplenishmentRows`; unassigned group; "Choose supplier" action |
+| P11-D11 performance per line with stated dates | 08/10 | `replenishment.test.ts` performance block; performance screen |
+| P11-D12 integer velocity, rounded once | 01/08 | `replenishment.ts`; walkthrough leg 23 |
+| P11-D13 catalogue cost derived and read-only | 05/09 | `updateDerivedCost`; product form; walkthrough leg 22 |
+| P11-D14 approval types ship with all eight | 01/02 | `APPROVAL_TYPES`; `approval_type` enum |
+| P11-D15 document numbers in their own table | 02 | `document_sequence`; walkthrough leg 1b |
+| P11-D16 enum values get their own migration | 02 | `0007`-style split recorded in the migration file |
+| P11-D17 every mutation is branch-scoped twice | 04–08 | walkthrough legs 26a–26e |
+| P11-D18 admin-raised orders are auto-approved | 03/04 | walkthrough leg 3 |
+| P11-D19 receiving is allowed from `APPROVED` | 05 | `canApplyOrderAction` matrix; `procurement.test.ts` |
+| P11-D20 idempotency keys on every procurement POST | 04/05/07/08 | replay tests; walkthrough leg 24 |
+| P11-D21 product submission uses `procurement.create` | 01/03 | permissions test; submission endpoint |
