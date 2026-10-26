@@ -130,28 +130,39 @@ describe('permissions', () => {
     expect(can('CASHIER', 'analytics.read')).toBe(false)
   })
 
-  it('lets managers order and receive, and keeps approval admin-only', () => {
+  it('lets managers order and receive, and read and decide approvals', () => {
     expect(can('MANAGER', 'procurement.read')).toBe(true)
     expect(can('MANAGER', 'procurement.create')).toBe(true)
     expect(can('MANAGER', 'procurement.receive')).toBe(true)
     expect(can('MANAGER', 'procurement.return')).toBe(true)
-    // PROC-02 / P11-D18: approving is the one thing a manager never does, including
-    // for their own branch, so no self-approval path can exist.
-    expect(can('MANAGER', 'procurement.approve')).toBe(false)
+    // P12-D1: `procurement.approve` is retired. A manager holds `approval.decide`
+    // because the authority stored on the row — not the permission alone — decides
+    // whether they may use it (P12-D2).
+    expect(can('MANAGER', 'approval.read')).toBe(true)
+    expect(can('MANAGER', 'approval.decide')).toBe(true)
 
     expect(can('ADMIN', 'procurement.read')).toBe(true)
     expect(can('ADMIN', 'procurement.create')).toBe(true)
-    expect(can('ADMIN', 'procurement.approve')).toBe(true)
     expect(can('ADMIN', 'procurement.receive')).toBe(true)
     expect(can('ADMIN', 'procurement.return')).toBe(true)
+    expect(can('ADMIN', 'approval.read')).toBe(true)
+    expect(can('ADMIN', 'approval.decide')).toBe(true)
   })
 
-  it('keeps cashiers out of procurement entirely', () => {
+  it('keeps cashiers out of procurement and approvals entirely', () => {
     expect(can('CASHIER', 'procurement.read')).toBe(false)
     expect(can('CASHIER', 'procurement.create')).toBe(false)
-    expect(can('CASHIER', 'procurement.approve')).toBe(false)
     expect(can('CASHIER', 'procurement.receive')).toBe(false)
     expect(can('CASHIER', 'procurement.return')).toBe(false)
+    expect(can('CASHIER', 'approval.read')).toBe(false)
+    expect(can('CASHIER', 'approval.decide')).toBe(false)
+  })
+
+  it('retires procurement.approve: one name for one action', () => {
+    expect(PERMISSIONS).not.toContain('procurement.approve')
+    expect(ROLE_PERMISSIONS.ADMIN).not.toContain('procurement.approve')
+    expect(ROLE_PERMISSIONS.MANAGER).not.toContain('procurement.approve')
+    expect(ROLE_PERMISSIONS.ADMIN).toEqual(PERMISSIONS)
   })
 
   it('has no duplicate permissions', () => {

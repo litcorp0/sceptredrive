@@ -54,9 +54,13 @@ export const PERMISSIONS = [
   'payable.invoice.manage',
   'payable.payment',
   'payable.void',
+  // P12-D1: one name for one action. Deciding a request is `approval.decide`
+  // whatever the request is about; the authority stored on the row decides
+  // whether a manager may use it (P12-D2).
+  'approval.read',
+  'approval.decide',
   'procurement.read',
   'procurement.create',
-  'procurement.approve',
   'procurement.receive',
   'procurement.return',
 ] as const
@@ -108,6 +112,8 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'payable.invoice.manage',
   'payable.payment',
   'payable.void',
+  'approval.read',
+  'approval.decide',
   'procurement.read',
   'procurement.create',
   'procurement.receive',
