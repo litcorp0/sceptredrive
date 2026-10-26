@@ -12,8 +12,10 @@ import {
 import { app } from '../../app.ts'
 import { category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import { product } from '../products/products.schema.ts'
 import { approval } from './approvals.schema.ts'
+import { requestApproval } from './approvals.service.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[approvals.test] database unavailable; integration tests skipped')
@@ -45,6 +47,11 @@ function submission(name: string) {
     description: 'Proposed by a branch manager',
     note: 'We keep selling out',
   }
+}
+
+/** A service-level actor, for the request paths no HTTP route exposes directly. */
+function testActor(id: string): AuditActor {
+  return { actorId: id, actorStaffId: null, ip: null, userAgent: null, requestId: null }
 }
 
 beforeAll(async () => {
@@ -308,5 +315,181 @@ describe.skipIf(!available)('approvals', () => {
       .where(and(eq(approval.branchId, branchAId), eq(approval.status, 'PENDING')))
     expect(pending.length).toBeGreaterThan(0)
     expect(pending[0]?.requestedBy).toBeTruthy()
+  })
+
+  it('lets an admin decide an admin-authority row raised in another branch', async () => {
+    const name = `Cross branch ${suffix}`
+    const [row] = await db
+      .insert(approval)
+      .values({
+        type: 'PRODUCT_CREATE',
+        branchId: branchBId,
+        requestedBy: managerBId,
+        deciderRole: 'ADMIN',
+        deciderBranchId: null,
+        amountMinor: 12_500,
+        payload: submission(name),
+      })
+      .returning({ id: approval.id })
+
+    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+
+    const rows = await db.select().from(product).where(eq(product.name, name))
+    expect(rows).toHaveLength(1)
+  })
+
+  it('refuses a manager an admin-authority row, even in their own branch', async () => {
+    const [row] = await db
+      .insert(approval)
+      .values({
+        type: 'PRODUCT_CREATE',
+        branchId: branchAId,
+        requestedBy: managerBId,
+        deciderRole: 'ADMIN',
+        deciderBranchId: null,
+        payload: submission(`Admin authority ${suffix}`),
+      })
+      .returning({ id: approval.id })
+
+    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(response.status).toBe(403)
+  })
+
+  it('lets the branch manager decide a manager-authority row', async () => {
+    const name = `Manager authority ${suffix}`
+    const [row] = await db
+      .insert(approval)
+      .values({
+        type: 'PRODUCT_CREATE',
+        branchId: branchAId,
+        requestedBy: managerBId,
+        deciderRole: 'MANAGER',
+        deciderBranchId: branchAId,
+        amountMinor: 12_500,
+        payload: submission(name),
+      })
+      .returning({ id: approval.id })
+
+    const detail = await app.request(`/api/approvals/${row?.id}`, {
+      headers: authedHeaders(managerACookie),
+    })
+    expect(detail.status).toBe(200)
+    expect((await readJson<{ canDecide: boolean }>(detail)).canDecide).toBe(true)
+
+    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+
+    const rows = await db.select().from(product).where(eq(product.name, name))
+    expect(rows).toHaveLength(1)
+  })
+
+  it('refuses the same row to a manager from another branch', async () => {
+    const [row] = await db
+      .insert(approval)
+      .values({
+        type: 'PRODUCT_CREATE',
+        branchId: branchAId,
+        requestedBy: adminId,
+        deciderRole: 'MANAGER',
+        deciderBranchId: branchAId,
+        payload: submission(`Other branch ${suffix}`),
+      })
+      .returning({ id: approval.id })
+
+    const detail = await app.request(`/api/approvals/${row?.id}`, {
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(detail.status).toBe(403)
+
+    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(managerBCookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(response.status).toBe(403)
+  })
+
+  it('refuses self-approval by a manager', async () => {
+    const name = `Own request ${suffix}`
+    const [row] = await db
+      .insert(approval)
+      .values({
+        type: 'PRODUCT_CREATE',
+        branchId: branchAId,
+        requestedBy: managerAId,
+        deciderRole: 'MANAGER',
+        deciderBranchId: branchAId,
+        payload: submission(name),
+      })
+      .returning({ id: approval.id })
+
+    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
+      method: 'POST',
+      headers: authedHeaders(managerACookie),
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
+    expect(response.status).toBe(403)
+
+    const rows = await db.select({ id: product.id }).from(product).where(eq(product.name, name))
+    expect(rows).toHaveLength(0)
+  })
+
+  it('defaults the authority from the shared table when a request omits it', async () => {
+    const adminRow = await requestApproval(
+      testActor(managerAId),
+      { type: 'PURCHASE_ORDER', entityId: randomUUID(), branchId: branchAId, amountMinor: 1_000 },
+      db,
+    )
+    expect(adminRow.deciderRole).toBe('ADMIN')
+    expect(adminRow.deciderBranchId).toBeNull()
+
+    const managerRow = await requestApproval(
+      testActor(managerBId),
+      { type: 'SHIFT_VARIANCE_REVIEW', branchId: branchAId },
+      db,
+    )
+    expect(managerRow.deciderRole).toBe('MANAGER')
+    expect(managerRow.deciderBranchId).toBe(branchAId)
+  })
+
+  it('refuses a malformed decider pairing at request time', async () => {
+    await expect(
+      requestApproval(
+        testActor(managerAId),
+        {
+          type: 'TRANSFER_REQUEST',
+          branchId: branchAId,
+          deciderRole: 'MANAGER',
+          deciderBranchId: null,
+        },
+        db,
+      ),
+    ).rejects.toMatchObject({ statusCode: 500 })
+
+    await expect(
+      requestApproval(
+        testActor(managerAId),
+        {
+          type: 'PURCHASE_ORDER',
+          branchId: branchAId,
+          deciderRole: 'ADMIN',
+          deciderBranchId: branchAId,
+        },
+        db,
+      ),
+    ).rejects.toMatchObject({ statusCode: 500 })
   })
 })
