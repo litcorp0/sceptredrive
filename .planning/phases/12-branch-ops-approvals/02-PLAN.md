@@ -174,6 +174,20 @@ Follow Phase 11 Plan 02's shape (`api/src/modules/platform/platform.test.ts` or 
 - assert `SETTING_DEFINITIONS` contains the six keys with their defaults;
 - assert `allocateDocumentNumber('stock_write_off', …)` returns `WO-<code>-<YYYYMM>-0001`.
 
+### 8. The one-line bridge (keeps every commit green)
+
+Plan 01 removed `procurement.approve` from the vocabulary. The decide route is the only API call
+site that names it:
+
+```ts
+// api/src/modules/approvals/approvals.routes.ts:32
+requirePermission('approval.decide'),   // was 'procurement.approve'
+```
+
+Change that one line here. Plan 03 rewrites the whole routes file (and adds `approval.read` to the
+three read routes); this bridge exists so `bun run check-types` is green at this commit rather than
+at the next one. No other route changes in this plan.
+
 ## Verification
 
 ```bash

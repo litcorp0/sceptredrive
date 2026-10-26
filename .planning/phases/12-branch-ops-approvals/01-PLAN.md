@@ -34,12 +34,18 @@ table**. Every plan after it compiles against the new names.
 
 ### 1. Permissions (`permissions.ts`)
 
-- **Remove** `'procurement.approve'` from `PERMISSIONS`.
+- **Remove** `'procurement.approve'` from `PERMISSIONS` (D1: one name for one action).
 - **Add** `'approval.read'` and `'approval.decide'` (place them before the `procurement.*` group).
 - Grant both to `MANAGER_PERMISSIONS`; `ADMIN_PERMISSIONS = PERMISSIONS` already has them.
 - `CASHIER_PERMISSIONS` stays `[]`.
 - Update `permissions.test.ts`: the manager list contains `approval.read` / `approval.decide` and
   does **not** contain `procurement.approve`; the admin list is exactly `PERMISSIONS`.
+
+Removing the string breaks the one API call site that names it
+(`approvals.routes.ts:32`, the decide route). **Plan 02 bridges that single line** to
+`approval.decide` so every commit in the phase compiles; Plan 03 then rewrites the routes file.
+Do not leave the old string in the vocabulary to keep the tree green — a dead permission is how
+a route ends up checking the one nobody grants.
 
 No other permission changes. `inventory.adjust` remains the permission that may *raise* a
 write-off (P12-D13); `approval.decide` is what may *decide* one.
@@ -175,10 +181,9 @@ bun run lint
 
 Expected: shared grows from **191** to ~**225**; no existing assertion is edited except the two
 that named `procurement.approve` and `APPROVAL_DECIDER_ROLE`, and both edits are named in the
-commit body. `grep -rn "procurement.approve" packages/ api/ admin/` returns nothing after this
-plan — the API still compiles only because Plan 03 changes its routes in the same phase; if the
-tree is gated between plans, expect a type error in `approvals.routes.ts` and
-`approvals.service.ts`, which is why Plan 03 follows immediately.
+commit body. `grep -rn "procurement.approve" packages/` returns nothing after this plan. The API
+still names the old string in one place until Plan 02's one-line bridge, which is why the two plans
+are executed back to back.
 
 ## Commits
 
