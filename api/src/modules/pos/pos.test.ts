@@ -934,7 +934,9 @@ describe.skipIf(!available)('POS sale application', () => {
     })
     payload.totals.subtotalMinor += 100
     payload.totals.totalMinor += 100
-    payload.tenders[0]!.amountMinor = payload.totals.totalMinor
+    const tender = payload.tenders[0]
+    if (!tender) throw new Error('sale payload has no tender')
+    tender.amountMinor = payload.totals.totalMinor
 
     const result = await apply(ctx, payload)
     expect(result.conflicts.map((conflict) => conflict.type)).toContain('TOTAL_MISMATCH')

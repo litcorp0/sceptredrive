@@ -10,7 +10,7 @@ import {
   signIn,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
-import { brand, category, uom } from '../catalog/catalog.schema.ts'
+import { category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { approval } from './approvals.schema.ts'
