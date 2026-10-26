@@ -21,6 +21,16 @@ export interface BranchListFilters {
   includeInactive: boolean
 }
 
+/**
+ * The minimum a source-branch picker needs. Deliberately narrower than
+ * `BranchRow`: no financials, address, staff, or counts.
+ */
+export type BranchDirectoryEntry = Pick<BranchRow, 'id' | 'code' | 'name' | 'type'>
+
+export interface BranchDirectoryResult {
+  branches: BranchDirectoryEntry[]
+}
+
 export interface BranchCreateInput {
   code: string
   name: string

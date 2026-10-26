@@ -36,6 +36,14 @@ branchesRoutes.get(
   (c) => branchesController.suggestCode(c, c.req.valid('query')),
 )
 
+// Registered before `/api/branches/:id`, or the uuid validator swallows it.
+branchesRoutes.get(
+  '/api/branches/directory',
+  requireSession,
+  requirePermission('branch.read'),
+  (c) => branchesController.listBranchDirectory(c),
+)
+
 branchesRoutes.get(
   '/api/branches/:id',
   requireSession,

@@ -18,6 +18,11 @@ export async function listBranches(c: Context<AppEnv>, query: BranchListQuery) {
   return c.json({ branches })
 }
 
+export async function listBranchDirectory(c: Context<AppEnv>) {
+  const user = currentUser(c)
+  return c.json(await branchesService.listBranchDirectory(user))
+}
+
 export async function createBranch(c: Context<AppEnv>, input: BranchCreateInput) {
   const actor = actorFromContext(c)
   const branch = await branchesService.createBranch(actor, input)

@@ -1,6 +1,6 @@
 import { db } from '@sceptre/db'
 import { normalizeBranchCode, suggestBranchCode } from '@sceptre/shared'
-import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
+import { assertBranchAccess, branchScope, hasPermission, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { writeAudit } from '../platform/audit.service.ts'
@@ -9,12 +9,14 @@ import { isUniqueViolation } from '../platform/db-errors.ts'
 import {
   findBranchById,
   insertBranch,
+  listActiveBranchDirectoryRows,
   listBranchRows,
   selectBranchCodes,
   updateBranchRow,
 } from './branches.repository.ts'
 import type {
   BranchCreateInput,
+  BranchDirectoryResult,
   BranchListFilters,
   BranchRow,
   BranchUpdateInput,
@@ -30,6 +32,20 @@ export async function listBranches(
 ): Promise<BranchRow[]> {
   const scope = branchScope(user)
   return listBranchRows({ branchId: scope, includeInactive: filters.includeInactive })
+}
+
+/**
+ * Unscoped by design: `/api/branches` stays branch-scoped for the console's
+ * branch switcher, but a manager requesting a transfer must be able to name a
+ * source branch. Only active branches are listed, so a deactivated branch can
+ * never be a transfer source.
+ */
+export async function listBranchDirectory(user: SessionUser): Promise<BranchDirectoryResult> {
+  if (!hasPermission(user, 'branch.read')) {
+    throw new ForbiddenError('You cannot read the branch directory')
+  }
+
+  return { branches: await listActiveBranchDirectoryRows() }
 }
 
 export async function getBranch(user: SessionUser, id: string): Promise<BranchRow> {

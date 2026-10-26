@@ -1,7 +1,7 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { and, asc, eq, type SQL } from 'drizzle-orm'
 import { branch } from './branches.schema.ts'
-import type { BranchRow } from './branches.types.ts'
+import type { BranchDirectoryEntry, BranchRow } from './branches.types.ts'
 
 export async function listBranchRows(
   options: { branchId?: string | null | undefined; includeInactive: boolean },
@@ -24,6 +24,25 @@ export async function findBranchById(
 ): Promise<BranchRow | null> {
   const rows = await executor.select().from(branch).where(eq(branch.id, id)).limit(1)
   return rows[0] ?? null
+}
+
+/**
+ * Unscoped directory read: every active branch, projected to the picker fields.
+ * Kept separate from `listBranchRows` so `/api/branches` stays branch-scoped.
+ */
+export async function listActiveBranchDirectoryRows(
+  executor: DbExecutor = db,
+): Promise<BranchDirectoryEntry[]> {
+  return executor
+    .select({
+      id: branch.id,
+      code: branch.code,
+      name: branch.name,
+      type: branch.type,
+    })
+    .from(branch)
+    .where(eq(branch.isActive, true))
+    .orderBy(asc(branch.code))
 }
 
 export async function insertBranch(

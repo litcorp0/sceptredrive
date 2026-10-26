@@ -31,6 +31,17 @@ interface BranchListResponse {
   branches: BranchRecord[]
 }
 
+interface BranchDirectoryEntry {
+  id: string
+  code: string
+  name: string
+  type: string
+}
+
+interface BranchDirectoryResponse {
+  branches: BranchDirectoryEntry[]
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
@@ -40,6 +51,7 @@ describe.skipIf(!available)('branch API', () => {
   const createdUserIds: string[] = []
   let adminCookie = ''
   let managerCookie = ''
+  let cashierCookie = ''
   let adminId = ''
   let primaryBranchId = ''
   let otherBranchId = ''
@@ -86,6 +98,14 @@ describe.skipIf(!available)('branch API', () => {
     })
     createdUserIds.push(manager.id)
     managerCookie = await signIn(manager.email)
+
+    const cashier = await createTestUser({
+      role: 'CASHIER',
+      branchId: primaryBranchId,
+      name: 'Test Cashier',
+    })
+    createdUserIds.push(cashier.id)
+    cashierCookie = await signIn(cashier.email)
   })
 
   afterAll(async () => {
@@ -167,6 +187,89 @@ describe.skipIf(!available)('branch API', () => {
     const body = await readJson<BranchListResponse>(response)
     expect(body.branches).toHaveLength(1)
     expect(body.branches[0]?.id).toBe(primaryBranchId)
+  })
+
+  it('returns every active branch in the directory to a manager', async () => {
+    const response = await app.request('/api/branches/directory', {
+      headers: authedHeaders(managerCookie),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<BranchDirectoryResponse>(response)
+    const ids = body.branches.map((entry) => entry.id)
+    expect(ids).toContain(primaryBranchId)
+    expect(ids).toContain(otherBranchId)
+
+    // A picker needs a name and a type, nothing else.
+    for (const entry of body.branches) {
+      expect(Object.keys(entry).sort()).toEqual(['code', 'id', 'name', 'type'])
+    }
+  })
+
+  it('excludes a deactivated branch from the directory', async () => {
+    const created = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        code: `T${suffix}-E`,
+        name: 'Deactivated Source',
+        type: 'WAREHOUSE',
+        city: 'Tema',
+      }),
+    })
+    expect(created.status).toBe(201)
+    const deactivatedBranchId = (await readJson<BranchResponse>(created)).branch.id
+    createdBranchIds.push(deactivatedBranchId)
+
+    const before = await app.request('/api/branches/directory', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(before.status).toBe(200)
+    expect(
+      (await readJson<BranchDirectoryResponse>(before)).branches.map((entry) => entry.id),
+    ).toContain(deactivatedBranchId)
+
+    const deactivated = await app.request(`/api/branches/${deactivatedBranchId}/deactivate`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+    })
+    expect(deactivated.status).toBe(200)
+
+    const after = await app.request('/api/branches/directory', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(after.status).toBe(200)
+    expect(
+      (await readJson<BranchDirectoryResponse>(after)).branches.map((entry) => entry.id),
+    ).not.toContain(deactivatedBranchId)
+  })
+
+  it('rejects unauthenticated directory requests', async () => {
+    const response = await app.request('/api/branches/directory')
+    expect(response.status).toBe(401)
+  })
+
+  it('forbids callers without branch.read from the directory', async () => {
+    const response = await app.request('/api/branches/directory', {
+      headers: authedHeaders(cashierCookie),
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('keeps /api/branches scoped to the manager branch after a directory read', async () => {
+    const directory = await app.request('/api/branches/directory', {
+      headers: authedHeaders(managerCookie),
+    })
+    expect(directory.status).toBe(200)
+
+    const response = await app.request('/api/branches', {
+      headers: authedHeaders(managerCookie),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<BranchListResponse>(response)
+    expect(body.branches.map((item) => item.id)).toEqual([primaryBranchId])
   })
 
   it('lets admins list all active branches', async () => {
