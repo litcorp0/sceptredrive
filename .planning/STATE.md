@@ -5,15 +5,15 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-26
-**Status:** **Phase 12 (Branch Operations & Approval Workflow) is planned: 13 plans, context
-locked, decisions recorded.** Phase 11 is complete and verified (11/11 plans); Phase 10 is
-complete and verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface
-phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop
-Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same
-day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals).
-The former 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 12, Plan 01 — Shared vocabulary** (`01-PLAN.md`), then Plans
-02–10 in the api lane, 11–12 in the admin lane, and 13 for verification. Phase 12's planning set is
+**Status:** **Phase 12 (Branch Operations & Approval Workflow) is in progress: plans 01–05 complete
+and verified (5/13).** Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
+verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface phases (7
+Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules &
+Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day added
+Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
+7/8/9 became Phases 13/14/15.
+**Next action:** execute **Phase 12, Plan 06 — Price band and price-change requests**, then Plans
+07–10 in the api lane, 11–12 in the admin lane, and 13 for verification. Phase 12's planning set is
 `README.md` (index, lanes, execution shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md`
 (sources + 38 verified repository facts) and `01…13-PLAN.md`. Phase 11's verification is
 `phases/11-procurement-replenishment/11-VERIFICATION.md`.
@@ -36,10 +36,61 @@ The former 7/8/9 became Phases 13/14/15.
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
-| 12 | Branch Operations & Approval Workflow | 🔷 Plans written (13 plans) |
+| 12 | Branch Operations & Approval Workflow | 🔷 In progress (5/13 plans) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 12 execution notes (2026-10-26)
+
+- **Plans 01–05 are complete.** Commits: `0037096`, `4ee2403`, `cc639eb`, `2941bdf` (shared);
+  `7311772`, `045daa9`, `cc85348`, `a98634f`, `9c90552`, `4a76575` (schema);
+  `0a81657`, `6e9a9d2`, `d6446b5`, `505bd87`, `c757144` (approvals core); `cd32d75`, `a500027`,
+  `5df1f49`, `cbc2ac9` (transfer requests); `ed583ba`, `7aa6e1b`, `33e0460`, `69bed53`
+  (write-offs). Numbers: shared **191 → 239**, API **479 → 521**, desktop **421 → 427** (the
+  enrolment fix's six tests), `check-types` 6/6 green, `api lint` green.
+- **The permission rename stayed green across every commit.** Plan 01 removed
+  `procurement.approve`; Plan 02 bridged the decide route literal and the service's decider-role
+  lookup, and the controller moved the two console call sites (`approval-panel.tsx`,
+  `products-page.tsx`) in `ccbb02f` because `admin/**` is not the api lane's to edit. Plan 03 then
+  replaced the bridge with the real per-row authority.
+- **`approval.decider_role` / `decider_branch_id` exist and are written by `requestApproval`.**
+  The service checks branch access against `deciderBranchId ?? branchId` — Phase 11's check would
+  have 403'd the source manager on a transfer request whose `branchId` is the destination.
+- **The inbox is two-sided.** A manager's list and summary match `branch_id = X OR
+  decider_branch_id = X`, because a transfer request is raised at the destination and decided by
+  the source. A badge that undercounted the queue it badges was the alternative.
+- **Plan 02's enum-only migration is `0011_enum_branch_ops.sql`; the DDL is `0012`.**
+  `stock_adjustment_reason` gained `THEFT`, `OBSOLESCENCE`, `SUPPLIER_FAULT` so a posted
+  `WRITE_OFF` movement can carry the form's reason (`EXPIRY` maps to `EXPIRED`); the write-off
+  table keeps its own enum.
+- **ABC ranking lives in `counts.repository.ts`** (the seed wrapper resolves the settings), because
+  `counts.service.ts` is frozen to Plan 09. A branch with zero total score classes every product
+  `C` rather than scheduling counts of nothing.
+- **`postMovements` now honours an explicit outbound `unitCostMinor`.** Without it the ledger could
+  not carry the approved write-off value, and P12-D17 would be false once a receipt moved the
+  average. `SUPPLIER_RETURN` movements now carry the returned line's cost instead of the branch
+  average; no test asserted the old value, but review should see that line.
+- **Boot assertions grow one type at a time.** `app.ts` and the registry test's `BOOT_LIST` are at
+  `['PRODUCT_CREATE','PURCHASE_ORDER','TRANSFER_REQUEST','STOCK_WRITE_OFF']`; Plans 06–08 append
+  their own type in the commit that registers the handler and loader. `REFUND` stays out until
+  Phase 13.
+- **The enrolment bug fixed during this session (`06071bd`).** The keychain token was persisted
+  correctly; `ensureSession` mapped every non-network failure to `missing`, so a token the server
+  no longer knew (the database was reset during Phase 11 verification) rendered the first-install
+  enrolment screen, and a 5xx would have done the same. There is now a `rejected` state, a single
+  classifier, a credential-problem screen that names the likely cause and offers an explicit
+  re-enrol, and no automatic token deletion. Six tests; desktop **421 → 427**.
+- **Pre-existing, left alone:** `admin/src/modules/settings/pages/settings-page.tsx` and
+  `admin/src/modules/branches/pages/branch-detail-page.tsx` remain locally modified (a stray
+  formatter run). With them stashed, `bun run lint` exits 0 with 19 warnings; with them present,
+  the formatter is the only error. `packages/brand/src/tokens.css` gained four `biome-ignore`
+  comments with the reason the reduced-motion block needs `!important` (`a3a001c`), because that
+  rule would otherwise fail the phase's lint gate on a file the phase never touched.
+- **Flakiness observed, not caused:** `sync.test.ts > rate limits PIN attempts per device` failed
+  once in a full API run and passed alone and on the next full run; `pin.test.ts` Argon2 tests
+  timed out once under load and pass in 2 s alone. Both are timing-sensitive, and neither file was
+  touched by this phase.
 
 ### Phase 12 planning notes (2026-10-26)
 
@@ -94,11 +145,11 @@ The former 7/8/9 became Phases 13/14/15.
 
 | Plan | Title | Status |
 |---|---|---|
-| 01 | Shared vocabulary: approval permissions, authority, band and count arithmetic | ⏳ Planned |
-| 02 | Schema, enum migrations, settings, document kind, seeds | ⏳ Planned |
-| 03 | Approvals core: per-row authority, subject registry, inbox and summary | ⏳ Planned |
-| 04 | Transfer requests: request, decide, dispatch guard, withdraw | ⏳ Planned |
-| 05 | Stock write-offs: document, approval, posted `WRITE_OFF` movement | ⏳ Planned |
+| 01 | Shared vocabulary: approval permissions, authority, band and count arithmetic | ✅ Complete |
+| 02 | Schema, enum migrations, settings, document kind, seeds | ✅ Complete |
+| 03 | Approvals core: per-row authority, subject registry, inbox and summary | ✅ Complete |
+| 04 | Transfer requests: request, decide, dispatch guard, withdraw | ✅ Complete |
+| 05 | Stock write-offs: document, approval, posted `WRITE_OFF` movement | ✅ Complete |
 | 06 | Price band and price-change requests | ⏳ Planned |
 | 07 | Credit limit change requests and the over-limit list | ⏳ Planned |
 | 08 | Shift variance review | ⏳ Planned |
