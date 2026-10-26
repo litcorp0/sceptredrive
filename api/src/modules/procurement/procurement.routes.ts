@@ -11,6 +11,7 @@ import {
   validateOrderIdParam,
   validateOrderListQuery,
   validateOrderUpdate,
+  validateReceiptIdParam,
   validateReceiveOrder,
   validateReturnCancel,
   validateReturnCreate,
@@ -112,6 +113,15 @@ procurementRoutes.post(
   validateOrderIdParam,
   validateReceiveOrder,
   (c) => procurementController.receiveOrder(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+// The return dialog's read: one receipt, capped by what is still returnable.
+procurementRoutes.get(
+  '/api/procurement/receipts/:receiptId/returnable',
+  requireSession,
+  requirePermission('procurement.read'),
+  validateReceiptIdParam,
+  (c) => procurementController.getReturnableReceipt(c, c.req.valid('param').receiptId),
 )
 
 procurementRoutes.get(

@@ -459,6 +459,24 @@ export async function selectReturnedQuantityByReceiptLine(
   return rows[0]?.quantity ?? 0
 }
 
+/** Returned quantity per receipt line across POSTED returns, for one receipt. */
+export async function selectReturnedQuantitiesForReceipt(
+  receiptId: string,
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  const rows = await executor
+    .select({
+      receiptLineId: supplierReturnLine.receiptLineId,
+      quantity: sql<number>`coalesce(sum(${supplierReturnLine.quantity}), 0)`.mapWith(Number),
+    })
+    .from(supplierReturnLine)
+    .innerJoin(supplierReturn, eq(supplierReturn.id, supplierReturnLine.returnId))
+    .innerJoin(stockReceiptLine, eq(stockReceiptLine.id, supplierReturnLine.receiptLineId))
+    .where(and(eq(stockReceiptLine.receiptId, receiptId), eq(supplierReturn.status, 'POSTED')))
+    .groupBy(supplierReturnLine.receiptLineId)
+  return new Map(rows.map((row) => [row.receiptLineId, row.quantity]))
+}
+
 export async function selectReceiptLineForReturn(
   receiptLineId: string,
   executor: DbExecutor = db,

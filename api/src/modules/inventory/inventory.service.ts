@@ -418,6 +418,7 @@ export async function listReceipts(
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
   const filters = {
     branchId,
+    purchaseOrderId: query.purchaseOrderId,
     from: query.from,
     to: query.to,
     limit: query.limit,

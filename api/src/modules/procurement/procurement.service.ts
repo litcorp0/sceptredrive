@@ -54,6 +54,7 @@ import {
   selectOrderWithSupplier,
   selectReceiptLineForReturn,
   selectReceivedByOrderLine,
+  selectReturnedQuantitiesForReceipt,
   selectReturnedQuantityByReceiptLine,
   selectReturnLines,
   selectReturnPage,
@@ -72,6 +73,7 @@ import type {
   OrderListQuery,
   OrderUpdateBody,
   ReceiveOrderBody,
+  ReturnableReceipt,
   ReturnCreateBody,
   ReturnDetail,
   ReturnLineView,
@@ -1110,6 +1112,48 @@ export async function getReturn(user: SessionUser, returnId: string): Promise<Re
     totalCreditMinor: lineViews.reduce((sum, line) => sum + line.lineCreditMinor, 0),
     canPost: canWrite && supplierReturn.status === 'DRAFT',
     canCancel: canWrite && supplierReturn.status === 'DRAFT',
+  }
+}
+
+/**
+ * The return dialog's starting point: one receipt and how much of each line is
+ * still returnable.
+ *
+ * `inventoryService.getReceipt` enforces the branch scope and the existence
+ * check, so this read cannot leak another branch's receipt. The returned
+ * quantity is summed across POSTED returns only — a cancelled return moved no
+ * stock and must not consume the cap.
+ */
+export async function getReturnableReceipt(
+  user: SessionUser,
+  receiptId: string,
+): Promise<ReturnableReceipt> {
+  const receipt = await inventoryService.getReceipt(user, receiptId)
+  const returned = await selectReturnedQuantitiesForReceipt(receipt.id)
+
+  return {
+    receipt: {
+      id: receipt.id,
+      number: receipt.number,
+      branchId: receipt.branchId,
+      purchaseOrderId: receipt.purchaseOrderId,
+      supplierId: receipt.supplierId,
+      supplierName: receipt.supplierName,
+      createdAt: receipt.createdAt,
+    },
+    lines: receipt.lines.map((line) => {
+      const returnedQuantity = returned.get(line.id) ?? 0
+      return {
+        id: line.id,
+        productId: line.productId,
+        sku: line.sku,
+        name: line.productName,
+        receivedQuantity: line.quantity,
+        returnedQuantity,
+        returnableQuantity: Math.max(line.quantity - returnedQuantity, 0),
+        unitCostMinor: line.unitCostMinor,
+      }
+    }),
   }
 }
 

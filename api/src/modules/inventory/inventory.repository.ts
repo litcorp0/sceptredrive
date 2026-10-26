@@ -201,6 +201,9 @@ export async function findReceiptByIdempotency(
 function receiptConditions(filters: ReceiptListFilters) {
   const conditions = []
   if (filters.branchId) conditions.push(eq(stockReceipt.branchId, filters.branchId))
+  if (filters.purchaseOrderId) {
+    conditions.push(eq(stockReceipt.purchaseOrderId, filters.purchaseOrderId))
+  }
   if (filters.from) conditions.push(gte(stockReceipt.createdAt, filters.from))
   if (filters.to) conditions.push(lte(stockReceipt.createdAt, filters.to))
   return conditions
@@ -217,6 +220,7 @@ export async function selectReceiptPage(
       branchId: stockReceipt.branchId,
       branchCode: branch.code,
       branchName: branch.name,
+      purchaseOrderId: stockReceipt.purchaseOrderId,
       supplierId: stockReceipt.supplierId,
       supplierName: sql<string | null>`coalesce(${supplier.name}, ${stockReceipt.supplierName})`,
       supplierInvoiceNumber: stockReceipt.supplierInvoiceNumber,
@@ -262,6 +266,7 @@ export async function findReceiptBase(
       branchId: stockReceipt.branchId,
       branchCode: branch.code,
       branchName: branch.name,
+      purchaseOrderId: stockReceipt.purchaseOrderId,
       supplierId: stockReceipt.supplierId,
       supplierName: sql<string | null>`coalesce(${supplier.name}, ${stockReceipt.supplierName})`,
       supplierInvoiceNumber: stockReceipt.supplierInvoiceNumber,

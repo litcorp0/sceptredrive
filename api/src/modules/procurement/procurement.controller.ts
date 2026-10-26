@@ -97,6 +97,11 @@ export async function createReturn(c: Context<AppEnv>, input: ReturnCreateBody) 
   return c.json(result.supplierReturn, result.replayed ? 200 : 201)
 }
 
+export async function getReturnableReceipt(c: Context<AppEnv>, receiptId: string) {
+  const user = currentUser(c)
+  return c.json(await procurementService.getReturnableReceipt(user, receiptId))
+}
+
 export async function listReturns(c: Context<AppEnv>, query: ReturnListQuery) {
   const user = currentUser(c)
   return c.json(await procurementService.listReturns(user, query))

@@ -79,6 +79,8 @@ export interface ReceiptLineInput {
 
 export interface ReceiptListQuery {
   branchId?: string
+  /** The purchase order this delivery fulfils (Phase 11); a receipt list for one order. */
+  purchaseOrderId?: string
   from?: Date
   to?: Date
   limit: number
@@ -87,6 +89,7 @@ export interface ReceiptListQuery {
 
 export interface ReceiptListFilters {
   branchId: string | null
+  purchaseOrderId?: string | undefined
   from?: Date | undefined
   to?: Date | undefined
   limit: number
@@ -109,6 +112,8 @@ export interface StockReceiptRow {
   branchId: string
   branchCode: string
   branchName: string
+  /** The purchase order this delivery fulfils; null for a manual receipt. */
+  purchaseOrderId: string | null
   supplierId: string | null
   supplierName: string | null
   supplierInvoiceNumber: string | null

@@ -31,6 +31,7 @@ export const receiptCreateSchema = z
 
 export const receiptListQuerySchema = z.object({
   branchId: z.uuid().optional(),
+  purchaseOrderId: z.uuid().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   limit: limitSchema,

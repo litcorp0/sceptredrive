@@ -199,3 +199,35 @@ export interface ReturnList {
   total: number
   branchId: string | null
 }
+
+/**
+ * What can still be sent back against one receipt.
+ *
+ * The cap is `received − already returned`, computed across POSTED returns, so
+ * the console can refuse a quantity the server would refuse a moment later
+ * instead of discovering it after a submit.
+ */
+export interface ReturnableReceiptLine {
+  /** The receipt line id a return names. */
+  id: string
+  productId: string
+  sku: string
+  name: string
+  receivedQuantity: number
+  returnedQuantity: number
+  returnableQuantity: number
+  unitCostMinor: number
+}
+
+export interface ReturnableReceipt {
+  receipt: {
+    id: string
+    number: string
+    branchId: string
+    purchaseOrderId: string | null
+    supplierId: string | null
+    supplierName: string | null
+    createdAt: Date
+  }
+  lines: ReturnableReceiptLine[]
+}

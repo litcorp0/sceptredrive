@@ -604,10 +604,24 @@ describe.skipIf(!available)('receiving against an order', () => {
     expect(response.status, await response.clone().text()).toBe(201)
 
     const body = await readJson<{
+      receipt: { id: string; number: string }
       order: { order: { status: string }; lines: { receivedQuantity: number }[] }
     }>(response)
     expect(body.order.order.status).toBe('RECEIVED')
     expect(body.order.lines[0]?.receivedQuantity).toBe(10)
+
+    // The receipt knows its order, so the console can list what arrived against it.
+    const receipts = await app.request(
+      `/api/inventory/receipts?branchId=${branchAId}&purchaseOrderId=${orderId}`,
+      { headers: authedHeaders(managerACookie) },
+    )
+    expect(receipts.status).toBe(200)
+    const receiptList = await readJson<{
+      receipts: { id: string; purchaseOrderId: string | null }[]
+    }>(receipts)
+    expect(receiptList.receipts).toHaveLength(1)
+    expect(receiptList.receipts[0]?.id).toBe(body.receipt.id)
+    expect(receiptList.receipts[0]?.purchaseOrderId).toBe(orderId)
 
     const level = await onHand(productAId)
     expect(level?.quantityOnHand).toBeGreaterThanOrEqual(10)
@@ -997,5 +1011,36 @@ describe.skipIf(!available)('purchase returns', () => {
       }),
     })
     expect(response.status).toBe(403)
+  })
+
+  it('says what is still returnable on a receipt', async () => {
+    const line = await receiptLineFor(productAId)
+    const response = await app.request(`/api/procurement/receipts/${line?.receiptId}/returnable`, {
+      headers: authedHeaders(managerACookie),
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+    const body = await readJson<{
+      receipt: { id: string; number: string; purchaseOrderId: string | null }
+      lines: {
+        id: string
+        receivedQuantity: number
+        returnedQuantity: number
+        returnableQuantity: number
+      }[]
+    }>(response)
+
+    expect(body.receipt.id).toBe(line?.receiptId)
+    const returnable = body.lines.find((candidate) => candidate.id === line?.id)
+    expect(returnable).toBeDefined()
+    // The first return leg posted against this receipt, so the cap has moved.
+    expect(returnable?.returnedQuantity).toBeGreaterThan(0)
+    expect(returnable?.returnableQuantity).toBe(
+      (returnable?.receivedQuantity ?? 0) - (returnable?.returnedQuantity ?? 0),
+    )
+
+    const foreign = await app.request(`/api/procurement/receipts/${line?.receiptId}/returnable`, {
+      headers: authedHeaders(managerBCookie),
+    })
+    expect(foreign.status).toBe(403)
   })
 })

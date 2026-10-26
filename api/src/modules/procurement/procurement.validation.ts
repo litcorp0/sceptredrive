@@ -85,6 +85,8 @@ export const orderListQuerySchema = z.object({
 
 export const orderIdParamSchema = z.object({ id: z.uuid() })
 
+export const receiptIdParamSchema = z.object({ receiptId: z.uuid() })
+
 export const matchableOrdersQuerySchema = z.object({
   supplierId: z.uuid(),
   branchId: z.uuid().optional(),
@@ -103,6 +105,7 @@ export const validateOrderFromSuggestions = validateJson(orderFromSuggestionsSch
 export const validateOrderUpdate = validateJson(orderUpdateSchema)
 export const validateOrderListQuery = validateQuery(orderListQuerySchema)
 export const validateOrderIdParam = validateParam(orderIdParamSchema)
+export const validateReceiptIdParam = validateParam(receiptIdParamSchema)
 export const validateOrderCancel = validateJson(orderCancelSchema)
 export const validateOrderClose = validateJson(orderCloseSchema)
 
