@@ -12,6 +12,7 @@
  * `toInt`, because node-postgres hands bigint back as a string.
  */
 import type { DbExecutor } from '@sceptre/db'
+import { countAccuracyBp } from '@sceptre/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import type {
   AnalyticsBranchScope,
@@ -24,6 +25,7 @@ import type {
   CreditUtilisationBucket,
   Granularity,
   InventoryBranchRow,
+  InventoryCountAccuracy,
   InventoryFlowPoint,
   InventoryMover,
   InventoryTotals,
@@ -1171,6 +1173,62 @@ export async function selectDeadStockCount(
         )`,
   )
   return toInt(row?.count)
+}
+
+/**
+ * Cycle-count accuracy (P12-D33), the same six figures `counts.repository`
+ * computes for `GET /api/counts/accuracy`. This module reads sibling tables
+ * directly rather than importing the counts repository, so the SQL is repeated
+ * here on purpose; the parity test keeps the two in step.
+ *
+ * Variance value comes from the `COUNT`-referenced movements, not a second
+ * arithmetic over count lines: it reconciles to the ledger by construction.
+ */
+export async function selectCountAccuracy(
+  executor: DbExecutor,
+  branchId: string | null,
+  window: AnalyticsWindow,
+): Promise<InventoryCountAccuracy> {
+  const scope = branchId ? sql`AND sc.branch_id = ${branchId}` : sql``
+  const [row] = await rows(
+    executor,
+    sql`
+      WITH posted AS (
+        SELECT sc.id, sc.due_at, sc.posted_at
+        FROM stock_count sc
+        WHERE sc.status = 'POSTED'
+          AND sc.posted_at >= ${window.from}
+          AND sc.posted_at < ${window.toExclusive}
+          ${scope}
+      ),
+      counted AS (
+        SELECT l.counted_qty, l.snapshot_qty
+        FROM stock_count_line l
+        JOIN posted p ON p.id = l.count_id
+        WHERE l.counted_qty IS NOT NULL
+      )
+      SELECT
+        (SELECT COUNT(*) FROM posted)::bigint AS counts_posted,
+        (SELECT COUNT(*) FROM posted
+          WHERE due_at IS NOT NULL AND posted_at::date <= due_at)::bigint AS counts_on_time,
+        (SELECT COUNT(*) FROM counted)::bigint AS counted_lines,
+        (SELECT COUNT(*) FROM counted WHERE counted_qty = snapshot_qty)::bigint AS matched_lines,
+        (SELECT COALESCE(SUM(ABS(sm.quantity_delta)::bigint * sm.unit_cost_minor), 0)
+          FROM stock_movement sm
+          JOIN posted p ON p.id = sm.reference_id
+          WHERE sm.reference_type = 'COUNT')::bigint AS variance_value_minor`,
+  )
+
+  const countedLines = toInt(row?.counted_lines)
+  const matchedLines = toInt(row?.matched_lines)
+  return {
+    accuracyBp: countAccuracyBp(matchedLines, countedLines),
+    countedLines,
+    matchedLines,
+    countsPosted: toInt(row?.counts_posted),
+    countsOnTime: toInt(row?.counts_on_time),
+    varianceValueMinor: toInt(row?.variance_value_minor),
+  }
 }
 
 // --- Credit ------------------------------------------------------------------

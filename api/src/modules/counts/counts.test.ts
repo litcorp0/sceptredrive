@@ -207,10 +207,18 @@ describe.skipIf(!available)('stock counts API', () => {
     if (createdBranchIds.length > 0) {
       await db.delete(stockMovement).where(inArray(stockMovement.branchId, createdBranchIds))
       await db.delete(stockLevel).where(inArray(stockLevel.branchId, createdBranchIds))
-    }
-    if (createdCountIds.length > 0) {
-      await db.delete(stockCountLine).where(inArray(stockCountLine.countId, createdCountIds))
-      await db.delete(stockCount).where(inArray(stockCount.id, createdCountIds))
+      // A posted variance can raise a trigger count this suite never created by
+      // hand, so clean every count in the fixture branches, not just the tracked
+      // ids: `stock_count_line.product_id` is RESTRICT and would block deletion.
+      const branchCounts = await db
+        .select({ id: stockCount.id })
+        .from(stockCount)
+        .where(inArray(stockCount.branchId, createdBranchIds))
+      const countIds = [...new Set([...createdCountIds, ...branchCounts.map((row) => row.id)])]
+      if (countIds.length > 0) {
+        await db.delete(stockCountLine).where(inArray(stockCountLine.countId, countIds))
+        await db.delete(stockCount).where(inArray(stockCount.id, countIds))
+      }
     }
     if (createdProductIds.length > 0) {
       await db.delete(product).where(inArray(product.id, createdProductIds))

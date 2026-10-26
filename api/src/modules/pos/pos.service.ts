@@ -47,6 +47,7 @@ import {
   revokeBinding,
   revokeStaffBindings,
   selectShiftCashTotals,
+  selectSoldValueByProduct,
   touchBinding,
   updateSaleConflictCount,
   updateShiftClose,
@@ -1534,3 +1535,21 @@ registerSubjectLoader('SHIFT_VARIANCE_REVIEW', async (approval) => {
     varianceMinor: row.varianceMinor,
   }
 })
+
+/**
+ * Ex-tax base sold per product for a branch in a half-open window. Empty map
+ * when nothing sold.
+ *
+ * A read service-to-service seam with no authorisation: the caller has already
+ * resolved the branch (`counts.service.recomputeAbcClasses` runs under an
+ * admin-only route or the nightly job). Money stays integer minor units —
+ * `base_minor` is the ex-tax base, not the tax-inclusive `net_minor`.
+ */
+export async function sumSoldValueByProduct(
+  branchId: string,
+  from: Date,
+  to: Date,
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  return selectSoldValueByProduct(branchId, from, to, executor)
+}

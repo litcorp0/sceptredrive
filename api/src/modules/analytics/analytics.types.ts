@@ -347,6 +347,21 @@ export interface InventoryMover {
   unitsSold: number
 }
 
+/**
+ * Cycle-count accuracy for the window, from posted counts and the stock ledger
+ * (P12-D33). The same six figures `GET /api/counts/accuracy` returns; the
+ * analytics tab shows them without a second endpoint.
+ */
+export interface InventoryCountAccuracy {
+  /** `null` — never `0` — when no line was counted in the window. */
+  accuracyBp: number | null
+  countedLines: number
+  matchedLines: number
+  countsPosted: number
+  countsOnTime: number
+  varianceValueMinor: number
+}
+
 export interface InventoryResponse {
   currency: 'GHS'
   period: Period
@@ -355,6 +370,7 @@ export interface InventoryResponse {
   byBranch: InventoryBranchRow[]
   flow: InventoryFlowPoint[]
   topMovers: InventoryMover[]
+  countAccuracy: InventoryCountAccuracy
   /**
    * Product/branch rows holding stock with no movement in the window. A count only — the
    * list belongs to RPT-04 (Phase 14), so the field is an object the tab can grow into.

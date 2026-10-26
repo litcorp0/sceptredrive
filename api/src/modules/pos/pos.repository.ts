@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { isRole } from '@sceptre/shared'
-import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { creditProfile } from '../credit/credit.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { terminal } from '../org/terminals.schema.ts'
@@ -557,4 +557,37 @@ export async function findSaleByReceiptNumber(
     .where(eq(sale.receiptNumber, receiptNumber))
     .limit(1)
   return rows[0] ?? null
+}
+
+/**
+ * Ex-tax base sold per product for one branch in a half-open window.
+ *
+ * `base_minor` is the ex-tax base the POS pricing engine computes; `net_minor`
+ * still carries the tax in inclusive mode and would inflate an ABC score by the
+ * 20% VAT/NHIL/GETFund it already added. This is the same column Phase 9 uses
+ * for revenue and gross profit, so the ABC ranking and the reports agree.
+ */
+export async function selectSoldValueByProduct(
+  branchId: string,
+  from: Date,
+  toExclusive: Date,
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  const rows = await executor
+    .select({
+      productId: saleLine.productId,
+      soldMinor: sql<number>`coalesce(sum(${saleLine.baseMinor}), 0)`.mapWith(Number),
+    })
+    .from(saleLine)
+    .innerJoin(sale, eq(sale.id, saleLine.saleId))
+    .where(
+      and(
+        eq(sale.branchId, branchId),
+        gte(sale.occurredAt, from),
+        lt(sale.occurredAt, toExclusive),
+      ),
+    )
+    .groupBy(saleLine.productId)
+
+  return new Map(rows.map((row) => [row.productId, row.soldMinor]))
 }

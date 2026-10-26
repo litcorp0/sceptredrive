@@ -693,7 +693,8 @@ export async function getInventory(
     const flow = await repository.selectStockFlow(tx, window, period.granularity, branchId)
     const topMovers = await repository.selectTopMovers(tx, window, branchId, TOP_MOVER_LIMIT)
     const deadStockCount = await repository.selectDeadStockCount(tx, window, branchId)
-    return { totals, byBranch, flow, topMovers, deadStockCount }
+    const countAccuracy = await repository.selectCountAccuracy(tx, branchId, window)
+    return { totals, byBranch, flow, topMovers, deadStockCount, countAccuracy }
   })
 
   return {
@@ -704,6 +705,7 @@ export async function getInventory(
     byBranch: result.byBranch,
     flow: result.flow,
     topMovers: result.topMovers,
+    countAccuracy: result.countAccuracy,
     deadStock: { count: result.deadStockCount },
   }
 }
