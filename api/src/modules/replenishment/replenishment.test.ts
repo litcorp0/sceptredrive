@@ -70,6 +70,7 @@ interface SuggestionGroup {
 interface SuggestionResponse {
   branchId: string
   velocityDays: number
+  settings: { velocityDays: number; safetyDays: number; defaultLeadDays: number }
   groups: SuggestionGroup[]
   unassigned: SuggestionGroup
   totals: { rows: number; suggestedUnits: number; valueMinor: number }
@@ -705,6 +706,7 @@ describe.skipIf(!available)('replenishment suggestions', () => {
     // 900 sold over 90 days, 7-day lead time, 7 safety days:
     // ceilDiv(900 × 14, 90) = 140, on hand 10 → 130.
     expect(body.velocityDays).toBe(90)
+    expect(body.settings).toEqual({ velocityDays: 90, safetyDays: 7, defaultLeadDays: 14 })
     expect(row.unitsSold).toBe(900)
     expect(row.leadTimeDays).toBe(7)
     expect(row.leadTimeAssumed).toBe(false)

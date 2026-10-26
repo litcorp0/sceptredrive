@@ -69,6 +69,8 @@ export interface ReplenishmentGroup {
 export interface ReplenishmentResult {
   branchId: string
   velocityDays: number
+  /** The settings the arithmetic used, so the screen can state them instead of hard-coding. */
+  settings: { velocityDays: number; safetyDays: number; defaultLeadDays: number }
   groups: ReplenishmentGroup[]
   /** Rows with no preferred supplier; they cannot become a PO line until one is chosen. */
   unassigned: ReplenishmentGroup

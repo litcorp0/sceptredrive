@@ -235,6 +235,7 @@ export async function getSuggestions(
   return {
     branchId,
     velocityDays: VELOCITY_DAYS,
+    settings: { velocityDays: VELOCITY_DAYS, safetyDays, defaultLeadDays },
     groups: pagedGroups,
     // An empty `supplierId` marks the Unassigned group; the console owns the
     // word for it (the API returns machine values, the client writes sentences).
