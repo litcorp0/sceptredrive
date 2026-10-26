@@ -4,6 +4,7 @@ import { brand, category, uom } from '../catalog/catalog.schema.ts'
 import { barcode, product, productPrice } from './products.schema.ts'
 import type {
   BarcodeRow,
+  PriceContext,
   ProductListFilters,
   ProductListQueryRow,
   ProductPriceRow,
@@ -92,15 +93,31 @@ export async function listProductPriceRows(
     .orderBy(desc(productPrice.updatedAt))
 }
 
-export async function findProductPriceRow(
+/**
+ * Base price and the branch override in one row; null when the product is unknown.
+ *
+ * The band is measured against the price the branch actually charges (P12-D18), so
+ * a decision needs both numbers from the same read: deriving the effective price
+ * from two queries lets a concurrent base-price edit slip between them.
+ */
+export async function findPriceContext(
   productId: string,
   branchId: string,
   executor: DbExecutor = db,
-): Promise<ProductPriceRow | null> {
+): Promise<PriceContext | null> {
   const rows = await executor
-    .select()
-    .from(productPrice)
-    .where(and(eq(productPrice.productId, productId), eq(productPrice.branchId, branchId)))
+    .select({
+      basePriceMinor: product.basePriceMinor,
+      overrideMinor: productPrice.priceMinor,
+      overrideRowId: productPrice.id,
+      isActive: product.isActive,
+    })
+    .from(product)
+    .leftJoin(
+      productPrice,
+      and(eq(productPrice.productId, product.id), eq(productPrice.branchId, branchId)),
+    )
+    .where(eq(product.id, productId))
     .limit(1)
   return rows[0] ?? null
 }

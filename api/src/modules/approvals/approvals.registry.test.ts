@@ -24,8 +24,14 @@ if (!available) console.warn('[approvals.registry.test] database unavailable; te
 
 const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
 
-/** What Plan 05 leaves wired; Plans 06–08 append their own type in their commit. */
-const BOOT_LIST = ['PRODUCT_CREATE', 'PURCHASE_ORDER', 'TRANSFER_REQUEST', 'STOCK_WRITE_OFF']
+/** What Plans 06–08 leave wired; Plan 09 appends its own type in its commit. */
+const BOOT_LIST = [
+  'PRODUCT_CREATE',
+  'PURCHASE_ORDER',
+  'TRANSFER_REQUEST',
+  'STOCK_WRITE_OFF',
+  'PRICE_CHANGE',
+]
 
 let branchId = ''
 let adminId = ''

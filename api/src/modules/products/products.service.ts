@@ -1,11 +1,15 @@
-import { type DbExecutor, db } from '@sceptre/db'
-import { resolveEffectivePrice } from '@sceptre/shared'
+import { type DbExecutor, type DbTransaction, db } from '@sceptre/db'
+import { priceBandBounds, resolveEffectivePrice, withinPriceBand } from '@sceptre/shared'
 import { and, count, eq } from 'drizzle-orm'
 import { branchScope, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import * as approvalsService from '../approvals/approvals.service.ts'
-import { registerDecisionHandler, registerSubjectLoader } from '../approvals/approvals.service.ts'
+import {
+  registerDecisionHandler,
+  registerSubjectLoader,
+  requestApproval,
+} from '../approvals/approvals.service.ts'
 import {
   findBrandById,
   findCategoryById,
@@ -20,6 +24,7 @@ import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-err
 import {
   advanceSequencePast,
   allocateFromSequence,
+  getResolvedSetting,
   peekSequenceValue,
 } from '../platform/settings.service.ts'
 import * as suppliersService from '../suppliers/suppliers.service.ts'
@@ -28,8 +33,8 @@ import {
   deleteBarcodeRow,
   deleteProductPriceRow,
   findBarcodeForProduct,
+  findPriceContext,
   findProductById,
-  findProductPriceRow,
   insertBarcode,
   insertProduct,
   insertProductPriceRow,
@@ -42,18 +47,23 @@ import {
 import { product } from './products.schema.ts'
 import type {
   BarcodeRow,
+  PriceChangeKind,
+  PriceChangePayload,
+  PriceChangeSubject,
+  PriceContext,
+  PriceWriteResult,
   ProductCreateInput,
   ProductDetail,
   ProductListFilters,
   ProductListQuery,
   ProductListRow,
-  ProductPriceRow,
+  ProductPriceList,
   ProductRow,
   ProductSubmissionBody,
   ProductUpdateInput,
   ProductWithBarcodes,
 } from './products.types.ts'
-import { productSubmissionSchema } from './products.validation.ts'
+import { priceChangePayloadSchema, productSubmissionSchema } from './products.validation.ts'
 
 async function validateCategoryRef(categoryId: string, executor: DbExecutor): Promise<string> {
   const category = await findCategoryById(categoryId, executor)
@@ -412,73 +422,30 @@ export interface PriceOverrideInput {
   priceMinor: number
 }
 
-/** Admin upserts any branch; managers only their own (checked via branch access). */
-export async function setPriceOverride(
-  user: SessionUser,
-  actor: AuditActor,
-  productId: string,
-  input: PriceOverrideInput,
-): Promise<ProductPriceRow> {
-  const found = await findProductById(productId)
-  if (!found) throw new NotFoundError('Product not found')
-
-  const branchRow = await branchesService.getBranch(user, input.branchId)
-  if (!branchRow.isActive) throw new ConflictError('The branch is inactive')
-
-  return db.transaction(async (tx) => {
-    const existing = await findProductPriceRow(productId, input.branchId, tx)
-
-    let saved: ProductPriceRow | null
-    if (existing) {
-      saved = await updateProductPriceRow(
-        existing.id,
-        { priceMinor: input.priceMinor, updatedBy: actor.actorId },
-        tx,
-      )
-    } else {
-      saved = await insertProductPriceRow(
-        {
-          productId,
-          branchId: input.branchId,
-          priceMinor: input.priceMinor,
-          updatedBy: actor.actorId,
-        },
-        tx,
-      )
-    }
-    if (!saved) throw new AppError(500, 'INTERNAL', 'Failed to set price override')
-
-    await writeAudit(
-      {
-        ...actor,
-        action: 'product.price.override_set',
-        entity: 'product',
-        entityId: productId,
-        before: existing ? { branchId: input.branchId, priceMinor: existing.priceMinor } : null,
-        after: { branchId: input.branchId, priceMinor: saved.priceMinor },
-      },
-      tx,
-    )
-    return saved
-  })
+/** The band is global and admin-only (P12-D18): read here, never trusted from a client. */
+async function managerBandPercent(executor: DbExecutor): Promise<number> {
+  const resolved = await getResolvedSetting('pricing.managerBandPercent', {}, executor)
+  return resolved.value
 }
 
-export async function removePriceOverride(
-  user: SessionUser,
+/**
+ * Writes the override and its audit. Only reachable once the band — or the admin
+ * exemption — has allowed the change, so it never decides anything itself.
+ */
+async function applyPriceChange(
+  tx: DbTransaction,
   actor: AuditActor,
   productId: string,
   branchId: string,
-): Promise<void> {
-  const found = await findProductById(productId)
-  if (!found) throw new NotFoundError('Product not found')
+  context: PriceContext,
+  proposedMinor: number,
+  kind: PriceChangeKind,
+): Promise<PriceWriteResult> {
+  const before = { branchId, priceMinor: context.overrideMinor }
 
-  await branchesService.getBranch(user, branchId)
-
-  await db.transaction(async (tx) => {
-    const existing = await findProductPriceRow(productId, branchId, tx)
-    if (!existing) throw new NotFoundError('Price override not found')
-
-    await deleteProductPriceRow(existing.id, tx)
+  if (kind === 'REMOVE') {
+    if (!context.overrideRowId) throw new NotFoundError('Price override not found')
+    await deleteProductPriceRow(context.overrideRowId, tx)
 
     await writeAudit(
       {
@@ -486,25 +453,196 @@ export async function removePriceOverride(
         action: 'product.price.override_removed',
         entity: 'product',
         entityId: productId,
-        before: { branchId, priceMinor: existing.priceMinor },
-        after: null,
+        branchId,
+        before,
+        after: { branchId, priceMinor: proposedMinor, removed: true, via: 'BAND' },
       },
       tx,
     )
-  })
+    return { status: 'APPLIED', priceMinor: proposedMinor }
+  }
+
+  const saved = context.overrideRowId
+    ? await updateProductPriceRow(
+        context.overrideRowId,
+        { priceMinor: proposedMinor, updatedBy: actor.actorId },
+        tx,
+      )
+    : await insertProductPriceRow(
+        { productId, branchId, priceMinor: proposedMinor, updatedBy: actor.actorId },
+        tx,
+      )
+  if (!saved) throw new AppError(500, 'INTERNAL', 'Failed to set price override')
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'product.price.override_set',
+      entity: 'product',
+      entityId: productId,
+      branchId,
+      before,
+      after: { branchId, priceMinor: saved.priceMinor, via: 'BAND' },
+    },
+    tx,
+  )
+  return { status: 'APPLIED', priceMinor: saved.priceMinor }
 }
 
-/** Base price plus the overrides the caller may see (managers: own branch). */
+/**
+ * One decision shared by setting and removing an override (P12-D19).
+ *
+ * An admin may move a price anywhere: the band is a manager rule (P12-D18). A
+ * manager may move it inside the band, measured against the price the branch
+ * actually charges. Outside the band nothing is written to `product_price` — the
+ * change becomes a `PRICE_CHANGE` request that an admin decides, which is what
+ * makes "the price nobody approved never goes live" true rather than aspirational.
+ *
+ * A second request for the same product hits `approval_open_entity_unique` and is
+ * a 409: two pending prices for one product is a decision nobody can make.
+ */
+async function writeOrRequestPriceChange(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  branchId: string,
+  proposedMinor: number,
+  kind: PriceChangeKind,
+): Promise<PriceWriteResult> {
+  const branchRow = await branchesService.getBranch(user, branchId)
+  if (!branchRow.isActive) throw new ConflictError('The branch is inactive')
+
+  try {
+    return await db.transaction(async (tx) => {
+      const context = await findPriceContext(productId, branchId, tx)
+      if (!context || !context.isActive) throw new NotFoundError('Product not found')
+      if (kind === 'REMOVE' && !context.overrideRowId) {
+        throw new NotFoundError('Price override not found')
+      }
+
+      const currentMinor = resolveEffectivePrice(context.basePriceMinor, context.overrideMinor)
+
+      // The band is a manager rule: an admin writes the price the branch asked for.
+      if (roleOf(user) === 'ADMIN') {
+        return applyPriceChange(tx, actor, productId, branchId, context, proposedMinor, kind)
+      }
+
+      const bandPercent = await managerBandPercent(tx)
+      if (withinPriceBand(currentMinor, proposedMinor, bandPercent)) {
+        return applyPriceChange(tx, actor, productId, branchId, context, proposedMinor, kind)
+      }
+
+      const approval = await requestApproval(
+        actor,
+        {
+          type: 'PRICE_CHANGE',
+          entityId: productId,
+          branchId,
+          amountMinor: proposedMinor,
+          payload: {
+            productId,
+            branchId,
+            currentPriceMinor: currentMinor,
+            proposedPriceMinor: proposedMinor,
+            bandPercent,
+            kind,
+          },
+          deciderRole: 'ADMIN',
+          deciderBranchId: null,
+        },
+        tx,
+      )
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'product.price.change_requested',
+          entity: 'product',
+          entityId: productId,
+          branchId,
+          after: {
+            branchId,
+            kind,
+            currentPriceMinor: currentMinor,
+            proposedPriceMinor: proposedMinor,
+            bandPercent,
+            approvalId: approval.id,
+          },
+        },
+        tx,
+      )
+
+      return { status: 'PENDING_APPROVAL', approvalId: approval.id }
+    })
+  } catch (error) {
+    if (
+      isUniqueViolation(error) &&
+      (uniqueViolationConstraint(error) ?? '').includes('approval_open_entity_unique')
+    ) {
+      throw new ConflictError('A price change for this product is already waiting for a decision')
+    }
+    throw error
+  }
+}
+
+/** Sets one branch's price: applied, or queued as a `PRICE_CHANGE` (P12-D19). */
+export async function setPriceOverride(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  input: PriceOverrideInput,
+): Promise<PriceWriteResult> {
+  return writeOrRequestPriceChange(user, actor, productId, input.branchId, input.priceMinor, 'SET')
+}
+
+/**
+ * Removing an override is a change to the base price, so it is band-checked the
+ * same way (P12-D19): otherwise deleting the row is how a manager escapes the band.
+ */
+export async function removePriceOverride(
+  user: SessionUser,
+  actor: AuditActor,
+  productId: string,
+  branchId: string,
+): Promise<PriceWriteResult> {
+  const found = await findProductById(productId)
+  if (!found) throw new NotFoundError('Product not found')
+
+  return writeOrRequestPriceChange(user, actor, productId, branchId, found.basePriceMinor, 'REMOVE')
+}
+
+/**
+ * Base price plus the overrides the caller may see (managers: own branch), each
+ * with the band a manager may move it within.
+ *
+ * The band travels with the rows because the console must warn before a request is
+ * sent and must not re-derive a server rule (P12-D18).
+ */
 export async function getPriceOverrides(
   user: SessionUser,
   productId: string,
-): Promise<{ basePriceMinor: number; overrides: ProductPriceRow[] }> {
+): Promise<ProductPriceList> {
   const found = await findProductById(productId)
   if (!found) throw new NotFoundError('Product not found')
 
   const scope = branchScope(user)
-  const overrides = await listProductPriceRows(productId, scope)
-  return { basePriceMinor: found.basePriceMinor, overrides }
+  const [overrides, resolvedBand] = await Promise.all([
+    listProductPriceRows(productId, scope),
+    getResolvedSetting('pricing.managerBandPercent'),
+  ])
+  const managerBandPercent = resolvedBand.value
+
+  return {
+    basePriceMinor: found.basePriceMinor,
+    managerBandPercent,
+    overrides: overrides.map((row) => ({
+      ...row,
+      bounds: priceBandBounds(
+        resolveEffectivePrice(found.basePriceMinor, row.priceMinor),
+        managerBandPercent,
+      ),
+    })),
+  }
 }
 
 /**
@@ -700,3 +838,126 @@ registerSubjectLoader('PRODUCT_CREATE', async (approval) => ({
   kind: 'product',
   proposal: approval.payload,
 }))
+
+/**
+ * A `PRICE_CHANGE` row we cannot read is a programming error, not a user error:
+ * the 500 tells the admin to reject it with a reason rather than guess a price.
+ */
+function parsePriceChangePayload(payload: unknown): PriceChangePayload {
+  const parsed = priceChangePayloadSchema.safeParse(payload)
+  if (!parsed.success) {
+    throw new AppError(500, 'INTERNAL', 'The price change request is malformed')
+  }
+  return parsed.data
+}
+
+/**
+ * The decision side of P12-D19/P12-D20, registered by this module at load.
+ *
+ * `REJECTED` returns before reading anything: there is nothing to undo, because a
+ * request never wrote to `product_price` in the first place. `APPROVED` re-reads the
+ * effective price and refuses a stale request with a 409, which rolls the decision
+ * back and leaves the approval `PENDING` for the admin to reject. Applying the
+ * `currentPriceMinor` the admin saw is the only safe write; applying a price that
+ * has since moved is how a price nobody approved goes live.
+ *
+ * Runs inside `decideApproval`'s transaction, before the status change, so the price
+ * row and the approval commit or roll back together — "applies exactly once" is
+ * this check plus that one transaction.
+ */
+registerDecisionHandler('PRICE_CHANGE', async (tx, approval, actor, decision) => {
+  const payload = parsePriceChangePayload(approval.payload)
+
+  if (approval.entityId !== null && approval.entityId !== payload.productId) {
+    throw new AppError(500, 'INTERNAL', 'The price change request points at another product')
+  }
+
+  if (decision === 'REJECTED') return undefined
+
+  const context = await findPriceContext(payload.productId, payload.branchId, tx)
+  if (!context) throw new NotFoundError('Product not found')
+
+  const currentMinor = resolveEffectivePrice(context.basePriceMinor, context.overrideMinor)
+  if (currentMinor !== payload.currentPriceMinor) {
+    throw new ConflictError(
+      'The price changed while this request was waiting. Reject it and raise a new one.',
+    )
+  }
+
+  if (payload.kind === 'REMOVE') {
+    if (!context.overrideRowId) {
+      throw new ConflictError(
+        'The price override this request would remove is already gone. Reject it and raise a new one.',
+      )
+    }
+    await deleteProductPriceRow(context.overrideRowId, tx)
+  } else if (context.overrideRowId) {
+    const updated = await updateProductPriceRow(
+      context.overrideRowId,
+      { priceMinor: payload.proposedPriceMinor, updatedBy: actor.actorId },
+      tx,
+    )
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to apply the approved price change')
+  } else {
+    const inserted = await insertProductPriceRow(
+      {
+        productId: payload.productId,
+        branchId: payload.branchId,
+        priceMinor: payload.proposedPriceMinor,
+        updatedBy: actor.actorId,
+      },
+      tx,
+    )
+    if (!inserted) throw new AppError(500, 'INTERNAL', 'Failed to apply the approved price change')
+  }
+
+  await writeAudit(
+    {
+      ...actor,
+      action:
+        payload.kind === 'REMOVE' ? 'product.price.override_removed' : 'product.price.override_set',
+      entity: 'product',
+      entityId: payload.productId,
+      branchId: payload.branchId,
+      before: { branchId: payload.branchId, priceMinor: payload.currentPriceMinor },
+      after: {
+        branchId: payload.branchId,
+        priceMinor: payload.proposedPriceMinor,
+        ...(payload.kind === 'REMOVE' ? { removed: true } : {}),
+        via: 'approval',
+        approvalId: approval.id,
+      },
+    },
+    tx,
+  )
+
+  return undefined
+})
+
+/**
+ * The approver's view of a price request: the product, both prices, and the band
+ * the request was judged against (with its bounds) so the console shows
+ * inside/outside without re-deriving a server rule.
+ *
+ * `bandPercent` comes from the stored payload rather than today's setting: widening
+ * the band tomorrow must not rewrite the reason today's request exists.
+ */
+registerSubjectLoader('PRICE_CHANGE', async (approval) => {
+  const payload = parsePriceChangePayload(approval.payload)
+
+  const found = await findProductById(payload.productId)
+  if (!found) throw new NotFoundError('Product not found')
+
+  const subject: PriceChangeSubject = {
+    kind: 'price_change',
+    productId: payload.productId,
+    branchId: payload.branchId,
+    currentPriceMinor: payload.currentPriceMinor,
+    proposedPriceMinor: payload.proposedPriceMinor,
+    productName: found.name,
+    sku: found.sku,
+    bandPercent: payload.bandPercent,
+    bounds: priceBandBounds(payload.currentPriceMinor, payload.bandPercent),
+  }
+  return subject
+})

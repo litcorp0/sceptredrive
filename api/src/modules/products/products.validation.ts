@@ -96,6 +96,26 @@ export const priceOverrideSchema = z
   })
   .strict()
 
+/**
+ * The proposal stored on a `PRICE_CHANGE` approval (P12-D19). It is parsed again
+ * when the admin decides, inside the decision's transaction, so a row that no
+ * longer makes sense is refused rather than half-applied.
+ *
+ * `bandPercent` is stored with the request because it is the rule the request was
+ * judged against: an admin who later widens the band does not retroactively make
+ * an old request legal.
+ */
+export const priceChangePayloadSchema = z
+  .object({
+    productId: z.uuid(),
+    branchId: z.uuid(),
+    currentPriceMinor: priceMinorSchema,
+    proposedPriceMinor: priceMinorSchema,
+    bandPercent: z.number().int().min(0).max(100),
+    kind: z.enum(['SET', 'REMOVE']),
+  })
+  .strict()
+
 export const validateProductIdParam = validateParam(productIdParamSchema)
 export const validateProductBarcodeParam = validateParam(productBarcodeParamSchema)
 export const validateProductBranchParam = validateParam(productBranchParamSchema)

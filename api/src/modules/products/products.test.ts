@@ -12,6 +12,7 @@ import {
   uniqueSuffix,
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
+import { approval } from '../approvals/approvals.schema.ts'
 import { brand, category, uom } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
@@ -287,6 +288,9 @@ describe.skipIf(!available)('products API', () => {
       await db.delete(uom).where(inArray(uom.id, createdUomIds))
     }
     if (createdBranchIds.length > 0) {
+      // Price-change requests reference the branch with RESTRICT, so the approvals
+      // this suite raised go first.
+      await db.delete(approval).where(inArray(approval.branchId, createdBranchIds))
       await db.delete(branch).where(inArray(branch.id, createdBranchIds))
     }
   })
@@ -697,6 +701,12 @@ describe.skipIf(!available)('products API', () => {
       priceMinor: number
     }
 
+    interface AppliedPrice {
+      status: 'APPLIED' | 'PENDING_APPROVAL'
+      priceMinor?: number
+      approvalId?: string
+    }
+
     it('lets admins set an override for any branch and upsert it later', async () => {
       const created = await createProductAndReturn()
 
@@ -706,9 +716,9 @@ describe.skipIf(!available)('products API', () => {
         body: JSON.stringify({ branchId: managerBranchId, priceMinor: 9_000 }),
       })
       expect(first.status).toBe(200)
-      const firstBody = await readJson<{ override: OverrideRecord }>(first)
-      expect(firstBody.override.priceMinor).toBe(9_000)
-      expect(firstBody.override.branchId).toBe(managerBranchId)
+      const firstBody = await readJson<AppliedPrice>(first)
+      expect(firstBody.status).toBe('APPLIED')
+      expect(firstBody.priceMinor).toBe(9_000)
 
       const second = await app.request(`/api/products/${created.id}/prices`, {
         method: 'PUT',
@@ -716,9 +726,9 @@ describe.skipIf(!available)('products API', () => {
         body: JSON.stringify({ branchId: managerBranchId, priceMinor: 8_750 }),
       })
       expect(second.status).toBe(200)
-      const secondBody = await readJson<{ override: OverrideRecord }>(second)
-      expect(secondBody.override.id).toBe(firstBody.override.id)
-      expect(secondBody.override.priceMinor).toBe(8_750)
+      const secondBody = await readJson<AppliedPrice>(second)
+      expect(secondBody.status).toBe('APPLIED')
+      expect(secondBody.priceMinor).toBe(8_750)
 
       const otherBranch = await app.request(`/api/products/${created.id}/prices`, {
         method: 'PUT',
@@ -834,11 +844,22 @@ describe.skipIf(!available)('products API', () => {
       expect(managerBody.overrides).toHaveLength(1)
       expect(managerBody.overrides[0]?.branchId).toBe(managerBranchId)
 
+      // The branch price is 9 000 against a 10 000 base: deleting it is an 11.1%
+      // move, so a manager's removal is a request like any other change (P12-D19).
       const remove = await app.request(`/api/products/${created.id}/prices/${managerBranchId}`, {
         method: 'DELETE',
         headers: authedHeaders(managerCookie),
       })
       expect(remove.status).toBe(200)
+      const removeBody = await readJson<{ status: string; approvalId: string }>(remove)
+      expect(removeBody.status).toBe('PENDING_APPROVAL')
+
+      const approve = await app.request(`/api/approvals/${removeBody.approvalId}/decide`, {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      })
+      expect(approve.status).toBe(200)
 
       const removeAgain = await app.request(
         `/api/products/${created.id}/prices/${managerBranchId}`,

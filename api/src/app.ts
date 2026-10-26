@@ -49,12 +49,14 @@ assertDecisionHandlersRegistered([
   'PURCHASE_ORDER',
   'TRANSFER_REQUEST',
   'STOCK_WRITE_OFF',
+  'PRICE_CHANGE',
 ])
 assertSubjectLoadersRegistered([
   'PRODUCT_CREATE',
   'PURCHASE_ORDER',
   'TRANSFER_REQUEST',
   'STOCK_WRITE_OFF',
+  'PRICE_CHANGE',
 ])
 
 export const app = factory.createApp()

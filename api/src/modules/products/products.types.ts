@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import type { barcode, product, productPrice } from './products.schema.ts'
 import type {
   barcodeCreateSchema,
+  priceChangePayloadSchema,
   priceOverrideSchema,
   productCreateSchema,
   productListQuerySchema,
@@ -17,6 +18,68 @@ export type ProductUpdateBody = z.infer<typeof productUpdateSchema>
 export type ProductListQuery = z.infer<typeof productListQuerySchema>
 export type BarcodeCreateBody = z.infer<typeof barcodeCreateSchema>
 export type PriceOverrideBody = z.infer<typeof priceOverrideSchema>
+
+/** The stored proposal of a `PRICE_CHANGE` request (P12-D19). */
+export type PriceChangePayload = z.infer<typeof priceChangePayloadSchema>
+export type PriceChangeKind = PriceChangePayload['kind']
+
+/**
+ * What a price write did (P12-D19). One endpoint, two honest outcomes: the change
+ * was inside the band (or the actor is an admin) and landed, or it became a
+ * request that an admin decides. Never both, and never a silent third state.
+ */
+export type PriceWriteResult =
+  | { status: 'APPLIED'; priceMinor: number }
+  | { status: 'PENDING_APPROVAL'; approvalId: string }
+
+/**
+ * The two prices a band decision needs, read in one row: the product's base price
+ * and this branch's override, plus the row id the write would target.
+ */
+export interface PriceContext {
+  basePriceMinor: number
+  overrideMinor: number | null
+  overrideRowId: string | null
+  isActive: boolean
+}
+
+/** The window a manager may set a price in, derived server-side (P12-D18). */
+export interface PriceBandBounds {
+  minMinor: number
+  maxMinor: number
+}
+
+/** An override row with the band the console may show beside it. */
+export interface ProductPriceBandRow extends ProductPriceRow {
+  bounds: PriceBandBounds
+}
+
+/**
+ * `GET /api/products/:id/prices`: the band travels with the rows so the console
+ * warns before sending a request instead of re-deriving the server rule.
+ */
+export interface ProductPriceList {
+  basePriceMinor: number
+  managerBandPercent: number
+  overrides: ProductPriceBandRow[]
+}
+
+/**
+ * The `price_change` subject with the figures an approver needs: the product, the
+ * band the request was judged against, and its bounds. `ApprovalSubject` keeps the
+ * four money fields; the rest are additive and rendered as-is.
+ */
+export interface PriceChangeSubject {
+  kind: 'price_change'
+  productId: string
+  branchId: string
+  currentPriceMinor: number
+  proposedPriceMinor: number
+  productName: string
+  sku: string
+  bandPercent: number
+  bounds: PriceBandBounds
+}
 
 export interface ProductCreateInput {
   sku?: string | undefined

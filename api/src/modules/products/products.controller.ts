@@ -74,15 +74,16 @@ export async function getPrices(c: Context<AppEnv>, id: string) {
 export async function setPriceOverride(c: Context<AppEnv>, id: string, input: PriceOverrideBody) {
   const user = currentUser(c)
   const actor = actorFromContext(c)
-  const override = await productsService.setPriceOverride(user, actor, id, input)
-  return c.json({ override })
+  const result = await productsService.setPriceOverride(user, actor, id, input)
+  // 200 for both outcomes: the request is a completed action, not an accepted one.
+  return c.json(result)
 }
 
 export async function removePriceOverride(c: Context<AppEnv>, id: string, branchId: string) {
   const user = currentUser(c)
   const actor = actorFromContext(c)
-  await productsService.removePriceOverride(user, actor, id, branchId)
-  return c.json({ removed: true })
+  const result = await productsService.removePriceOverride(user, actor, id, branchId)
+  return c.json(result)
 }
 
 export async function submitProduct(c: Context<AppEnv>, input: ProductSubmissionBody) {
