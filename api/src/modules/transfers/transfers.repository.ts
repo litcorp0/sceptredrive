@@ -6,6 +6,7 @@ import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { transfer, transferLine } from './transfers.schema.ts'
 import type {
+  LevelSnapshot,
   TransferLineDetail,
   TransferLineRow,
   TransferListFilters,
@@ -21,6 +22,7 @@ export async function insertTransfer(
     number: string
     fromBranchId: string
     toBranchId: string
+    status: 'DRAFT' | 'REQUESTED'
     note: string | null
     createdBy: string | null
   },
@@ -237,15 +239,29 @@ export async function selectTransferBase(
   return rows[0] ?? null
 }
 
+/**
+ * The level of every requested product at one branch. One query serves both the
+ * detail's on-hand columns and the request valuation, so "the level at a branch"
+ * has one definition (P12-D6).
+ */
 export async function selectLevelsForProducts(
   branchId: string,
   productIds: string[],
   executor: DbExecutor = db,
-): Promise<Map<string, number>> {
+): Promise<Map<string, LevelSnapshot>> {
   if (productIds.length === 0) return new Map()
   const rows = await executor
-    .select({ productId: stockLevel.productId, quantityOnHand: stockLevel.quantityOnHand })
+    .select({
+      productId: stockLevel.productId,
+      quantityOnHand: stockLevel.quantityOnHand,
+      avgCostMinor: stockLevel.avgCostMinor,
+    })
     .from(stockLevel)
     .where(and(eq(stockLevel.branchId, branchId), inArray(stockLevel.productId, productIds)))
-  return new Map(rows.map((row) => [row.productId, row.quantityOnHand]))
+  return new Map(
+    rows.map((row) => [
+      row.productId,
+      { quantityOnHand: row.quantityOnHand, avgCostMinor: row.avgCostMinor },
+    ]),
+  )
 }

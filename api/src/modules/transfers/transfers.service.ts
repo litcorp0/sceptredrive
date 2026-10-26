@@ -1,8 +1,9 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { assertBranchAccess, branchScope, resolveBranchFilter } from '../../auth/scope.ts'
+import { assertBranchAccess, branchScope, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { requestApproval } from '../approvals/approvals.service.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
 import { findBranchById } from '../org/branches.repository.ts'
 import { writeAudit } from '../platform/audit.service.ts'
@@ -35,6 +36,7 @@ import type {
   TransferListQuery,
   TransferListRow,
   TransferRow,
+  TransferStatus,
   TransferUpdateInput,
 } from './transfers.types.ts'
 
@@ -84,8 +86,8 @@ async function loadTransferDetail(id: string): Promise<TransferDetail> {
   ])
   const lines = lineRows.map((line) => ({
     ...line,
-    fromOnHand: fromLevels.get(line.productId) ?? 0,
-    toOnHand: toLevels.get(line.productId) ?? 0,
+    fromOnHand: fromLevels.get(line.productId)?.quantityOnHand ?? 0,
+    toOnHand: toLevels.get(line.productId)?.quantityOnHand ?? 0,
   }))
   return {
     ...base,
@@ -96,13 +98,22 @@ async function loadTransferDetail(id: string): Promise<TransferDetail> {
   }
 }
 
-/** Creates a draft transfer; either side may belong to the drafting manager. */
+/**
+ * Creates the document a branch is asking for.
+ *
+ * A manager raises a **request** at their own branch: `REQUESTED`, with a
+ * `TRANSFER_REQUEST` approval the source branch decides, in the same
+ * transaction (P12-D10). An admin creates a **draft** directly — an admin has
+ * nobody to approve them, and their direct path is the draft (P12-D3). There is
+ * deliberately no `status` input: the actor's role decides, not the body.
+ */
 export async function createTransfer(
   user: SessionUser,
   actor: AuditActor,
   input: TransferCreateInput,
 ): Promise<TransferDetail> {
   assertLinesUnique(input.lines)
+  const isAdmin = roleOf(user) === 'ADMIN'
   const scope = branchScope(user)
 
   const [from, to] = await Promise.all([
@@ -116,18 +127,34 @@ export async function createTransfer(
   if (!from.isActive || !to.isActive) {
     throw new ConflictError('Cannot transfer stock to or from an inactive branch')
   }
-  if (scope !== null && from.id !== scope && to.id !== scope) {
-    throw new ForbiddenError('One side of the transfer must be your branch')
+  // The destination asks; the source agrees. A manager creating an outgoing
+  // transfer would be dispatching their own request, which is the hole D4 closes.
+  if (!isAdmin && to.id !== scope) {
+    throw new ForbiddenError('A transfer request is raised by the destination branch.')
   }
   await validateLineProducts(input.lines)
 
+  const productIds = input.lines.map((line) => line.productId)
+
   const transferId = await db.transaction(async (tx) => {
+    // Value frozen at request time from the source's own projection: the same
+    // read the detail shows, so the number a manager sees is the number the
+    // decider is given (P12-D6).
+    const sourceLevels = await selectLevelsForProducts(from.id, productIds, tx)
+    const amountMinor = input.lines.reduce(
+      (sum, line) =>
+        sum + line.quantityRequested * (sourceLevels.get(line.productId)?.avgCostMinor ?? 0),
+      0,
+    )
+
+    const status: TransferStatus = isAdmin ? 'DRAFT' : 'REQUESTED'
     const number = await allocateFromSequence('inventory.transferSequence', tx)
     const created = await insertTransfer(
       {
         number,
         fromBranchId: from.id,
         toBranchId: to.id,
+        status,
         note: input.note ?? null,
         createdBy: actorLabel(actor),
       },
@@ -144,6 +171,28 @@ export async function createTransfer(
       tx,
     )
 
+    let approvalId: string | null = null
+    if (status === 'REQUESTED') {
+      const approval = await requestApproval(
+        actor,
+        {
+          type: 'TRANSFER_REQUEST',
+          entityId: created.id,
+          branchId: to.id,
+          amountMinor,
+          payload: {
+            fromBranchId: from.id,
+            toBranchId: to.id,
+            fromBranchType: from.type,
+            lineCount: input.lines.length,
+          },
+          note: input.note ?? null,
+        },
+        tx,
+      )
+      approvalId = approval.id
+    }
+
     await writeAudit(
       {
         ...actor,
@@ -156,6 +205,8 @@ export async function createTransfer(
           fromBranchId: from.id,
           toBranchId: to.id,
           lines: input.lines,
+          status,
+          approvalId,
         },
       },
       tx,

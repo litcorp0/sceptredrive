@@ -103,3 +103,14 @@ export interface TransferLineDetail extends TransferLineRow {
 export interface TransferDetail extends TransferListRow {
   lines: TransferLineDetail[]
 }
+
+/**
+ * The projection of one product at one branch, as the transfer module reads it:
+ * on-hand for the dispatch guard and average cost for the request valuation.
+ * A missing entry means the branch has never held the product (P12-D6: it
+ * values at 0 and fails at dispatch on stock, which is the honest place).
+ */
+export interface LevelSnapshot {
+  quantityOnHand: number
+  avgCostMinor: number
+}
