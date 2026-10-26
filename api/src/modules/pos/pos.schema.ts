@@ -24,6 +24,9 @@ export const shiftStatusEnum = pgEnum('shift_status', ['OPEN', 'CLOSED'])
  */
 export const shiftReviewStatusEnum = pgEnum('shift_review_status', ['NONE', 'REQUIRED', 'REVIEWED'])
 
+/** The review state vocabulary, derived from the enum so there is one source. */
+export type ShiftReviewStatus = (typeof shiftReviewStatusEnum.enumValues)[number]
+
 export const cashMovementTypeEnum = pgEnum('cash_movement_type', ['CASH_IN', 'CASH_OUT'])
 
 export const saleTenderMethodEnum = pgEnum('sale_tender_method', ['CASH', 'CREDIT'])

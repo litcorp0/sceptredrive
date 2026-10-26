@@ -32,6 +32,7 @@ const BOOT_LIST = [
   'STOCK_WRITE_OFF',
   'PRICE_CHANGE',
   'CREDIT_LIMIT_CHANGE',
+  'SHIFT_VARIANCE_REVIEW',
 ]
 
 let branchId = ''

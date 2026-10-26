@@ -51,6 +51,7 @@ assertDecisionHandlersRegistered([
   'STOCK_WRITE_OFF',
   'PRICE_CHANGE',
   'CREDIT_LIMIT_CHANGE',
+  'SHIFT_VARIANCE_REVIEW',
 ])
 assertSubjectLoadersRegistered([
   'PRODUCT_CREATE',
@@ -59,6 +60,7 @@ assertSubjectLoadersRegistered([
   'STOCK_WRITE_OFF',
   'PRICE_CHANGE',
   'CREDIT_LIMIT_CHANGE',
+  'SHIFT_VARIANCE_REVIEW',
 ])
 
 export const app = factory.createApp()

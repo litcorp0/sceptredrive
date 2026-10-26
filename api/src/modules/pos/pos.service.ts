@@ -2,7 +2,12 @@ import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import { can, priceCart, type TaxMode } from '@sceptre/shared'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
-import { AppError, ConflictError } from '../../http/errors.ts'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import {
+  registerDecisionHandler,
+  registerSubjectLoader,
+  requestApproval,
+} from '../approvals/approvals.service.ts'
 import { postEntryInTransaction as postCreditEntry } from '../credit/credit.service.ts'
 import type { CreditOverrideReason } from '../credit/credit.types.ts'
 import { resolveDraftCustomer } from '../customers/customers.service.ts'
@@ -19,6 +24,7 @@ import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { addConflict } from './pos.conflicts.ts'
 import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
+  countShiftSales,
   findActiveBinding,
   findBindingById,
   findBindingByTokenHash,
@@ -26,8 +32,10 @@ import {
   findOpenShiftByTerminal,
   findSaleByReceiptNumber,
   findShiftByIdForUpdate,
+  findShiftWithTerminal,
   findStaffById,
   findStaffForAuthorization,
+  findTerminalName,
   insertBinding,
   insertCashMovement,
   insertConflict,
@@ -42,6 +50,7 @@ import {
   touchBinding,
   updateSaleConflictCount,
   updateShiftClose,
+  updateShiftReview,
   updateStaffPinHash,
 } from './pos.repository.ts'
 import type {
@@ -616,6 +625,64 @@ export async function closeShift(
     },
     executor,
   )
+
+  // A drawer beyond the branch's tolerance gets a person's name on it (P12-D24).
+  // Strictly greater: exactly at tolerance is not "beyond tolerance" (BRN-04).
+  // The raise is inside the upload transaction, so a failure rolls the close back
+  // and the outbox retries the idempotent close (P12-D27); the response shape is
+  // unchanged, because the till never learns an approval exists (APR-06).
+  const tolerance = await getSettingValue(
+    'pos.shiftVarianceToleranceMinor',
+    { branchId: row.branchId },
+    executor,
+  )
+
+  if (Math.abs(variance) > tolerance) {
+    await updateShiftReview(payload.shiftId, { reviewStatus: 'REQUIRED' }, executor)
+
+    const terminalName = await findTerminalName(device.terminalId, executor)
+    if (terminalName === null) {
+      // A shift cannot outlive its terminal (FK restrict); treat it as an
+      // integrity failure rather than raise a review with no subject.
+      throw new AppError(500, 'INTERNAL', 'The shift terminal no longer exists')
+    }
+
+    const [cashier, saleCount] = await Promise.all([
+      findStaffById(row.cashierUserId, executor),
+      countShiftSales(payload.shiftId, executor),
+    ])
+
+    // The requester is the cashier who counted the drawer, not the device: that
+    // is what makes the no-self-approval rule mean something (P12-D26).
+    await requestApproval(
+      auditActorFor({ userId: row.cashierUserId, staffId: row.cashierStaffId }),
+      {
+        type: 'SHIFT_VARIANCE_REVIEW',
+        entityId: payload.shiftId,
+        branchId: row.branchId,
+        amountMinor: Math.abs(variance),
+        deciderRole: 'MANAGER',
+        deciderBranchId: row.branchId,
+        note: payload.closeNote ?? null,
+        // Everything the reviewer needs to tell a wrong drawer from a terminal
+        // and server that disagreed about the arithmetic (P12-D24, §3).
+        payload: {
+          shiftId: payload.shiftId,
+          shiftNumber: row.number,
+          terminalName,
+          cashierName: cashier?.name ?? null,
+          openedAt: row.openedAt.toISOString(),
+          closedAt: closedAt.toISOString(),
+          saleCount,
+          expectedMinor: serverExpected,
+          clientExpectedMinor: payload.clientExpectedCashMinor,
+          countedMinor: payload.countedCashMinor,
+          varianceMinor: variance,
+        },
+      },
+      executor,
+    )
+  }
 
   await writeAudit(
     {
@@ -1364,3 +1431,106 @@ export async function applySale(
 
   return { saleId, conflicts: applied, resolvedCustomerId }
 }
+
+// --- Variance review (Plan 12-08) -------------------------------------------
+
+/** The reviewer's staff label; a user id is the fallback, never the PIN. */
+function reviewerLabel(actor: AuditActor): string {
+  return actor.actorStaffId ?? actor.actorId ?? 'unknown'
+}
+
+/**
+ * The review's half of the decision registry (P12-D24, P12-D25).
+ *
+ * A variance is not a proposal, so `REJECTED` is refused: "rejected" would read
+ * as "the money is fine now", which is a statement the reviewer cannot make. The
+ * note is the outcome, and it is required for the same reason.
+ *
+ * `APPROVED` writes the four review columns and one audit row. No money column is
+ * in the patch — `updateShiftReview` cannot even represent one — so the drawer's
+ * figures are byte-identical after the decision (P12-D25).
+ */
+registerDecisionHandler('SHIFT_VARIANCE_REVIEW', async (tx, approval, actor, decision, input) => {
+  if (decision !== 'APPROVED') {
+    throw new ValidationError('A variance review records an outcome; it cannot be rejected')
+  }
+
+  const note = input.note?.trim() ?? ''
+  if (note.length < 3) {
+    throw new ValidationError('Record what you found before closing the review')
+  }
+  if (!approval.entityId) {
+    throw new AppError(500, 'INTERNAL', 'A variance review has no shift')
+  }
+
+  const row = await findShiftByIdForUpdate(approval.entityId, tx)
+  if (!row) throw new NotFoundError('Shift not found')
+  if (row.status !== 'CLOSED') throw new ConflictError('This shift is not closed')
+  if (row.reviewStatus !== 'REQUIRED') {
+    throw new ConflictError('This shift is not awaiting review')
+  }
+
+  const reviewedAt = new Date()
+  await updateShiftReview(
+    row.id,
+    {
+      reviewStatus: 'REVIEWED',
+      reviewedBy: reviewerLabel(actor),
+      reviewedAt,
+      reviewNote: note,
+    },
+    tx,
+  )
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'pos.shift.reviewed',
+      entity: 'shift',
+      entityId: row.id,
+      branchId: row.branchId,
+      before: { reviewStatus: 'REQUIRED', varianceMinor: row.varianceMinor },
+      after: {
+        reviewStatus: 'REVIEWED',
+        reviewNote: note,
+        approvalId: approval.id,
+        reviewedAt: reviewedAt.toISOString(),
+      },
+    },
+    tx,
+  )
+})
+
+/**
+ * The review's half of the subject registry: the reviewer sees the drawer's
+ * arithmetic — what the server expected, what the cashier counted, and the
+ * terminal's name — so a wrong drawer reads differently from a terminal and
+ * server that disagreed (SHIFT_VARIANCE_MISMATCH). Read-only, no transaction
+ * (P12-D4). The close-time figures also travel in the approval payload.
+ */
+registerSubjectLoader('SHIFT_VARIANCE_REVIEW', async (approval) => {
+  if (!approval.entityId) throw new NotFoundError('Shift not found')
+
+  const found = await findShiftWithTerminal(approval.entityId)
+  if (!found) throw new NotFoundError('Shift not found')
+
+  const { shift: row } = found
+  if (
+    row.serverExpectedCashMinor === null ||
+    row.countedCashMinor === null ||
+    row.varianceMinor === null
+  ) {
+    // A review exists only for a closed shift; missing figures are an integrity
+    // failure, not a shape the inbox should render as zeroes.
+    throw new AppError(500, 'INTERNAL', 'This shift has no closed cash figures')
+  }
+
+  return {
+    kind: 'shift_variance',
+    shiftId: row.id,
+    terminalName: found.terminalName,
+    expectedMinor: row.serverExpectedCashMinor,
+    countedMinor: row.countedCashMinor,
+    varianceMinor: row.varianceMinor,
+  }
+})

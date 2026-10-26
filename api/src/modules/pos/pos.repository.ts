@@ -9,6 +9,7 @@ import { product, productPrice } from '../products/products.schema.ts'
 import {
   cashMovement,
   posStaffBinding,
+  type ShiftReviewStatus,
   sale,
   saleLine,
   saleTender,
@@ -300,6 +301,88 @@ export async function updateShiftClose(
   executor: DbExecutor = db,
 ): Promise<void> {
   await executor.update(shift).set(patch).where(eq(shift.id, shiftId))
+}
+
+/**
+ * The review columns and nothing else. The patch type *is* the allow-list
+ * (P12-D25): `counted_cash_minor`, `server_expected_cash_minor` and
+ * `variance_minor` are not representable, so a review can never restate the
+ * drawer's figures.
+ */
+export interface ShiftReviewPatch {
+  reviewStatus?: ShiftReviewStatus
+  reviewedBy?: string | null
+  reviewedAt?: Date | null
+  reviewNote?: string | null
+}
+
+const SHIFT_REVIEW_COLUMNS = new Set(['reviewStatus', 'reviewedBy', 'reviewedAt', 'reviewNote'])
+
+/**
+ * The only writer of the review columns. The runtime guard repeats the type's
+ * promise for a caller that has cast its way around it: a money column is a
+ * programming error, refused before the update runs.
+ */
+export async function updateShiftReview(
+  shiftId: string,
+  patch: ShiftReviewPatch,
+  executor: DbExecutor = db,
+): Promise<void> {
+  const columns = Object.keys(patch)
+  for (const column of columns) {
+    if (!SHIFT_REVIEW_COLUMNS.has(column)) {
+      throw new Error(`updateShiftReview refuses a non-review column: ${column}`)
+    }
+  }
+  if (columns.length === 0) return
+
+  const rows = await executor
+    .update(shift)
+    .set(patch)
+    .where(eq(shift.id, shiftId))
+    .returning({ id: shift.id })
+  if (rows.length === 0) throw new Error('Failed to update the shift review')
+}
+
+/** A shift with the terminal name a reviewer needs; one join, indexed read. */
+export interface ShiftWithTerminal {
+  shift: typeof shift.$inferSelect
+  terminalName: string
+}
+
+export async function findShiftWithTerminal(
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<ShiftWithTerminal | null> {
+  const rows = await executor
+    .select({ shift, terminalName: terminal.name })
+    .from(shift)
+    .innerJoin(terminal, eq(shift.terminalId, terminal.id))
+    .where(eq(shift.id, shiftId))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** The terminal's display name, for the review payload written at close. */
+export async function findTerminalName(
+  terminalId: string,
+  executor: DbExecutor = db,
+): Promise<string | null> {
+  const rows = await executor
+    .select({ name: terminal.name })
+    .from(terminal)
+    .where(eq(terminal.id, terminalId))
+    .limit(1)
+  return rows[0]?.name ?? null
+}
+
+/** How many sales the shift recorded, for the review payload (`sale_shift_idx`). */
+export async function countShiftSales(shiftId: string, executor: DbExecutor = db): Promise<number> {
+  const rows = await executor
+    .select({ value: sql<number>`count(*)::int` })
+    .from(sale)
+    .where(eq(sale.shiftId, shiftId))
+  return rows[0]?.value ?? 0
 }
 
 export async function insertConflict(
