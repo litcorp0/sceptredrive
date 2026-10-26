@@ -340,7 +340,12 @@ function ReviewDialog({
 				)}
 
 				<DialogFooter>
-					<Button type="button" variant="outline" onClick={onClose}>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={onClose}
+						disabled={decideMutation.isPending}
+					>
 						Close
 					</Button>
 				</DialogFooter>

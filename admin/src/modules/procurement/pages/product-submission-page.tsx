@@ -114,6 +114,7 @@ export function ProductSubmissionPage() {
 	])
 	const loadingCatalog =
 		categoriesQuery.isLoading || brandsQuery.isLoading || unitsQuery.isLoading
+	const catalogError = categoriesQuery.isError || brandsQuery.isError || unitsQuery.isError
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
@@ -167,6 +168,15 @@ export function ProductSubmissionPage() {
 			</p>
 
 			<form onSubmit={handleSubmit} className="mt-4 grid gap-4">
+				{catalogError ? (
+					<p
+						role="alert"
+						className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+					>
+						Couldn't load the catalogue's categories, brands or units. Reload the page and try
+						again.
+					</p>
+				) : null}
 				<Card>
 					<CardHeader>
 						<CardTitle>Product</CardTitle>
