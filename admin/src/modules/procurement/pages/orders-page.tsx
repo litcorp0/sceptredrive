@@ -47,6 +47,7 @@ const STATUS_OPTIONS: OrderStatus[] = [
 export function OrdersPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const { activeBranchId, canSelectBranch } = useBranch()
+	const canRead = hasPermission(session.user.role, "procurement.read")
 	const canCreate = hasPermission(session.user.role, "procurement.create")
 
 	const [status, setStatus] = useState<"ALL" | OrderStatus>("ALL")
@@ -66,7 +67,9 @@ export function OrdersPage() {
 		offset,
 	}
 
-	const ordersQuery = useQuery(orderListOptions(filters))
+	// The API refuses the list without `procurement.read`; the screen does not even ask, so a
+	// cashier who reaches the URL directly sees why instead of an empty table that looks broken.
+	const ordersQuery = useQuery({ ...orderListOptions(filters), enabled: canRead })
 
 	const orders = ordersQuery.data?.orders ?? []
 	const total = ordersQuery.data?.total ?? 0
@@ -74,6 +77,16 @@ export function OrdersPage() {
 
 	function resetOffset() {
 		setOffset(0)
+	}
+
+	if (!canRead) {
+		return (
+			<section>
+				<p className="text-sm text-muted-foreground">
+					You don't have permission to view purchase orders.
+				</p>
+			</section>
+		)
 	}
 
 	return (
