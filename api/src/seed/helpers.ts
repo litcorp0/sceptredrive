@@ -11,8 +11,13 @@ import {
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { approval } from '../modules/approvals/approvals.schema.ts'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
-import { computeAbcClasses as computeAbcClassRows } from '../modules/counts/counts.repository.ts'
-import { countSchedule } from '../modules/counts/counts.schema.ts'
+import {
+  computeAbcClasses as computeAbcClassRows,
+  insertCount,
+  selectProductsWithLevels,
+  updateCountRow,
+} from '../modules/counts/counts.repository.ts'
+import { countSchedule, stockCount, stockCountLine } from '../modules/counts/counts.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../modules/credit/credit.schema.ts'
 import { customer } from '../modules/customers/customers.schema.ts'
 import { account, user } from '../modules/identity/staff.schema.ts'
@@ -222,6 +227,103 @@ export async function computeAbcClasses(
   const aThresholdBp = await getSettingValue('inventory.abcAThresholdBp', {}, executor)
   const bThresholdBp = await getSettingValue('inventory.abcBThresholdBp', {}, executor)
   return computeAbcClassRows(branchId, { aThresholdBp, bThresholdBp }, executor)
+}
+
+/**
+ * Posts one finished demo stock count (Phase 12): its frozen snapshot, its counted
+ * quantities, and the variance the ledger carries.
+ *
+ * The variances go through `postMovements`, the single stock writer, so
+ * `Σ stock_movement.quantity_delta` still equals `stock_level.quantity_on_hand`
+ * for every product in the branch. Lines are never edited afterwards: a posted
+ * count is history. Idempotent by document number; a second call writes nothing.
+ */
+export async function ensureDemoCountHistory(input: {
+  number: string
+  branchId: string
+  dueAt: string
+  postedAt: Date
+  lines: readonly { productId: string; delta: number }[]
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: stockCount.id })
+    .from(stockCount)
+    .where(eq(stockCount.number, input.number))
+    .limit(1)
+  if (existing[0]) return false
+
+  return db.transaction(async (tx) => {
+    const snapshot = await selectProductsWithLevels(
+      input.branchId,
+      input.lines.map((line) => line.productId),
+      tx,
+    )
+    const snapshotByProduct = new Map(snapshot.map((row) => [row.productId, row.snapshotQty]))
+
+    // A product the branch has never stocked has no level row: skip it rather than
+    // invent a snapshot. Clamping a shortage keeps the post above zero even if a
+    // caller planned a delta larger than what is on hand.
+    const rows = input.lines.flatMap((line) => {
+      const snapshotQty = snapshotByProduct.get(line.productId)
+      if (snapshotQty === undefined) return []
+      const delta = Math.max(line.delta, -snapshotQty)
+      return [{ productId: line.productId, snapshotQty, countedQty: snapshotQty + delta, delta }]
+    })
+    if (rows.length === 0) return false
+
+    const created = await insertCount(
+      {
+        number: input.number,
+        branchId: input.branchId,
+        status: 'OPEN',
+        countType: 'SCHEDULED',
+        scope: 'ROTATION',
+        scopeKey: 'ROTATION',
+        dueAt: input.dueAt,
+        note: 'Demo rotation count',
+        createdBy: 'seed',
+        createdAt: new Date(input.postedAt.getTime() - 6 * 60 * 60 * 1000),
+      },
+      tx,
+    )
+    if (!created) return false
+
+    await tx.insert(stockCountLine).values(
+      rows.map((row) => ({
+        countId: created.id,
+        productId: row.productId,
+        snapshotQty: row.snapshotQty,
+        countedQty: row.countedQty,
+      })),
+    )
+
+    const variances = rows.filter((row) => row.delta !== 0)
+    if (variances.length > 0) {
+      await postMovements(
+        { actorId: 'seed', actorStaffId: null, ip: null, userAgent: null, requestId: null },
+        variances.map((row) => ({
+          productId: row.productId,
+          branchId: input.branchId,
+          type: 'COUNT_VARIANCE' as const,
+          quantityDelta: row.delta,
+          referenceType: 'COUNT' as const,
+          referenceId: created.id,
+          referenceNumber: input.number,
+          note: 'Stock count variance',
+        })),
+        { executor: tx },
+      )
+    }
+
+    const posted = await updateCountRow(
+      created.id,
+      { status: 'POSTED', postedBy: 'seed', postedAt: input.postedAt },
+      tx,
+    )
+    if (!posted) throw new Error(`Could not post the demo stock count ${input.number}`)
+
+    return true
+  })
 }
 
 export async function ensureBranch(input: {

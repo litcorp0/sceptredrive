@@ -394,3 +394,89 @@ export function plannedUnitsByBranchProduct(sales: readonly PlannedSale[]): Map<
   }
   return units
 }
+
+// --- Count history -----------------------------------------------------------
+
+/**
+ * Days before `endDay` each posted demo count lands. Spread across a quarter so
+ * the accuracy window and the ROTATION ordering both have real history.
+ */
+export const DEMO_COUNT_DAYS_AGO = [78, 46, 13] as const
+
+/** Lines per count: a rotation slice of the twelve-part demo catalogue. */
+export const DEMO_COUNT_LINES = 6
+
+/**
+ * How far each count's slice advances through the catalogue. With twelve parts
+ * and six lines, four keeps every part's last-counted day distinct, so
+ * `selectRotationProductIds` has a genuine order instead of one flat date
+ * (P12-D28).
+ */
+const DEMO_COUNT_SLICE_STRIDE = 4
+
+export interface PlannedCountLine {
+  productId: string
+  /** `counted_qty - snapshot_qty`; `0` is a matched line. */
+  delta: number
+}
+
+export interface PlannedDemoCount {
+  number: string
+  dueAt: string
+  postedAt: string
+  lines: PlannedCountLine[]
+}
+
+/**
+ * A deterministic history of posted stock counts for one branch (Phase 12).
+ *
+ * Pure like the sale plan: the same `(branch, endDay, products, seed)` always
+ * produces the same numbers, dates, and counted quantities, so the seed is
+ * idempotent by document number and a demo screenshot is reproducible.
+ *
+ * Two lines in every three match their snapshot exactly and the rest carry a
+ * small ±1–3 unit variance, so `countAccuracyBp` is a real figure strictly
+ * between 0 and 10,000 without ever being a fabricated "perfect" count.
+ */
+export function planDemoCounts(options: {
+  branchCode: string
+  endDay: string
+  productIds: readonly string[]
+  seed: number
+}): PlannedDemoCount[] {
+  if (options.productIds.length === 0) return []
+
+  const end = parseDay(options.endDay)
+  const lineCount = Math.min(DEMO_COUNT_LINES, options.productIds.length)
+
+  return DEMO_COUNT_DAYS_AGO.map((daysAgo, countIndex) => {
+    const day = isoDay(new Date(end.getTime() - daysAgo * DAY_MS))
+    const rng = mulberry32(fnv1a(`${options.seed}:${options.branchCode}:count:${countIndex}`))
+    const used = new Set<string>()
+    const lines: PlannedCountLine[] = []
+
+    for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
+      const productIndex =
+        (countIndex * DEMO_COUNT_SLICE_STRIDE + lineIndex) % options.productIds.length
+      const productId = options.productIds[productIndex]
+      // A short catalogue can wrap the slice; one line per product, like the
+      // `(count_id, product_id)` unique index demands.
+      if (!productId || used.has(productId)) continue
+      used.add(productId)
+
+      const magnitude = 1 + Math.floor(rng() * 3)
+      const matched = (countIndex + lineIndex) % 3 !== 0
+      lines.push({
+        productId,
+        delta: matched ? 0 : rng() < 0.5 ? -magnitude : magnitude,
+      })
+    }
+
+    return {
+      number: `DEMO-CNT-${options.branchCode}-${String(countIndex + 1).padStart(2, '0')}`,
+      dueAt: day,
+      postedAt: `${day}T16:30:00.000Z`,
+      lines,
+    }
+  })
+}

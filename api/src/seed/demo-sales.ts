@@ -35,12 +35,14 @@ import {
   type DemoPlanProduct,
   demoCreditLimits,
   type PlannedSale,
+  planDemoCounts,
   planDemoSales,
   plannedUnitsByBranchProduct,
 } from './demo-sales.plan.ts'
 import {
   createUserWithCredential,
   ensureBranch,
+  ensureDemoCountHistory,
   ensureDevice,
   ensureStockReceipt,
   ensureTerminal,
@@ -48,15 +50,20 @@ import {
 } from './helpers.ts'
 
 /**
- * `seed:demo-sales` — six weeks of trading written through `applySale`.
+ * `seed:demo-sales` — six weeks of trading written through `applySale`, plus the
+ * posted stock-count history Phase 12's accuracy and rotation views read.
  *
  * Direct inserts would satisfy the charts and break the promise that the dashboard
  * reconciles to the ledgers, so every sale goes through the same service the POS uploads
  * use. Stock movements, the credit charge, the loyalty earn/redeem, the sale lines, and
- * the shift totals are therefore written by the owning rules in one transaction.
+ * the shift totals are therefore written by the owning rules in one transaction. The
+ * counts are posted the same way: the variance goes through `postMovements`, so the
+ * branch's movement ledger still sums to its stock levels.
  *
- * Idempotent by receipt prefix: if any `DEMO-%` sale exists the run writes nothing and
- * says so. It never deletes rows to make room.
+ * Idempotent by receipt prefix: if any `DEMO-%` sale exists the run writes no sales and
+ * says so. It never deletes rows to make room. The count history is written before that
+ * guard, because it is separate evidence and idempotent by count number — a database
+ * that already holds the demo month still gets its counts.
  *
  * Refuses production (`NODE_ENV=production`), exactly like `seed/run.ts`.
  *
@@ -291,12 +298,6 @@ export async function seedDemoSales(
 
   const result: SeedDemoSalesResult = { created: [], sales: 0, shifts: 0 }
 
-  const [existing] = await db
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(sale)
-    .where(sql`${sale.receiptNumber} LIKE ${`${DEMO_RECEIPT_PREFIX}%`}`)
-  if ((existing?.count ?? 0) > 0) return result
-
   const endDay = options.endDay ?? accraIsoDay()
   const days = options.days ?? 42
   const seed = options.seed ?? 20261024
@@ -308,7 +309,7 @@ export async function seedDemoSales(
 
   // 1. Branches and terminals, matched by code. Only missing rows are created.
   const branchFixtures: DemoSalesBranchFixture[] =
-    options.branches ?? DEMO_SALES_BRANCHES.map((branch) => ({ ...branch }))
+    options.branches ?? DEMO_SALES_BRANCHES.map((fixture) => ({ ...fixture }))
   const branches: Array<{ fixture: DemoSalesBranchFixture; id: string }> = []
   for (const fixture of branchFixtures) {
     const row = await ensureBranch({
@@ -329,48 +330,7 @@ export async function seedDemoSales(
     branches.push({ fixture, id: row.id })
   }
 
-  // 2. One device, cashier, and live binding per terminal.
-  const terminals = new Map<string, TerminalContext>()
-  for (const branch of branches) {
-    const cashier = branch.fixture.cashier
-      ? {
-          ...branch.fixture.cashier,
-          pinVersion:
-            (
-              await db
-                .select({ pinVersion: user.pinVersion })
-                .from(user)
-                .where(eq(user.id, branch.fixture.cashier.userId))
-                .limit(1)
-            )[0]?.pinVersion ?? 1,
-        }
-      : await ensureBranchCashier(branch.id, branch.fixture.code, result.created)
-
-    for (const terminalCode of branch.fixture.terminals) {
-      const rows = await db
-        .select({ id: terminal.id })
-        .from(terminal)
-        .where(eq(terminal.code, terminalCode))
-        .limit(1)
-      const terminalId = rows[0]?.id
-      if (!terminalId) throw new Error(`terminal ${terminalCode} was not created`)
-
-      const demoDevice = await ensureDevice({
-        terminalId,
-        fingerprint: `${DEMO_DEVICE_PREFIX}${terminalCode}`,
-      })
-      if (demoDevice.created) result.created.push(`device ${terminalCode}`)
-
-      const binding = await ensureBinding(branch.id, demoDevice.id, cashier, result.created)
-      terminals.set(terminalCode, {
-        device: { deviceId: demoDevice.id, terminalId, branchId: branch.id },
-        cashier,
-        binding,
-      })
-    }
-  }
-
-  // 3. The plan (pure), then the stock and credit fixtures its numbers need.
+  // 2. The plan (pure), then the stock and count history its numbers need.
   const planCustomers: DemoPlanCustomer[] = [
     ...customers.credit.map((id) => ({ id, kind: 'CREDIT' as const, loyalty: false })),
     ...customers.loyalty.map((id) => ({ id, kind: 'CASH' as const, loyalty: true })),
@@ -423,6 +383,84 @@ export async function seedDemoSales(
     }
   }
 
+  /**
+   * The count history is posted before the sale guard: a database that already
+   * holds the demo month still needs the counts the console and ROTATION read,
+   * and the step is idempotent by count number. It runs after the stock receipt
+   * so every snapshot has a level row to freeze.
+   */
+  const branchIdByCode = new Map(branches.map((entry) => [entry.fixture.code, entry.id]))
+  const countProductIds = products.map((row) => row.id).sort()
+  for (const fixture of branchFixtures) {
+    const branchId = branchIdByCode.get(fixture.code)
+    if (!branchId) continue
+    const plannedCounts = planDemoCounts({
+      branchCode: fixture.code,
+      endDay,
+      productIds: countProductIds,
+      seed,
+    })
+    for (const planned of plannedCounts) {
+      const countCreated = await ensureDemoCountHistory({
+        number: planned.number,
+        branchId,
+        dueAt: planned.dueAt,
+        postedAt: new Date(planned.postedAt),
+        lines: planned.lines,
+      })
+      if (countCreated) result.created.push(`stock count ${planned.number}`)
+    }
+  }
+
+  // Idempotent by receipt prefix: the demo month is written once.
+  const [existing] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(sale)
+    .where(sql`${sale.receiptNumber} LIKE ${`${DEMO_RECEIPT_PREFIX}%`}`)
+  if ((existing?.count ?? 0) > 0) return result
+
+  // 3. One device, cashier, and live binding per terminal.
+  const terminals = new Map<string, TerminalContext>()
+  for (const branch of branches) {
+    const cashier = branch.fixture.cashier
+      ? {
+          ...branch.fixture.cashier,
+          pinVersion:
+            (
+              await db
+                .select({ pinVersion: user.pinVersion })
+                .from(user)
+                .where(eq(user.id, branch.fixture.cashier.userId))
+                .limit(1)
+            )[0]?.pinVersion ?? 1,
+        }
+      : await ensureBranchCashier(branch.id, branch.fixture.code, result.created)
+
+    for (const terminalCode of branch.fixture.terminals) {
+      const rows = await db
+        .select({ id: terminal.id })
+        .from(terminal)
+        .where(eq(terminal.code, terminalCode))
+        .limit(1)
+      const terminalId = rows[0]?.id
+      if (!terminalId) throw new Error(`terminal ${terminalCode} was not created`)
+
+      const demoDevice = await ensureDevice({
+        terminalId,
+        fingerprint: `${DEMO_DEVICE_PREFIX}${terminalCode}`,
+      })
+      if (demoDevice.created) result.created.push(`device ${terminalCode}`)
+
+      const binding = await ensureBinding(branch.id, demoDevice.id, cashier, result.created)
+      terminals.set(terminalCode, {
+        device: { deviceId: demoDevice.id, terminalId, branchId: branch.id },
+        cashier,
+        binding,
+      })
+    }
+  }
+
+  // 4. Credit profiles and loyalty accounts the plan's tenders need.
   const exposure = creditExposureByCustomerBranch(plan)
   const limits = demoCreditLimits(exposure, [...exposure.keys()])
   for (const [key, limitMinor] of limits) {
@@ -465,7 +503,7 @@ export async function seedDemoSales(
     if (inserted[0]) result.created.push('loyalty account')
   }
 
-  // 4. Shifts and sales, in plan order (day → branch → terminal → sale).
+  // 5. Shifts and sales, in plan order (day → branch → terminal → sale).
   const attachedIds = [...new Set(plan.map((entry) => entry.customerId).filter(Boolean))]
   const customerRows = new Map<string, { phone: string | null; name: string }>()
   if (attachedIds.length > 0) {
