@@ -2,7 +2,9 @@ import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import { can, priceCart, type TaxMode } from '@sceptre/shared'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
+import { resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import type { SessionUser } from '../../http/factory.ts'
 import {
   registerDecisionHandler,
   registerSubjectLoader,
@@ -24,6 +26,7 @@ import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { addConflict } from './pos.conflicts.ts'
 import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
+  countShiftReviewsAwaiting,
   countShiftSales,
   findActiveBinding,
   findBindingById,
@@ -1501,6 +1504,24 @@ registerDecisionHandler('SHIFT_VARIANCE_REVIEW', async (tx, approval, actor, dec
     tx,
   )
 })
+
+/**
+ * Closed shifts in the branch whose variance is waiting for a reviewer.
+ *
+ * The manager's operations view (Plan 12-10) needs this number and no list
+ * service owned it, so it lives with the shifts it counts. Branch scoping runs
+ * through `resolveBranchFilter` even though the route already demanded
+ * `approval.read`: a manager asking for another branch is a 403 here too
+ * (P11-D17), and the caller cannot obtain a foreign queue by editing a query
+ * string. Read-only — no transaction, no writes, no money column.
+ */
+export async function countShiftsAwaitingReview(
+  user: SessionUser,
+  requestedBranchId?: string | null,
+): Promise<{ count: number; branchId: string | null }> {
+  const branchId = resolveBranchFilter(user, requestedBranchId ?? null)
+  return { count: await countShiftReviewsAwaiting(branchId), branchId }
+}
 
 /**
  * The review's half of the subject registry: the reviewer sees the drawer's

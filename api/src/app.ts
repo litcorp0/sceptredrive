@@ -21,6 +21,7 @@ import { customersRoutes } from './modules/customers/customers.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
 import { loyaltyRoutes } from './modules/loyalty/loyalty.routes.ts'
+import { operationsRoutes } from './modules/operations/operations.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
@@ -91,6 +92,7 @@ app.route('/', countsRoutes)
 app.route('/', customersRoutes)
 app.route('/', creditRoutes)
 app.route('/', loyaltyRoutes)
+app.route('/', operationsRoutes)
 app.route('/', suppliersRoutes)
 app.route('/', payablesRoutes)
 app.route('/', posRoutes)

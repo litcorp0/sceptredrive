@@ -385,6 +385,29 @@ export async function countShiftSales(shiftId: string, executor: DbExecutor = db
   return rows[0]?.value ?? 0
 }
 
+/**
+ * How many closed shifts in the branch still owe a variance review.
+ *
+ * `review_status` is a projection of the variance decision, not a second status
+ * column, so the filter is `status = 'CLOSED' AND review_status = 'REQUIRED'`
+ * exactly as P12-D9 describes. `shift_review_idx (branch_id, review_status,
+ * closed_at)` serves it: one branch's queue is an index count, and a `null`
+ * branch counts every branch for an admin.
+ */
+export async function countShiftReviewsAwaiting(
+  branchId: string | null,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const conditions = [eq(shift.status, 'CLOSED'), eq(shift.reviewStatus, 'REQUIRED')]
+  if (branchId) conditions.push(eq(shift.branchId, branchId))
+
+  const rows = await executor
+    .select({ value: sql<number>`count(*)::int` })
+    .from(shift)
+    .where(and(...conditions))
+  return rows[0]?.value ?? 0
+}
+
 export async function insertConflict(
   values: typeof syncConflict.$inferInsert,
   executor: DbExecutor = db,
