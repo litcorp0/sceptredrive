@@ -79,7 +79,21 @@ export const shortCloseSchema = z.object({ note: z.string().trim().min(1).max(30
 
 export const transferListQuerySchema = z.object({
   branchId: z.uuid().optional(),
-  status: z.enum(['DRAFT', 'DISPATCHED', 'RECEIVED', 'SHORT_CLOSED', 'CANCELLED']).optional(),
+  // Phase 12's request states are filterable like the rest: the source branch's
+  // queue is `status=REQUESTED`, and the console must not have to fetch a page
+  // of every transfer to find it.
+  status: z
+    .enum([
+      'DRAFT',
+      'REQUESTED',
+      'APPROVED',
+      'REJECTED',
+      'DISPATCHED',
+      'RECEIVED',
+      'SHORT_CLOSED',
+      'CANCELLED',
+    ])
+    .optional(),
   direction: z.enum(['from', 'to']).optional(),
   limit: limitSchema,
   offset: offsetSchema,

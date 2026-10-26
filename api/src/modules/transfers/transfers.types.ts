@@ -1,3 +1,4 @@
+import type { ApprovalReasonCode, ApprovalStatus } from '@sceptre/shared'
 import type { transfer, transferLine, transferStatusEnum } from './transfers.schema.ts'
 
 export type TransferStatus = (typeof transferStatusEnum.enumValues)[number]
@@ -100,10 +101,6 @@ export interface TransferLineDetail extends TransferLineRow {
   toOnHand: number
 }
 
-export interface TransferDetail extends TransferListRow {
-  lines: TransferLineDetail[]
-}
-
 /**
  * The projection of one product at one branch, as the transfer module reads it:
  * on-hand for the dispatch guard and average cost for the request valuation.
@@ -113,4 +110,24 @@ export interface TransferDetail extends TransferListRow {
 export interface LevelSnapshot {
   quantityOnHand: number
   avgCostMinor: number
+}
+
+/**
+ * The request behind a transfer, if one was raised. A `DRAFT` transfer an admin
+ * created has none; a manager's request always does (P12-D10).
+ */
+export interface TransferApproval {
+  id: string
+  status: ApprovalStatus
+  requestedBy: string
+  decidedBy: string | null
+  decidedAt: Date | null
+  decisionReasonCode: ApprovalReasonCode | null
+}
+
+export interface TransferDetail extends TransferListRow {
+  lines: TransferLineDetail[]
+  approval: TransferApproval | null
+  /** Server-computed so the console never re-implements the dispatch rule. */
+  canDispatch: boolean
 }

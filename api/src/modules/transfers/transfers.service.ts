@@ -4,6 +4,11 @@ import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import {
+  findPendingApprovalForEntity,
+  withdrawApprovalRow,
+} from '../approvals/approvals.repository.ts'
+import {
+  listApprovals,
   registerDecisionHandler,
   registerSubjectLoader,
   requestApproval,
@@ -31,8 +36,10 @@ import {
 } from './transfers.repository.ts'
 import type {
   DispatchInput,
+  LevelSnapshot,
   ReceiveInput,
   ShortCloseInput,
+  TransferApproval,
   TransferCreateInput,
   TransferDetail,
   TransferLineInput,
@@ -64,6 +71,45 @@ function assertDraft(row: TransferRow): void {
   }
 }
 
+/**
+ * Cancel and withdraw: a draft an admin created, or a request nobody has decided
+ * yet. A dispatched transfer is stock in a van and is never cancelled (P12-D12).
+ */
+function assertCancellable(row: TransferRow): void {
+  if (row.status !== 'DRAFT' && row.status !== 'REQUESTED') {
+    throw new ConflictError(`A transfer with status ${row.status} cannot be cancelled`)
+  }
+}
+
+/**
+ * Dispatch needs the source branch's agreement. A `DRAFT` is that agreement when
+ * an admin created it directly (P12-D10); a request needs an `APPROVED` decision.
+ * The status is named in the message so a console can explain the refusal.
+ */
+function assertDispatchable(row: TransferRow): void {
+  if (row.status === 'DRAFT' || row.status === 'APPROVED') return
+  if (row.status === 'REQUESTED') {
+    throw new ConflictError(
+      'This transfer is still REQUESTED: the source branch must decide it before dispatch',
+    )
+  }
+  if (row.status === 'REJECTED') {
+    throw new ConflictError(
+      'This transfer was REJECTED by the source branch and cannot be dispatched',
+    )
+  }
+  throw new ConflictError(`A transfer with status ${row.status} cannot be dispatched`)
+}
+
+/** The source side, or an admin, is the only actor who may release stock. */
+function canDispatch(user: SessionUser, row: TransferListRow): boolean {
+  const scope = branchScope(user)
+  return (
+    (row.status === 'DRAFT' || row.status === 'APPROVED') &&
+    (scope === null || scope === row.fromBranchId)
+  )
+}
+
 function assertLinesUnique(lines: readonly { productId: string }[]): void {
   if (new Set(lines.map((line) => line.productId)).size !== lines.length) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Each product may appear only once')
@@ -79,19 +125,50 @@ async function validateLineProducts(
   }
 }
 
-async function loadTransferDetail(id: string): Promise<TransferDetail> {
+/**
+ * The request behind a transfer, read through the approvals service so the
+ * approval table has one reader per contract. `newest` because a document has at
+ * most one live approval, and the decided one is the interesting one.
+ */
+async function loadTransferApproval(
+  user: SessionUser,
+  transferId: string,
+): Promise<TransferApproval | null> {
+  const { approvals } = await listApprovals(user, {
+    type: 'TRANSFER_REQUEST',
+    entityId: transferId,
+    sort: 'newest',
+    limit: 1,
+    offset: 0,
+  })
+  const row = approvals[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    status: row.status,
+    requestedBy: row.requestedBy,
+    decidedBy: row.decidedBy,
+    decidedAt: row.decidedAt,
+    decisionReasonCode: row.decisionReasonCode,
+  }
+}
+
+async function loadTransferDetail(id: string, user: SessionUser): Promise<TransferDetail> {
   const base = await selectTransferBase(id)
   if (!base) throw new NotFoundError('Transfer not found')
   const lineRows = await selectTransferLineDetails(id)
   const productIds = lineRows.map((line) => line.productId)
-  const [fromLevels, toLevels] = await Promise.all([
+  const [fromLevels, toLevels, approval] = await Promise.all([
     selectLevelsForProducts(base.fromBranchId, productIds),
     selectLevelsForProducts(base.toBranchId, productIds),
+    loadTransferApproval(user, id),
   ])
+  const onHand = (levels: Map<string, LevelSnapshot>, productId: string) =>
+    levels.get(productId)?.quantityOnHand ?? 0
   const lines = lineRows.map((line) => ({
     ...line,
-    fromOnHand: fromLevels.get(line.productId)?.quantityOnHand ?? 0,
-    toOnHand: toLevels.get(line.productId)?.quantityOnHand ?? 0,
+    fromOnHand: onHand(fromLevels, line.productId),
+    toOnHand: onHand(toLevels, line.productId),
   }))
   return {
     ...base,
@@ -99,6 +176,8 @@ async function loadTransferDetail(id: string): Promise<TransferDetail> {
     unitsDispatched: lines.reduce((sum, line) => sum + line.quantityDispatched, 0),
     unitsReceived: lines.reduce((sum, line) => sum + line.quantityReceived, 0),
     lines,
+    approval,
+    canDispatch: canDispatch(user, base),
   }
 }
 
@@ -223,7 +302,7 @@ export async function createTransfer(
     return created.id
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 export async function listTransfers(
@@ -249,7 +328,7 @@ export async function getTransfer(user: SessionUser, transferId: string): Promis
   const row = await findTransferById(transferId)
   if (!row) throw new NotFoundError('Transfer not found')
   assertTransferAccess(user, row)
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 export async function updateTransfer(
@@ -282,7 +361,7 @@ export async function updateTransfer(
     }
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 export async function replaceTransferLines(
@@ -323,9 +402,16 @@ export async function replaceTransferLines(
     )
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
+/**
+ * Cancels a draft, or withdraws a request nobody has decided.
+ *
+ * A `REQUESTED` cancel takes its pending approval with it in the same
+ * transaction, so the decider's queue cannot hold a document that no longer
+ * exists (P12-D7). The approval row is closed as `WITHDRAWN`, never deleted.
+ */
 export async function cancelTransfer(
   user: SessionUser,
   actor: AuditActor,
@@ -335,7 +421,17 @@ export async function cancelTransfer(
     const existing = await findTransferByIdForUpdate(transferId, tx)
     if (!existing) throw new NotFoundError('Transfer not found')
     assertTransferAccess(user, existing)
-    assertDraft(existing)
+    assertCancellable(existing)
+
+    let withdrawnApprovalId: string | null = null
+    if (existing.status === 'REQUESTED') {
+      const pending = await findPendingApprovalForEntity('TRANSFER_REQUEST', transferId, tx)
+      if (pending) {
+        const withdrawn = await withdrawApprovalRow(pending.id, tx)
+        if (!withdrawn) throw new AppError(500, 'INTERNAL', 'Failed to withdraw the request')
+        withdrawnApprovalId = withdrawn.id
+      }
+    }
 
     const updated = await updateTransferRow(
       transferId,
@@ -352,14 +448,14 @@ export async function cancelTransfer(
         entityId: transferId,
         branchId: existing.fromBranchId,
         before: { status: existing.status },
-        after: { status: updated.status },
+        after: { status: updated.status, approvalId: withdrawnApprovalId },
       },
       tx,
     )
   })
 }
 
-/** Dispatches a draft; only the source-side manager (or admin) may do this. */
+/** Dispatches an approved (or admin-drafted) transfer; source side only. */
 export async function dispatchTransfer(
   user: SessionUser,
   actor: AuditActor,
@@ -373,9 +469,7 @@ export async function dispatchTransfer(
   await db.transaction(async (tx) => {
     const locked = await findTransferByIdForUpdate(transferId, tx)
     if (!locked) throw new NotFoundError('Transfer not found')
-    if (locked.status !== 'DRAFT') {
-      throw new ConflictError('Only draft transfers can be dispatched')
-    }
+    assertDispatchable(locked)
 
     const lines = await selectTransferLineDetails(transferId, tx)
     assertLinesUnique(input.lines)
@@ -454,7 +548,7 @@ export async function dispatchTransfer(
     )
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 /** Receives a dispatched transfer; only the destination manager (or admin). */
@@ -548,7 +642,7 @@ export async function receiveTransfer(
     )
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 /** Closes a partially received transfer, recording the shortfall (no movement). */
@@ -607,7 +701,7 @@ export async function shortCloseTransfer(
     )
   })
 
-  return loadTransferDetail(transferId)
+  return loadTransferDetail(transferId, user)
 }
 
 /**
