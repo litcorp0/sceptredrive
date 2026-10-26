@@ -1,12 +1,22 @@
 import type { DbExecutor, DbTransaction } from '@sceptre/db'
 import { db } from '@sceptre/db'
 import {
-  APPROVAL_DECIDER_ROLE,
+  type ApprovalAuthority,
   type ApprovalReasonCode,
   type ApprovalType,
+  canDecideApproval,
+  defaultApprovalAuthority,
   isDecided,
+  isRole,
+  type Role,
 } from '@sceptre/shared'
-import { assertBranchAccess, hasPermission, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
+import {
+  assertBranchAccess,
+  branchScope,
+  hasPermission,
+  resolveBranchFilter,
+  roleOf,
+} from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ForbiddenError, NotFoundError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
@@ -75,6 +85,10 @@ export interface ApprovalRequestInput {
   amountMinor?: number | null
   payload?: Record<string, unknown>
   note?: string | null
+  /** Defaults from `defaultApprovalAuthority(type, branchId)`. */
+  deciderRole?: Role
+  /** Defaults to `branchId` when the role is `MANAGER`, and `null` for an admin. */
+  deciderBranchId?: string | null
 }
 
 /** Called inside the requesting service's transaction. Returns the new approval. */
@@ -83,12 +97,16 @@ export async function requestApproval(
   input: ApprovalRequestInput,
   executor: DbExecutor,
 ): Promise<ApprovalRow> {
+  const authority = resolveAuthority(input)
+
   const created = await insertApproval(
     {
       type: input.type,
       entityId: input.entityId ?? null,
       branchId: input.branchId,
       requestedBy: actorLabel(actor) ?? 'unknown',
+      deciderRole: authority.role,
+      deciderBranchId: authority.branchId,
       amountMinor: input.amountMinor ?? null,
       payload: input.payload ?? {},
       requestNote: input.note ?? null,
@@ -115,6 +133,39 @@ export async function requestApproval(
   return created
 }
 
+/**
+ * The authority a new row is written with, and the one place the pairing is
+ * checked.
+ *
+ * A `MANAGER` row without a branch, or an `ADMIN` row bound to one, is a
+ * programming error in the calling service: it is refused as a 500 rather than
+ * persisted as a row nobody — or everybody — can decide (P12-D2).
+ */
+function resolveAuthority(input: ApprovalRequestInput): ApprovalAuthority {
+  const fallback = defaultApprovalAuthority(input.type, input.branchId)
+  const role = input.deciderRole ?? fallback.role
+
+  if (!isRole(role)) {
+    throw new AppError(500, 'INTERNAL', `Unknown approval decider role: ${String(role)}`)
+  }
+
+  const branchId =
+    input.deciderBranchId !== undefined
+      ? input.deciderBranchId
+      : role === 'MANAGER'
+        ? input.branchId
+        : null
+
+  if (role === 'MANAGER' && branchId === null) {
+    throw new AppError(500, 'INTERNAL', 'A manager decision needs the branch it belongs to')
+  }
+  if (role === 'ADMIN' && branchId !== null) {
+    throw new AppError(500, 'INTERNAL', 'An admin decision is never bound to a branch')
+  }
+
+  return { role, branchId }
+}
+
 export async function resolveApprovalThreshold(
   branchId: string,
   executor: DbExecutor = db,
@@ -138,7 +189,7 @@ export async function decideApproval(
   },
 ): Promise<ApprovalDetail> {
   if (!hasPermission(user, 'approval.decide')) {
-    throw new ForbiddenError('Only an admin can decide this request')
+    throw new ForbiddenError('You cannot decide this request')
   }
   if (input.decision === 'REJECTED' && !input.reasonCode) {
     throw new AppError(400, 'VALIDATION_ERROR', 'A rejection needs a reason code')
@@ -148,20 +199,20 @@ export async function decideApproval(
     const current = await lockApprovalForUpdate(approvalId, tx)
     if (!current) throw new NotFoundError('Approval not found')
 
-    assertBranchAccess(user, current.branchId)
+    // The decider must belong to the branch the row names, and the requester's
+    // branch is the fallback. A transfer is raised at the destination and decided
+    // by the source manager, so Phase 11's `current.branchId` would 403 them.
+    assertBranchAccess(user, current.deciderBranchId ?? current.branchId)
 
     if (isDecided(current.status)) {
       throw new AppError(409, 'CONFLICT', 'This request has already been decided')
     }
-    if (roleOf(user) !== APPROVAL_DECIDER_ROLE[current.type]) {
-      throw new ForbiddenError('Your role cannot decide this request')
-    }
 
-    // Structural, not a permission: nobody decides their own request. P11-D18
-    // removes the purchase-order case by auto-approving an admin's own order, and
-    // this check keeps every future type honest.
-    if (current.requestedBy === (actorLabel(actor) ?? 'unknown')) {
-      throw new ForbiddenError('You cannot decide your own request')
+    // One rule, shared with the console: pending, holds the permission, not the
+    // requester, and either an admin or the manager of the branch named on the
+    // row. The permission is checked at the route and again here (OWASP A01).
+    if (!canDecideApproval({ approval: authorityOf(current), user: deciderOf(user, actor) })) {
+      throw new ForbiddenError('You cannot decide this request')
     }
 
     const handler = HANDLERS.get(current.type)
@@ -282,23 +333,54 @@ export async function getApproval(
 ): Promise<ApprovalDetail> {
   const found = await findApprovalById(approvalId)
   if (!found) throw new NotFoundError('Approval not found')
-  assertBranchAccess(user, found.branchId)
+  assertApprovalReadable(user, found)
   return buildDetail(user, actor, found)
+}
+
+/**
+ * A manager reads their own branch's requests and the ones their branch must
+ * decide; an admin reads every branch. Everything else is a 403 — the row
+ * exists, and the caller is not allowed to know that (OWASP A01).
+ */
+function assertApprovalReadable(user: SessionUser, approval: ApprovalRow): void {
+  const scope = branchScope(user)
+  if (scope === null) return
+  if (approval.branchId === scope) return
+  if (approval.deciderBranchId !== null && approval.deciderBranchId === scope) return
+  throw new ForbiddenError('You can only access your own branch')
 }
 
 function buildDetail(user: SessionUser, actor: AuditActor, approval: ApprovalRow): ApprovalDetail {
   const self = approval.requestedBy === (actorLabel(actor) ?? 'unknown')
-  const canDecide =
-    !isDecided(approval.status) &&
-    !self &&
-    hasPermission(user, 'approval.decide') &&
-    roleOf(user) === APPROVAL_DECIDER_ROLE[approval.type]
 
   return {
     approval,
     subject: subjectOf(approval),
-    canDecide,
+    canDecide: canDecideApproval({
+      approval: authorityOf(approval),
+      user: deciderOf(user, actor),
+    }),
     canWithdraw: !isDecided(approval.status) && self,
+  }
+}
+
+/** The slice of the row `canDecideApproval` needs. */
+function authorityOf(approval: ApprovalRow) {
+  return {
+    status: approval.status,
+    deciderRole: approval.deciderRole as Role,
+    deciderBranchId: approval.deciderBranchId,
+    requestedBy: approval.requestedBy,
+  }
+}
+
+/** The slice of the actor `canDecideApproval` needs. */
+function deciderOf(user: SessionUser, actor: AuditActor) {
+  return {
+    role: roleOf(user),
+    branchId: branchScope(user),
+    label: actorLabel(actor) ?? 'unknown',
+    hasDecidePermission: hasPermission(user, 'approval.decide'),
   }
 }
 
