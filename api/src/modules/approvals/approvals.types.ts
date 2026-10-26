@@ -3,18 +3,55 @@ import type { approval } from './approvals.schema.ts'
 
 export type ApprovalRow = typeof approval.$inferSelect
 
+/**
+ * The route's query, before branch scoping. `sort` defaults to `oldest`: the
+ * inbox is a queue, not a log.
+ */
 export interface ApprovalListQuery {
   type?: ApprovalType
   status?: ApprovalStatus
-  /** Already resolved for the caller: a manager's own branch, or an admin's filter. */
-  branchId: string | null
+  entityId?: string
+  branchId?: string | null
+  sort?: 'oldest' | 'newest'
   limit: number
   offset: number
 }
 
+/**
+ * A list filter after the service has resolved the caller's scope.
+ *
+ * `scope` is `null` for an admin (every branch). `includeDeciderBranch` is true
+ * for a scoped manager: a transfer request is raised at the destination and
+ * decided by the source manager, so the manager must see both sides — P12-D11.
+ */
+export interface ApprovalListFilters {
+  type?: ApprovalType
+  status?: ApprovalStatus
+  entityId?: string
+  sort: 'oldest' | 'newest'
+  limit: number
+  offset: number
+  scope: { branchId: string } | null
+  includeDeciderBranch: boolean
+}
+
+/**
+ * A page of the inbox. Each row carries the subject's discriminator so the
+ * console can draw an icon and a link without the API running one subject loader
+ * per row; the subject itself is only loaded for a single detail read.
+ */
+export type ApprovalListRow = ApprovalRow & { subjectKind: ApprovalSubject['kind'] }
+
 export interface ApprovalList {
-  approvals: ApprovalRow[]
+  approvals: ApprovalListRow[]
   total: number
+  branchId: string | null
+}
+
+/** The badge and the manager's view — one count per type, zeroes included. */
+export interface ApprovalSummary {
+  pending: number
+  byType: Record<ApprovalType, number>
   branchId: string | null
 }
 
@@ -24,7 +61,12 @@ export interface ApprovalDecisionBody {
   note?: string
 }
 
-/** What the decision is about, rendered by the console without a second request. */
+/**
+ * What the decision is about, rendered by the console without a second request.
+ * One arm per type that can be requested; `other` is the honest fallback for a
+ * type whose owning plan has not registered a loader yet (only `REFUND`, until
+ * Phase 13).
+ */
 export type ApprovalSubject =
   | { kind: 'purchase_order'; purchaseOrderId: string }
   | { kind: 'product'; proposal: unknown }

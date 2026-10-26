@@ -1,6 +1,7 @@
 import type { DbExecutor, DbTransaction } from '@sceptre/db'
 import { db } from '@sceptre/db'
 import {
+  APPROVAL_TYPES,
   type ApprovalAuthority,
   type ApprovalReasonCode,
   type ApprovalType,
@@ -25,6 +26,7 @@ import type { AuditActor } from '../platform/audit.types.ts'
 import { getResolvedSetting } from '../platform/settings.service.ts'
 import {
   countApprovals,
+  countPendingByType,
   findApprovalById,
   insertApproval,
   lockApprovalForUpdate,
@@ -36,21 +38,24 @@ import {
 import type {
   ApprovalDetail,
   ApprovalList,
+  ApprovalListFilters,
   ApprovalListQuery,
+  ApprovalListRow,
   ApprovalRow,
   ApprovalSubject,
+  ApprovalSummary,
   SubjectLoader,
 } from './approvals.types.ts'
 
 /**
- * The approval lifecycle and the decision registry.
+ * The approval lifecycle, the decision registry and the subject registry.
  *
- * The registry exists so a decision can act on its own document without this
+ * Both registries exist so a request can act on its own document without this
  * module importing every owner: `products` and `procurement` register their
- * handlers at module load, and the dependency runs one way only
+ * handlers and loaders at module load, and the dependency runs one way only
  * (`owner → approvals`). An unregistered type is a programming error and fails
- * loudly at boot (`assertDecisionHandlersRegistered`) rather than at 4pm on a
- * Friday.
+ * loudly at boot (`assertDecisionHandlersRegistered`,
+ * `assertSubjectLoadersRegistered`) rather than at 4pm on a Friday.
  */
 
 export type DecisionHandler = (
@@ -323,29 +328,52 @@ export async function withdrawApproval(
   })
 }
 
+/**
+ * The inbox: oldest first by default, branch-scoped, and with both sides of a
+ * request visible to the manager who must decide it (P12-D5, P12-D11).
+ */
 export async function listApprovals(
   user: SessionUser,
-  query: {
-    type?: ApprovalType
-    status?: ApprovalListQuery['status']
-    branchId?: string | null
-    limit: number
-    offset: number
-  },
+  query: ApprovalListQuery,
 ): Promise<ApprovalList> {
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
-  const filters: ApprovalListQuery = {
+  const filters: ApprovalListFilters = {
     type: query.type,
     status: query.status,
-    branchId,
+    entityId: query.entityId,
+    sort: query.sort ?? 'oldest',
     limit: query.limit,
     offset: query.offset,
+    scope: branchId === null ? null : { branchId },
+    includeDeciderBranch: branchId !== null,
   }
-  const [approvals, total] = await Promise.all([
-    selectApprovalPage(filters),
-    countApprovals(filters),
-  ])
-  return { approvals, total, branchId }
+
+  const [rows, total] = await Promise.all([selectApprovalPage(filters), countApprovals(filters)])
+
+  return { approvals: rows.map(withSubjectKind), total, branchId }
+}
+
+/** The nav badge and the manager's view: one query, one number per type. */
+export async function getApprovalSummary(
+  user: SessionUser,
+  requestedBranchId?: string | null,
+): Promise<ApprovalSummary> {
+  const branchId = resolveBranchFilter(user, requestedBranchId ?? null)
+  const counts = await countPendingByType(branchId === null ? null : { branchId })
+
+  // Every type is present, zero included: a client never has to guess whether a
+  // missing key means "none" or "not asked".
+  const byType = Object.fromEntries(APPROVAL_TYPES.map((type) => [type, 0])) as Record<
+    ApprovalType,
+    number
+  >
+  let pending = 0
+  for (const row of counts) {
+    byType[row.type] = row.count
+    pending += row.count
+  }
+
+  return { pending, byType, branchId }
 }
 
 export async function getApproval(
@@ -421,4 +449,22 @@ async function loadSubject(approval: ApprovalRow): Promise<ApprovalSubject> {
     throw new AppError(500, 'INTERNAL', `No subject loader for ${approval.type}`)
   }
   return loader(approval)
+}
+
+const SUBJECT_KIND: Record<ApprovalType, ApprovalSubject['kind']> = {
+  PURCHASE_ORDER: 'purchase_order',
+  PRODUCT_CREATE: 'product',
+  TRANSFER_REQUEST: 'transfer',
+  STOCK_WRITE_OFF: 'stock_write_off',
+  PRICE_CHANGE: 'price_change',
+  CREDIT_LIMIT_CHANGE: 'credit_limit_change',
+  SHIFT_VARIANCE_REVIEW: 'shift_variance',
+  // Phase 13 registers the refund subject; until then the inbox renders it as
+  // "other" rather than pretending to know a shape that does not exist.
+  REFUND: 'other',
+}
+
+/** The list's discriminator. Cheap by construction: no loader, no query. */
+function withSubjectKind(row: ApprovalRow): ApprovalListRow {
+  return { ...row, subjectKind: SUBJECT_KIND[row.type] }
 }
