@@ -32,13 +32,13 @@ const THRESHOLD_SOURCE: Record<OrderDetail["threshold"]["source"], string> = {
 /**
  * The pending decision on an order, and the sentence that says who decided what.
  *
- * Approve/reject are rendered only when the actor holds `procurement.approve` **and** the server's
+ * Approve/reject are rendered only when the actor holds `approval.decide` **and** the server's
  * `canDecide` is true, which also covers the self-approval rule: nobody decides their own request.
  */
 export function ApprovalPanel({ detail, role }: { detail: OrderDetail; role: string }) {
 	const queryClient = useQueryClient()
 	const approval = detail.approval
-	const canApprove = hasPermission(role, "procurement.approve")
+	const canApprove = hasPermission(role, "approval.decide")
 	const pending = approval?.status === "PENDING"
 
 	const decisionQuery = useQuery({

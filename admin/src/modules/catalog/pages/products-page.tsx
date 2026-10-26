@@ -52,7 +52,7 @@ export function ProductsPage() {
 	const canCreate = hasPermission(role, "catalog.create")
 	// Managers do not hold `catalog.create`; their route is a proposal the admin decides.
 	const canSubmit = !canCreate && hasPermission(role, "procurement.create")
-	const canApprove = hasPermission(role, "procurement.approve")
+	const canApprove = hasPermission(role, "approval.decide")
 	const canArchive = hasPermission(role, "catalog.archive")
 
 	const [search, setSearch] = useState("")
