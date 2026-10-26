@@ -170,6 +170,27 @@ export async function updateSetting(
     )
   }
 
+  // The ABC thresholds are cumulative score shares, so B at or below A would
+  // make every product class C. One key's schema cannot see the other value, so
+  // the pair is checked here, before anything is written (P12-D29).
+  if (key === 'inventory.abcAThresholdBp' || key === 'inventory.abcBThresholdBp') {
+    const nextA =
+      key === 'inventory.abcAThresholdBp'
+        ? (parsed.data as number)
+        : await getSettingValue('inventory.abcAThresholdBp', {})
+    const nextB =
+      key === 'inventory.abcBThresholdBp'
+        ? (parsed.data as number)
+        : await getSettingValue('inventory.abcBThresholdBp', {})
+    if (nextA >= nextB) {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'inventory.abcAThresholdBp must be less than inventory.abcBThresholdBp',
+      )
+    }
+  }
+
   return db.transaction(async (tx) => {
     const existing = await findSettingRowForUpdate(key, targetBranchId, tx)
 

@@ -10,6 +10,7 @@ import {
   DOCUMENT_KINDS,
 } from './sequences.service.ts'
 import { setting } from './settings.schema.ts'
+import { isSettingKey, SETTING_DEFINITIONS } from './settings.validation.ts'
 
 const available = await databaseAvailable()
 if (!available) console.warn('[sequences.test] database unavailable; integration tests skipped')
@@ -115,7 +116,10 @@ describe.skipIf(!available)('document numbering', () => {
 
   it('declares a prefix setting for every kind', () => {
     for (const [kind, format] of Object.entries(DOCUMENT_KINDS)) {
-      expect(format.prefixKey.startsWith('procurement.')).toBe(true)
+      // Phase 12 added `stock_write_off`, whose prefix is `inventory.*`; the
+      // contract is a real setting key, not a procurement-only namespace.
+      expect(isSettingKey(format.prefixKey)).toBe(true)
+      expect(SETTING_DEFINITIONS[format.prefixKey].schema.safeParse('XX').success).toBe(true)
       expect(format.pad).toBeGreaterThan(0)
       expect(kind.length).toBeGreaterThan(0)
     }

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { hash, type Options } from '@node-rs/argon2'
-import { db } from '@sceptre/db'
+import { type DbExecutor, db } from '@sceptre/db'
 import {
   averageCostAfterReceipt,
   type CartLineInput,
@@ -11,6 +11,8 @@ import {
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { approval } from '../modules/approvals/approvals.schema.ts'
 import { brand, category, uom } from '../modules/catalog/catalog.schema.ts'
+import { computeAbcClasses as computeAbcClassRows } from '../modules/counts/counts.repository.ts'
+import { countSchedule } from '../modules/counts/counts.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../modules/credit/credit.schema.ts'
 import { customer } from '../modules/customers/customers.schema.ts'
 import { account, user } from '../modules/identity/staff.schema.ts'
@@ -38,6 +40,7 @@ import {
 import { documentSequence } from '../modules/platform/sequences.schema.ts'
 import { allocateDocumentNumber } from '../modules/platform/sequences.service.ts'
 import { setting } from '../modules/platform/settings.schema.ts'
+import { getSettingValue } from '../modules/platform/settings.service.ts'
 import { sale, saleLine, saleTender, shift, syncConflict } from '../modules/pos/pos.schema.ts'
 import {
   purchaseOrder,
@@ -172,6 +175,53 @@ export async function ensureSetting(key: string, value: unknown): Promise<boolea
 
   await db.insert(setting).values({ key, value, updatedBy: 'seed' }).onConflictDoNothing()
   return true
+}
+
+/** One recurring count scope for a branch (Phase 12, CC-01). Idempotent by `(branch_id, scope_key)`. */
+export async function ensureCountSchedule(input: {
+  branchId: string
+  scope: 'CATEGORY' | 'BRAND' | 'ABC_CLASS' | 'ROTATION'
+  scopeKey: string
+  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'BIANNUAL'
+  nextDueAt: string
+  assignedTo?: string | null
+}): Promise<boolean> {
+  const existing = await db
+    .select({ id: countSchedule.id })
+    .from(countSchedule)
+    .where(
+      and(eq(countSchedule.branchId, input.branchId), eq(countSchedule.scopeKey, input.scopeKey)),
+    )
+    .limit(1)
+  if (existing[0]) return false
+
+  await db
+    .insert(countSchedule)
+    .values({
+      branchId: input.branchId,
+      scope: input.scope,
+      scopeKey: input.scopeKey,
+      frequency: input.frequency,
+      nextDueAt: input.nextDueAt,
+      assignedTo: input.assignedTo ?? null,
+      createdBy: 'seed',
+    })
+    .onConflictDoNothing()
+  return true
+}
+
+/**
+ * Derives the branch's ABC classes from its stock levels and 90-day sales
+ * (P12-D29). The ranking lives in `counts.repository.computeAbcClasses`, which
+ * Plan 09's nightly job reuses; this wrapper only resolves the two thresholds.
+ */
+export async function computeAbcClasses(
+  branchId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const aThresholdBp = await getSettingValue('inventory.abcAThresholdBp', {}, executor)
+  const bThresholdBp = await getSettingValue('inventory.abcBThresholdBp', {}, executor)
+  return computeAbcClassRows(branchId, { aThresholdBp, bThresholdBp }, executor)
 }
 
 export async function ensureBranch(input: {

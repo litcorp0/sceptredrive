@@ -268,6 +268,64 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 'SCN',
     branchScoped: false,
   },
+  // --- Phase 12: branch operations and approvals -----------------------------
+  /**
+   * How far a manager may move a price without an approval, in whole percent
+   * (P12-D18). Global and admin-only: a branch that sets its own band has none.
+   */
+  'pricing.managerBandPercent': {
+    schema: z.number().int().min(0).max(100),
+    defaultValue: 10,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  /**
+   * A close with |variance| strictly greater than this raises a review (P12-D24,
+   * P12-D25). Branch-overridable but admin-writable: a branch that sets its own
+   * tolerance has none.
+   */
+  'pos.shiftVarianceToleranceMinor': {
+    schema: z.number().int().min(0).max(1_000_000),
+    defaultValue: 2_000,
+    branchScoped: true,
+    writableBy: 'admin',
+  },
+  /** A posted count whose |variance value| exceeds this raises a trigger count (P12-D32). */
+  'inventory.countVarianceToleranceMinor': {
+    schema: z.number().int().min(0).max(1_000_000),
+    defaultValue: 1_000,
+    branchScoped: true,
+    writableBy: 'admin',
+  },
+  /** The branch-month serial prefix for a write-off: `WO-ACC-202610-0001` (P12-D14). */
+  'inventory.writeOffPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Z]+$/),
+    defaultValue: 'WO',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  /**
+   * Cumulative score share at which a product is class A, in basis points
+   * (P12-D29). Must stay below `inventory.abcBThresholdBp`; `settings.service`
+   * enforces the pair because one schema cannot see the other value.
+   */
+  'inventory.abcAThresholdBp': {
+    schema: z.number().int().min(1).max(9_999),
+    defaultValue: 8_000,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'inventory.abcBThresholdBp': {
+    schema: z.number().int().min(2).max(10_000),
+    defaultValue: 9_500,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS

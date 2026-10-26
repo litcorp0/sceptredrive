@@ -1,10 +1,12 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
+import { abcClassFromShare, ratioBp } from '@sceptre/shared'
+import { and, count, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { category } from '../catalog/catalog.schema.ts'
 import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
+import { sale, saleLine } from '../pos/pos.schema.ts'
 import { product } from '../products/products.schema.ts'
-import { stockCount, stockCountLine } from './counts.schema.ts'
+import { stockAbcClass, stockCount, stockCountLine } from './counts.schema.ts'
 import type {
   CountLineDetail,
   CountListFilters,
@@ -222,4 +224,110 @@ export async function findCategoryName(
     .where(eq(category.id, categoryId))
     .limit(1)
   return rows[0]?.name ?? null
+}
+
+/** The window the ABC ranking treats as "what moves" (P12-D29). */
+const ABC_SOLD_WINDOW_DAYS = 90
+
+export interface AbcThresholds {
+  aThresholdBp: number
+  bThresholdBp: number
+}
+
+/**
+ * Ranks one branch's stocked products by `value_minor + sold_minor` and upserts
+ * their ABC class (P12-D29). This is the single implementation the nightly job
+ * and the demo seed share.
+ *
+ * The thresholds are passed in rather than read here: a repository does not
+ * resolve settings, and Plan 09's job may want to resolve them once for a whole
+ * run. `stock_abc_class.is_manual` rows are left untouched — an admin override
+ * outranks the derivation.
+ *
+ * A branch whose products all score zero classifies them as `C`: there is no
+ * value to protect, and `A` would schedule monthly counts of nothing.
+ */
+export async function computeAbcClasses(
+  branchId: string,
+  thresholds: AbcThresholds,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const since = new Date(Date.now() - ABC_SOLD_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+  const levelRows = await executor
+    .select({
+      productId: stockLevel.productId,
+      quantityOnHand: stockLevel.quantityOnHand,
+      avgCostMinor: stockLevel.avgCostMinor,
+    })
+    .from(stockLevel)
+    .where(eq(stockLevel.branchId, branchId))
+
+  const soldRows = await executor
+    .select({
+      productId: saleLine.productId,
+      soldMinor: sql<number>`coalesce(sum(${saleLine.baseMinor}), 0)`.mapWith(Number),
+    })
+    .from(saleLine)
+    .innerJoin(sale, eq(sale.id, saleLine.saleId))
+    .where(and(eq(sale.branchId, branchId), gt(sale.occurredAt, since)))
+    .groupBy(saleLine.productId)
+
+  const soldByProduct = new Map(soldRows.map((row) => [row.productId, row.soldMinor]))
+  const ranked = levelRows
+    .map((row) => {
+      const valueMinor = row.quantityOnHand * row.avgCostMinor
+      const soldMinor = soldByProduct.get(row.productId) ?? 0
+      return { productId: row.productId, valueMinor, soldMinor, score: valueMinor + soldMinor }
+    })
+    .sort(
+      (left, right) => right.score - left.score || left.productId.localeCompare(right.productId),
+    )
+
+  const totalScore = ranked.reduce((sum, row) => sum + row.score, 0)
+  const computedAt = new Date()
+  let cumulative = 0
+
+  const values = ranked.map((row) => {
+    cumulative += row.score
+    const classValue =
+      totalScore === 0
+        ? ('C' as const)
+        : abcClassFromShare(
+            ratioBp(cumulative, totalScore) ?? 0,
+            thresholds.aThresholdBp,
+            thresholds.bThresholdBp,
+          )
+    return {
+      productId: row.productId,
+      branchId,
+      class: classValue,
+      valueMinor: row.valueMinor,
+      soldMinor: row.soldMinor,
+      score: row.score,
+      computedAt,
+      isManual: false,
+      updatedBy: null,
+    }
+  })
+
+  if (values.length === 0) return 0
+
+  await executor
+    .insert(stockAbcClass)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [stockAbcClass.productId, stockAbcClass.branchId],
+      set: {
+        class: sql`excluded."class"`,
+        valueMinor: sql`excluded."value_minor"`,
+        soldMinor: sql`excluded."sold_minor"`,
+        score: sql`excluded."score"`,
+        computedAt: sql`excluded."computed_at"`,
+        updatedBy: sql`excluded."updated_by"`,
+      },
+      setWhere: eq(stockAbcClass.isManual, false),
+    })
+
+  return values.length
 }

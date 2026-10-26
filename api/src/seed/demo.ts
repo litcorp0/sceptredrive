@@ -1,10 +1,12 @@
 import { db } from '@sceptre/db'
 import {
   closeDemoShift,
+  computeAbcClasses,
   createUserWithCredential,
   ensureBranch,
   ensureBrand,
   ensureCategory,
+  ensureCountSchedule,
   ensureCreditOpening,
   ensureCustomer,
   ensureDemoConflict,
@@ -799,6 +801,22 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   if (await ensureSequenceAtLeast('catalog.skuSequence', DEMO_PRODUCTS.length + 1)) {
     created.push('catalog sequence')
   }
+
+  // Phase 12: the retail branch starts with one monthly ABC:A schedule, and the
+  // classes it would count are derived from the stock and sales above, so the
+  // console and the manager's view are not empty on a fresh seed (P12-D28, D29).
+  if (
+    await ensureCountSchedule({
+      branchId: retail.id,
+      scope: 'ABC_CLASS',
+      scopeKey: 'ABC:A',
+      frequency: 'MONTHLY',
+      nextDueAt: '2026-11-01',
+    })
+  ) {
+    created.push('count schedule ABC:A @ ACC-SPX')
+  }
+  await computeAbcClasses(retail.id)
 
   return { created }
 }

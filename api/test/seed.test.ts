@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../src/app.ts'
 import { brand, category, uom } from '../src/modules/catalog/catalog.schema.ts'
+import { countSchedule, stockAbcClass } from '../src/modules/counts/counts.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../src/modules/credit/credit.schema.ts'
 import { customer } from '../src/modules/customers/customers.schema.ts'
 import { user as userTable } from '../src/modules/identity/staff.schema.ts'
@@ -151,6 +152,10 @@ describe.skipIf(!available)('database seeds', () => {
     if (demoBranchIds.length > 0) {
       await db.delete(syncConflict).where(inArray(syncConflict.branchId, demoBranchIds))
       await db.delete(shift).where(inArray(shift.branchId, demoBranchIds))
+      // Phase 12 seeds a count schedule and ABC classes per retail branch; both
+      // reference the branch with RESTRICT, so they go before it.
+      await db.delete(countSchedule).where(inArray(countSchedule.branchId, demoBranchIds))
+      await db.delete(stockAbcClass).where(inArray(stockAbcClass.branchId, demoBranchIds))
     }
     await db.delete(device).where(eq(device.fingerprint, 'seed-ACC-SPX-T01'))
 

@@ -13,7 +13,11 @@ import { getSettingValue } from './settings.service.ts'
  * duplicate purchase order, which is the failure worth paying a gap to avoid.
  */
 
-export type DocumentKind = 'purchase_order' | 'supplier_return' | 'supplier_credit_note'
+export type DocumentKind =
+  | 'purchase_order'
+  | 'supplier_return'
+  | 'supplier_credit_note'
+  | 'stock_write_off'
 
 export const DOCUMENT_KINDS: Record<
   DocumentKind,
@@ -22,6 +26,7 @@ export const DOCUMENT_KINDS: Record<
       | 'procurement.orderPrefix'
       | 'procurement.returnPrefix'
       | 'procurement.creditNotePrefix'
+      | 'inventory.writeOffPrefix'
     label: string
     pad: number
   }
@@ -39,6 +44,11 @@ export const DOCUMENT_KINDS: Record<
   supplier_credit_note: {
     prefixKey: 'procurement.creditNotePrefix',
     label: 'credit note number',
+    pad: 4,
+  },
+  stock_write_off: {
+    prefixKey: 'inventory.writeOffPrefix',
+    label: 'stock write-off number',
     pad: 4,
   },
 }
