@@ -19,6 +19,7 @@ import { supplierInvoice, supplierPayment } from '../payables/payables.schema.ts
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
+import { supplierCreditNote, supplierReturn } from '../procurement/procurement.schema.ts'
 import { product } from '../products/products.schema.ts'
 import { supplier, supplierPaymentDetail, supplierProduct } from './suppliers.schema.ts'
 import * as suppliersService from './suppliers.service.ts'
@@ -54,6 +55,7 @@ describe.skipIf(!available)('suppliers module', () => {
   const detailIds: string[] = []
   const mappingIds: string[] = []
   const invoiceIds: string[] = []
+  const returnIds: string[] = []
   const paymentIds: string[] = []
   const httpUserIds: string[] = []
   let branchId = ''
@@ -163,6 +165,10 @@ describe.skipIf(!available)('suppliers module', () => {
     }
     if (paymentIds.length > 0) {
       await db.delete(supplierPayment).where(inArray(supplierPayment.id, paymentIds))
+    }
+    if (returnIds.length > 0) {
+      await db.delete(supplierCreditNote).where(inArray(supplierCreditNote.returnId, returnIds))
+      await db.delete(supplierReturn).where(inArray(supplierReturn.id, returnIds))
     }
     if (invoiceIds.length > 0) {
       await db.delete(supplierInvoice).where(inArray(supplierInvoice.id, invoiceIds))
@@ -305,6 +311,49 @@ describe.skipIf(!available)('suppliers module', () => {
     expect(error).toBeInstanceOf(ConflictError)
     if (!(error instanceof ConflictError)) throw new Error('expected ConflictError')
     expect(error.message).toContain('held on account')
+  })
+
+  it('lets a credit note offset an invoice so a fully-returned supplier can be archived', async () => {
+    const created = await createSupplier()
+    const invoices = await db
+      .insert(supplierInvoice)
+      .values({
+        number: `SINV-${suffix}-CREDIT`,
+        supplierId: created.id,
+        branchId,
+        supplierInvoiceNumber: `EXT-CREDIT-${suffix}`,
+        invoiceDate: '2026-10-01',
+        dueDate: '2026-10-31',
+        subtotalMinor: 10_000,
+        vatMinor: 0,
+        totalMinor: 10_000,
+      })
+      .returning({ id: supplierInvoice.id })
+    if (invoices[0]) invoiceIds.push(invoices[0].id)
+
+    const returns = await db
+      .insert(supplierReturn)
+      .values({
+        number: `RET-${suffix}-CREDIT`,
+        branchId,
+        supplierId: created.id,
+        reason: 'Every unit went back',
+      })
+      .returning({ id: supplierReturn.id })
+    const returnId = returns[0]?.id
+    if (returnId) returnIds.push(returnId)
+    await db.insert(supplierCreditNote).values({
+      number: `SCN-${suffix}-CREDIT`,
+      branchId,
+      supplierId: created.id,
+      returnId: returnId as string,
+      amountMinor: 10_000,
+    })
+
+    // P11-D9: the credit reduces what is owed. Without it this would be GHS 100.00
+    // outstanding and the archive would be refused.
+    const archived = await suppliersService.archiveSupplier(actor, created.id, 'returned in full')
+    expect(archived.status).toBe('ARCHIVED')
   })
 
   it('manages payment details with exactly one active default and masked auditing', async () => {
