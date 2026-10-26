@@ -114,9 +114,7 @@ export function OrderLinesEditor({
 					</div>
 					<div className="grid gap-1">
 						<span className="text-xs text-muted-foreground">Line total</span>
-						<span className="py-2 text-sm tabular-nums">
-							{formatGhs(orderLineDraftTotal(row))}
-						</span>
+						<span className="py-2 text-sm tabular-nums">{formatGhs(orderLineDraftTotal(row))}</span>
 					</div>
 					<Button
 						type="button"

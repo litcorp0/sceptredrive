@@ -75,9 +75,7 @@ export function OrderPrintSheet({
 							<td className="py-2 pr-3 tabular-nums">{line.lineNumber}</td>
 							<td className="py-2 pr-3">{formatOrderLine(line)}</td>
 							<td className="py-2 pr-3 text-right tabular-nums">{line.quantity}</td>
-							<td className="py-2 pr-3 text-right tabular-nums">
-								{formatGhs(line.unitCostMinor)}
-							</td>
+							<td className="py-2 pr-3 text-right tabular-nums">{formatGhs(line.unitCostMinor)}</td>
 							<td className="py-2 text-right tabular-nums">{formatGhs(line.lineTotalMinor)}</td>
 						</tr>
 					))}

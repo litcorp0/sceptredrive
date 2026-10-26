@@ -1,6 +1,6 @@
-import { CircleCheckIcon, CircleHelpIcon, TriangleAlertIcon } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { type StatusVariant, StatusBadge } from "#/components/common/status-badge"
+import { CircleCheckIcon, CircleHelpIcon, TriangleAlertIcon } from "lucide-react"
+import { StatusBadge, type StatusVariant } from "#/components/common/status-badge"
 import type { InvoiceMatchStatus } from "#/modules/payables"
 
 /**

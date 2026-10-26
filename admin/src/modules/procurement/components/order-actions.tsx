@@ -137,9 +137,9 @@ export function OrderActions({ order }: { order: OrderDetail }) {
 				title="Submit this order?"
 				description={
 					<>
-						The goods value is {formatGhs(order.goodsValueMinor)}. At or above the approval limit
-						of {formatGhs(order.threshold.valueMinor)} an administrator decides; below it the order
-						is approved automatically.
+						The goods value is {formatGhs(order.goodsValueMinor)}. At or above the approval limit of{" "}
+						{formatGhs(order.threshold.valueMinor)} an administrator decides; below it the order is
+						approved automatically.
 					</>
 				}
 				confirmLabel="Submit"

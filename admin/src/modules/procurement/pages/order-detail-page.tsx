@@ -81,8 +81,7 @@ export function OrderDetailPage() {
 	}
 
 	const branchName = branches.find((branch) => branch.id === order.branchId)?.name ?? "Branch"
-	const canEdit =
-		order.status === "DRAFT" && hasPermission(session.user.role, "procurement.create")
+	const canEdit = order.status === "DRAFT" && hasPermission(session.user.role, "procurement.create")
 
 	return (
 		<section>
@@ -112,9 +111,7 @@ export function OrderDetailPage() {
 						</p>
 						<p className="mt-1 text-sm">
 							Goods value (ex-tax):{" "}
-							<span className="font-medium tabular-nums">
-								{formatGhs(detail.goodsValueMinor)}
-							</span>
+							<span className="font-medium tabular-nums">{formatGhs(detail.goodsValueMinor)}</span>
 						</p>
 					</div>
 

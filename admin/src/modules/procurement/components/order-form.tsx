@@ -118,7 +118,9 @@ export function OrderForm({
 		},
 		onSuccess: async (data) => {
 			idempotencyKey.current = null
-			toast.success(isEdit ? `Order ${data.order.number} updated` : `Order ${data.order.number} drafted`)
+			toast.success(
+				isEdit ? `Order ${data.order.number} updated` : `Order ${data.order.number} drafted`,
+			)
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: orderKeys.all }),
 				queryClient.invalidateQueries({ queryKey: orderKeys.byId(data.order.id) }),
@@ -185,11 +187,7 @@ export function OrderForm({
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="grid gap-1.5">
 							<Label>Supplier</Label>
-							<SupplierCombobox
-								value={supplier}
-								onSelect={setSupplier}
-								disabled={busy}
-							/>
+							<SupplierCombobox value={supplier} onSelect={setSupplier} disabled={busy} />
 						</div>
 
 						{canSelectBranch && !isEdit ? (
@@ -213,8 +211,8 @@ export function OrderForm({
 								<Label>Branch</Label>
 								<p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
 									{isEdit && order
-										? branches.find((branch) => branch.id === order.order.branchId)?.name ??
-											"Branch"
+										? (branches.find((branch) => branch.id === order.order.branchId)?.name ??
+											"Branch")
 										: (activeBranch?.name ?? "Your branch")}
 								</p>
 							</div>

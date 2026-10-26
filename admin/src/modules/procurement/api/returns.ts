@@ -1,11 +1,6 @@
 import { queryOptions } from "@tanstack/react-query"
 import { apiRequest } from "#/lib/api"
-import type {
-	ReturnCreateInput,
-	ReturnDetail,
-	ReturnListQuery,
-	ReturnListResult,
-} from "../types"
+import type { ReturnCreateInput, ReturnDetail, ReturnListQuery, ReturnListResult } from "../types"
 import { returnKeys } from "./keys"
 
 /** `GET /api/procurement/returns` — branch-scoped by the API. */

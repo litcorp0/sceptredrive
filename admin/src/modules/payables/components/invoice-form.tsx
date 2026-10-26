@@ -24,13 +24,13 @@ import { toastApiError } from "#/lib/toast"
 // A supplier invoice is recorded against a goods receipt, so payables reads inventory's receipt
 // fetchers through its barrel. This is the sanctioned `payables → inventory` edge.
 import { getReceipt, type InventoryReceipt } from "#/modules/inventory"
-// Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); it
-// never reaches into the supplier store.
-import { getSupplier, supplierKeys } from "#/modules/suppliers"
 // Invoices are matched to purchase orders (PROC-04), so payables reads the matchable list and the
 // chosen order's lines through the procurement barrel. It never sends a purchase-order line id:
 // the API matches by product, so the screen cannot invent a link the order does not have.
 import { matchableOrderOptions, orderDetailOptions, statusLabel } from "#/modules/procurement"
+// Payables reads the supplier master through the suppliers barrel (`payables → suppliers`); it
+// never reaches into the supplier store.
+import { getSupplier, supplierKeys } from "#/modules/suppliers"
 import { payablesKeys } from "../api/keys"
 import {
 	createInvoice,

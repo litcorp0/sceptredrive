@@ -25,8 +25,8 @@ import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 // A return is built from receipt lines, and receipts are inventory's documents.
 import {
-	inventoryKeys,
 	type InventoryReceipt,
+	inventoryKeys,
 	receiptDetailOptions,
 	receiptListOptions,
 } from "#/modules/inventory"
@@ -175,9 +175,7 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 		for (const row of rows) {
 			const quantity = parseQuantity(row.quantity)
 			if (quantity > row.received) {
-				setFormError(
-					`You can return at most ${row.received} of ${row.sku}; the API refuses more.`,
-				)
+				setFormError(`You can return at most ${row.received} of ${row.sku}; the API refuses more.`)
 				return
 			}
 		}
@@ -257,9 +255,7 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 							>
 								<SelectTrigger id="return-receipt" className="w-full">
 									<SelectValue
-										placeholder={
-											receiptsQuery.isLoading ? "Loading receipts…" : "Choose a receipt"
-										}
+										placeholder={receiptsQuery.isLoading ? "Loading receipts…" : "Choose a receipt"}
 									/>
 								</SelectTrigger>
 								<SelectContent>
@@ -361,9 +357,7 @@ export function ReturnDialog({ order, onClose }: { order: OrderDetail; onClose: 
 							</div>
 							<div className="grid gap-3">
 								<div className="grid gap-1.5">
-									<Label htmlFor="return-credit-note">
-										Supplier credit note number (optional)
-									</Label>
+									<Label htmlFor="return-credit-note">Supplier credit note number (optional)</Label>
 									<Input
 										id="return-credit-note"
 										maxLength={60}

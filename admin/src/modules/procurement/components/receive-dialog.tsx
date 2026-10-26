@@ -143,9 +143,7 @@ export function ReceiveOrderDialog({
 	})
 
 	function updateRow(key: string, patch: Partial<ReceiveRowDraft>) {
-		setRows((current) =>
-			current.map((row) => (row.line.id === key ? { ...row, ...patch } : row)),
-		)
+		setRows((current) => current.map((row) => (row.line.id === key ? { ...row, ...patch } : row)))
 	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -214,9 +212,7 @@ export function ReceiveOrderDialog({
 											inputMode="numeric"
 											value={row.quantity}
 											disabled={busy}
-											onChange={(event) =>
-												updateRow(row.line.id, { quantity: event.target.value })
-											}
+											onChange={(event) => updateRow(row.line.id, { quantity: event.target.value })}
 											aria-label={`Receiving now for line ${index + 1}`}
 										/>
 									</div>
@@ -234,10 +230,7 @@ export function ReceiveOrderDialog({
 									{over ? (
 										<div className="grid gap-2 sm:col-span-5 sm:grid-cols-2">
 											<div className="grid gap-1.5">
-												<Label
-													className="text-xs"
-													htmlFor={`receive-reason-${row.line.id}`}
-												>
+												<Label className="text-xs" htmlFor={`receive-reason-${row.line.id}`}>
 													Over-delivery reason (required)
 												</Label>
 												<Select
@@ -249,10 +242,7 @@ export function ReceiveOrderDialog({
 													}
 													disabled={busy}
 												>
-													<SelectTrigger
-														id={`receive-reason-${row.line.id}`}
-														className="w-full"
-													>
+													<SelectTrigger id={`receive-reason-${row.line.id}`} className="w-full">
 														<SelectValue placeholder="Why is more arriving?" />
 													</SelectTrigger>
 													<SelectContent>
@@ -264,15 +254,12 @@ export function ReceiveOrderDialog({
 													</SelectContent>
 												</Select>
 												<p className="text-xs text-muted-foreground">
-													Receiving {quantity}, {quantity - row.line.outstandingQuantity} more
-													than outstanding. The excess is recorded, never removed.
+													Receiving {quantity}, {quantity - row.line.outstandingQuantity} more than
+													outstanding. The excess is recorded, never removed.
 												</p>
 											</div>
 											<div className="grid gap-1.5">
-												<Label
-													className="text-xs"
-													htmlFor={`receive-note-${row.line.id}`}
-												>
+												<Label className="text-xs" htmlFor={`receive-note-${row.line.id}`}>
 													Reason note (optional)
 												</Label>
 												<Input
@@ -280,9 +267,7 @@ export function ReceiveOrderDialog({
 													value={row.note}
 													disabled={busy}
 													maxLength={300}
-													onChange={(event) =>
-														updateRow(row.line.id, { note: event.target.value })
-													}
+													onChange={(event) => updateRow(row.line.id, { note: event.target.value })}
 												/>
 											</div>
 										</div>
@@ -294,9 +279,7 @@ export function ReceiveOrderDialog({
 
 					<div className="grid gap-3 sm:grid-cols-2">
 						<div className="grid gap-1.5">
-							<Label htmlFor="receive-invoice-number">
-								Supplier invoice number (optional)
-							</Label>
+							<Label htmlFor="receive-invoice-number">Supplier invoice number (optional)</Label>
 							<Input
 								id="receive-invoice-number"
 								value={supplierInvoiceNumber}
@@ -343,10 +326,7 @@ export function ReceiveOrderDialog({
 						<Button type="button" variant="outline" onClick={onClose} disabled={busy}>
 							Cancel
 						</Button>
-						<Button
-							type="submit"
-							disabled={busy || quantityNow === 0 || missingReasons.length > 0}
-						>
+						<Button type="submit" disabled={busy || quantityNow === 0 || missingReasons.length > 0}>
 							{busy ? "Receiving…" : "Receive goods"}
 						</Button>
 					</DialogFooter>

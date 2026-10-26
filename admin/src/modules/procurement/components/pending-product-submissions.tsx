@@ -33,8 +33,8 @@ import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { approvalKeys } from "../api/keys"
 import { approvalDetailOptions, approvalListOptions, decideApproval } from "../api/approvals"
+import { approvalKeys } from "../api/keys"
 import {
 	APPROVAL_REASON_LABELS,
 	proposalName,
@@ -115,11 +115,7 @@ export function PendingProductSubmissions({ onDecided }: { onDecided?: () => voi
 												{formatDay(approval.requestedAt)}
 											</TableCell>
 											<TableCell className="text-right">
-												<Button
-													size="sm"
-													variant="ghost"
-													onClick={() => setReviewId(approval.id)}
-												>
+												<Button size="sm" variant="ghost" onClick={() => setReviewId(approval.id)}>
 													Review
 												</Button>
 											</TableCell>
@@ -236,9 +232,7 @@ function ReviewDialog({
 							{proposal && proposalText(proposal, "description") ? (
 								<div className="flex justify-between gap-4">
 									<dt className="text-muted-foreground">Description</dt>
-									<dd className="max-w-64 text-right">
-										{proposalText(proposal, "description")}
-									</dd>
+									<dd className="max-w-64 text-right">{proposalText(proposal, "description")}</dd>
 								</div>
 							) : null}
 							<div className="flex justify-between gap-4">
@@ -264,9 +258,7 @@ function ReviewDialog({
 						{detail.canDecide ? (
 							<div className="grid gap-3 rounded-md border bg-muted/30 p-3">
 								<div className="grid gap-1.5">
-									<Label htmlFor="submission-reason">
-										Reason (required to reject)
-									</Label>
+									<Label htmlFor="submission-reason">Reason (required to reject)</Label>
 									<Select
 										value={reasonCode || undefined}
 										onValueChange={(value) => setReasonCode(value as ApprovalReasonCode)}
@@ -332,8 +324,8 @@ function ReviewDialog({
 							</div>
 						) : (
 							<p className="text-sm text-muted-foreground">
-								You cannot decide this request. An administrator other than the requester
-								decides it.
+								You cannot decide this request. An administrator other than the requester decides
+								it.
 							</p>
 						)}
 					</div>

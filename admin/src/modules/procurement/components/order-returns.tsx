@@ -104,8 +104,8 @@ export function OrderReturns({ order, role }: { order: OrderDetail; role: string
 			<CardHeader>
 				<CardTitle>Supplier returns</CardTitle>
 				<CardDescription>
-					Goods sent back and the credit notes they created. A posted return has already moved
-					stock and reduced what this branch owes.
+					Goods sent back and the credit notes they created. A posted return has already moved stock
+					and reduced what this branch owes.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="grid gap-3">
@@ -124,9 +124,7 @@ export function OrderReturns({ order, role }: { order: OrderDetail; role: string
 						Couldn't load supplier returns.
 					</p>
 				) : returns.length === 0 ? (
-					<p className="text-sm text-muted-foreground">
-						No returns recorded against this order.
-					</p>
+					<p className="text-sm text-muted-foreground">No returns recorded against this order.</p>
 				) : (
 					<div className="overflow-x-auto rounded-lg border">
 						<Table>

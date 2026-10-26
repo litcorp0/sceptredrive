@@ -22,10 +22,7 @@ export function approvalReasonLabel(code: ApprovalReasonCode | null): string {
 }
 
 /** A `PRODUCT_CREATE` payload is the API's validated submission body; read it defensively. */
-export function proposalText(
-	payload: Record<string, unknown>,
-	key: string,
-): string | null {
+export function proposalText(payload: Record<string, unknown>, key: string): string | null {
 	const value = payload[key]
 	return typeof value === "string" && value.trim().length > 0 ? value : null
 }

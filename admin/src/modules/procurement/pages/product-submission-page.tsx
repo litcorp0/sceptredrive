@@ -22,8 +22,8 @@ import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
 // The catalogue owns the reference data a proposal names; the approval is procurement's.
 import { brandListOptions, categoryListOptions, unitListOptions } from "#/modules/catalog"
-import { approvalKeys } from "../api/keys"
 import { submitProductProposal } from "../api/approvals"
+import { approvalKeys } from "../api/keys"
 import type { ProductSubmissionInput } from "../types"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
@@ -112,8 +112,7 @@ export function ProductSubmissionPage() {
 			active: child.isActive,
 		})),
 	])
-	const loadingCatalog =
-		categoriesQuery.isLoading || brandsQuery.isLoading || unitsQuery.isLoading
+	const loadingCatalog = categoriesQuery.isLoading || brandsQuery.isLoading || unitsQuery.isLoading
 	const catalogError = categoriesQuery.isError || brandsQuery.isError || unitsQuery.isError
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -163,8 +162,8 @@ export function ProductSubmissionPage() {
 			<BackLink />
 			<h2 className="text-lg font-semibold tracking-tight">Submit a product</h2>
 			<p className="mt-1 text-sm text-muted-foreground">
-				This creates an approval request, not a product. An administrator decides; only then does
-				it appear in the catalogue.
+				This creates an approval request, not a product. An administrator decides; only then does it
+				appear in the catalogue.
 			</p>
 
 			<form onSubmit={handleSubmit} className="mt-4 grid gap-4">

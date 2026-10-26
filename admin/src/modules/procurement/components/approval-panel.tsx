@@ -1,8 +1,4 @@
-import {
-	APPROVAL_REASON_CODES,
-	type ApprovalReasonCode,
-	formatDay,
-} from "@sceptre/shared"
+import { APPROVAL_REASON_CODES, type ApprovalReasonCode, formatDay } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -22,8 +18,8 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
-import { approvalKeys, orderKeys } from "../api/keys"
 import { approvalDetailOptions, decideApproval } from "../api/approvals"
+import { approvalKeys, orderKeys } from "../api/keys"
 import type { OrderDetail } from "../types"
 import { APPROVAL_REASON_LABELS, approvalReasonLabel } from "../utils/approval"
 
@@ -62,9 +58,7 @@ export function ApprovalPanel({ detail, role }: { detail: OrderDetail; role: str
 				...(note.trim() ? { note: note.trim() } : {}),
 			}),
 		onSuccess: async (data) => {
-			toast.success(
-				data.approval.status === "APPROVED" ? "Order approved" : "Order rejected",
-			)
+			toast.success(data.approval.status === "APPROVED" ? "Order approved" : "Order rejected")
 			setNote("")
 			setReasonCode("")
 			await Promise.all([
@@ -74,7 +68,10 @@ export function ApprovalPanel({ detail, role }: { detail: OrderDetail; role: str
 			])
 		},
 		onError: (error) => {
-			if (error instanceof ApiError && (error.status === 400 || error.status === 409 || error.status === 403)) {
+			if (
+				error instanceof ApiError &&
+				(error.status === 400 || error.status === 409 || error.status === 403)
+			) {
 				setActionError(error.message)
 				return
 			}
