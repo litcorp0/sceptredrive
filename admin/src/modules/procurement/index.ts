@@ -11,22 +11,13 @@
  *
  * - `procurement → inventory` for a receipt's lines when a return is raised (`getReceipt`,
  *   `receiptListOptions`, `inventoryKeys`); a receipt is inventory's document.
- * - `catalog → procurement` for the pending product submissions the console must decide. The
- *   approvals fetchers live here because approvals are procurement's queue; the catalogue panel
- *   imports this barrel, never `api/approvals`.
+ * - `procurement → approvals` for the pending product-submission panel and the order detail's
+ *   approval card. The approval fetchers and the approval row types live in that module now; the
+ *   catalogue panel still imports this barrel, never `api/approvals`.
  *
  * The barrel is the only entry point.
  */
-export {
-	approvalDetailOptions,
-	approvalListOptions,
-	decideApproval,
-	getApproval,
-	listApprovals,
-	submitProductProposal,
-	withdrawApproval,
-} from "./api/approvals"
-export { approvalKeys, orderKeys, returnKeys } from "./api/keys"
+export { orderKeys, returnKeys } from "./api/keys"
 export {
 	cancelOrder,
 	closeOrder,
@@ -52,6 +43,7 @@ export {
 	returnDetailOptions,
 	returnListOptions,
 } from "./api/returns"
+export { submitProductProposal } from "./api/submissions"
 export { ApprovalPanel } from "./components/approval-panel"
 export { OrderActions } from "./components/order-actions"
 export { OrderForm } from "./components/order-form"
@@ -68,12 +60,6 @@ export { OrdersPage } from "./pages/orders-page"
 export { ProcurementLayout } from "./pages/procurement-layout"
 export { ProductSubmissionPage } from "./pages/product-submission-page"
 export type {
-	ApprovalDecisionInput,
-	ApprovalDetail,
-	ApprovalListQuery,
-	ApprovalListResult,
-	ApprovalRow,
-	ApprovalSubject,
 	MatchableOrder,
 	OrderApprovalSummary,
 	OrderCancelInput,

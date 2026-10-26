@@ -1,3 +1,5 @@
+import type { ApprovalReasonCode, ApprovalStatus } from "@sceptre/shared"
+
 export type AdjustmentReason = "DAMAGE" | "LOSS" | "FOUND" | "CORRECTION" | "EXPIRED" | "OTHER"
 
 /**
@@ -158,7 +160,15 @@ export interface ThresholdInput {
 	minOrderQuantity?: number
 }
 
-export type TransferStatus = "DRAFT" | "DISPATCHED" | "RECEIVED" | "SHORT_CLOSED" | "CANCELLED"
+export type TransferStatus =
+	| "DRAFT"
+	| "REQUESTED"
+	| "APPROVED"
+	| "REJECTED"
+	| "DISPATCHED"
+	| "RECEIVED"
+	| "SHORT_CLOSED"
+	| "CANCELLED"
 
 export interface TransferLine {
 	id: string
@@ -264,4 +274,80 @@ export type CountListQuery = {
 	status?: StockCountStatus
 	limit?: number
 	offset?: number
+}
+
+// ---------------------------------------------------------------- stock write-offs (Phase 12)
+//
+// Mirrors `api/src/modules/writeoffs/writeoffs.types.ts`. A write-off is a document, not an
+// adjustment: it is raised complete, decided as one unit, and `APPROVED` means posted. The value
+// is frozen at request time; the console formats it and never recomputes a line total.
+
+export type WriteOffStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "CANCELLED"
+
+export type WriteOffReason =
+	| "DAMAGE"
+	| "EXPIRY"
+	| "OBSOLESCENCE"
+	| "THEFT"
+	| "SUPPLIER_FAULT"
+	| "OTHER"
+
+export interface WriteOffListRow {
+	id: string
+	number: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	status: WriteOffStatus
+	note: string | null
+	valueMinor: number
+	approvalId: string | null
+	requestedBy: string
+	postedAt: string | null
+	createdBy: string | null
+	createdAt: string
+	updatedAt: string
+	cancelledBy: string | null
+	cancelledAt: string | null
+	lineCount: number
+}
+
+export interface WriteOffListResult {
+	writeOffs: WriteOffListRow[]
+	total: number
+	branchId: string | null
+}
+
+export interface WriteOffListQuery {
+	branchId?: string
+	status?: WriteOffStatus
+	limit?: number
+	offset?: number
+}
+
+export interface WriteOffLineDetail {
+	id: string
+	writeOffId: string
+	productId: string
+	quantity: number
+	unitCostMinor: number
+	reason: WriteOffReason
+	note: string | null
+	sku: string
+	productName: string
+}
+
+export interface WriteOffApproval {
+	id: string
+	status: ApprovalStatus
+	requestedBy: string
+	decidedBy: string | null
+	decidedAt: string | null
+	decisionReasonCode: ApprovalReasonCode | null
+}
+
+export interface WriteOffDetail {
+	writeOff: WriteOffListRow
+	lines: WriteOffLineDetail[]
+	approval: WriteOffApproval | null
 }

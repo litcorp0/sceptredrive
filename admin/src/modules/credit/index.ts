@@ -21,6 +21,7 @@ export {
 	createCreditEntry,
 	createRepayment,
 	entryListOptions,
+	overLimitListOptions,
 	profileListOptions,
 	statementOptions,
 	updateCreditProfile,
@@ -33,6 +34,7 @@ export { CreditProfileDialog } from "./components/credit-profile-dialog"
 export { RepaymentDialog } from "./components/repayment-dialog"
 export { StatementView } from "./components/statement-view"
 export { CreditAgingPage } from "./pages/credit-aging-page"
+export { OverLimitPage } from "./pages/over-limit-page"
 export { CreditStatementPage } from "./pages/credit-statement-page"
 export type {
 	AgingChargeRow,
@@ -53,6 +55,9 @@ export type {
 	CreditProfileUpdateInput,
 	CreditReasonCode,
 	CreditStatement,
+	OverLimitListResult,
+	OverLimitQuery,
+	OverLimitRow,
 	RepaymentCreateInput,
 	StatementEntry,
 	StatementQuery,
@@ -66,5 +71,8 @@ export {
 	CREDIT_METHOD_LABELS,
 	CREDIT_OVERRIDE_LABELS,
 	CREDIT_REASON_LABELS,
+	overLimitSearchDefaults,
+	overLimitSearchSchema,
+	type OverLimitSearch,
 	signedGhs,
 } from "./utils/credit"

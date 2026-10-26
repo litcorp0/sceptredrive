@@ -23,11 +23,14 @@ import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authe
 import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
 import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authenticated/inventory/route'
 import { Route as AuthenticatedLoyaltyRouteImport } from './routes/_authenticated/loyalty'
+import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedProcurementRouteRouteImport } from './routes/_authenticated/procurement/route'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedSuppliersRouteRouteImport } from './routes/_authenticated/suppliers/route'
 import { Route as AuthenticatedTerminalsRouteImport } from './routes/_authenticated/terminals'
+import { Route as AuthenticatedApprovalsIndexRouteImport } from './routes/_authenticated/approvals/index'
+import { Route as AuthenticatedApprovalsApprovalIdRouteImport } from './routes/_authenticated/approvals/$approvalId'
 import { Route as AuthenticatedBranchesIndexRouteImport } from './routes/_authenticated/branches/index'
 import { Route as AuthenticatedBranchesIdRouteImport } from './routes/_authenticated/branches/$id'
 import { Route as AuthenticatedCatalogIndexRouteImport } from './routes/_authenticated/catalog/index'
@@ -38,8 +41,10 @@ import { Route as AuthenticatedCatalogUnitsRouteImport } from './routes/_authent
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers/$id'
 import { Route as AuthenticatedCustomersAgingRouteImport } from './routes/_authenticated/customers/aging'
+import { Route as AuthenticatedCustomersOverLimitRouteImport } from './routes/_authenticated/customers/over-limit'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedInventoryStockRouteImport } from './routes/_authenticated/inventory/stock'
+import { Route as AuthenticatedInventoryWriteOffsRouteImport } from './routes/_authenticated/inventory/write-offs'
 import { Route as AuthenticatedProcurementIndexRouteImport } from './routes/_authenticated/procurement/index'
 import { Route as AuthenticatedProcurementReplenishmentRouteImport } from './routes/_authenticated/procurement/replenishment'
 import { Route as AuthenticatedProcurementSuppliersRouteImport } from './routes/_authenticated/procurement/suppliers'
@@ -145,6 +150,11 @@ const AuthenticatedLoyaltyRoute = AuthenticatedLoyaltyRouteImport.update({
   path: '/loyalty',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProcurementRouteRoute =
   AuthenticatedProcurementRouteRouteImport.update({
     id: '/procurement',
@@ -172,6 +182,18 @@ const AuthenticatedTerminalsRoute = AuthenticatedTerminalsRouteImport.update({
   path: '/terminals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedApprovalsIndexRoute =
+  AuthenticatedApprovalsIndexRouteImport.update({
+    id: '/approvals/',
+    path: '/approvals/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedApprovalsApprovalIdRoute =
+  AuthenticatedApprovalsApprovalIdRouteImport.update({
+    id: '/approvals/$approvalId',
+    path: '/approvals/$approvalId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBranchesIndexRoute =
   AuthenticatedBranchesIndexRouteImport.update({
     id: '/',
@@ -231,6 +253,12 @@ const AuthenticatedCustomersAgingRoute =
     path: '/aging',
     getParentRoute: () => AuthenticatedCustomersRouteRoute,
   } as any)
+const AuthenticatedCustomersOverLimitRoute =
+  AuthenticatedCustomersOverLimitRouteImport.update({
+    id: '/over-limit',
+    path: '/over-limit',
+    getParentRoute: () => AuthenticatedCustomersRouteRoute,
+  } as any)
 const AuthenticatedInventoryIndexRoute =
   AuthenticatedInventoryIndexRouteImport.update({
     id: '/',
@@ -241,6 +269,12 @@ const AuthenticatedInventoryStockRoute =
   AuthenticatedInventoryStockRouteImport.update({
     id: '/stock',
     path: '/stock',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryWriteOffsRoute =
+  AuthenticatedInventoryWriteOffsRouteImport.update({
+    id: '/write-offs',
+    path: '/write-offs',
     getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
 const AuthenticatedProcurementIndexRoute =
@@ -440,9 +474,11 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AuthenticatedAuditRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/loyalty': typeof AuthenticatedLoyaltyRoute
+  '/operations': typeof AuthenticatedOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
+  '/approvals/$approvalId': typeof AuthenticatedApprovalsApprovalIdRoute
   '/branches/$id': typeof AuthenticatedBranchesIdRoute
   '/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
@@ -450,11 +486,14 @@ export interface FileRoutesByFullPath {
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRouteWithChildren
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
+  '/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
   '/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
+  '/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/approvals/': typeof AuthenticatedApprovalsIndexRoute
   '/branches/': typeof AuthenticatedBranchesIndexRoute
   '/catalog/': typeof AuthenticatedCatalogIndexRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -495,19 +534,24 @@ export interface FileRoutesByTo {
   '/audit': typeof AuthenticatedAuditRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/loyalty': typeof AuthenticatedLoyaltyRoute
+  '/operations': typeof AuthenticatedOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/terminals': typeof AuthenticatedTerminalsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/approvals/$approvalId': typeof AuthenticatedApprovalsApprovalIdRoute
   '/branches/$id': typeof AuthenticatedBranchesIdRoute
   '/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
   '/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
   '/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/customers/aging': typeof AuthenticatedCustomersAgingRoute
+  '/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
+  '/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/approvals': typeof AuthenticatedApprovalsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/catalog': typeof AuthenticatedCatalogIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -556,10 +600,12 @@ export interface FileRoutesById {
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
   '/_authenticated/loyalty': typeof AuthenticatedLoyaltyRoute
+  '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
   '/_authenticated/terminals': typeof AuthenticatedTerminalsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/approvals/$approvalId': typeof AuthenticatedApprovalsApprovalIdRoute
   '/_authenticated/branches/$id': typeof AuthenticatedBranchesIdRoute
   '/_authenticated/catalog/brands': typeof AuthenticatedCatalogBrandsRoute
   '/_authenticated/catalog/categories': typeof AuthenticatedCatalogCategoriesRoute
@@ -567,11 +613,14 @@ export interface FileRoutesById {
   '/_authenticated/catalog/units': typeof AuthenticatedCatalogUnitsRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRouteWithChildren
   '/_authenticated/customers/aging': typeof AuthenticatedCustomersAgingRoute
+  '/_authenticated/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
   '/_authenticated/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
+  '/_authenticated/inventory/write-offs': typeof AuthenticatedInventoryWriteOffsRoute
   '/_authenticated/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/_authenticated/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
   '/_authenticated/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/_authenticated/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/_authenticated/approvals/': typeof AuthenticatedApprovalsIndexRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
   '/_authenticated/catalog/': typeof AuthenticatedCatalogIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -621,9 +670,11 @@ export interface FileRouteTypes {
     | '/audit'
     | '/change-password'
     | '/loyalty'
+    | '/operations'
     | '/settings'
     | '/staff'
     | '/terminals'
+    | '/approvals/$approvalId'
     | '/branches/$id'
     | '/catalog/brands'
     | '/catalog/categories'
@@ -631,11 +682,14 @@ export interface FileRouteTypes {
     | '/catalog/units'
     | '/customers/$id'
     | '/customers/aging'
+    | '/customers/over-limit'
     | '/inventory/stock'
+    | '/inventory/write-offs'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
+    | '/approvals/'
     | '/branches/'
     | '/catalog/'
     | '/customers/'
@@ -676,19 +730,24 @@ export interface FileRouteTypes {
     | '/audit'
     | '/change-password'
     | '/loyalty'
+    | '/operations'
     | '/settings'
     | '/staff'
     | '/terminals'
     | '/'
+    | '/approvals/$approvalId'
     | '/branches/$id'
     | '/catalog/brands'
     | '/catalog/categories'
     | '/catalog/units'
     | '/customers/aging'
+    | '/customers/over-limit'
+    | '/inventory/write-offs'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
+    | '/approvals'
     | '/branches'
     | '/catalog'
     | '/customers'
@@ -736,10 +795,12 @@ export interface FileRouteTypes {
     | '/_authenticated/audit'
     | '/_authenticated/change-password'
     | '/_authenticated/loyalty'
+    | '/_authenticated/operations'
     | '/_authenticated/settings'
     | '/_authenticated/staff'
     | '/_authenticated/terminals'
     | '/_authenticated/'
+    | '/_authenticated/approvals/$approvalId'
     | '/_authenticated/branches/$id'
     | '/_authenticated/catalog/brands'
     | '/_authenticated/catalog/categories'
@@ -747,11 +808,14 @@ export interface FileRouteTypes {
     | '/_authenticated/catalog/units'
     | '/_authenticated/customers/$id'
     | '/_authenticated/customers/aging'
+    | '/_authenticated/customers/over-limit'
     | '/_authenticated/inventory/stock'
+    | '/_authenticated/inventory/write-offs'
     | '/_authenticated/procurement/replenishment'
     | '/_authenticated/procurement/suppliers'
     | '/_authenticated/suppliers/$supplierId'
     | '/_authenticated/suppliers/aging'
+    | '/_authenticated/approvals/'
     | '/_authenticated/branches/'
     | '/_authenticated/catalog/'
     | '/_authenticated/customers/'
@@ -892,6 +956,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLoyaltyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/operations': {
+      id: '/_authenticated/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof AuthenticatedOperationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/procurement': {
       id: '/_authenticated/procurement'
       path: '/procurement'
@@ -925,6 +996,20 @@ declare module '@tanstack/react-router' {
       path: '/terminals'
       fullPath: '/terminals'
       preLoaderRoute: typeof AuthenticatedTerminalsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/approvals/': {
+      id: '/_authenticated/approvals/'
+      path: '/approvals'
+      fullPath: '/approvals/'
+      preLoaderRoute: typeof AuthenticatedApprovalsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/approvals/$approvalId': {
+      id: '/_authenticated/approvals/$approvalId'
+      path: '/approvals/$approvalId'
+      fullPath: '/approvals/$approvalId'
+      preLoaderRoute: typeof AuthenticatedApprovalsApprovalIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/branches/': {
@@ -997,6 +1082,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersAgingRouteImport
       parentRoute: typeof AuthenticatedCustomersRouteRoute
     }
+    '/_authenticated/customers/over-limit': {
+      id: '/_authenticated/customers/over-limit'
+      path: '/over-limit'
+      fullPath: '/customers/over-limit'
+      preLoaderRoute: typeof AuthenticatedCustomersOverLimitRouteImport
+      parentRoute: typeof AuthenticatedCustomersRouteRoute
+    }
     '/_authenticated/inventory/': {
       id: '/_authenticated/inventory/'
       path: '/'
@@ -1009,6 +1101,13 @@ declare module '@tanstack/react-router' {
       path: '/stock'
       fullPath: '/inventory/stock'
       preLoaderRoute: typeof AuthenticatedInventoryStockRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/write-offs': {
+      id: '/_authenticated/inventory/write-offs'
+      path: '/write-offs'
+      fullPath: '/inventory/write-offs'
+      preLoaderRoute: typeof AuthenticatedInventoryWriteOffsRouteImport
       parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
     '/_authenticated/procurement/': {
@@ -1305,6 +1404,7 @@ const AuthenticatedCustomersIdRouteWithChildren =
 interface AuthenticatedCustomersRouteRouteChildren {
   AuthenticatedCustomersIdRoute: typeof AuthenticatedCustomersIdRouteWithChildren
   AuthenticatedCustomersAgingRoute: typeof AuthenticatedCustomersAgingRoute
+  AuthenticatedCustomersOverLimitRoute: typeof AuthenticatedCustomersOverLimitRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
 }
 
@@ -1312,6 +1412,7 @@ const AuthenticatedCustomersRouteRouteChildren: AuthenticatedCustomersRouteRoute
   {
     AuthenticatedCustomersIdRoute: AuthenticatedCustomersIdRouteWithChildren,
     AuthenticatedCustomersAgingRoute: AuthenticatedCustomersAgingRoute,
+    AuthenticatedCustomersOverLimitRoute: AuthenticatedCustomersOverLimitRoute,
     AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   }
 
@@ -1340,6 +1441,7 @@ const AuthenticatedInventoryStockRouteWithChildren =
 
 interface AuthenticatedInventoryRouteRouteChildren {
   AuthenticatedInventoryStockRoute: typeof AuthenticatedInventoryStockRouteWithChildren
+  AuthenticatedInventoryWriteOffsRoute: typeof AuthenticatedInventoryWriteOffsRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInventoryCountsCountIdRoute: typeof AuthenticatedInventoryCountsCountIdRoute
   AuthenticatedInventoryCountsNewRoute: typeof AuthenticatedInventoryCountsNewRoute
@@ -1355,6 +1457,7 @@ const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRoute
   {
     AuthenticatedInventoryStockRoute:
       AuthenticatedInventoryStockRouteWithChildren,
+    AuthenticatedInventoryWriteOffsRoute: AuthenticatedInventoryWriteOffsRoute,
     AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
     AuthenticatedInventoryCountsCountIdRoute:
       AuthenticatedInventoryCountsCountIdRoute,
@@ -1452,10 +1555,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
   AuthenticatedLoyaltyRoute: typeof AuthenticatedLoyaltyRoute
+  AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
   AuthenticatedTerminalsRoute: typeof AuthenticatedTerminalsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedApprovalsApprovalIdRoute: typeof AuthenticatedApprovalsApprovalIdRoute
+  AuthenticatedApprovalsIndexRoute: typeof AuthenticatedApprovalsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1473,10 +1579,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
   AuthenticatedLoyaltyRoute: AuthenticatedLoyaltyRoute,
+  AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,
   AuthenticatedTerminalsRoute: AuthenticatedTerminalsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedApprovalsApprovalIdRoute: AuthenticatedApprovalsApprovalIdRoute,
+  AuthenticatedApprovalsIndexRoute: AuthenticatedApprovalsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

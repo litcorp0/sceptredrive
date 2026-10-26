@@ -25,6 +25,7 @@ import { AdjustDialog } from "../components/adjust-dialog"
 import { ReceiveDialog } from "../components/receive-dialog"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
+const listRoute = getRouteApi("/_authenticated/inventory/stock/")
 
 const PAGE_SIZE = 25
 
@@ -33,17 +34,20 @@ export function StockPage() {
 	const { activeBranchId, activeBranch } = useBranch()
 	const canReceive = hasPermission(session.user.role, "inventory.receive")
 	const canAdjust = hasPermission(session.user.role, "inventory.adjust")
+	const listSearch = listRoute.useSearch()
+	const navigateSearch = listRoute.useNavigate()
 
 	const [search, setSearch] = useState("")
-	const [lowOnly, setLowOnly] = useState(false)
+	const lowOnly = listSearch.lowStock === "true"
 	const [offset, setOffset] = useState(0)
 	const [receiveOpen, setReceiveOpen] = useState(false)
 	const [adjustOpen, setAdjustOpen] = useState(false)
 
 	const debouncedSearch = useDebouncedValue(search, 300)
 
+	const branchId = listSearch.branchId ?? activeBranchId
 	const filters = {
-		branchId: activeBranchId ?? undefined,
+		branchId: branchId ?? undefined,
 		q: debouncedSearch.trim() || undefined,
 		lowStock: lowOnly ? true : undefined,
 		limit: PAGE_SIZE,
@@ -52,7 +56,7 @@ export function StockPage() {
 
 	const stockQuery = useQuery({
 		...stockListOptions(filters),
-		enabled: activeBranchId !== null,
+		enabled: branchId !== null,
 	})
 
 	const rows = stockQuery.data?.stock ?? []
@@ -83,7 +87,9 @@ export function StockPage() {
 						id="low-stock-only"
 						checked={lowOnly}
 						onCheckedChange={(checked) => {
-							setLowOnly(checked)
+							void navigateSearch({
+								search: (prev) => ({ ...prev, lowStock: checked ? "true" : undefined }),
+							})
 							setOffset(0)
 						}}
 					/>

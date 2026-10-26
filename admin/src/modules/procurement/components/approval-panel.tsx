@@ -18,10 +18,15 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
-import { approvalDetailOptions, decideApproval } from "../api/approvals"
-import { approvalKeys, orderKeys } from "../api/keys"
+import {
+	APPROVAL_REASON_LABELS,
+	approvalDetailOptions,
+	approvalKeys,
+	approvalReasonLabel,
+	decideApproval,
+} from "#/modules/approvals"
+import { orderKeys } from "../api/keys"
 import type { OrderDetail } from "../types"
-import { APPROVAL_REASON_LABELS, approvalReasonLabel } from "../utils/approval"
 
 const THRESHOLD_SOURCE: Record<OrderDetail["threshold"]["source"], string> = {
 	branch: "branch limit",

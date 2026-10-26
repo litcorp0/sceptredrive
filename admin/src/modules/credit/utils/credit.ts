@@ -1,3 +1,4 @@
+import { z } from "zod"
 import { formatGhs } from "#/lib/format"
 import type {
 	AgingBucketKey,
@@ -75,3 +76,16 @@ export function signedGhs(amountMinor: number): string {
 	const sign = amountMinor > 0 ? "+" : amountMinor < 0 ? "−" : ""
 	return `${sign}${formatGhs(Math.abs(amountMinor))}`
 }
+
+/**
+ * The over-limit list's filters live in the URL, so the operations card can link the queue it
+ * counted. `branchId` is an admin's filter; a manager's scope is decided by the server.
+ */
+export const overLimitSearchSchema = z.object({
+	branchId: z.uuid().optional().catch(undefined),
+	offset: z.coerce.number().int().min(0).optional().catch(undefined),
+})
+
+export type OverLimitSearch = z.infer<typeof overLimitSearchSchema>
+
+export const overLimitSearchDefaults = {} as const

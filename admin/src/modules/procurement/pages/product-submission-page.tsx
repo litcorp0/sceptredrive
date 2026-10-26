@@ -22,8 +22,8 @@ import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
 // The catalogue owns the reference data a proposal names; the approval is procurement's.
 import { brandListOptions, categoryListOptions, unitListOptions } from "#/modules/catalog"
-import { submitProductProposal } from "../api/approvals"
-import { approvalKeys } from "../api/keys"
+import { approvalKeys } from "#/modules/approvals"
+import { submitProductProposal } from "../api/submissions"
 import type { ProductSubmissionInput } from "../types"
 
 const authenticatedRoute = getRouteApi("/_authenticated")

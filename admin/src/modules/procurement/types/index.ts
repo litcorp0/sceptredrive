@@ -10,7 +10,6 @@
 import type {
 	ApprovalReasonCode,
 	ApprovalStatus,
-	ApprovalType,
 	PurchaseOrderAction,
 	PurchaseOrderStatus,
 } from "@sceptre/shared"
@@ -295,61 +294,10 @@ export interface ReturnCreateInput {
 	lines: { receiptLineId: string; quantity: number }[]
 }
 
-// ---------------------------------------------------------------- approvals
-
-export interface ApprovalRow {
-	id: string
-	type: ApprovalType
-	entityId: string | null
-	branchId: string
-	status: ApprovalStatus
-	requestedBy: string
-	requestedAt: string
-	requestNote: string | null
-	amountMinor: number | null
-	/** The proposed document for types that do not have a row yet (a product submission). */
-	payload: Record<string, unknown>
-	decidedBy: string | null
-	decidedAt: string | null
-	decisionReasonCode: ApprovalReasonCode | null
-	decisionNote: string | null
-	createdAt: string
-	updatedAt: string
-}
-
-export interface ApprovalListQuery {
-	type?: ApprovalType
-	status?: ApprovalStatus
-	branchId?: string
-	limit?: number
-	offset?: number
-}
-
-export interface ApprovalListResult {
-	approvals: ApprovalRow[]
-	total: number
-	branchId: string | null
-}
-
-export type ApprovalSubject =
-	| { kind: "purchase_order"; purchaseOrderId: string }
-	| { kind: "product"; proposal: Record<string, unknown> }
-	| { kind: "other" }
-
-export interface ApprovalDetail {
-	approval: ApprovalRow
-	subject: ApprovalSubject
-	/** Both computed for this actor, so the console never re-implements the rule. */
-	canDecide: boolean
-	canWithdraw: boolean
-}
-
-export interface ApprovalDecisionInput {
-	decision: "APPROVED" | "REJECTED"
-	reasonCode?: ApprovalReasonCode
-	note?: string
-}
-
+// ---------------------------------------------------------------- product submissions
+//
+// The approval row itself now belongs to `modules/approvals`. This module owns only the manager's
+// proposal body and the id of the approval it creates.
 /**
  * A manager's product proposal. It is not a product: the row exists only if an admin approves the
  * `PRODUCT_CREATE` request this body creates (P11-D7).

@@ -9,6 +9,8 @@ import type {
 	CreditProfileListRow,
 	CreditProfileUpdateInput,
 	CreditStatement,
+	OverLimitListResult,
+	OverLimitQuery,
 	RepaymentCreateInput,
 } from "../types"
 import { type CreditEntryFilters, creditKeys } from "./keys"
@@ -83,5 +85,18 @@ export function createRepayment(input: RepaymentCreateInput) {
 	return apiRequest<CreditPostingResult>("/api/credit/repayments", {
 		method: "POST",
 		body: input,
+	})
+}
+
+/** `GET /api/credit/over-limit` — customers whose ledger balance is above their limit. */
+export function overLimitListOptions(query: OverLimitQuery = {}) {
+	const limit = query.limit ?? 25
+	const offset = query.offset ?? 0
+	return queryOptions({
+		queryKey: creditKeys.overLimitList(query.branchId ?? null, limit, offset),
+		queryFn: () =>
+			apiRequest<OverLimitListResult>("/api/credit/over-limit", {
+				query: { branchId: query.branchId, limit, offset },
+			}),
 	})
 }

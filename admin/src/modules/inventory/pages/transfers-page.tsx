@@ -25,8 +25,14 @@ import { hasPermission } from "#/lib/role"
 import { transferListOptions } from "../api/transfers"
 import { TransferStatusBadge } from "../components/transfer-status-badge"
 import type { TransferStatus } from "../types"
+import {
+	type TransferSearch,
+	TRANSFER_STATUSES,
+	TRANSFER_STATUS_LABELS,
+} from "../utils/transfer"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
+const listRoute = getRouteApi("/_authenticated/inventory/transfers/")
 
 const PAGE_SIZE = 25
 const ALL = "all"
@@ -35,14 +41,17 @@ export function TransfersPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const { activeBranchId } = useBranch()
 	const navigate = useNavigate()
+	const navigateSearch = listRoute.useNavigate()
+	const search = listRoute.useSearch()
 	const canTransfer = hasPermission(session.user.role, "inventory.transfer")
 
-	const [status, setStatus] = useState<"all" | TransferStatus>("all")
+	const status = search.status ?? ALL
 	const [direction, setDirection] = useState<"all" | "from" | "to">("all")
 	const [offset, setOffset] = useState(0)
 
 	const filters = {
-		branchId: activeBranchId ?? undefined,
+		// The operations card links the branch it counted; otherwise the shell's branch applies.
+		branchId: search.branchId ?? activeBranchId ?? undefined,
 		status: status === ALL ? undefined : status,
 		direction: direction === ALL ? undefined : direction,
 		limit: PAGE_SIZE,
@@ -60,7 +69,12 @@ export function TransfersPage() {
 				<Select
 					value={status}
 					onValueChange={(value) => {
-						setStatus(value as "all" | TransferStatus)
+						void navigateSearch({
+							search: (prev: TransferSearch) => ({
+								...prev,
+								status: value === ALL ? undefined : (value as TransferStatus),
+							}),
+						})
 						setOffset(0)
 					}}
 				>
@@ -69,11 +83,11 @@ export function TransfersPage() {
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="all">All statuses</SelectItem>
-						<SelectItem value="DRAFT">Draft</SelectItem>
-						<SelectItem value="DISPATCHED">Dispatched</SelectItem>
-						<SelectItem value="RECEIVED">Received</SelectItem>
-						<SelectItem value="SHORT_CLOSED">Short closed</SelectItem>
-						<SelectItem value="CANCELLED">Cancelled</SelectItem>
+						{TRANSFER_STATUSES.map((status) => (
+							<SelectItem key={status} value={status}>
+								{TRANSFER_STATUS_LABELS[status]}
+							</SelectItem>
+						))}
 					</SelectContent>
 				</Select>
 

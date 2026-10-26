@@ -1,5 +1,6 @@
 import type { Permission } from "@sceptre/shared"
 import { can } from "@sceptre/shared"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
@@ -7,6 +8,7 @@ import {
 	ChartLine,
 	ClipboardList,
 	Gift,
+	Inbox,
 	LayoutDashboard,
 	type LucideIcon,
 	MonitorSmartphone,
@@ -26,17 +28,22 @@ import {
 	SidebarGroupLabel,
 	SidebarHeader,
 	SidebarMenu,
+	SidebarMenuBadge,
 	SidebarMenuButton,
 	SidebarMenuItem,
 	SidebarRail,
 	useSidebar,
 } from "#/components/ui/sidebar"
+import { useBranch } from "#/lib/branch-context"
 import { toRole } from "#/lib/role"
+import { approvalSummaryOptions } from "#/modules/approvals"
 
 /** Route paths the console shell links to. Presentation only — no new routes. */
 type NavPath =
 	| "/"
 	| "/analytics"
+	| "/approvals"
+	| "/operations"
 	| "/branches"
 	| "/terminals"
 	| "/staff"
@@ -81,6 +88,13 @@ export const NAV_GROUPS: NavGroup[] = [
 	{
 		label: "Operations",
 		items: [
+			{ to: "/approvals", label: "Approvals", icon: Inbox, permission: "approval.read" },
+			{
+				to: "/operations",
+				label: "Branch operations",
+				icon: LayoutDashboard,
+				permission: "approval.read",
+			},
 			{ to: "/catalog", label: "Catalog", icon: Package, permission: "catalog.read" },
 			{
 				to: "/procurement",
@@ -149,6 +163,8 @@ const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
 	["aging", "Aging"],
 	["statement", "Statement"],
 	["orders", "Orders"],
+	["write-offs", "Write-offs"],
+	["over-limit", "Over limit"],
 	["replenishment", "Replenishment"],
 	["submit", "Submit"],
 	["new", "New"],
@@ -234,6 +250,31 @@ function visibleGroups(roleValue: string): NavGroup[] {
 }
 
 /**
+ * The pending-approval count beside the Approvals item.
+ *
+ * The query is mounted by this component, which is rendered only inside the
+ * permission-filtered nav item — a role without `approval.read` never asks. A 60-second
+ * `staleTime` and no `refetchInterval` (P12-D36): the number changes when a manager
+ * submits a form, not every five seconds.
+ *
+ * The visible number is hidden from assistive technology and repeated as the badge's
+ * accessible name, because a bare number in a navigation list is not a label.
+ */
+function ApprovalBadge() {
+	const { activeBranchId } = useBranch()
+	const { data } = useQuery({ ...approvalSummaryOptions(activeBranchId), staleTime: 60_000 })
+	const pending = data?.pending ?? 0
+
+	if (pending === 0) return null
+
+	return (
+		<SidebarMenuBadge role="status" aria-label={`${pending} pending approvals`}>
+			<span aria-hidden="true">{pending}</span>
+		</SidebarMenuBadge>
+	)
+}
+
+/**
  * The console navigation. Mounted by `AppShell` inside `SidebarProvider`; the
  * primitive renders it as a fixed rail at `lg` and above and as a Sheet below.
  */
@@ -299,6 +340,7 @@ export function AppSidebar({ role }: { role: string }) {
 													<span>{item.label}</span>
 												</Link>
 											</SidebarMenuButton>
+											{item.to === "/approvals" ? <ApprovalBadge /> : null}
 										</SidebarMenuItem>
 									))}
 								</SidebarMenu>

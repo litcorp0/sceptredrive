@@ -35,9 +35,10 @@ const API_FILE = path.join(ADMIN_SRC, 'lib', 'api.ts')
 
 const STRICT = process.argv.includes('--strict')
 
-/** The fourteen modules this phase migrates (D1's fifteen minus `analytics`). */
+/** The modules this phase migrates (D1's fifteen minus `analytics`), plus Phase 12's two. */
 const REQUIRED_MODULES = [
   'analytics',
+  'approvals',
   'auth',
   'audit',
   'branches',
@@ -47,6 +48,7 @@ const REQUIRED_MODULES = [
   'dashboard',
   'inventory',
   'loyalty',
+  'operations',
   'payables',
   'procurement',
   'replenishment',

@@ -23,6 +23,7 @@ export const creditKeys = {
 	entries: ["credit-entries"] as const,
 	aging: ["aging"] as const,
 	statement: ["statement"] as const,
+	overLimit: ["credit-over-limit"] as const,
 
 	profileList: (customerId: string) => [...creditKeys.profiles, customerId] as const,
 	entryList: (customerId: string, branchId: string | null, filters: CreditEntryFilters) =>
@@ -31,4 +32,6 @@ export const creditKeys = {
 		[...creditKeys.aging, branchId, asOf] as const,
 	statementFor: (customerId: string, branchId: string | null, from: string, to: string) =>
 		[...creditKeys.statement, customerId, branchId, from, to] as const,
+	overLimitList: (branchId: string | null, limit: number, offset: number) =>
+		[...creditKeys.overLimit, branchId, limit, offset] as const,
 }

@@ -1,0 +1,33 @@
+import { queryOptions } from "@tanstack/react-query"
+import { apiRequest } from "#/lib/api"
+import type { WriteOffDetail, WriteOffListQuery, WriteOffListResult } from "../types"
+import { writeOffKeys } from "./keys"
+
+/**
+ * `GET /api/write-offs` — the branch's write-off documents.
+ *
+ * The list is branch-scoped by the API. The console passes the caller's filter and never narrows
+ * afterwards: a manager asking for another branch is refused, not shown an empty table.
+ */
+export function listWriteOffs(query: WriteOffListQuery = {}) {
+	return apiRequest<WriteOffListResult>("/api/write-offs", { query })
+}
+
+export function writeOffListOptions(query: WriteOffListQuery = {}) {
+	return queryOptions({
+		queryKey: writeOffKeys.list(query),
+		queryFn: () => listWriteOffs(query),
+	})
+}
+
+/** `GET /api/write-offs/:id` — the document's lines at their frozen cost, for a decider. */
+export function getWriteOff(id: string) {
+	return apiRequest<WriteOffDetail>(`/api/write-offs/${id}`)
+}
+
+export function writeOffDetailOptions(id: string) {
+	return queryOptions({
+		queryKey: writeOffKeys.detail(id),
+		queryFn: () => getWriteOff(id),
+	})
+}

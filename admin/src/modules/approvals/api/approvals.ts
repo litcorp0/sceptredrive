@@ -6,16 +6,16 @@ import type {
 	ApprovalListQuery,
 	ApprovalListResult,
 	ApprovalRow,
-	ProductSubmissionInput,
-	ProductSubmissionResult,
+	ApprovalSummary,
 } from "../types"
 import { approvalKeys } from "./keys"
 
 /**
  * `GET /api/approvals` — the decision queue.
  *
- * The list is branch-scoped by the API: a manager sees their own branch, an admin sees the
- * caller's filter or everything. The console never filters after the fact.
+ * The list is branch-scoped by the API: a manager sees their own branch (and the branch they must
+ * decide for), an admin sees the caller's filter or everything. The console never filters after
+ * the fact.
  */
 export function listApprovals(query: ApprovalListQuery = {}) {
 	return apiRequest<ApprovalListResult>("/api/approvals", { query })
@@ -41,6 +41,17 @@ export function approvalDetailOptions(id: string | null) {
 	})
 }
 
+/** `GET /api/approvals/summary` — the nav badge and the per-type breakdown. */
+export function approvalSummaryOptions(branchId: string | null) {
+	return queryOptions({
+		queryKey: approvalKeys.summary(branchId),
+		queryFn: () =>
+			apiRequest<ApprovalSummary>("/api/approvals/summary", {
+				query: { branchId: branchId ?? undefined },
+			}),
+	})
+}
+
 /** A rejection without a reason code is refused by the server, so the dialog asks first. */
 export function decideApproval(id: string, input: ApprovalDecisionInput) {
 	return apiRequest<ApprovalDetail>(`/api/approvals/${id}/decide`, {
@@ -52,19 +63,5 @@ export function decideApproval(id: string, input: ApprovalDecisionInput) {
 export function withdrawApproval(id: string) {
 	return apiRequest<{ approval: ApprovalRow }>(`/api/approvals/${id}/withdraw`, {
 		method: "POST",
-	})
-}
-
-/**
- * `POST /api/products/submissions` — the manager's half of a `PRODUCT_CREATE` decision.
- *
- * The body is a proposal, not a product: the API inserts nothing and answers with the approval it
- * queued. An admin is refused here on purpose (the product screen is theirs), and the server
- * enforces that rather than this form.
- */
-export function submitProductProposal(input: ProductSubmissionInput) {
-	return apiRequest<ProductSubmissionResult>("/api/products/submissions", {
-		method: "POST",
-		body: input,
 	})
 }

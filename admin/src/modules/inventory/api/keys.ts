@@ -1,4 +1,10 @@
-import type { CountListQuery, ReceiptListQuery, StockListQuery, TransferListQuery } from "../types"
+import type {
+	CountListQuery,
+	ReceiptListQuery,
+	StockListQuery,
+	TransferListQuery,
+	WriteOffListQuery,
+} from "../types"
 
 /**
  * Every key the inventory module owns.
@@ -41,4 +47,10 @@ export const countKeys = {
 	all: ["counts"] as const,
 	list: (query: CountListQuery) => [...countKeys.all, query] as const,
 	detail: (id: string) => ["count", id] as const,
+}
+
+export const writeOffKeys = {
+	all: ["write-offs"] as const,
+	list: (query: WriteOffListQuery) => [...writeOffKeys.all, "list", query] as const,
+	detail: (id: string) => [...writeOffKeys.all, "detail", id] as const,
 }

@@ -6,6 +6,9 @@ const META: Record<
 	{ label: string; tone: "green" | "zinc" | "amber" | "red" | "blue" }
 > = {
 	DRAFT: { label: "Draft", tone: "zinc" },
+	REQUESTED: { label: "Awaiting approval", tone: "amber" },
+	APPROVED: { label: "Approved", tone: "blue" },
+	REJECTED: { label: "Rejected", tone: "red" },
 	DISPATCHED: { label: "Dispatched", tone: "blue" },
 	RECEIVED: { label: "Received", tone: "green" },
 	SHORT_CLOSED: { label: "Short closed", tone: "amber" },

@@ -33,14 +33,17 @@ import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { formatGhs } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
-import { approvalDetailOptions, approvalListOptions, decideApproval } from "../api/approvals"
-import { approvalKeys } from "../api/keys"
 import {
 	APPROVAL_REASON_LABELS,
+	type ApprovalRow,
+	approvalDetailOptions,
+	approvalKeys,
+	approvalListOptions,
+	decideApproval,
+	proposalMinor,
 	proposalName,
-	proposalPriceMinor,
 	proposalText,
-} from "../utils/approval"
+} from "#/modules/approvals"
 
 /**
  * The pending `PRODUCT_CREATE` queue, shown on the catalogue's product list to an approver.
@@ -137,6 +140,11 @@ export function PendingProductSubmissions({ onDecided }: { onDecided?: () => voi
 			) : null}
 		</Card>
 	)
+}
+
+/** The proposal's price is the approval's `amountMinor`; the stored payload is the fallback. */
+function proposalPriceMinor(approval: ApprovalRow): number | null {
+	return approval.amountMinor ?? proposalMinor(approval.payload, "proposedBasePriceMinor")
 }
 
 function ReviewDialog({

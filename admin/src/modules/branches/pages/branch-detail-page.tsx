@@ -38,7 +38,7 @@ export function BranchDetailPage() {
 	}
 
 	return (
-		<div className="max-w-xl">
+		<div className="">
 			<Button variant="ghost" size="sm" className="mb-3 -ml-2" asChild>
 				<Link to="/branches">
 					<ArrowLeftIcon className="size-4" />

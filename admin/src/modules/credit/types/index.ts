@@ -186,3 +186,31 @@ export interface CreditEntryListResult {
 	page: number
 	pageSize: number
 }
+
+// ---------------------------------------------------------------- over-limit customers (Phase 12)
+//
+// Mirrors `api/src/modules/credit/credit.types.ts` (`OverLimitRow`), the list behind the
+// operations page's "customers over their limit" card. Every amount is integer minor units and
+// already decided by the ledger; the console formats it and never recomputes the excess.
+
+export interface OverLimitRow {
+	customerId: string
+	customerName: string
+	phone: string | null
+	branchId: string
+	limitMinor: number
+	balanceMinor: number
+	overByMinor: number
+}
+
+export interface OverLimitListResult {
+	customers: OverLimitRow[]
+	total: number
+	branchId: string | null
+}
+
+export interface OverLimitQuery {
+	branchId?: string
+	limit?: number
+	offset?: number
+}
