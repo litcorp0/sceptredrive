@@ -10,7 +10,9 @@ export async function listApprovals(
   query: {
     type?: ApprovalListQuery['type']
     status?: ApprovalListQuery['status']
+    entityId?: string
     branchId?: string
+    sort: ApprovalListQuery['sort']
     limit: number
     offset: number
   },
@@ -18,6 +20,12 @@ export async function listApprovals(
   const user = currentUser(c)
   const result = await approvalsService.listApprovals(user, query)
   return c.json(result)
+}
+
+export async function getApprovalSummary(c: Context<AppEnv>, branchId?: string) {
+  const user = currentUser(c)
+  const summary = await approvalsService.getApprovalSummary(user, branchId ?? null)
+  return c.json(summary)
 }
 
 export async function getApproval(c: Context<AppEnv>, id: string) {

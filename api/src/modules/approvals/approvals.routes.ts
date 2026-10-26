@@ -6,6 +6,7 @@ import {
   validateApprovalDecision,
   validateApprovalIdParam,
   validateApprovalListQuery,
+  validateApprovalSummaryQuery,
 } from './approvals.validation.ts'
 
 export const approvalsRoutes = factory.createApp()
@@ -13,15 +14,25 @@ export const approvalsRoutes = factory.createApp()
 approvalsRoutes.get(
   '/api/approvals',
   requireSession,
-  requirePermission('procurement.read'),
+  requirePermission('approval.read'),
   validateApprovalListQuery,
   (c) => approvalsController.listApprovals(c, c.req.valid('query')),
+)
+
+// Before `/:id`: a literal path registered after the param route is swallowed by
+// the uuid validator, which would answer 400 for `summary`.
+approvalsRoutes.get(
+  '/api/approvals/summary',
+  requireSession,
+  requirePermission('approval.read'),
+  validateApprovalSummaryQuery,
+  (c) => approvalsController.getApprovalSummary(c, c.req.valid('query').branchId),
 )
 
 approvalsRoutes.get(
   '/api/approvals/:id',
   requireSession,
-  requirePermission('procurement.read'),
+  requirePermission('approval.read'),
   validateApprovalIdParam,
   (c) => approvalsController.getApproval(c, c.req.valid('param').id),
 )
@@ -38,7 +49,7 @@ approvalsRoutes.post(
 approvalsRoutes.post(
   '/api/approvals/:id/withdraw',
   requireSession,
-  requirePermission('procurement.read'),
+  requirePermission('approval.read'),
   validateApprovalIdParam,
   (c) => approvalsController.withdrawApproval(c, c.req.valid('param').id),
 )

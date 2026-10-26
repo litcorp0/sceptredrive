@@ -9,8 +9,16 @@ export const approvalListQuerySchema = z.object({
   type: z.enum(APPROVAL_TYPES).optional(),
   status: z.enum(APPROVAL_STATUSES).optional(),
   branchId: z.uuid().optional(),
+  /** One document's request, for a screen that already knows what it is showing. */
+  entityId: z.uuid().optional(),
+  /** The inbox is a queue: oldest first unless the caller asks otherwise. */
+  sort: z.enum(['oldest', 'newest']).default('oldest'),
   limit: limitSchema,
   offset: offsetSchema,
+})
+
+export const approvalSummaryQuerySchema = z.object({
+  branchId: z.uuid().optional(),
 })
 
 export const approvalIdParamSchema = z.object({ id: z.uuid() })
@@ -25,5 +33,6 @@ export const approvalDecisionSchema = z
   .strict()
 
 export const validateApprovalListQuery = validateQuery(approvalListQuerySchema)
+export const validateApprovalSummaryQuery = validateQuery(approvalSummaryQuerySchema)
 export const validateApprovalIdParam = validateParam(approvalIdParamSchema)
 export const validateApprovalDecision = validateJson(approvalDecisionSchema)
