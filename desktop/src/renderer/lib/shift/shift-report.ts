@@ -181,6 +181,10 @@ export function localShiftReport(
   const countedCashMinor = shift.countedCashMinor ?? 0
   return {
     ...figures,
+    // The report's field name for the refund figure the expected-cash sum
+    // already subtracts (P14-D1). The local mirror table has no column for it,
+    // so it travels with the report object the close hands to the printer.
+    cashRefundMinor: figures.cashRefundsMinor,
     shiftId: shift.id,
     branchId: shift.branchId,
     terminalId: shift.terminalId,

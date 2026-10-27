@@ -43,6 +43,17 @@ export interface ShiftReportFigures {
   cardMinor: number
   bankTransferMinor: number
   changeMinor: number
+  /**
+   * Settled cash refunds: money that physically left this drawer, and the
+   * figure the expected-cash formula already subtracts.
+   *
+   * It arrives from the report payload (on the till, `readShiftFigures`; on the
+   * server, `shift_report.cash_refund_minor`) and is never re-summed here — two
+   * summations of the same refunds eventually disagree. Null means the snapshot
+   * never measured it (a Z stored before the column existed), which the paper
+   * says out loud instead of printing a zero it cannot prove.
+   */
+  cashRefundMinor: number | null
   cashInMinor: number
   cashOutMinor: number
   expectedCashMinor: number
@@ -198,8 +209,19 @@ export function buildReportDocument(
   lines.push({ kind: 'rule' })
   lines.push({ kind: 'title', label: 'DRAWER' })
   lines.push({ kind: 'row', label: 'Opening float', value: amount(figures.openingFloatMinor) })
+  // The same number as TENDERS' `Cash`, deliberately: it is the cash the shift
+  // took, and the drawer adds it up rather than restating it differently.
+  lines.push({ kind: 'row', label: 'Cash taken', value: amount(figures.cashMinor) })
+  // Deductions are printed as deductions, in the order the money left: change,
+  // then the cash refund that Phase 13's expected-cash sum already nets off.
+  lines.push({ kind: 'row', label: 'Change given', value: amount(-figures.changeMinor) })
+  lines.push({
+    kind: 'row',
+    label: 'Cash refunds',
+    value: figures.cashRefundMinor === null ? 'not itemised' : amount(-figures.cashRefundMinor),
+  })
   lines.push({ kind: 'row', label: 'Cash in', value: amount(figures.cashInMinor) })
-  lines.push({ kind: 'row', label: 'Cash out', value: amount(figures.cashOutMinor) })
+  lines.push({ kind: 'row', label: 'Cash out', value: amount(-figures.cashOutMinor) })
   lines.push({ kind: 'row', label: 'Expected', value: amount(figures.expectedCashMinor) })
   lines.push({
     kind: 'row',
