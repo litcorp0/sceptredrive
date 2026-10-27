@@ -1,6 +1,6 @@
 import { db } from '@sceptre/db'
-import { priceCart, type TenderMethod, tenderBalance } from '@sceptre/shared'
-import { and, eq, inArray } from 'drizzle-orm'
+import { accraIsoDay, priceCart, type TenderMethod, tenderBalance } from '@sceptre/shared'
+import { and, eq, inArray, type SQL, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   authedHeaders,
@@ -25,6 +25,8 @@ import {
 import { branch } from '../org/branches.schema.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import { device, terminal } from '../org/terminals.schema.ts'
+import { settleMockPayment } from '../payments/payments.mock.provider.ts'
+import { payment } from '../payments/payments.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import { product, productPrice } from '../products/products.schema.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
@@ -66,6 +68,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
   const createdUomIds: string[] = []
   const createdCustomerIds: string[] = []
   const createdSaleIds: string[] = []
+  const createdPaymentIds: string[] = []
   const createdTerminalIds: string[] = []
   const createdDeviceIds: string[] = []
   const createdBranchIds: string[] = []
@@ -86,6 +89,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
   let home: Counter
   let other: Counter
 
+  let adminUserId = ''
   let managerUserId = ''
   let managerStaffId = ''
   let foreignManagerUserId = ''
@@ -127,6 +131,45 @@ describe.skipIf(!available)('POS conflict queue', () => {
 
   async function get(path: string, cookie: string = managerCookie): Promise<Response> {
     return app.request(path, { headers: sessionHeaders(cookie) })
+  }
+
+  async function getDevice(path: string, token: string): Promise<Response> {
+    return app.request(path, { headers: { authorization: `Bearer ${token}` } })
+  }
+
+  /**
+   * A whole table's rows for one document, hashed. `t::text` is every column as
+   * PostgreSQL prints it, ordered by id so the hash is stable, and an empty set
+   * hashes the empty string rather than null.
+   *
+   * A checksum is the only way to say "byte-identical" and mean it: comparing a
+   * few columns would pass on a row that moved a pesewa somewhere else.
+   */
+  async function checksum(table: string, predicate: SQL): Promise<{ hash: string; rows: number }> {
+    const result = await db.execute<{ hash: string; row_count: number }>(sql`
+      SELECT count(*)::int AS row_count,
+             md5(coalesce(string_agg(t::text, '|' ORDER BY t.id), '')) AS hash
+      FROM ${sql.raw(table)} t
+      WHERE ${predicate}
+    `)
+    const row = result.rows[0]
+    return { hash: row?.hash ?? '', rows: row?.row_count ?? 0 }
+  }
+
+  /** The six tables a resolution must not touch, for one sale. */
+  async function saleChecksums(
+    saleId: string,
+  ): Promise<Record<string, { hash: string; rows: number }>> {
+    const bySale = sql`t.sale_id = ${saleId}`
+    const byReference = sql`t.reference_type = 'SALE' AND t.reference_id = ${saleId}`
+    return {
+      sale: await checksum('sale', sql`t.id = ${saleId}`),
+      sale_line: await checksum('sale_line', bySale),
+      sale_tender: await checksum('sale_tender', bySale),
+      stock_movement: await checksum('stock_movement', byReference),
+      credit_ledger_entry: await checksum('credit_ledger_entry', byReference),
+      loyalty_ledger_entry: await checksum('loyalty_ledger_entry', byReference),
+    }
   }
 
   async function patch(path: string, cookie: string, body: unknown): Promise<Response> {
@@ -362,6 +405,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
   beforeAll(async () => {
     const admin = await createTestUser({ role: 'ADMIN' })
     createdUserIds.push(admin.id)
+    adminUserId = admin.id
     adminCookie = await signIn(admin.email)
 
     home = await provisionCounter('home', 'CH')
@@ -613,6 +657,9 @@ describe.skipIf(!available)('POS conflict queue', () => {
       await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.customerId, createdCustomerIds))
       await db.delete(creditProfile).where(inArray(creditProfile.customerId, createdCustomerIds))
       await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
+    }
+    if (createdPaymentIds.length > 0) {
+      await db.delete(payment).where(inArray(payment.id, createdPaymentIds))
     }
     await db.delete(stockLevel).where(inArray(stockLevel.branchId, createdBranchIds))
     await db.delete(shift).where(inArray(shift.branchId, createdBranchIds))
@@ -1059,5 +1106,133 @@ describe.skipIf(!available)('POS conflict queue', () => {
     expect(audits).toHaveLength(1)
     expect(audits[0]?.branchId).toBe(other.branchId)
     expect(audits[0]?.after).toMatchObject({ status: 'DISMISSED', resolutionCode: 'ACCEPTED_RISK' })
+  })
+
+  it('leaves six tables byte-identical and clears two counters', async () => {
+    const before = await saleChecksums(conflictSaleId)
+    // A checksum over nothing proves nothing: every table has to carry a row.
+    for (const [table, sum] of Object.entries(before)) {
+      expect(sum.rows, `${table} has no row for the sale`).toBeGreaterThan(0)
+    }
+
+    const deviceBefore = await readJson<{ conflicts: Array<{ id: string; status: string }> }>(
+      await getDevice('/api/pos/sync/conflicts', home.accessToken),
+    )
+    const stateBefore = await readJson<{ pendingConflicts: number }>(
+      await getDevice('/api/pos/sync/state', home.accessToken),
+    )
+    const today = accraIsoDay(new Date())
+    const overviewPath = `/api/analytics/overview?from=${today}&to=${today}&branchId=${home.branchId}`
+    const overviewBefore = await readJson<{ attention: { openConflictCount: number } }>(
+      await get(overviewPath, managerCookie),
+    )
+
+    expect(deviceBefore.conflicts.find((row) => row.id === clockConflictId)?.status).toBe('OPEN')
+
+    const response = await patch(`/api/pos/oversight/conflicts/${clockConflictId}`, adminCookie, {
+      status: 'RESOLVED',
+      code: 'CORRECTED_ELSEWHERE',
+      note: 'The till clock was wrong; the sale was re-keyed at the counter.',
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+    const body = await readJson<{ resolvedBy: string | null }>(response)
+    // The admin has no staff id, so the account id is what `resolved_by` records.
+    expect(body.resolvedBy).toBe(adminUserId)
+
+    // Nothing the conflict was about has moved: not a column, not a row order.
+    expect(await saleChecksums(conflictSaleId)).toEqual(before)
+
+    // The till's own read reflects the resolution with no code change...
+    const deviceAfter = await readJson<{ conflicts: Array<{ id: string; status: string }> }>(
+      await getDevice('/api/pos/sync/conflicts', home.accessToken),
+    )
+    expect(deviceAfter.conflicts.find((row) => row.id === clockConflictId)?.status).toBe('RESOLVED')
+    // ...and its badge has fallen by exactly the one row that closed.
+    const stateAfter = await readJson<{ pendingConflicts: number }>(
+      await getDevice('/api/pos/sync/state', home.accessToken),
+    )
+    expect(stateAfter.pendingConflicts).toBe(stateBefore.pendingConflicts - 1)
+
+    // The dashboard counts the same status the queue reads, so it agrees.
+    const overviewAfter = await readJson<{ attention: { openConflictCount: number } }>(
+      await get(overviewPath, managerCookie),
+    )
+    expect(overviewAfter.attention.openConflictCount).toBe(
+      overviewBefore.attention.openConflictCount - 1,
+    )
+
+    // The queue can still find what was closed, and by which status.
+    const dismissed = await listFor('/api/pos/oversight/conflicts?status=DISMISSED', adminCookie)
+    expect(dismissed.conflicts.map((row) => row.id)).toEqual([foreignConflictId])
+  })
+
+  it('resolves a late settlement with an instruction and never touches the payment', async () => {
+    const created = await app.request('/api/pos/payments', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${home.accessToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clientPaymentId: crypto.randomUUID(),
+        shiftId: homeShiftId,
+        method: 'MOMO',
+        amountMinor: 5_000,
+        mobileMoney: { provider: 'mtn', phone: customerPhone },
+      }),
+    })
+    expect(created.status, await created.clone().text()).toBe(201)
+    const paymentView = await readJson<{ payment: { id: string; providerReference: string } }>(
+      created,
+    )
+    const paymentId = paymentView.payment.id
+    createdPaymentIds.push(paymentId)
+
+    // The customer pays after the cashier gave up: the verify inside abandon turns
+    // the intent PAID, flags it orphaned, and raises the HIGH conflict.
+    expect(settleMockPayment(paymentView.payment.providerReference, 'PAID')).toBe(true)
+    const abandoned = await app.request(`/api/pos/payments/${paymentId}/abandon`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${home.accessToken}` },
+    })
+    expect(abandoned.status, await abandoned.clone().text()).toBe(200)
+
+    const lateConflict = (
+      await db
+        .select()
+        .from(syncConflict)
+        .where(
+          and(
+            eq(syncConflict.shiftId, homeShiftId),
+            eq(syncConflict.type, 'PAYMENT_LATE_SETTLEMENT'),
+          ),
+        )
+    )[0]
+    expect(lateConflict).toBeDefined()
+    const conflictId = lateConflict?.id ?? ''
+
+    const paymentBefore = (await db.select().from(payment).where(eq(payment.id, paymentId)))[0]
+
+    // The note names the action the branch has to take at the counter (P14-D15).
+    const response = await patch(`/api/pos/oversight/conflicts/${conflictId}`, managerCookie, {
+      status: 'RESOLVED',
+      code: 'TILL_INSTRUCTION',
+      note: 'Claimed on the terminal that owns the payment: POST /api/pos/payments/:id/claim.',
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+    const body = await readJson<{
+      status: string
+      resolutionCode: string
+      subject: { kind: string; id?: string }
+    }>(response)
+    expect(body.status).toBe('RESOLVED')
+    expect(body.resolutionCode).toBe('TILL_INSTRUCTION')
+    // An orphaned payment has no sale; the shift it was taken in is the subject.
+    expect(body.subject.kind).toBe('shift')
+    expect(body.subject.id).toBe(homeShiftId)
+
+    // The money is a fact the resolution may describe but never edits.
+    const paymentAfter = (await db.select().from(payment).where(eq(payment.id, paymentId)))[0]
+    expect(paymentAfter?.status).toBe('PAID')
+    expect(paymentAfter?.orphaned).toBe(true)
+    expect(paymentAfter?.paidAt?.toISOString()).toBe(paymentBefore?.paidAt?.toISOString())
+    expect(paymentAfter?.providerTransactionId).toBe(paymentBefore?.providerTransactionId)
   })
 })
