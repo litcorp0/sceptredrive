@@ -1,0 +1,174 @@
+
+## fixtures (created through the API)
+     branches: src=a5b377dd dst=0e0f396d wh=277c81aa foreign=2e83fcaa
+     terminal WA-NMLT-T01 enrolled; device JWT minted
+
+## 1: sessions and branch scope
+PASS 1.1  the admin session reads every branch, including the four walk branches
+PASS 1.2  the manager session is scoped to their own branch on /api/branches
+PASS 1.3  the manager can name a transfer source through /api/branches/directory
+
+## 2: a manager raises a branch-to-branch transfer request
+PASS 2.1  the request is REQUESTED with a PENDING approval
+PASS 2.2  the source manager is the decider (deciderRole MANAGER, deciderBranchId = source)
+PASS 2.3  the amount is hand-computed quantity x average cost, re-read from SQL
+
+## 3: dispatch before approval is refused and moves nothing
+PASS 3.1  dispatching a REQUESTED transfer is a 409
+PASS 3.2  the source level did not move on the refusal (SQL)
+
+## 4: the source manager approves, dispatches, and the destination receives
+PASS 4.1  the source manager approves the request
+PASS 4.2  dispatch moves the transfer to DISPATCHED
+PASS 4.3  the source level after dispatch is re-derived from SQL and equals the API figure
+     transfer source level after dispatch: SQL 20 - 2 = 18; API fromOnHand 18
+PASS 4.4  the destination manager receives it and the transfer is RECEIVED
+PASS 4.5  the ledger equals on hand on both sides of the transfer (SQL)
+
+## 5: the source manager rejects a request; nothing moves
+PASS 5.1  the rejection is REJECTED on the transfer and the approval
+PASS 5.2  a rejected transfer has zero movements (SQL)
+
+## 6: the requester withdraws a pending request
+PASS 6.1  the requester can cancel their own pending request
+PASS 6.2  the approval is WITHDRAWN, never deleted
+
+## 7: a warehouse source is an admin decision
+PASS 7.1  a warehouse source names an ADMIN decider with no branch binding
+PASS 7.2  a manager cannot decide an ADMIN-authority row, even at the source
+PASS 7.3  the admin decides it
+PASS 7.4  the warehouse transfer completes end to end
+
+## 8: a write-off is valued at request time and posted when approved
+PASS 8.1  the write-off is PENDING_APPROVAL and valued at quantity x average cost
+PASS 8.2  approval posts the write-off (APPROVED with postedAt)
+PASS 8.3  the WRITE_OFF movements post -3 and the level drops
+PASS 8.4  the approved write-off value re-derived from SQL equals header, ledger and approval
+     approved write-off value: header=150000 lines=150000 ledger=150000 approval=150000 (expected 150000)
+PASS 8.5  the ledger equals on hand after the write-off (SQL)
+
+## 9: a rejected write-off moves nothing
+PASS 9.1  the rejection sets REJECTED
+PASS 9.2  a rejected write-off posts zero movements and leaves the level unchanged (SQL)
+
+## 10: a write-off that would go negative is refused
+PASS 10.1  approving an impossible write-off is a 409
+PASS 10.2  the refusal leaves the write-off PENDING_APPROVAL and the level intact (SQL)
+PASS 10.3  the manager can cancel the impossible request
+
+## 11: shrinkage is not an adjustment
+PASS 11.1  a manager posting a negative DAMAGE adjustment is refused with a 400
+PASS 11.2  the same call from an admin is accepted
+
+## 12: a price inside the band applies, and the audit says so
+PASS 12.1  exactly 10% is APPLIED with the new price
+PASS 12.2  the price row changed
+PASS 12.3  the audit row records via: 'BAND'
+
+## 13: one pesewa beyond the band waits for a decision
+PASS 13.1  110,001 pesewas is PENDING_APPROVAL, not APPLIED
+PASS 13.2  the price row is unchanged
+
+## 14: approving a price applies it once
+PASS 14.1  the approved request writes the proposed price
+PASS 14.2  a second decision is a 409 and the row is untouched
+
+## 15: a price that moved underneath a pending request cannot be applied
+PASS 15.1  the out-of-band request is pending and wrote nothing
+PASS 15.2  an admin moves the price directly while the request waits
+PASS 15.3  approving the stale request is a 409 and the live price stays 115,000
+
+## 16: removing an out-of-band override is a request, not a delete
+PASS 16.1  the manager cannot delete an override outside the band
+PASS 16.2  approving the request removes the override
+
+## 17: a credit limit decrease is direct
+PASS 17.1  a manager lowering a limit applies immediately
+PASS 17.2  the audit records via: 'DIRECT_DECREASE'
+
+## 18: a credit limit increase is not direct
+PASS 18.1  a manager raising a limit directly is refused with a 403
+PASS 18.2  zero limit-change approvals exist for that profile (SQL)
+PASS 18.3  the limit is unchanged
+
+## 19: a credit limit increase is requested and approved
+PASS 19.1  the request is accepted and the limit has not moved
+PASS 19.2  the ledger and the balance are untouched by the request (SQL)
+PASS 19.3  approval moves the limit to the proposal
+PASS 19.4  the ledger entries and the balance are unchanged by the approval (SQL)
+
+## 20: the over-limit list and the analytics count are the same rows
+PASS 20.1  the list total equals its rows and names the over-limit customer
+PASS 20.2  analytics counts exactly the list total
+
+## 21-23: shift variance review (driven through the device upload)
+     a shift is opened and closed by the terminal, so these legs POST /api/pos/sync/upload with the device JWT minted above, exactly as the POS does
+     shift tolerance 2000 pesewas, count variance tolerance 1000 pesewas
+PASS 21.1  a close exactly at tolerance is not a review (review_status NONE)
+PASS 21.2  the at-tolerance close raised zero approvals (SQL)
+PASS 22.1  a close one pesewa over tolerance is REQUIRED
+PASS 22.2  exactly one approval exists and it carries |variance|
+PASS 23.1  the closer cannot decide their own variance (403)
+PASS 23.2  a different manager in the same branch records REVIEWED
+PASS 23.3  the money columns are byte-identical before and after the decision
+
+## 24: a count schedule runs once per due period
+     no HTTP trigger exists for the nightly inventory jobs (P12-D34), so each "run" enqueues the real pg-boss job the API worker consumes and waits for it to finish
+PASS 24.1  the schedule is created due today
+PASS 24.2  the first run creates exactly one SCHEDULED count and advances next_due_at
+PASS 24.3  the second run creates none and advances nothing
+PASS 24.4  a never-stocked product is in the count at snapshot zero
+
+## 25: a posted variance over tolerance raises one trigger count
+PASS 25.1  a manual count opens with the snapshot book
+PASS 25.2  the counted lines are recorded against the snapshot
+PASS 25.3  posting records the variance and posts the count
+PASS 25.4  one TRIGGER count exists for the product, because the variance value exceeds tolerance
+PASS 25.5  a second posted variance for the same product raises no second trigger count
+
+## 26: two oversell conflicts raise one trigger count, once
+PASS 26.1  two sales of a zero-stock product record two STOCK_OVERSELL conflicts and still sell
+PASS 26.2  the oversell is applied, not blocked (level below zero, ledger agrees)
+PASS 26.3  the drawer with cash sales closes with the server expected cash
+PASS 26.4  the scan raises one OVERSELL trigger count
+PASS 26.5  a third scan creates none
+
+## 27: ABC classes are derived, manual overrides survive, clearing restores the derivation
+PASS 27.1  the recompute assigns A, B and C by the hand-computed cumulative share
+     ABC representatives: A=daea2210 B=e5be6da5 C=461e6f8d (A <= 8000bp, B <= 9500bp cumulative)
+PASS 27.2  a manual class survives a recompute
+PASS 27.3  clearing the override lets the derivation overwrite it
+
+## 28: accuracy re-derived from SQL
+PASS 28.1  accuracy counts and basis points match the SQL re-derivation
+     accuracy: 2/4 = 5000bp
+PASS 28.2  the variance value equals the COUNT_VARIANCE movements (SQL)
+PASS 28.3  a branch with no posted counts answers null, never zero
+
+## 29: the inbox sorts, filters and summarises consistently
+PASS 29.1  sort=oldest is ascending by requestedAt
+PASS 29.2  the entityId filter returns that document and nothing else
+PASS 29.3  every per-type pending count equals that list endpoint total
+PASS 29.4  the summary pending total is the sum of the lists
+
+## 30: OWASP A01 — authority, IDOR and a smuggled branch
+PASS 30.1  a requester cannot decide their own transfer, write-off, price or credit request
+     the shift variance requester was covered by leg 23.1: the closer is refused their own review
+     foreign-branch reads refused: transfer 403, write-off 403, count 403, approval 403, credit profile 403
+PASS 30.2  a foreign branch gets a 403 on every document read that names a branch
+PASS 30.3  a branchId smuggled into a body is refused, never honoured
+
+## 31: every decision is audited, and every effect has its own row
+PASS 31.1  every decided approval has an approval.decided row naming actor, before and after
+PASS 31.2  every effect has its own action row
+
+## 32: the POS is untouched
+     phase start 1e0a7578 (before 00370962 feat(shared): approval.read and approval.decide replace procurement.approve)
+     last commit touching desktop/ or powersync/: 06071bd 2026-10-26 fix(desktop): a refused device token is not a first install
+PASS 32.1  git diff over desktop/ and powersync/ is empty since the phase started
+NOT-DRIVEN 32.2  the desktop suite still passes at its committed count — the desktop suite is a repository-wide gate and this walkthrough must not restart the API or run another workspace suite; covered by evidence/suites.txt (51 files, 427 tests, recorded by run-suites.sh)
+
+## cleanup (rows this run created, foreign-key order)
+CLEANUP  branches removed 4/4, products removed 12/12
+
+PASS 93  FAIL 0  NOT-DRIVEN 1  (legs with a driven check 32/32, fully driven 31/32)
