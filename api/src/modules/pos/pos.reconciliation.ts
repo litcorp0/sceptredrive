@@ -242,8 +242,9 @@ export async function reconcileSales(
 }
 
 /**
- * Proves per shift: expected cash = float + cash tenders − change + in − out,
- * variance = counted − expected, and OPEN/CLOSED fields agree with the status.
+ * Proves per shift: expected cash = float + cash tenders − change + in − out −
+ * cash refunds, variance = counted − expected, and OPEN/CLOSED fields agree with
+ * the status.
  */
 export async function reconcileShifts(
   branchId?: string | null,
@@ -268,7 +269,12 @@ export async function reconcileShifts(
              COALESCE((
                SELECT SUM(cm.amount_minor) FROM cash_movement cm
                WHERE cm.shift_id = sh.id AND cm.type = 'CASH_OUT'
-             ), 0)::int AS cash_out
+             ), 0)::int AS cash_out,
+             COALESCE((
+               SELECT SUM(rt.amount_minor) FROM refund_tender rt
+               JOIN refund r ON r.id = rt.refund_id
+               WHERE r.shift_id = sh.id AND rt.method = 'CASH' AND rt.status = 'SETTLED'
+             ), 0)::int AS cash_refunds
       FROM shift sh
       WHERE ${branch}
     )
@@ -280,18 +286,19 @@ export async function reconcileShifts(
         'changeMinor', change_total,
         'cashInMinor', cash_in,
         'cashOutMinor', cash_out,
+        'cashRefundsMinor', cash_refunds,
         'serverExpectedCashMinor', server_expected_cash_minor,
         'countedCashMinor', counted_cash_minor,
         'varianceMinor', variance_minor,
         'recomputedExpectedMinor',
-          opening_float_minor + cash_tenders - change_total + cash_in - cash_out
+          opening_float_minor + cash_tenders - change_total + cash_in - cash_out - cash_refunds
       ) AS details
     FROM cash
     WHERE
       (status = 'CLOSED'
         AND (
           server_expected_cash_minor IS DISTINCT FROM
-            (opening_float_minor + cash_tenders - change_total + cash_in - cash_out)
+            (opening_float_minor + cash_tenders - change_total + cash_in - cash_out - cash_refunds)
           OR variance_minor IS DISTINCT FROM (counted_cash_minor - server_expected_cash_minor)
         ))
       OR (status = 'OPEN'

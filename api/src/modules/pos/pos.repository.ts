@@ -268,19 +268,34 @@ export async function insertCashMovement(
 }
 
 /**
+ * The drawer facts, with the cash refunds the shared `ShiftCashTotals` shape
+ * does not yet name. Declared here rather than widening the shared type so this
+ * read carries the fact without touching another lane's file.
+ */
+export interface ShiftDrawerTotals extends ShiftCashTotals {
+  cashRefundsMinor: number
+}
+
+/**
  * Recomputes a shift's expected cash from the applied facts: cash tenders,
- * change, and cash in/out. Sales not yet uploaded simply do not exist here.
+ * change, cash in/out, and the cash refunds that left the drawer. Sales not yet
+ * uploaded simply do not exist here.
+ *
+ * A refund counts against the **refund's** shift, not the sale's: the sale may
+ * belong to a shift that closed hours ago, while the money left this drawer.
+ * Only a `SETTLED` `CASH` tender moved cash; an electronic refund never did.
  */
 export async function selectShiftCashTotals(
   shiftId: string,
   openingFloatMinor: number,
   executor: DbExecutor = db,
-): Promise<ShiftCashTotals> {
+): Promise<ShiftDrawerTotals> {
   const rows = await executor.execute<{
     cash_tenders: string
     change_total: string
     cash_in: string
     cash_out: string
+    cash_refunds: string
   }>(sql`
     SELECT
       COALESCE((
@@ -297,7 +312,13 @@ export async function selectShiftCashTotals(
       COALESCE((
         SELECT SUM(cm.amount_minor) FROM cash_movement cm
         WHERE cm.shift_id = ${shiftId} AND cm.type = 'CASH_OUT'
-      ), 0)::text AS cash_out
+      ), 0)::text AS cash_out,
+      COALESCE((
+        SELECT SUM(rt.amount_minor)
+        FROM refund_tender rt
+        JOIN refund r ON r.id = rt.refund_id
+        WHERE r.shift_id = ${shiftId} AND rt.method = 'CASH' AND rt.status = 'SETTLED'
+      ), 0)::text AS cash_refunds
   `)
   const row = rows.rows[0]
   return {
@@ -306,6 +327,7 @@ export async function selectShiftCashTotals(
     changeMinor: Number(row?.change_total ?? 0),
     cashInMinor: Number(row?.cash_in ?? 0),
     cashOutMinor: Number(row?.cash_out ?? 0),
+    cashRefundsMinor: Number(row?.cash_refunds ?? 0),
   }
 }
 

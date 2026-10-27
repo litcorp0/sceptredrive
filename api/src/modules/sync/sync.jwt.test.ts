@@ -78,7 +78,18 @@ describe('POS JWT signing', () => {
   it('rejects a tampered signature', async () => {
     const token = await signDeviceJwt(DEVICE)
     const [header, payload, signature] = token.split('.') as [string, string, string]
-    const flipped = `${signature.slice(0, -2)}${signature.endsWith('A') ? 'BB' : 'AA'}`
+
+    // Flip one character in the middle of the signature segment. Base64url's
+    // trailing characters share padding bits, so rewriting the last two could
+    // decode to the same bytes and leave a valid token; a middle character is
+    // fully significant and the replacement is guaranteed to differ.
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    const index = Math.floor(signature.length / 2)
+    const current = signature[index] as string
+    const replacement = alphabet[(alphabet.indexOf(current) + 1) % alphabet.length] as string
+    expect(replacement).not.toBe(current)
+    const flipped = `${signature.slice(0, index)}${replacement}${signature.slice(index + 1)}`
+
     await expect(verifyDeviceJwt(`${header}.${payload}.${flipped}`)).rejects.toMatchObject({
       code: 'DEVICE_TOKEN_INVALID',
     })

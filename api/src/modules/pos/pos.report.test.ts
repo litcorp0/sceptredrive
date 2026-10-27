@@ -116,6 +116,7 @@ describe.skipIf(!available)('POS shift reports', () => {
     gross: 0,
     itemCount: 0,
     change: 0,
+    cashRefunds: 0,
     tender: { CASH: 0, CREDIT: 0, MOMO: 0, CARD: 0, BANK_TRANSFER: 0 } as Record<
       TenderMethod,
       number
@@ -377,6 +378,9 @@ describe.skipIf(!available)('POS shift reports', () => {
               WHERE cm.shift_id = ${id} AND cm.type = 'CASH_IN'), 0)
           - COALESCE((SELECT SUM(cm.amount_minor) FROM cash_movement cm
               WHERE cm.shift_id = ${id} AND cm.type = 'CASH_OUT'), 0)
+          - COALESCE((SELECT SUM(rt.amount_minor) FROM refund_tender rt
+              JOIN refund r ON r.id = rt.refund_id
+              WHERE r.shift_id = ${id} AND rt.method = 'CASH' AND rt.status = 'SETTLED'), 0)
           FROM shift WHERE id = ${id})::int AS "expectedCashMinor"
     `)
     const row = result.rows[0] as Oracle | undefined
@@ -706,6 +710,7 @@ describe.skipIf(!available)('POS shift reports', () => {
         tx,
       ),
     )
+    if (refundTenderRow.method === 'CASH') handed.cashRefunds += refundLineRow.totalMinor
 
     // A cart that never became a sale, and the drawer's two manual movements.
     const voidId = crypto.randomUUID()
@@ -978,13 +983,20 @@ describe.skipIf(!available)('POS shift reports', () => {
     expect(snapshot.creditMinor).toBe(3_000)
     expect(snapshot.momoMinor + snapshot.cardMinor + snapshot.bankTransferMinor).toBe(6_000)
 
-    // The drawer: float + cash − change + in − out, and counted − expected.
+    // The drawer: float + cash − change + in − out − cash refunds, and counted
+    // − expected. The refund is subtracted because that cash left the drawer.
     expect(snapshot.openingFloatMinor).toBe(openingFloatMinor)
     expect(snapshot.cashInMinor).toBe(cashInMinor)
     expect(snapshot.cashOutMinor).toBe(cashOutMinor)
     expect(snapshot.expectedCashMinor).toBe(
-      openingFloatMinor + handed.tender.CASH - handed.change + cashInMinor - cashOutMinor,
+      openingFloatMinor +
+        handed.tender.CASH -
+        handed.change +
+        cashInMinor -
+        cashOutMinor -
+        handed.cashRefunds,
     )
+    expect(handed.cashRefunds).toBeGreaterThan(0)
     expect(snapshot.expectedCashMinor).toBe(oracle.expectedCashMinor)
     expect(snapshot.countedCashMinor).toBe(countedCashMinor)
     expect(snapshot.varianceMinor).toBe(countedCashMinor - snapshot.expectedCashMinor)

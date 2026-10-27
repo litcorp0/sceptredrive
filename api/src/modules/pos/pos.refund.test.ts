@@ -65,6 +65,8 @@ describe.skipIf(!available)('POS refunds', () => {
   const createdSaleIds: string[] = []
   const createdRefundIds: string[] = []
   const createdPaymentIds: string[] = []
+  const createdTerminalIds: string[] = []
+  const createdDeviceIds: string[] = []
 
   let branchId = ''
   let terminalId = ''
@@ -91,12 +93,12 @@ describe.skipIf(!available)('POS refunds', () => {
 
   const deviceContext = (): DeviceAuthContext => ({ deviceId, terminalId, branchId })
 
-  function saleContext() {
+  function saleContext(device = deviceContext()) {
     const clientTransactionId = crypto.randomUUID()
     createdSaleIds.push(clientTransactionId)
     return {
       clientTransactionId,
-      device: deviceContext(),
+      device,
       receivedAt: new Date(),
       clockSkewToleranceMinutes: 10,
     }
@@ -131,6 +133,8 @@ describe.skipIf(!available)('POS refunds', () => {
     tenders: Array<{ method: TenderMethod; amountMinor: number; paymentId?: string }>
     customer?: { id: string; phone: string; name: string }
     cashier?: { userId: string; staffId: string; bindingId: string; bindingToken: string }
+    /** A sale taken on another till, for the foreign-refund refusal. */
+    context?: { device: DeviceAuthContext; shiftId: string }
   }
 
   async function createSale(spec: SaleSpec): Promise<string> {
@@ -164,7 +168,7 @@ describe.skipIf(!available)('POS refunds', () => {
 
     const payload: SalePayload = {
       receiptNumber: `RF${suffix}-${receiptSequence}`,
-      shiftId,
+      shiftId: spec.context?.shiftId ?? shiftId,
       cashier: { ...cashier, pinVersion: 1 },
       customer: spec.customer ?? null,
       lines: spec.lines.map((line) => ({
@@ -198,7 +202,7 @@ describe.skipIf(!available)('POS refunds', () => {
       appVersion: 'test',
     }
 
-    const ctx = saleContext()
+    const ctx = saleContext(spec.context?.device)
     await db.transaction((tx) => applySale(ctx, payload, tx))
     return ctx.clientTransactionId
   }
@@ -579,6 +583,12 @@ describe.skipIf(!available)('POS refunds', () => {
     }
     if (deviceId) await db.delete(device).where(eq(device.id, deviceId))
     if (terminalId) await db.delete(terminal).where(eq(terminal.id, terminalId))
+    if (createdDeviceIds.length > 0) {
+      await db.delete(device).where(inArray(device.id, createdDeviceIds))
+    }
+    if (createdTerminalIds.length > 0) {
+      await db.delete(terminal).where(inArray(terminal.id, createdTerminalIds))
+    }
     if (createdProductIds.length > 0) {
       await db.delete(product).where(inArray(product.id, createdProductIds))
     }
@@ -728,6 +738,80 @@ describe.skipIf(!available)('POS refunds', () => {
     )
 
     expect(await refundRowsFor(sale.saleId)).toHaveLength(1)
+  })
+
+  it('refuses a sale another terminal took and writes nothing', async () => {
+    // A second till in the same branch takes a sale of its own.
+    const foreignTerminalRow = await db
+      .insert(terminal)
+      .values({ branchId, code: `R${suffix}-T02`, name: 'Other Refund Counter' })
+      .returning()
+    const foreignTerminalId = foreignTerminalRow[0]?.id ?? ''
+    createdTerminalIds.push(foreignTerminalId)
+    const foreignDeviceRow = await db
+      .insert(device)
+      .values({
+        terminalId: foreignTerminalId,
+        fingerprint: `refund-foreign-${suffix}`,
+        tokenHash: randomToken(32),
+        status: 'ACTIVE',
+        enrolledAt: new Date(),
+      })
+      .returning()
+    const foreignDeviceId = foreignDeviceRow[0]?.id ?? ''
+    createdDeviceIds.push(foreignDeviceId)
+    const foreignShiftRow = await db
+      .insert(shift)
+      .values({
+        number: `RF-${suffix}-S-20261027-02`,
+        branchId,
+        terminalId: foreignTerminalId,
+        deviceId: foreignDeviceId,
+        cashierUserId,
+        cashierStaffId,
+        status: 'OPEN',
+        openedAt: new Date('2026-10-27T08:00:00Z'),
+        openingFloatMinor: 0,
+        openedBy: cashierStaffId,
+      })
+      .returning()
+    const foreignShiftId = foreignShiftRow[0]?.id ?? ''
+
+    const foreignSaleId = await createSale({
+      lines: [{ productId: productB, quantity: 1, unitPriceMinor: 1_000 }],
+      tenders: [{ method: 'CASH', amountMinor: 1_000 }],
+      context: {
+        device: { deviceId: foreignDeviceId, terminalId: foreignTerminalId, branchId },
+        shiftId: foreignShiftId,
+      },
+    })
+    const lines = await db.select().from(saleLine).where(eq(saleLine.saleId, foreignSaleId))
+    const tenders = await db.select().from(saleTender).where(eq(saleTender.saleId, foreignSaleId))
+
+    // This till may not refund another till's sale, even in the same branch.
+    const ctx = refundContext()
+    await expect(
+      applyRefund(
+        ctx,
+        refundPayload({
+          saleId: foreignSaleId,
+          lines: [{ saleLineId: lines[0]?.id ?? '', quantity: 1 }],
+          tenders: [{ saleTenderId: tenders[0]?.id ?? '', amountMinor: 1_000 }],
+          refundedMinor: 1_000,
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'REFUND_SALE_FOREIGN' })
+
+    // Nothing was written: no document, no approval, no stock movement.
+    expect(await refundRowsFor(foreignSaleId)).toHaveLength(0)
+    expect(await stockMovementsFor(ctx.clientTransactionId)).toHaveLength(0)
+    expect(
+      await db.select().from(approval).where(eq(approval.entityId, ctx.clientTransactionId)),
+    ).toHaveLength(0)
+    // The foreign sale is untouched.
+    const storedSale = (await db.select().from(sale).where(eq(sale.id, foreignSaleId)))[0]
+    expect(storedSale?.shiftId).toBe(foreignShiftId)
+    expect(tenders).toHaveLength(1)
   })
 
   it('writes an electronic tender PENDING and enqueues the dispatch after the commit', async () => {

@@ -29,9 +29,12 @@ import { auditLog } from '../platform/audit.schema.ts'
 import { product, productPrice } from '../products/products.schema.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { reconcileSales, reconcileShifts } from './pos.reconciliation.ts'
+import { selectShiftCashTotals } from './pos.repository.ts'
 import {
   cashMovement,
   posStaffBinding,
+  refund,
+  refundTender,
   sale,
   saleLine,
   saleTender,
@@ -43,6 +46,7 @@ import {
   applySale,
   closeShift,
   computeExpectedCash,
+  getXReport,
   openShift,
   recordCashMovement,
 } from './pos.service.ts'
@@ -128,6 +132,25 @@ describe.skipIf(!available)('POS shift application', () => {
     if (createdShiftIds.length > 0) {
       await db.delete(syncConflict).where(inArray(syncConflict.shiftId, createdShiftIds))
       await db.delete(cashMovement).where(inArray(cashMovement.shiftId, createdShiftIds))
+      // The drawer fixture's documents are append-only facts; a test suite is
+      // the one place they are removed, children first.
+      const refundIds = (
+        await db
+          .select({ id: refund.id })
+          .from(refund)
+          .where(inArray(refund.shiftId, createdShiftIds))
+      ).map((row) => row.id)
+      if (refundIds.length > 0) {
+        await db.delete(refundTender).where(inArray(refundTender.refundId, refundIds))
+        await db.delete(refund).where(inArray(refund.id, refundIds))
+      }
+      const saleIds = (
+        await db.select({ id: sale.id }).from(sale).where(inArray(sale.shiftId, createdShiftIds))
+      ).map((row) => row.id)
+      if (saleIds.length > 0) {
+        await db.delete(saleTender).where(inArray(saleTender.saleId, saleIds))
+        await db.delete(sale).where(inArray(sale.id, saleIds))
+      }
       // The Z-report is immutable history and the shift FK is RESTRICT, so the
       // test removes the snapshot before the shift it belongs to.
       await db.delete(shiftReport).where(inArray(shiftReport.shiftId, createdShiftIds))
@@ -164,6 +187,18 @@ describe.skipIf(!available)('POS shift application', () => {
         cashOutMinor: 0,
       }),
     ).toBe(0)
+
+    // A cash refund is drawer money that left, so it reduces the expectation.
+    expect(
+      computeExpectedCash({
+        openingFloatMinor: 20_000,
+        cashTendersMinor: 22_500,
+        changeMinor: 7_500,
+        cashInMinor: 5_000,
+        cashOutMinor: 2_000,
+        cashRefundsMinor: 500,
+      }),
+    ).toBe(37_500)
   })
 
   it('opens a shift with the client id and audits it', async () => {
@@ -352,6 +387,162 @@ describe.skipIf(!available)('POS shift application', () => {
       serverExpectedCashMinor: 10_000,
       varianceMinor: 0,
     })
+  })
+
+  it('takes cash refunds out of expected cash and ignores electronic ones', async () => {
+    const drawerDevice = await createTerminal(deviceA.branchId, 'D')
+    const drawerShiftId = crypto.randomUUID()
+    createdShiftIds.push(drawerShiftId)
+    const openingFloatMinor = 20_000
+    const cashTenderMinor = 1_800
+    const cardTenderMinor = 1_000
+    const cashInMinor = 3_000
+    const cashRefundMinor = 500
+    const countedCashMinor = 24_450
+    const occurredAt = new Date('2026-10-27T18:00:00Z')
+
+    await openShift(drawerDevice, {
+      ...openPayload(drawerShiftId, openingFloatMinor),
+      number: `${suffix}-S-20261027-01`,
+    })
+
+    // The fixture writes the sale and refund documents directly: this test is
+    // about the drawer read, and the rows are append-only facts either way.
+    const saleId = crypto.randomUUID()
+    await db.insert(sale).values({
+      id: saleId,
+      receiptNumber: `DR-${suffix}-01`,
+      branchId: drawerDevice.branchId,
+      terminalId: drawerDevice.terminalId,
+      deviceId: drawerDevice.deviceId,
+      shiftId: drawerShiftId,
+      clientTransactionId: crypto.randomUUID(),
+      cashierUserId,
+      cashierStaffId,
+      occurredAt,
+      subtotalMinor: cashTenderMinor + cardTenderMinor,
+      totalMinor: cashTenderMinor + cardTenderMinor,
+      tenderTotalMinor: cashTenderMinor + cardTenderMinor,
+      taxMode: 'INCLUSIVE',
+    })
+    const tenders = await db
+      .insert(saleTender)
+      .values([
+        { saleId, sequence: 1, method: 'CASH', amountMinor: cashTenderMinor },
+        { saleId, sequence: 2, method: 'CARD', amountMinor: cardTenderMinor },
+      ])
+      .returning()
+    const cashTenderId = tenders.find((tender) => tender.method === 'CASH')?.id ?? ''
+    const cardTenderId = tenders.find((tender) => tender.method === 'CARD')?.id ?? ''
+
+    async function insertRefund(input: {
+      number: string
+      saleTenderId: string
+      method: 'CASH' | 'CARD'
+      amountMinor: number
+      status: 'SETTLED' | 'PENDING'
+    }): Promise<void> {
+      const refundId = crypto.randomUUID()
+      await db.insert(refund).values({
+        id: refundId,
+        number: input.number,
+        saleId,
+        branchId: drawerDevice.branchId,
+        terminalId: drawerDevice.terminalId,
+        deviceId: drawerDevice.deviceId,
+        shiftId: drawerShiftId,
+        reasonCode: 'CUSTOMER_CHANGED_MIND',
+        refundedMinor: input.amountMinor,
+        approvedByUserId: 'test-manager',
+        approvedByStaffId: 'GA-TEST',
+        approvalPinVersion: 1,
+        approvalReasonCode: 'RETURN',
+        approvedAt: occurredAt,
+        occurredAt,
+      })
+      await db.insert(refundTender).values({
+        refundId,
+        sequence: 1,
+        method: input.method,
+        amountMinor: input.amountMinor,
+        saleTenderId: input.saleTenderId,
+        status: input.status,
+      })
+    }
+
+    await insertRefund({
+      number: `DR-${suffix}-R1`,
+      saleTenderId: cashTenderId,
+      method: 'CASH',
+      amountMinor: cashRefundMinor,
+      status: 'SETTLED',
+    })
+    // Electronic money never sat in the drawer, so its refund does not move it.
+    await insertRefund({
+      number: `DR-${suffix}-R2`,
+      saleTenderId: cardTenderId,
+      method: 'CARD',
+      amountMinor: 400,
+      status: 'SETTLED',
+    })
+    // A pending cash refund has not left the drawer yet.
+    await insertRefund({
+      number: `DR-${suffix}-R3`,
+      saleTenderId: cashTenderId,
+      method: 'CASH',
+      amountMinor: 100,
+      status: 'PENDING',
+    })
+
+    await recordCashMovement(drawerDevice, {
+      id: crypto.randomUUID(),
+      shiftId: drawerShiftId,
+      type: 'CASH_IN',
+      amountMinor: cashInMinor,
+      reason: 'Change float top-up',
+      occurredAt: occurredAt.toISOString(),
+      staffUserId: cashierUserId,
+      staffStaffId: cashierStaffId,
+    })
+
+    const totals = await selectShiftCashTotals(drawerShiftId, openingFloatMinor)
+    expect(totals.cashRefundsMinor).toBe(cashRefundMinor)
+
+    // float + cash − change + in − out − cash refunds.
+    const expectedCashMinor = openingFloatMinor + cashTenderMinor + cashInMinor - cashRefundMinor
+    expect(computeExpectedCash(totals)).toBe(expectedCashMinor)
+    expect(expectedCashMinor).toBe(24_300)
+
+    // The X taken before the close already reflects the refund.
+    const openX = await getXReport(drawerDevice, drawerShiftId)
+    expect(openX.expectedCashMinor).toBe(expectedCashMinor)
+    expect(openX.varianceMinor).toBeNull()
+
+    const result = await closeShift(drawerDevice, {
+      shiftId: drawerShiftId,
+      countedCashMinor,
+      clientExpectedCashMinor: expectedCashMinor,
+      occurredAt: occurredAt.toISOString(),
+    })
+    expect(result.serverExpectedCashMinor).toBe(expectedCashMinor)
+    expect(result.varianceMinor).toBe(countedCashMinor - expectedCashMinor)
+    expect(result.conflictId).toBeUndefined()
+
+    // The stored Z follows the same formula.
+    const reportRows = await db
+      .select()
+      .from(shiftReport)
+      .where(eq(shiftReport.shiftId, drawerShiftId))
+    expect(reportRows).toHaveLength(1)
+    expect(reportRows[0]?.expectedCashMinor).toBe(expectedCashMinor)
+    expect(reportRows[0]?.countedCashMinor).toBe(countedCashMinor)
+    expect(reportRows[0]?.varianceMinor).toBe(150)
+
+    // And so does the X taken after the close.
+    const closedX = await getXReport(drawerDevice, drawerShiftId)
+    expect(closedX.expectedCashMinor).toBe(expectedCashMinor)
+    expect(closedX.countedCashMinor).toBe(countedCashMinor)
+    expect(closedX.varianceMinor).toBe(150)
   })
 })
 
