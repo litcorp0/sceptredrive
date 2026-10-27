@@ -613,6 +613,15 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     expect(unchanged?.status).toBe('WAITING_FOR_INVOICE')
     expect(unchanged?.attempts).toBe(0)
 
+    // An operator's retry must not queue a refund ahead of its invoice either.
+    const retried = await app.request(`/api/evat/submissions/${refundUpload.submissionId}/retry`, {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+    })
+    expect(retried.status).toBe(200)
+    const retriedBody = await readJson<{ submission: { status: string } }>(retried)
+    expect(retriedBody.submission.status).toBe('WAITING_FOR_INVOICE')
+
     const certified = await submitNow(origin.submissionId)
     expect(certified?.status).toBe('CERTIFIED')
     const released = await submissionRow(refundUpload.submissionId)
@@ -682,7 +691,12 @@ describe.skipIf(!available)('E-VAT submissions', () => {
       const submittedAt = row?.submittedAt?.getTime() ?? 0
       const nextAttemptAt = row?.nextAttemptAt?.getTime() ?? 0
       expect(nextAttemptAt - submittedAt).toBe((minutes ?? 0) * 60_000)
-      // The lock is released, so the next attempt may read the row again.
+      // The rung elapses: a worker only picks a row whose `next_attempt_at` has
+      // passed, so the test moves the clock rather than the ladder.
+      await db
+        .update(evatSubmission)
+        .set({ nextAttemptAt: new Date(Date.now() - 1_000) })
+        .where(eq(evatSubmission.id, origin.submissionId))
     }
   })
 
@@ -694,6 +708,12 @@ describe.skipIf(!available)('E-VAT submissions', () => {
       const row = await submitNow(origin.submissionId)
       expect(row?.attempts).toBe(attempt)
       expect(row?.status).toBe(attempt < EVAT_MAX_ATTEMPTS ? 'RETRY' : 'ATTENTION')
+      if (attempt < EVAT_MAX_ATTEMPTS) {
+        await db
+          .update(evatSubmission)
+          .set({ nextAttemptAt: new Date(Date.now() - 1_000) })
+          .where(eq(evatSubmission.id, origin.submissionId))
+      }
     }
 
     const callsBefore = getMockEvatCallCounts().certify
@@ -816,7 +836,12 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     // `due_at` — nothing about the status changes (P14-D36).
     await db
       .update(evatSubmission)
-      .set({ dueAt: new Date(Date.now() - 3_600_000) })
+      .set({
+        dueAt: new Date(Date.now() - 3_600_000),
+        // Out of reach: a later worker run in this suite must not certify the
+        // row before the assertions below.
+        nextAttemptAt: new Date(Date.now() + 3_600_000),
+      })
       .where(eq(evatSubmission.id, origin.submissionId))
 
     const detail = await app.request(`/api/evat/submissions/${origin.submissionId}`, {
@@ -839,6 +864,7 @@ describe.skipIf(!available)('E-VAT submissions', () => {
   it('flag.evatSubmission=false queues nothing new and still certifies an existing row', async () => {
     const queued = await uploadSale()
 
+    await db.delete(setting).where(eq(setting.key, 'flag.evatSubmission'))
     await db.insert(setting).values({ key: 'flag.evatSubmission', value: false, branchId: null })
     try {
       const suppressed = await uploadSale()

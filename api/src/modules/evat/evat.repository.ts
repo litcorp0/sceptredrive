@@ -17,7 +17,6 @@ import {
 } from 'drizzle-orm'
 import { branch } from '../org/branches.schema.ts'
 import { refund, refundLine, refundTender, sale, saleLine, saleTender } from '../pos/pos.schema.ts'
-import { product } from '../products/products.schema.ts'
 import { evatSubmission } from './evat.schema.ts'
 import type {
   EvatListFilters,
@@ -98,13 +97,15 @@ export async function selectRefundDocumentLines(
       quantity: refundLine.quantity,
       unitPriceMinor: refundLine.unitPriceMinor,
       lineTotalMinor: refundLine.totalMinor,
-      productName: product.name,
-      productSku: product.sku,
+      // The name and SKU as sold: `sale_line` is the immutable snapshot, so a
+      // product renamed after the sale cannot make the credit note disagree
+      // with the invoice it references.
+      productName: saleLine.name,
+      productSku: saleLine.sku,
       taxCategory: saleLine.taxCategory,
     })
     .from(refundLine)
     .innerJoin(saleLine, eq(saleLine.id, refundLine.saleLineId))
-    .innerJoin(product, eq(product.id, refundLine.productId))
     .where(eq(refundLine.refundId, refundId))
     .orderBy(asc(refundLine.lineNumber))
 }

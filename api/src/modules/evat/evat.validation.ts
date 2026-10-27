@@ -14,19 +14,23 @@ const offsetSchema = z.coerce.number().int().min(0).default(0)
  * stored proxy for when the document happened, since an offline sale is queued
  * hours after it was taken.
  */
-export const evatListQuerySchema = z.object({
-  branchId: z.uuid().optional(),
-  status: z.enum(EVAT_SUBMISSION_STATUSES).optional(),
-  kind: z.enum(EVAT_DOCUMENT_KINDS).optional(),
-  overdue: z
-    .enum(['true', 'false'])
-    .transform((value) => value === 'true')
-    .optional(),
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
-  limit: limitSchema,
-  offset: offsetSchema,
-})
+export const evatListQuerySchema = z
+  .object({
+    branchId: z.uuid().optional(),
+    status: z.enum(EVAT_SUBMISSION_STATUSES).optional(),
+    kind: z.enum(EVAT_DOCUMENT_KINDS).optional(),
+    overdue: z
+      .enum(['true', 'false'])
+      .transform((value) => value === 'true')
+      .optional(),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    limit: limitSchema,
+    offset: offsetSchema,
+  })
+  // Strict: a misspelt filter is a 400, not a silently unfiltered page. An
+  // operator who asked for one branch must never be shown every branch.
+  .strict()
 
 export const evatIdParamSchema = z.object({ id: z.uuid() })
 
