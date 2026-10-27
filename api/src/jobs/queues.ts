@@ -5,6 +5,7 @@ import {
   runDueCountSchedules,
   scanOversellTriggers,
 } from '../modules/counts/counts.service.ts'
+import { processEvatSubmissions } from '../modules/evat/evat.service.ts'
 import { expireDueLots } from '../modules/loyalty/loyalty.service.ts'
 import { reconcileStaleTransfers } from '../modules/payables/payables.service.ts'
 import type { PaymentRow } from '../modules/payments/payments.repository.ts'
@@ -186,6 +187,7 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   await ensureQueue(boss, POS_REFUND_DISPATCH_QUEUE)
   await ensureQueue(boss, POS_PAYMENT_RECONCILE_QUEUE)
   await ensureQueue(boss, PAYABLES_TRANSFER_RECONCILE_QUEUE)
+  await ensureQueue(boss, EVAT_SUBMIT_QUEUE)
 
   await boss.work(LOYALTY_EXPIRY_QUEUE, async () => {
     const summary = await expireDueLots()
@@ -238,6 +240,15 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
       { queue: PAYABLES_TRANSFER_RECONCILE_QUEUE, ...summary },
       'transfer reconcile run complete',
     )
+    return summary
+  })
+
+  // The payload names one submission, but the worker reads the database: the
+  // row is the queue and this is only the doorbell. A doorbell for a row that a
+  // concurrent run already took is answered by the same batch.
+  await boss.work(EVAT_SUBMIT_QUEUE, async () => {
+    const summary = await processEvatSubmissions()
+    logger.info({ queue: EVAT_SUBMIT_QUEUE, ...summary }, 'e-vat submission run complete')
     return summary
   })
 
@@ -305,5 +316,16 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
       tz: INVENTORY_JOB_TZ,
     },
     'transfer reconcile sweep registered',
+  )
+
+  // The E-VAT sweep: five minutes, because the deadline is 24 hours and a lost
+  // doorbell must not become a missed statutory window (P14-D40).
+  await boss.schedule(EVAT_SUBMIT_QUEUE, EVAT_SUBMIT_CRON, null, {
+    tz: INVENTORY_JOB_TZ,
+    missed: 'once',
+  })
+  logger.info(
+    { queue: EVAT_SUBMIT_QUEUE, cron: EVAT_SUBMIT_CRON, tz: INVENTORY_JOB_TZ },
+    'e-vat submission sweep registered',
   )
 }

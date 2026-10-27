@@ -6,9 +6,15 @@ import {
   type EvatCertificate,
   evatDueAt,
   evatRetryDelayMinutes,
+  isEvatOverdue,
 } from '@sceptre/shared'
+import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { env } from '../../config/env.ts'
-import { AppError } from '../../http/errors.ts'
+import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
+import type { SessionUser } from '../../http/factory.ts'
+import { logger } from '../../logger.ts'
+import { writeAudit } from '../platform/audit.service.ts'
+import type { AuditActor } from '../platform/audit.types.ts'
 import * as settingsService from '../platform/settings.service.ts'
 import {
   type EInvoicingProvider,
@@ -19,21 +25,36 @@ import {
   getEvatProvider,
 } from './evat.provider.ts'
 import {
+  countSubmissions,
   findBranchForDocument,
   findRefundDocument,
   findSaleDocument,
   findSubmissionByRefundId,
   findSubmissionBySaleId,
+  findSubmissionJoinedById,
   findSubmissionRowByIdForUpdate,
   insertQueuedSubmission,
+  promoteAllWaitingRefunds,
   promoteWaitingRefundsForSale,
+  selectDueSubmissions,
   selectRefundDocumentLines,
   selectRefundDocumentTenders,
   selectSaleDocumentLines,
   selectSaleDocumentTenders,
+  selectSubmissionPage,
+  selectSubmissionSummary,
   updateSubmission,
 } from './evat.repository.ts'
-import type { EvatSubmissionRow } from './evat.types.ts'
+import type {
+  EvatCertificateView,
+  EvatListFilters,
+  EvatListQuery,
+  EvatSubmissionJoinedRow,
+  EvatSubmissionPage,
+  EvatSubmissionRow,
+  EvatSubmissionView,
+  EvatSummary,
+} from './evat.types.ts'
 
 /**
  * Queueing and certification (P14-D34 … P14-D40).
@@ -498,4 +519,297 @@ export async function submit(
   }
 
   return updateSubmission(row.id, attentionPatch(result.code, result.message), executor)
+}
+
+// --- Reads (P14-D40: every submission has a visible state) --------------------
+
+function certificateOf(row: EvatSubmissionJoinedRow): EvatCertificateView | null {
+  const {
+    providerInvoiceNumber,
+    sdcId,
+    serial,
+    signature,
+    internalData,
+    machineCode,
+    stampedAt,
+    qrPayload,
+  } = row
+  if (
+    !providerInvoiceNumber ||
+    !sdcId ||
+    !serial ||
+    !signature ||
+    !internalData ||
+    !machineCode ||
+    !stampedAt ||
+    !qrPayload
+  ) {
+    return null
+  }
+  return {
+    providerInvoiceNumber,
+    sdcId,
+    serial,
+    signature,
+    internalData,
+    machineCode,
+    stampedAt: stampedAt.toISOString(),
+    qrPayload,
+  }
+}
+
+/**
+ * `overdue` is derived on every read and never stored: a certified document is
+ * finished whatever the clock says, and everything else past `due_at` is late.
+ */
+function toView(row: EvatSubmissionJoinedRow, now: Date): EvatSubmissionView {
+  return {
+    id: row.id,
+    kind: row.kind,
+    status: row.status,
+    overdue: row.status !== 'CERTIFIED' && isEvatOverdue(row.dueAt, now),
+    attempts: row.attempts,
+    branchId: row.branchId,
+    terminalId: row.terminalId,
+    saleId: row.saleId,
+    refundId: row.refundId,
+    documentNumber: row.documentNumber,
+    dueAt: row.dueAt.toISOString(),
+    nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
+    provider: row.provider,
+    certificate: certificateOf(row),
+    lastErrorCode: row.lastErrorCode,
+    lastErrorMessage: row.lastErrorMessage,
+    submittedAt: row.submittedAt?.toISOString() ?? null,
+    certifiedAt: row.certifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
+/** A date-only boundary (midnight UTC = midnight Accra) means the whole day, inclusive. */
+function inclusiveEnd(date: Date): Date {
+  const isMidnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  return isMidnight ? new Date(date.getTime() + 86_400_000 - 1) : date
+}
+
+export async function listSubmissions(
+  user: SessionUser,
+  query: EvatListQuery,
+): Promise<EvatSubmissionPage> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const now = new Date()
+  const filters: EvatListFilters = {
+    branchId,
+    status: query.status,
+    kind: query.kind,
+    overdue: query.overdue,
+    from: query.from,
+    to: query.to ? inclusiveEnd(query.to) : undefined,
+    limit: query.limit,
+    offset: query.offset,
+    now,
+  }
+  const [rows, total] = await Promise.all([
+    selectSubmissionPage(filters),
+    countSubmissions(filters),
+  ])
+  return { submissions: rows.map((row) => toView(row, now)), total, branchId }
+}
+
+export async function getSubmission(user: SessionUser, id: string): Promise<EvatSubmissionView> {
+  const row = await findSubmissionJoinedById(id)
+  if (!row) throw new NotFoundError('Submission not found')
+  assertBranchAccess(user, row.branchId)
+  return toView(row, new Date())
+}
+
+/**
+ * A manager's retry is refused by the permission, not by this function: the
+ * route asks for `evat.retry`, which only an admin holds. This is the
+ * administrative release of a stuck document — `attempts` is history and is not
+ * reset (P14-D40).
+ */
+export async function retrySubmission(
+  user: SessionUser,
+  actor: AuditActor,
+  id: string,
+): Promise<EvatSubmissionView> {
+  await db.transaction(async (tx) => {
+    const row = await findSubmissionRowByIdForUpdate(id, tx)
+    if (!row) throw new NotFoundError('Submission not found')
+    assertBranchAccess(user, row.branchId)
+    if (row.status === 'CERTIFIED') {
+      throw new ConflictError('A certified submission cannot be retried')
+    }
+    if (row.status === 'SUBMITTING') {
+      throw new ConflictError('This submission is being submitted right now')
+    }
+
+    const nextAttemptAt = new Date()
+    await updateSubmission(id, { status: 'QUEUED', nextAttemptAt }, tx)
+    await writeAudit(
+      {
+        ...actor,
+        action: 'evat.submission.retried',
+        entity: 'evat_submission',
+        entityId: id,
+        branchId: row.branchId,
+        before: {
+          status: row.status,
+          attempts: row.attempts,
+          nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
+        },
+        after: { status: 'QUEUED', nextAttemptAt: nextAttemptAt.toISOString() },
+      },
+      tx,
+    )
+  })
+
+  return getSubmission(user, id)
+}
+
+export async function getSummary(user: SessionUser): Promise<EvatSummary> {
+  const branchId = resolveBranchFilter(user, null)
+  const counts = await selectSubmissionSummary(branchId)
+  const now = Date.now()
+  return {
+    queued: counts.queued,
+    certified: counts.certified,
+    retrying: counts.retrying,
+    attention: counts.attention,
+    overdue: counts.overdue,
+    oldestOverdueMinutes: counts.oldestDueAt
+      ? Math.max(0, Math.floor((now - counts.oldestDueAt.getTime()) / 60_000))
+      : null,
+  }
+}
+
+// --- Health (P14-D40) ---------------------------------------------------------
+
+/** A health check is a provider call; the console may ask, but not per keystroke. */
+export const EVAT_HEALTH_CACHE_MS = 60_000
+
+let healthCache: { checkedAt: Date; result: { ok: boolean; detail?: string } } | null = null
+
+export interface EvatHealth {
+  ok: boolean
+  detail?: string
+  checkedAt: string
+  /** True when this answer was reused rather than asked for again. */
+  cached: boolean
+}
+
+/**
+ * At most one provider health check a minute. A failure is a failure, not a
+ * throw: an unreachable GRA must not make the console page itself look broken,
+ * and the detail says what to fix without naming a credential.
+ */
+export async function checkProviderHealth(now: Date = new Date()): Promise<EvatHealth> {
+  if (healthCache && now.getTime() - healthCache.checkedAt.getTime() < EVAT_HEALTH_CACHE_MS) {
+    return {
+      ...healthCache.result,
+      checkedAt: healthCache.checkedAt.toISOString(),
+      cached: true,
+    }
+  }
+
+  let result: { ok: boolean; detail?: string }
+  try {
+    result = await getEvatProvider().healthCheck()
+  } catch (error) {
+    result = { ok: false, detail: messageOf(error) }
+  }
+  healthCache = { checkedAt: now, result }
+  return { ...result, checkedAt: now.toISOString(), cached: false }
+}
+
+/** Test seam: the cache is process-local, like the provider it caches. */
+export function resetEvatHealthCache(): void {
+  healthCache = null
+}
+
+// --- The worker (P14-D40) -----------------------------------------------------
+
+/** One bounded batch; the next run takes the rest. */
+export const EVAT_QUEUE_BATCH = 50
+
+export interface EvatRunSummary {
+  promoted: number
+  processed: number
+  certified: number
+  retrying: number
+  attention: number
+  failed: number
+}
+
+/**
+ * One worker run: promote refunds whose invoice has certified, then submit the
+ * due rows.
+ *
+ * Every row is its own transaction and its own try/catch, so one bad payload
+ * cannot stop the other forty-nine. The log line carries `{ submissionId,
+ * status, attempts, code }` and nothing else: the document holds money and a
+ * TIN, and a log is storage like any other. A crash before the enqueue of a
+ * doorbell is harmless — the row is still `QUEUED`, and the five-minute sweep
+ * reads the same table.
+ */
+export async function processEvatSubmissions(
+  options: { limit?: number } = {},
+): Promise<EvatRunSummary> {
+  const summary: EvatRunSummary = {
+    promoted: 0,
+    processed: 0,
+    certified: 0,
+    retrying: 0,
+    attention: 0,
+    failed: 0,
+  }
+
+  try {
+    summary.promoted = await db.transaction((tx) => promoteAllWaitingRefunds(tx))
+  } catch (error) {
+    logger.error(
+      { queue: 'evat-submit', error: error instanceof Error ? error.name : 'unknown' },
+      'e-vat sweep could not promote waiting refunds',
+    )
+  }
+
+  const due = await selectDueSubmissions(new Date(), options.limit ?? EVAT_QUEUE_BATCH)
+  for (const candidate of due) {
+    try {
+      const row = await db.transaction((tx) => submit(candidate.id, tx))
+      if (!row) {
+        summary.failed += 1
+        continue
+      }
+      if (row.status === 'CERTIFIED') summary.certified += 1
+      if (row.status === 'RETRY') summary.retrying += 1
+      if (row.status === 'ATTENTION') summary.attention += 1
+      summary.processed += 1
+      logger.info(
+        {
+          submissionId: row.id,
+          status: row.status,
+          attempts: row.attempts,
+          code: row.lastErrorCode ?? null,
+        },
+        'e-vat submission processed',
+      )
+    } catch (error) {
+      summary.failed += 1
+      logger.error(
+        {
+          submissionId: candidate.id,
+          error: error instanceof Error ? error.name : 'unknown',
+        },
+        'e-vat submission failed; the next sweep will retry it',
+      )
+    }
+  }
+
+  return summary
 }

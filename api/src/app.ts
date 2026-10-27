@@ -18,6 +18,7 @@ import { catalogRoutes } from './modules/catalog/catalog.routes.ts'
 import { countsRoutes } from './modules/counts/counts.routes.ts'
 import { creditRoutes } from './modules/credit/credit.routes.ts'
 import { customersRoutes } from './modules/customers/customers.routes.ts'
+import { evatRoutes } from './modules/evat/evat.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
 import { loyaltyRoutes } from './modules/loyalty/loyalty.routes.ts'
@@ -106,6 +107,7 @@ app.route('/', payablesRoutes)
 app.route('/', posRoutes)
 app.route('/', procurementRoutes)
 app.route('/', replenishmentRoutes)
+app.route('/', evatRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 app.route('/', syncRoutes)
