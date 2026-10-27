@@ -617,9 +617,23 @@ describe.skipIf(!available)('inventory API', () => {
       .select()
       .from(auditLog)
       .where(and(eq(auditLog.entity, 'stock_threshold'), eq(auditLog.branchId, branchAId)))
-    const latest = audits.at(-1)
-    expect(latest?.action).toBe('stock_threshold.updated')
-    expect(latest?.after).toMatchObject({ threshold: 15, maxQuantity: 30, minOrderQuantity: 5 })
+    // An unordered SELECT promises no row order, so the assertion finds the row
+    // that carries the write rather than trusting whichever row the driver put
+    // last. `.at(-1)` failed once in a full run for exactly that reason.
+    const updated = audits.filter(
+      (row) =>
+        row.action === 'stock_threshold.updated' &&
+        row.after !== null &&
+        typeof row.after === 'object' &&
+        (row.after as Record<string, unknown>).productId === productBId &&
+        (row.after as Record<string, unknown>).threshold === 15,
+    )
+    expect(updated).toHaveLength(1)
+    expect(updated[0]?.after).toMatchObject({
+      threshold: 15,
+      maxQuantity: 30,
+      minOrderQuantity: 5,
+    })
 
     await app.request(`/api/inventory/thresholds/${productBId}?branchId=${branchAId}`, {
       method: 'DELETE',
