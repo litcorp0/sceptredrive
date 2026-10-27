@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeExpectedCash, computeVariance } from './shift-service'
+import { closeAuthority, computeExpectedCash, computeVariance } from './shift-service'
 
 /**
  * Expected cash (P13-D32).
@@ -39,5 +39,56 @@ describe('computeExpectedCash', () => {
         cashRefundsMinor: 0,
       }),
     ).toBe(210_000)
+  })
+})
+
+/**
+ * Who may close a drawer (P14-D12).
+ *
+ * Phase 13's `closeShift` refused anyone but the shift's cashier, so a manager
+ * could only close their own drawer even though the server has honoured
+ * `closedBy` since Plan 13. The rule now: the cashier who opened it, or a
+ * manager/admin signed in on this terminal's branch. Everything else is
+ * `NOT_OWNER`, unchanged.
+ */
+
+const DRAWER = { cashierUserId: 'user-ama', branchId: 'branch-accra' }
+const TERMINAL_BRANCH = 'branch-accra'
+
+describe('closeAuthority', () => {
+  it('lets the cashier close the drawer they opened', () => {
+    expect(closeAuthority(DRAWER, { userId: 'user-ama', role: 'CASHIER' }, TERMINAL_BRANCH)).toBe(
+      'CASHIER',
+    )
+  })
+
+  it('lets a manager of this branch take a cashier’s drawer over', () => {
+    expect(closeAuthority(DRAWER, { userId: 'user-kofi', role: 'MANAGER' }, TERMINAL_BRANCH)).toBe(
+      'MANAGER',
+    )
+  })
+
+  it('lets an admin do the same, because the API does', () => {
+    expect(closeAuthority(DRAWER, { userId: 'user-adjoa', role: 'ADMIN' }, TERMINAL_BRANCH)).toBe(
+      'MANAGER',
+    )
+  })
+
+  it('refuses a cashier closing another cashier’s drawer', () => {
+    expect(
+      closeAuthority(DRAWER, { userId: 'user-esinam', role: 'CASHIER' }, TERMINAL_BRANCH),
+    ).toBeNull()
+  })
+
+  it('refuses a manager when the shift is not this branch’s', () => {
+    // A shift row can only reach this terminal through the terminal-scoped read;
+    // if one ever does from another branch, the manager does not inherit it.
+    expect(
+      closeAuthority(
+        { ...DRAWER, branchId: 'branch-kumasi' },
+        { userId: 'user-kofi', role: 'MANAGER' },
+        TERMINAL_BRANCH,
+      ),
+    ).toBeNull()
   })
 })

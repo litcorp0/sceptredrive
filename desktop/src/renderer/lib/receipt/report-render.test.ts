@@ -41,6 +41,7 @@ const FIGURES: ShiftReportFigures = {
   cardMinor: 0,
   bankTransferMinor: 0,
   changeMinor: 2_000,
+  cashRefundMinor: 0,
   cashInMinor: 5_000,
   cashOutMinor: 1_000,
   expectedCashMinor: 52_000,
@@ -136,5 +137,120 @@ describe('buildReportDocument', () => {
     )
     expect(text).toContain('GHS 45.01')
     expect(text).not.toContain('GHS 45.009999')
+  })
+})
+
+/**
+ * The drawer, read off the paper (P14-D1).
+ *
+ * The plan's example: a GH₵500 cash refund went out of a drawer that took
+ * GH₵4300 and gave GH₵200 back, with a float and a cash-in/out on top. The six
+ * lines above `Expected` have to add up to it without a calculator, and the
+ * tender block has to print the same cash figure under a different heading.
+ */
+
+const DRAWER_FIGURES: ShiftReportFigures = {
+  ...FIGURES,
+  openingFloatMinor: 100_000,
+  cashMinor: 430_000,
+  changeMinor: 20_000,
+  cashRefundMinor: 50_000,
+  cashInMinor: 20_000,
+  cashOutMinor: 10_000,
+  expectedCashMinor: 470_000,
+  countedCashMinor: 470_000,
+  varianceMinor: 0,
+}
+
+function rowParts(row: string): { label: string; value: string } | null {
+  const match = /^(.+?)\s{2,}(\S.*)$/.exec(row.trimEnd())
+  const label = match?.[1]?.trim()
+  if (!label || !match?.[2]) return null
+  return { label, value: match[2] }
+}
+
+/** Every printed row, whatever the section; titles and rules are not rows. */
+function rowsOf(text: string): { label: string; value: string }[] {
+  return text.split('\n').flatMap((row) => rowParts(row) ?? [])
+}
+
+function rowValue(text: string, label: string): string | undefined {
+  return rowsOf(text).find((row) => row.label === label)?.value
+}
+
+function drawerRows(text: string): { label: string; value: string }[] {
+  const rows = text.split('\n')
+  const start = rows.findIndex((row) => row.trim() === 'DRAWER')
+  const after = rows.slice(start + 1)
+  const end = after.findIndex((row) => /^-+$/.test(row))
+  return (end === -1 ? after : after.slice(0, end)).flatMap((row) => rowParts(row) ?? [])
+}
+
+/** `GHS -500.00` → `-50000`, without a float round-trip on paper money. */
+function printedMinor(value: string): number {
+  const amount = value.replace(/^GH[S₵] /, '')
+  const negative = amount.startsWith('-')
+  const [whole, fraction] = amount.replace('-', '').split('.')
+  const minor = Number(whole) * 100 + Number(fraction ?? 0)
+  return negative ? -minor : minor
+}
+
+describe('the DRAWER block', () => {
+  it('prints the money in the order it moved, and the lines add up', () => {
+    const text = reportDocumentText(
+      buildReportDocument(DRAWER_FIGURES, context({ varianceLabel: varianceWords(0) })),
+    )
+    const drawer = drawerRows(text)
+
+    expect(drawer.map((row) => row.label)).toEqual([
+      'Opening float',
+      'Cash taken',
+      'Change given',
+      'Cash refunds',
+      'Cash in',
+      'Cash out',
+      'Expected',
+      'Counted',
+      'Variance',
+    ])
+
+    const values = drawer.map((row) => row.value)
+    expect(values.slice(0, 6)).toEqual([
+      'GHS 1000.00',
+      'GHS 4300.00',
+      'GHS -200.00',
+      'GHS -500.00',
+      'GHS 200.00',
+      'GHS -100.00',
+    ])
+
+    // 1000 + 4300 − 200 − 500 + 200 − 100 = 4700, which is the row below it.
+    const sum = values.slice(0, 6).reduce((total, value) => total + printedMinor(value), 0)
+    expect(sum).toBe(printedMinor(values[6] as string))
+    expect(values[6]).toBe('GHS 4700.00')
+    // A drawer counted at the formula disagrees by nothing.
+    expect(values[8]).toBe(varianceWords(0))
+  })
+
+  it('prints one cash figure for both TENDERS and DRAWER', () => {
+    const text = reportDocumentText(buildReportDocument(DRAWER_FIGURES, context()))
+    const tendersCash = rowValue(text, 'Cash')
+    const taken = drawerRows(text).find((row) => row.label === 'Cash taken')
+
+    expect(tendersCash).toBe('GHS 4300.00')
+    // Same field, same number: a manager comparing the two finds them equal,
+    // and neither line is a second summation that can drift.
+    expect(taken?.value).toBe(tendersCash)
+  })
+
+  it('says the cash refund was never itemised rather than printing a zero', () => {
+    const text = reportDocumentText(
+      buildReportDocument({ ...DRAWER_FIGURES, cashRefundMinor: null }, context()),
+    )
+    const refunds = drawerRows(text).find((row) => row.label === 'Cash refunds')
+
+    // A snapshot that did not measure the refund cannot claim it was nothing.
+    expect(refunds?.value).toBe('not itemised')
+    expect(refunds?.value).not.toContain('-')
   })
 })

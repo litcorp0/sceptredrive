@@ -18,8 +18,6 @@ import { CloseShiftError, closeShiftWithReport } from './close-shift'
 const NOW = new Date('2026-10-27T18:30:00.000Z')
 
 const BINDING: LocalStaffBinding = {
-  // The close stays with the shift's own cashier: `closeShift` refuses anyone
-  // else, so the drawer and the name on it are the same person by construction.
   id: 'binding-cashier',
   userId: 'user-cashier',
   staffId: 'GA-0003',
@@ -36,6 +34,29 @@ const BINDING: LocalStaffBinding = {
   lockedUntil: null,
   isActive: true,
   boundAt: '2026-10-01T00:00:00.000Z',
+}
+
+/** The manager who takes Ama's drawer over at shift end (P14-D12). */
+const MANAGER: LocalStaffBinding = {
+  ...BINDING,
+  id: 'binding-manager',
+  userId: 'user-manager',
+  staffId: 'GA-0001',
+  name: 'Kofi Boateng',
+  role: 'MANAGER',
+  bindingId: 'binding-manager',
+  bindingToken: 'manager-token',
+}
+
+/** A different cashier: the same role, but not this drawer's owner. */
+const OTHER_CASHIER: LocalStaffBinding = {
+  ...BINDING,
+  id: 'binding-esinam',
+  userId: 'user-esinam',
+  staffId: 'GA-0004',
+  name: 'Esinam Adjei',
+  bindingId: 'binding-esinam',
+  bindingToken: 'esinam-token',
 }
 
 const CONFIG = {
@@ -106,6 +127,21 @@ const BINDING_ROW = {
   bound_at: BINDING.boundAt,
 }
 
+/** The same row, for whoever is signed in: the close reads their own binding. */
+function bindingRow(binding: LocalStaffBinding) {
+  return {
+    ...BINDING_ROW,
+    id: binding.id,
+    user_id: binding.userId,
+    staff_id: binding.staffId,
+    name: binding.name,
+    role: binding.role,
+    binding_id: binding.bindingId,
+    binding_token: binding.bindingToken,
+    pin_version: binding.pinVersion,
+  }
+}
+
 /**
  * One row answers both readers: the close's cash totals and the report's
  * aggregates. The two must agree, and here they do by construction.
@@ -171,18 +207,30 @@ function fakeDb(
     holds?: HoldRow[]
     figures?: Partial<typeof FIGURES>
     failOn?: (sql: string) => boolean
+    /** The staff rows the till holds: the close reads the signed-in member's. */
+    bindings?: LocalStaffBinding[]
+    /** A shift row whose branch is not this terminal's (a re-assigned device). */
+    shiftBranchId?: string
   } = {},
 ) {
   const holds = [...(options.holds ?? [])]
   const figures = { ...FIGURES, ...options.figures }
+  const bindings = (options.bindings ?? [BINDING]).map(bindingRow)
   const written: Write[] = []
   const outbox = new Map<string, string>()
-  let shiftRow = { ...SHIFT_ROW }
+  let shiftRow = { ...SHIFT_ROW, branch_id: options.shiftBranchId ?? SHIFT_ROW.branch_id }
   let reports = 0
 
   async function readOne(sql: string, parameters?: unknown[]): Promise<unknown> {
     if (/FROM pos_config/.test(sql)) return CONFIG
-    if (/FROM staff_binding/.test(sql)) return BINDING_ROW
+    if (/FROM staff_binding/.test(sql)) {
+      // `getBinding(db, bindingId)` asks by id: the proof is the caller's row,
+      // never whichever row happens to be first.
+      return (
+        bindings.find((row) => parameters?.[0] === undefined || row.binding_id === parameters[0]) ??
+        null
+      )
+    }
     if (/COUNT\(\*\) AS total FROM held_cart/.test(sql)) return { total: holds.length }
     if (/FROM held_cart WHERE id/.test(sql)) {
       const found = holds.find((row) => row.id === parameters?.[0])
@@ -329,6 +377,7 @@ function fakeDb(
     get shift(): LocalShift {
       return {
         ...SHIFT,
+        branchId: shiftRow.branch_id,
         status: shiftRow.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
         closedAt: shiftRow.closed_at,
         countedCashMinor: shiftRow.counted_cash_minor,
@@ -603,5 +652,70 @@ describe('closeShiftWithReport', () => {
     await expect(
       closeShiftWithReport(fake.db, { countedCashMinor: 0, holdsDecision: 'KEEP' }),
     ).rejects.toMatchObject({ code: 'NOT_SIGNED_IN' })
+  })
+
+  it('lets a manager close a cashier’s drawer as themselves', async () => {
+    startStaffSession(MANAGER)
+    const fake = fakeDb({ bindings: [BINDING, MANAGER] })
+
+    const result = await closeShiftWithReport(
+      fake.db,
+      { countedCashMinor: 51_500, holdsDecision: 'KEEP' },
+      { now: NOW },
+    )
+
+    // The count, the variance, the Z and the outbox row are untouched: only
+    // the person named as the closer differs from the drawer's owner.
+    expect(fake.reports).toBe(1)
+    expect(result.expectedCashMinor).toBe(52_000)
+    expect(result.varianceMinor).toBe(-500)
+    expect(fake.shift.status).toBe('CLOSED')
+    expect(fake.shift.countedCashMinor).toBe(51_500)
+    expect(fake.shift.closedBy).toBe(MANAGER.staffId)
+    expect(fake.shift.cashierUserId).toBe(BINDING.userId)
+
+    const payload = fake.shiftClosePayload as {
+      closedBy: { userId: string; staffId: string; bindingId: string }
+    }
+    // The variance review that follows names the manager, not the cashier.
+    expect(payload.closedBy).toMatchObject({
+      userId: MANAGER.userId,
+      staffId: MANAGER.staffId,
+      bindingId: MANAGER.bindingId,
+    })
+  })
+
+  it('still refuses a cashier closing another cashier’s drawer', async () => {
+    startStaffSession(OTHER_CASHIER)
+    const fake = fakeDb({ bindings: [BINDING, OTHER_CASHIER] })
+
+    await expect(
+      closeShiftWithReport(
+        fake.db,
+        { countedCashMinor: 51_500, holdsDecision: 'KEEP' },
+        { now: NOW },
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_OWNER' })
+
+    expect(fake.shift.status).toBe('OPEN')
+    expect(fake.reports).toBe(0)
+    expect(fake.written).toHaveLength(0)
+  })
+
+  it('refuses a manager when the drawer is not this branch’s shift', async () => {
+    startStaffSession(MANAGER)
+    const fake = fakeDb({ bindings: [BINDING, MANAGER], shiftBranchId: 'branch-kumasi' })
+
+    await expect(
+      closeShiftWithReport(
+        fake.db,
+        { countedCashMinor: 51_500, holdsDecision: 'KEEP' },
+        { now: NOW },
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_OWNER' })
+
+    // Scoped by holding nothing rather than by trusting the terminal read.
+    expect(fake.shift.status).toBe('OPEN')
+    expect(fake.written).toHaveLength(0)
   })
 })
