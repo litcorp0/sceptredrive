@@ -1,10 +1,4 @@
-import {
-  isElectronicTender,
-  TENDER_LABELS,
-  TENDER_METHODS,
-  type TenderMethod,
-  tenderBalance,
-} from '@sceptre/shared'
+import { TENDER_LABELS, TENDER_METHODS, type TenderMethod, tenderBalance } from '@sceptre/shared'
 import { Check, X } from 'lucide-react'
 import { StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
@@ -170,6 +164,13 @@ export interface TenderDraftLine {
   id: string
   method: TenderMethod
   amountMinor: number
+  /**
+   * The server payment this line settles. Set only for an electronic tender
+   * that the server has already marked `PAID`; the sale upload references it
+   * and `applySale` refuses an electronic tender without one (P13-D6).
+   */
+  paymentId?: string | null
+  providerReference?: string | null
 }
 
 /**
@@ -270,7 +271,7 @@ export function TenderSummary({
 }
 
 /**
- * Cash or credit, as one 44 px segmented pair.
+ * The five tender methods, as one 44 px segmented row.
  *
  * The selected state is not colour-only: it carries a check icon, a heavier
  * border, and a heavier label (WCAG 2.2 SC 1.4.1). The icon's box is reserved
@@ -280,9 +281,9 @@ export function TenderSummary({
  * turns that — and any other unexpected value — back into the current choice,
  * because a till always has a payment method.
  *
- * The list is the shared method vocabulary minus the electronic methods: MoMo,
- * card and bank arrive with the payment provider in Plan 09, and offering a
- * button that cannot be completed would be a lie at the counter.
+ * The electronic buttons stay enabled offline: their panel says in words why a
+ * provider round trip is unavailable, and the cashier can still read the reason
+ * rather than wonder why the button is dead. Cash and credit never depend on it.
  */
 export function TenderMethodToggle({
   method,
@@ -293,8 +294,6 @@ export function TenderMethodToggle({
   onChange: (method: TenderMethod) => void
   creditDisabled: boolean
 }) {
-  const methods = TENDER_METHODS.filter((candidate) => !isElectronicTender(candidate))
-
   return (
     <ToggleGroup
       type="single"
@@ -302,15 +301,15 @@ export function TenderMethodToggle({
       value={method}
       onValueChange={(value) => onChange(nextTenderMethod(value, method))}
       aria-label="Payment method"
-      className="mb-4 flex w-full"
+      className="mb-4 flex w-full flex-wrap"
     >
-      {methods.map((option) => (
+      {TENDER_METHODS.map((option) => (
         <ToggleGroupItem
           key={option}
           value={option}
           disabled={option === 'CREDIT' && creditDisabled}
           className="h-12 min-h-12 flex-1 gap-2 text-sm font-semibold data-[state=on]:border-2 data-[state=on]:border-foreground data-[state=on]:font-bold"
-          data-testid={option === 'CASH' ? 'method-cash' : 'method-credit'}
+          data-testid={TENDER_TEST_IDS[option]}
         >
           <span aria-hidden="true" className="flex size-4 items-center justify-center">
             {method === option ? <Check className="size-4" /> : null}
@@ -320,4 +319,13 @@ export function TenderMethodToggle({
       ))}
     </ToggleGroup>
   )
+}
+
+/** Kept stable for `counter-audit`, which drives the first two by test id. */
+const TENDER_TEST_IDS: Record<TenderMethod, string> = {
+  CASH: 'method-cash',
+  CREDIT: 'method-credit',
+  MOMO: 'method-momo',
+  CARD: 'method-card',
+  BANK_TRANSFER: 'method-bank-transfer',
 }

@@ -5,13 +5,14 @@ import {
   type TenderMethod,
   tenderBalance,
 } from '@sceptre/shared'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ManagerOverrideDialog, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import type { PosConfigSnapshot } from '@/lib/api/types'
 import { getBinding, type LocalStaffBinding } from '@/lib/auth/bindings'
 import type { StaffSession } from '@/lib/auth/staff-session'
+import type { CartTenderRecord } from '@/lib/cart/cart-repository'
 import { cartPricingContext, useCart } from '@/lib/cart/cart-store'
 import { posRuntimeConfig } from '@/lib/config'
 import {
@@ -32,6 +33,7 @@ import { completeSale, SaleCompletionError } from '@/lib/sale/complete-sale'
 import { peekReceiptNumber } from '@/lib/sale/document-sequence'
 import { usePosShortcuts } from '@/lib/shortcuts'
 import { CartTotalsPanel } from '@/modules/cart'
+import { ElectronicTenderPanel, type PaidElectronicTender } from '../components/electronic-tender'
 import {
   CashKeypad,
   NoPaymentDue,
@@ -76,7 +78,7 @@ export function TenderScreen({
   config: PosConfigSnapshot
 }) {
   const db = usePosDatabase()
-  const { state, totals, dispatch } = useCart()
+  const { state, totals, dispatch, cartTenders, status: cartStatus } = useCart()
   const customerContext = useCustomerContext(state.customer, identity.branchId)
 
   const totalMinor = totals.priced.totalMinor
@@ -122,6 +124,24 @@ export function TenderScreen({
     setCreditBypass(false)
   }, [customerKey])
 
+  /*
+   * A `PAID` cart tender is money already taken (P13-D31). It is seeded into the
+   * tender list exactly once per screen mount, so the crash case — paid, then
+   * the app died — resumes at a sale that is one click from complete. The
+   * electronic panel's own resume path may also report it; `addPaidTender`
+   * dedupes on the payment id, so the line cannot be counted twice.
+   */
+  const seededTenders = useRef(false)
+  useEffect(() => {
+    if (cartStatus !== 'ready' || seededTenders.current) return
+    seededTenders.current = true
+    const paid = cartTenders.filter(
+      (row) => row.draftId === state.saleId && row.status === 'PAID' && row.paymentId,
+    )
+    if (paid.length === 0) return
+    setLines((current) => mergePaidTenders(current, paid))
+  }, [cartStatus, cartTenders, state.saleId])
+
   const appliedMinor = lines.reduce((sum, line) => sum + line.amountMinor, 0)
   const pending: TenderDraftLine[] =
     inputMinor > 0 ? [{ id: 'pending', method: activeMethod, amountMinor: inputMinor }] : []
@@ -159,12 +179,12 @@ export function TenderScreen({
     !balanceProblem
 
   function selectMethod(next: TenderMethod): void {
-    if (isElectronicTender(next)) return
     setActiveMethod(next)
     setError(null)
     // The method button is also the "pay the rest this way" gesture: prefill what
     // is still owed so a cashier who switches to credit does not have to retype it.
-    setInputMinor(Math.max(0, totalMinor - appliedMinor))
+    // Electronic methods ask the server for the amount instead.
+    setInputMinor(isElectronicTender(next) ? 0 : Math.max(0, totalMinor - appliedMinor))
   }
 
   function addTender(): void {
@@ -174,6 +194,30 @@ export function TenderScreen({
     const amount = activeMethod === 'CREDIT' ? Math.min(requested, remaining) : requested
     if (amount <= 0) return
     setLines([...lines, { id: crypto.randomUUID(), method: activeMethod, amountMinor: amount }])
+    setInputMinor(0)
+    setError(null)
+  }
+
+  /**
+   * An electronic tender is added only after the server says `PAID`, and it is
+   * keyed by the payment id: a resume, a slow poll and the panel's own resume
+   * path can all report the same money, and it must appear once.
+   */
+  function addPaidTender(tender: PaidElectronicTender): void {
+    setLines((current) =>
+      current.some((line) => line.id === tender.id)
+        ? current
+        : [
+            ...current,
+            {
+              id: tender.id,
+              method: tender.method,
+              amountMinor: tender.amountMinor,
+              paymentId: tender.paymentId,
+              providerReference: tender.providerReference,
+            },
+          ],
+    )
     setInputMinor(0)
     setError(null)
   }
@@ -224,6 +268,12 @@ export function TenderScreen({
         : effective.map((line) => ({
             method: line.method,
             amountMinor: line.amountMinor,
+            ...(line.paymentId
+              ? {
+                  paymentId: line.paymentId,
+                  providerReference: line.providerReference ?? null,
+                }
+              : {}),
           })),
       cashier: {
         userId: binding.userId,
@@ -356,7 +406,16 @@ export function TenderScreen({
             <NoPaymentDue />
           ) : (
             <>
-              {activeMethod === 'CASH' ? (
+              {isElectronicTender(activeMethod) ? (
+                <ElectronicTenderPanel
+                  draftId={state.saleId}
+                  shiftId={shift?.id ?? ''}
+                  method={activeMethod}
+                  remainingMinor={Math.max(0, totalMinor - appliedMinor)}
+                  onPaid={addPaidTender}
+                  onSwitchToCash={() => selectMethod('CASH')}
+                />
+              ) : activeMethod === 'CASH' ? (
                 <CashKeypad
                   totalMinor={totalMinor}
                   appliedMinor={appliedMinor}
@@ -449,17 +508,19 @@ export function TenderScreen({
                   lines={lines}
                   onRemove={(id) => setLines(lines.filter((line) => line.id !== id))}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addTender}
-                  disabled={balance.remainingMinor === 0 && inputMinor === 0}
-                  className="h-11"
-                  data-testid="add-tender"
-                >
-                  Add {TENDER_LABELS[activeMethod].toLowerCase()} payment
-                  <span className="ml-1 font-mono text-xs font-normal opacity-70">Enter</span>
-                </Button>
+                {isElectronicTender(activeMethod) ? null : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addTender}
+                    disabled={balance.remainingMinor === 0 && inputMinor === 0}
+                    className="h-11"
+                    data-testid="add-tender"
+                  >
+                    Add {TENDER_LABELS[activeMethod].toLowerCase()} payment
+                    <span className="ml-1 font-mono text-xs font-normal opacity-70">Enter</span>
+                  </Button>
+                )}
                 <TenderSummary totalMinor={totalMinor} lines={effective} />
               </div>
             </>
@@ -536,4 +597,28 @@ export function TenderScreen({
       ) : null}
     </div>
   )
+}
+
+/**
+ * Seeds the tender list from `PAID` cart tenders (P13-D31).
+ *
+ * A row can arrive from two places — this screen's seed and the electronic
+ * panel's resume — so the merge is idempotent on the payment id, which is also
+ * the line id the sale will write.
+ */
+function mergePaidTenders(
+  lines: TenderDraftLine[],
+  rows: readonly CartTenderRecord[],
+): TenderDraftLine[] {
+  const seen = new Set(lines.map((line) => line.id))
+  const added = rows
+    .filter((row) => row.paymentId !== null && !seen.has(row.paymentId))
+    .map((row) => ({
+      id: row.paymentId as string,
+      method: row.method,
+      amountMinor: row.amountMinor,
+      paymentId: row.paymentId as string,
+      providerReference: row.providerReference,
+    }))
+  return added.length === 0 ? lines : [...lines, ...added]
 }

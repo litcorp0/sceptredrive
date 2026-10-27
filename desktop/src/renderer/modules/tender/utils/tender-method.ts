@@ -1,4 +1,4 @@
-import type { TenderMethod } from '@/lib/sale/sale-draft'
+import { isTenderMethod, type TenderMethod } from '@sceptre/shared'
 
 /**
  * The payment method a `ToggleGroup type="single"` is reporting.
@@ -9,5 +9,5 @@ import type { TenderMethod } from '@/lib/sale/sale-draft'
  * not a state this screen has, and an unchecked cast would let it through.
  */
 export function nextTenderMethod(value: string, current: TenderMethod): TenderMethod {
-  return value === 'CASH' || value === 'CREDIT' ? value : current
+  return isTenderMethod(value) ? value : current
 }

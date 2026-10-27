@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { cartReducer, emptyCart } from '../cart/reducer'
 import { computeCartTotals } from '../cart/totals'
 import type { CartOverrideProof, CartState, SellableProduct } from '../cart/types'
-import { buildSaleDraft, parseTenderMethod, SaleDraftError, toSaleProof } from './sale-draft'
+import {
+  buildSaleDraft,
+  parseTenderMethod,
+  SaleDraftError,
+  type TenderMethod,
+  toSaleProof,
+} from './sale-draft'
 
 const NOW = '2026-10-23T10:00:00.000Z'
 const CONTEXT = {
@@ -55,11 +61,19 @@ function cartWith(lines: Array<[string, number, number]>): CartState {
 
 function draftFor(
   cart: CartState,
-  tender: { method: 'CASH' | 'CREDIT'; amountMinor: number; override?: CartOverrideProof | null },
-  extra: Array<{
-    method: 'CASH' | 'CREDIT'
+  tender: {
+    method: TenderMethod
     amountMinor: number
     override?: CartOverrideProof | null
+    paymentId?: string | null
+    providerReference?: string | null
+  },
+  extra: Array<{
+    method: TenderMethod
+    amountMinor: number
+    override?: CartOverrideProof | null
+    paymentId?: string | null
+    providerReference?: string | null
   }> = [],
 ) {
   return buildSaleDraft({
@@ -72,8 +86,8 @@ function draftFor(
       method: line.method,
       amountMinor: line.amountMinor,
       override: line.override ?? null,
-      paymentId: null,
-      providerReference: null,
+      paymentId: line.paymentId ?? null,
+      providerReference: line.providerReference ?? null,
     })),
     occurredAt: NOW,
     appVersion: '0.1.0',
@@ -107,7 +121,15 @@ describe('buildSaleDraft — cash', () => {
     ])
     expect(draft.payload.totals.totalMinor).toBe(20_000)
     expect(draft.payload.totals.changeMinor).toBe(5_000)
-    expect(draft.payload.tenders).toEqual([{ method: 'CASH', amountMinor: 25_000, override: null }])
+    expect(draft.payload.tenders).toEqual([
+      {
+        method: 'CASH',
+        amountMinor: 25_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
+    ])
   })
 
   it('matches the server payload contract key for key', () => {
@@ -251,6 +273,8 @@ describe('buildSaleDraft — credit', () => {
           note: 'Known customer',
           occurredAt: NOW,
         },
+        paymentId: null,
+        providerReference: null,
       },
     ])
     expect(draft.payload.totals.changeMinor).toBe(0)
@@ -346,8 +370,20 @@ describe('buildSaleDraft — split tender', () => {
 
     expect(draft.payload.totals.totalMinor).toBe(10_000)
     expect(draft.payload.tenders).toEqual([
-      { method: 'CASH', amountMinor: 4_000, override: null },
-      { method: 'CREDIT', amountMinor: 6_000, override: null },
+      {
+        method: 'CASH',
+        amountMinor: 4_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
+      {
+        method: 'CREDIT',
+        amountMinor: 6_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
     ])
     expect(draft.payload.totals.changeMinor).toBe(0)
   })
@@ -386,6 +422,51 @@ describe('buildSaleDraft — split tender', () => {
     })
     cart = cartReducer(cart, { type: 'setLoyaltyRedeem', points: 1_000, now: NOW })
     expect(() => draftFor(cart, { method: 'CASH', amountMinor: 500 })).toThrow(/takes no payment/)
+  })
+})
+
+describe('buildSaleDraft — electronic tender', () => {
+  const paymentId = '77777777-7777-7777-8777-777777777777'
+
+  it('sends the payment reference for an electronic tender and null for cash', () => {
+    const draft = draftFor(cartWith([['p1', 10_000, 1]]), { method: 'CASH', amountMinor: 4_000 }, [
+      {
+        method: 'MOMO',
+        amountMinor: 6_000,
+        paymentId,
+        providerReference: 'sd-cp_1',
+      },
+    ])
+
+    expect(draft.payload.tenders).toEqual([
+      {
+        method: 'CASH',
+        amountMinor: 4_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
+      {
+        method: 'MOMO',
+        amountMinor: 6_000,
+        override: null,
+        paymentId,
+        providerReference: 'sd-cp_1',
+      },
+    ])
+  })
+
+  it('keeps the tender keys the strict upload schema expects', () => {
+    const draft = draftFor(cartWith([['p1', 10_000, 1]]), {
+      method: 'CARD',
+      amountMinor: 10_000,
+      paymentId,
+      providerReference: 'sd-cp_2',
+    })
+
+    expect(Object.keys(draft.payload.tenders[0] ?? {}).sort()).toEqual(
+      ['amountMinor', 'method', 'override', 'paymentId', 'providerReference'].sort(),
+    )
   })
 })
 

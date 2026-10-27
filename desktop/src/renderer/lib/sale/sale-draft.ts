@@ -94,14 +94,16 @@ export interface SalePayloadDraft {
   } | null
   loyalty: { redeemPoints: number; earnPreviewPoints: number } | null
   /**
-   * In payment order. `paymentId`/`providerReference` stay on the device rows
-   * until Plan 09 adds them to the wire alongside the electronic methods: the
-   * current schema is `.strict()`, so sending them early is a 400.
+   * In payment order. `paymentId` and `providerReference` are how the server
+   * ties an electronic tender to the money it already saw (P13-D6); they are
+   * `null` for cash and credit, which have no provider behind them.
    */
   tenders: Array<{
     method: TenderMethod
     amountMinor: number
     override: SaleProof | null
+    paymentId: string | null
+    providerReference: string | null
   }>
   totals: {
     subtotalMinor: number
@@ -304,6 +306,8 @@ export function buildSaleDraft(input: SaleDraftInput): SaleDraft {
         method: tender.method,
         amountMinor: tender.amountMinor,
         override: toSaleProof(tender.override),
+        paymentId: tender.paymentId,
+        providerReference: tender.providerReference,
       })),
       totals: {
         subtotalMinor: totals.priced.subtotalMinor,

@@ -4,18 +4,21 @@ import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { endStaffSession, type StaffSession } from '@/lib/auth/staff-session'
 import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
+import { usePosRuntime } from '@/lib/pos-runtime'
 import { navigate } from '@/lib/router'
 import { usePosShortcuts } from '@/lib/shortcuts'
 import { requestFocus } from '@/lib/ui-intent'
 import { AttentionStrip } from '../components/attention-strip'
 import { DrawerTile } from '../components/drawer-tile'
 import { HourChart } from '../components/hour-chart'
+import { PaymentAttention } from '../components/payment-attention'
 import { StatTiles } from '../components/stat-tiles'
 import { TakeFigure } from '../components/take-figure'
 import { TopSellers } from '../components/top-sellers'
 import { useAccraDay } from '../hooks/use-accra-day'
 import { useCurrentAccraHour } from '../hooks/use-accra-hour'
 import { useHomeDay } from '../hooks/use-home'
+import { useDraftForClaim, useOrphanPayments } from '../hooks/use-payment-attention'
 
 /**
  * The counter's home screen (Plan 05, P10-D1).
@@ -44,6 +47,9 @@ export function HomePage({
 }) {
   const day = useAccraDay()
   const currentHour = useCurrentAccraHour()
+  const runtime = usePosRuntime()
+  const orphans = useOrphanPayments()
+  const draftForClaim = useDraftForClaim(shift?.id ?? null, runtime.config)
   const home = useHomeDay(day, {
     terminalId: identity.terminalId,
     branchId: identity.branchId,
@@ -112,6 +118,7 @@ export function HomePage({
         </div>
 
         <AttentionStrip items={home.attention} />
+        <PaymentAttention orphans={orphans} draft={draftForClaim} />
       </main>
     </div>
   )

@@ -1,5 +1,5 @@
 import type { PowerSyncDatabase, Transaction } from '@powersync/web'
-import type { TaxCategory } from '@sceptre/shared'
+import { isTenderMethod, type TaxCategory, type TenderMethod } from '@sceptre/shared'
 import type { CartCustomer, CartLine, CartOverrideProof, CartState } from './types'
 
 /**
@@ -44,6 +44,46 @@ export interface CartDraftLineRow {
   line_discount_reason: string | null
   line_discount_note: string | null
   line_discount_override: string | null
+}
+
+/**
+ * One in-flight electronic tender on the draft (P13-D31).
+ *
+ * The screen's state machine reads `ElectronicTender`; this is the stored copy
+ * that survives a restart. It carries no secret: a provider reference is a
+ * routing id, and the phone is the customer's own number, already spoken aloud
+ * at the counter.
+ */
+export interface CartTenderRecord {
+  id: string
+  draftId: string
+  sequence: number
+  method: TenderMethod
+  amountMinor: number
+  momoProvider: string | null
+  phone: string | null
+  paymentId: string | null
+  providerReference: string | null
+  status: string
+  displayText: string | null
+  expiresAt: string | null
+  createdAt: string
+}
+
+interface CartTenderDbRow {
+  id: string
+  draft_id: string
+  sequence: number | null
+  method: string
+  amount_minor: number
+  momo_provider: string | null
+  phone: string | null
+  payment_id: string | null
+  provider_reference: string | null
+  status: string
+  display_text: string | null
+  expires_at: string | null
+  created_at: string
 }
 
 const PROOF_STRING_KEYS = [
@@ -292,6 +332,148 @@ export async function saveCartDraft(db: PowerSyncDatabase, state: CartState): Pr
   await db.writeTransaction(async (tx) => {
     await writeDraft(tx, state)
   })
+}
+
+function toCartTenderRecord(row: CartTenderDbRow): CartTenderRecord {
+  return {
+    id: row.id,
+    draftId: row.draft_id,
+    sequence: row.sequence ?? 1,
+    method: isTenderMethod(row.method) ? row.method : 'CASH',
+    amountMinor: row.amount_minor,
+    momoProvider: row.momo_provider,
+    phone: row.phone,
+    paymentId: row.payment_id,
+    providerReference: row.provider_reference,
+    status: row.status,
+    displayText: row.display_text,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }
+}
+
+async function writeCartTenders(
+  tx: Transaction,
+  draftId: string,
+  tenders: readonly CartTenderRecord[],
+): Promise<void> {
+  await tx.execute('DELETE FROM cart_tender WHERE draft_id = ?', [draftId])
+  for (const tender of tenders) {
+    await tx.execute(
+      `INSERT INTO cart_tender
+         (id, draft_id, sequence, method, amount_minor, momo_provider, phone, payment_id,
+          provider_reference, status, display_text, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tender.id,
+        draftId,
+        tender.sequence,
+        tender.method,
+        tender.amountMinor,
+        tender.momoProvider,
+        tender.phone,
+        tender.paymentId,
+        tender.providerReference,
+        tender.status,
+        tender.displayText,
+        tender.expiresAt,
+        tender.createdAt,
+      ],
+    )
+  }
+}
+
+/**
+ * The draft **and** its in-flight electronic tenders, written in the same
+ * transaction (P13-D31).
+ *
+ * This is the one write the cart debounce makes: a crash inside a 180-second
+ * MoMo authorisation must not lose the fact that GH₵50 is in flight, so the
+ * tender rows cannot be a second, later write.
+ */
+export async function saveCart(
+  db: PowerSyncDatabase,
+  state: CartState,
+  tenders: readonly CartTenderRecord[],
+): Promise<void> {
+  await db.writeTransaction(async (tx) => {
+    await writeDraft(tx, state)
+    await writeCartTenders(tx, state.saleId, tenders)
+  })
+}
+
+/** The same restore as `loadCartDraft`, plus the draft's electronic tenders. */
+export async function loadCartDraftWithTenders(
+  db: PowerSyncDatabase,
+  shiftId: string | null,
+): Promise<{ state: CartState | null; tenders: CartTenderRecord[] }> {
+  const state = await loadCartDraft(db, shiftId)
+
+  // Tenders belong to a draft; a draft that was pruned (or never existed) must
+  // not leave a payment looking in flight.
+  await db.execute('DELETE FROM cart_tender WHERE draft_id NOT IN (SELECT id FROM cart_draft)')
+  if (!state) return { state: null, tenders: [] }
+
+  const rows = await db.getAll<CartTenderDbRow>(
+    `SELECT * FROM cart_tender WHERE draft_id = ? ORDER BY COALESCE(sequence, 1), created_at`,
+    [state.saleId],
+  )
+  return { state, tenders: rows.map(toCartTenderRecord) }
+}
+
+export interface AttachPaidTenderInput {
+  paymentId: string
+  providerReference: string
+  method: TenderMethod
+  amountMinor: number
+  displayText?: string | null
+}
+
+/**
+ * Attaches an orphaned payment to the current draft after `claim` (P13-D9).
+ *
+ * The money arrived before the sale did, so the row is written already `PAID`
+ * and the tender screen's resume path adds the line. It is one transaction so a
+ * crash cannot leave a claimed payment with no tender pointing at it.
+ */
+export async function attachPaidCartTender(
+  db: PowerSyncDatabase,
+  draftId: string,
+  input: AttachPaidTenderInput,
+): Promise<CartTenderRecord> {
+  const existing = await db.getAll<{ sequence: number | null }>(
+    'SELECT sequence FROM cart_tender WHERE draft_id = ?',
+    [draftId],
+  )
+  const sequence = existing.reduce((max, row) => Math.max(max, row.sequence ?? 1), 0) + 1
+  const record: CartTenderRecord = {
+    id: crypto.randomUUID(),
+    draftId,
+    sequence,
+    method: input.method,
+    amountMinor: input.amountMinor,
+    momoProvider: null,
+    phone: null,
+    paymentId: input.paymentId,
+    providerReference: input.providerReference,
+    status: 'PAID',
+    displayText: input.displayText ?? null,
+    expiresAt: null,
+    createdAt: new Date().toISOString(),
+  }
+
+  await db.writeTransaction(async (tx) => {
+    await writeCartTenders(tx, draftId, [...(await readForWrite(tx, draftId)), record])
+  })
+  return record
+}
+
+async function readForWrite(tx: Transaction, draftId: string): Promise<CartTenderRecord[]> {
+  const rows = await tx.getAll<CartTenderDbRow>(
+    `SELECT * FROM cart_tender WHERE draft_id = ? ORDER BY COALESCE(sequence, 1), created_at`,
+    [draftId],
+  )
+  return rows.map(toCartTenderRecord)
 }
 
 /** After a completed sale the draft is gone; the next cart starts with a new id. */

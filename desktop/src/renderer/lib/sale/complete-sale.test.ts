@@ -202,8 +202,20 @@ describe('prepareSale', () => {
       [2, 'CREDIT'],
     ])
     expect(prepared.draft.payload.tenders).toEqual([
-      { method: 'CASH', amountMinor: 4_000, override: null },
-      { method: 'CREDIT', amountMinor: 8_000, override: null },
+      {
+        method: 'CASH',
+        amountMinor: 4_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
+      {
+        method: 'CREDIT',
+        amountMinor: 8_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
     ])
   })
 
@@ -557,8 +569,20 @@ describe('completeSale transaction', () => {
       totals: { changeMinor: number }
     }
     expect(payload.tenders).toEqual([
-      { method: 'CASH', amountMinor: 4_000, override: null },
-      { method: 'CREDIT', amountMinor: 8_000, override: null },
+      {
+        method: 'CASH',
+        amountMinor: 4_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
+      {
+        method: 'CREDIT',
+        amountMinor: 8_000,
+        override: null,
+        paymentId: null,
+        providerReference: null,
+      },
     ])
     expect(payload.totals.changeMinor).toBe(0)
   })

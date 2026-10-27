@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react'
 import type { PosConfigSnapshot } from '../api/types'
-import { loadCartDraft, saveCartDraft } from './cart-repository'
+import { type CartTenderRecord, loadCartDraftWithTenders, saveCart } from './cart-repository'
 import { cartReducer, emptyCart } from './reducer'
 import { type CartPricingContext, type CartTotals, computeCartTotals } from './totals'
 import type { CartAction, CartCustomer, CartState, SellableProduct } from './types'
@@ -33,6 +33,13 @@ interface CartContextValue {
   addProduct: (product: SellableProduct, quantity?: number) => void
   setCustomer: (customer: CartCustomer | null) => void
   clear: () => void
+  /**
+   * In-flight electronic tenders (P13-D31). They are written by the same 150 ms
+   * debounce as the draft, so a crash inside a MoMo authorisation does not lose
+   * the fact that the money may already be moving.
+   */
+  cartTenders: CartTenderRecord[]
+  setCartTenders: (next: CartTenderRecord[]) => void
 }
 
 const CartContext = createContext<CartContextValue | null>(null)
@@ -61,6 +68,7 @@ export function CartProvider({
   children: ReactNode
 }) {
   const [state, rawDispatch] = useReducer(cartReducer, undefined, () => emptyCart({ shiftId }))
+  const [cartTenders, setCartTenders] = useState<CartTenderRecord[]>([])
   const [status, setStatus] = useState<'loading' | 'ready'>('loading')
   const [error, setError] = useState<string | null>(null)
 
@@ -87,16 +95,18 @@ export function CartProvider({
 
   const clear = useCallback(() => {
     dispatch({ type: 'clear' })
+    setCartTenders([])
   }, [dispatch])
 
   // Restore the draft left by a crash, but only when it belongs to this shift.
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
-    void loadCartDraft(db, shiftId)
+    void loadCartDraftWithTenders(db, shiftId)
       .then((restored) => {
         if (cancelled) return
-        rawDispatch(restored ? { type: 'hydrate', state: restored } : { type: 'clear' })
+        rawDispatch(restored.state ? { type: 'hydrate', state: restored.state } : { type: 'clear' })
+        setCartTenders(restored.tenders)
         setStatus('ready')
       })
       .catch((loadError: unknown) => {
@@ -117,7 +127,7 @@ export function CartProvider({
   useEffect(() => {
     if (status !== 'ready') return
     const timer = setTimeout(() => {
-      void saveCartDraft(db, state).catch((saveError: unknown) => {
+      void saveCart(db, state, cartTenders).catch((saveError: unknown) => {
         setError(
           saveError instanceof Error
             ? `Could not save the cart: ${saveError.message}`
@@ -126,11 +136,23 @@ export function CartProvider({
       })
     }, DRAFT_WRITE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [db, state, status])
+  }, [db, state, cartTenders, status])
 
   const value = useMemo<CartContextValue>(
-    () => ({ state, totals, pricing, status, error, dispatch, addProduct, setCustomer, clear }),
-    [state, totals, pricing, status, error, dispatch, addProduct, setCustomer, clear],
+    () => ({
+      state,
+      totals,
+      pricing,
+      status,
+      error,
+      dispatch,
+      addProduct,
+      setCustomer,
+      clear,
+      cartTenders,
+      setCartTenders,
+    }),
+    [state, totals, pricing, status, error, dispatch, addProduct, setCustomer, clear, cartTenders],
   )
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
