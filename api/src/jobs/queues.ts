@@ -6,6 +6,7 @@ import {
   scanOversellTriggers,
 } from '../modules/counts/counts.service.ts'
 import { expireDueLots } from '../modules/loyalty/loyalty.service.ts'
+import { reconcileStaleTransfers } from '../modules/payables/payables.service.ts'
 import type { PaymentRow } from '../modules/payments/payments.repository.ts'
 import { findStalePending } from '../modules/payments/payments.repository.ts'
 import { dispatchPendingRefunds, getPayment } from '../modules/payments/payments.service.ts'
@@ -49,6 +50,14 @@ export const POS_REFUND_DISPATCH_CRON = '*/15 * * * *'
 
 /** Accra is UTC+0 all year, but the zone is named rather than assumed. */
 export const INVENTORY_JOB_TZ = 'Africa/Accra'
+
+/**
+ * Phase 14 supplier transfers (P14-D31, P14-D47). Every fifteen minutes the
+ * sweep verifies the transfers still open after ten minutes. It never finalises
+ * an OTP: that is a human's second factor, not a job's.
+ */
+export const PAYABLES_TRANSFER_RECONCILE_QUEUE = 'payables-transfer-reconcile'
+export const PAYABLES_TRANSFER_RECONCILE_CRON = '*/15 * * * *'
 
 async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   const existing = await boss.getQueue(name)
@@ -151,6 +160,7 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   await ensureQueue(boss, INVENTORY_TRIGGER_SCAN_QUEUE)
   await ensureQueue(boss, POS_REFUND_DISPATCH_QUEUE)
   await ensureQueue(boss, POS_PAYMENT_RECONCILE_QUEUE)
+  await ensureQueue(boss, PAYABLES_TRANSFER_RECONCILE_QUEUE)
 
   await boss.work(LOYALTY_EXPIRY_QUEUE, async () => {
     const summary = await expireDueLots()
@@ -193,6 +203,15 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
     logger.info(
       { queue: POS_PAYMENT_RECONCILE_QUEUE, ...summary },
       'payment reconcile run complete',
+    )
+    return summary
+  })
+
+  await boss.work(PAYABLES_TRANSFER_RECONCILE_QUEUE, async () => {
+    const summary = await reconcileStaleTransfers()
+    logger.info(
+      { queue: PAYABLES_TRANSFER_RECONCILE_QUEUE, ...summary },
+      'transfer reconcile run complete',
     )
     return summary
   })
@@ -246,5 +265,20 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   logger.info(
     { queue: POS_REFUND_DISPATCH_QUEUE, cron: POS_REFUND_DISPATCH_CRON, tz: INVENTORY_JOB_TZ },
     'refund dispatch sweep registered',
+  )
+
+  // The transfer sweep: a webhook that never arrived leaves an intent open, and
+  // only a verify can tell us whether the money moved (P14-D31).
+  await boss.schedule(PAYABLES_TRANSFER_RECONCILE_QUEUE, PAYABLES_TRANSFER_RECONCILE_CRON, null, {
+    tz: INVENTORY_JOB_TZ,
+    missed: 'once',
+  })
+  logger.info(
+    {
+      queue: PAYABLES_TRANSFER_RECONCILE_QUEUE,
+      cron: PAYABLES_TRANSFER_RECONCILE_CRON,
+      tz: INVENTORY_JOB_TZ,
+    },
+    'transfer reconcile sweep registered',
   )
 }
