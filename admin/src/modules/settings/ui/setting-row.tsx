@@ -10,7 +10,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Switch } from "#/components/ui/switch"
-import type { ResolvedSetting, SettingControl, SettingMeta } from "../types"
+import type { ResolvedSetting, SettingControl, SettingMeta, SettingScope } from "../types"
 import { sourceLabel, valueNote, writableBySentence } from "../utils/meta"
 
 /** The draft a text-like control starts from. `String(null)` would render "null". */
@@ -19,8 +19,13 @@ function draftOf(setting: ResolvedSetting): string {
 }
 
 /**
- * One setting row. Presentational by contract: it owns the draft value and the parse, and hands
- * a typed value to `onSave`. The page owns the mutation, so no fetch happens here.
+ * One setting row. Presentational by contract: it owns the draft value, the parse and the write
+ * scope, and hands a typed value to `onSave`. The page owns the mutation, so no fetch happens
+ * here.
+ *
+ * A branch-scoped key is written to the selected branch. "All branches" is a switch a person has
+ * to turn on for that row — never the state of the branch switcher — and while it is on the save
+ * button says what it will do (P14-D43).
  *
  * A key with no metadata still renders: the label is the key, the control is plain text, and the
  * page never has to know it exists.
@@ -41,28 +46,31 @@ export function SettingRow({
 	/** Why the control is disabled. Never shown while `canWrite`. */
 	reason: string | null
 	pending: boolean
-	onSave: (value: unknown) => void
+	onSave: (value: unknown, scope: SettingScope) => void
 }) {
 	const inputId = useId()
 	const descriptionId = useId()
+	const scopeId = useId()
+	const scopeHelpId = useId()
 	const [draft, setDraft] = useState(() => draftOf(setting))
+	const [scope, setScope] = useState<SettingScope>("branch")
 	const [error, setError] = useState<string | null>(null)
 
-	// A refetch (another tab, a branch switch) replaces the effective value; the draft follows it
-	// rather than keeping a stale edit on screen.
+	// A refetch (another tab, a branch switch) replaces the effective value; the draft and the
+	// scope choice follow it rather than keeping a stale edit on screen.
 	useEffect(() => {
 		setDraft(draftOf(setting))
+		setScope("branch")
 		setError(null)
 	}, [setting])
 
 	const dirty = draft !== draftOf(setting)
 	const note = valueNote(setting.key, setting.value)
+	const chooseScope = setting.branchScoped && canWrite
 	const describedBy = [
 		meta.description ? descriptionId : null,
 		note ? `${descriptionId}-note` : null,
-	]
-		.filter(Boolean)
-		.join(" ")
+	].filter(Boolean)
 
 	function parse(raw: string): { ok: true; value: unknown } | { ok: false; message: string } {
 		if (control !== "number") return { ok: true, value: raw }
@@ -82,14 +90,8 @@ export function SettingRow({
 			return
 		}
 		setError(null)
-		onSave(parsed.value)
+		onSave(parsed.value, scope)
 	}
-
-	const label = (
-		<label htmlFor={inputId} className="text-sm font-medium">
-			{meta.label}
-		</label>
-	)
 
 	return (
 		<form
@@ -99,7 +101,9 @@ export function SettingRow({
 		>
 			<div className="min-w-0">
 				<div className="flex flex-wrap items-center gap-2">
-					{label}
+					<label htmlFor={inputId} className="text-sm font-medium">
+						{meta.label}
+					</label>
 					<StatusBadge variant={setting.source === "branch" ? "info" : "muted"}>
 						{sourceLabel(setting.source)}
 					</StatusBadge>
@@ -127,8 +131,8 @@ export function SettingRow({
 							id={inputId}
 							checked={setting.value === true}
 							disabled={!canWrite || pending}
-							aria-describedby={describedBy || undefined}
-							onCheckedChange={(checked) => onSave(checked)}
+							aria-describedby={describedBy.join(" ") || undefined}
+							onCheckedChange={(checked) => onSave(checked, scope)}
 						/>
 						<span className="text-xs text-muted-foreground">
 							{setting.value === true ? "On" : "Off"}
@@ -140,7 +144,11 @@ export function SettingRow({
 						onValueChange={(next) => setDraft(next)}
 						disabled={!canWrite || pending}
 					>
-						<SelectTrigger id={inputId} className="h-8 w-44" aria-describedby={describedBy}>
+						<SelectTrigger
+							id={inputId}
+							className="h-8 w-44"
+							aria-describedby={describedBy.join(" ") || undefined}
+						>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -160,16 +168,39 @@ export function SettingRow({
 						className="h-8 w-40"
 						value={draft}
 						disabled={!canWrite || pending}
-						aria-describedby={describedBy || undefined}
+						aria-describedby={describedBy.join(" ") || undefined}
 						onChange={(event) => setDraft(event.target.value)}
 					/>
 				)}
 				{control === "boolean" ? null : (
 					<Button type="submit" size="sm" disabled={!canWrite || !dirty || pending}>
-						{pending ? "Saving…" : "Save"}
+						{pending ? "Saving…" : scope === "all" ? "Set for every branch" : "Save"}
 					</Button>
 				)}
 			</div>
+
+			{chooseScope ? (
+				<div className="flex items-start gap-2 md:col-span-2 md:justify-end">
+					<Switch
+						id={scopeId}
+						size="sm"
+						checked={scope === "all"}
+						disabled={pending}
+						aria-describedby={scopeHelpId}
+						onCheckedChange={(checked) => setScope(checked ? "all" : "branch")}
+					/>
+					<div className="grid gap-0.5">
+						<label htmlFor={scopeId} className="text-xs text-muted-foreground">
+							All branches
+						</label>
+						<p id={scopeHelpId} className="text-xs text-muted-foreground">
+							{scope === "all"
+								? "Writes the global value every branch inherits unless it has its own."
+								: "Applies to this branch only."}
+						</p>
+					</div>
+				</div>
+			) : null}
 
 			{error ? (
 				<p role="alert" className="text-xs text-destructive md:col-span-2">

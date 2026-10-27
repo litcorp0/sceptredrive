@@ -29,6 +29,13 @@ export interface SettingsUpdateInput {
  */
 export type SettingControl = "text" | "number" | "boolean" | "select"
 
+/**
+ * Where a write lands. `branch` writes the branch's own row; `all` writes the global row every
+ * branch inherits unless it has one. The global write only exists behind an explicit choice
+ * (P14-D43).
+ */
+export type SettingScope = "branch" | "all"
+
 /** Presentation hints only. They describe a row; they never decide whether it exists. */
 export interface SettingMeta {
 	label: string

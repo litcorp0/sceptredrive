@@ -19,7 +19,7 @@ import { settingsKeys } from "../api/keys"
 import { settingsListOptions, settingsUpdate } from "../api/settings"
 import { SettingRow } from "../ui/setting-row"
 import { controlFor, metaFor } from "../utils/meta"
-import { filterSettings, groupSettings } from "../utils/settings"
+import { filterSettings, groupSettings, saveTargetBranchId } from "../utils/settings"
 
 const routeApi = getRouteApi("/_authenticated/settings")
 
@@ -96,6 +96,13 @@ export function SettingsPage() {
 	return (
 		<div>
 			<PageHeader title="Settings" description={description} />
+
+			{canSelectBranch && activeBranchId === null ? (
+				<p className="mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+					Branch values are read-only while the switcher is on all branches. Pick a branch to change
+					one, then turn on “All branches” on that row if the change is meant for every branch.
+				</p>
+			) : null}
 
 			{settingsQuery.isLoading ? (
 				<div className="grid gap-2" aria-busy="true">
@@ -174,16 +181,15 @@ export function SettingsPage() {
 										const meta = metaFor(setting.key)
 										const canWrite =
 											canUpdate &&
-											(setting.writableBy === "admin"
-												? isAdmin
-												: setting.branchScoped
-													? isAdmin || activeBranchId !== null
-													: isAdmin)
+											(setting.writableBy === "admin" ? isAdmin : true) &&
+											(!setting.branchScoped || activeBranchId !== null)
 										const reason = !canUpdate
 											? "Your role cannot change settings."
 											: setting.writableBy === "admin" && !isAdmin
 												? "Only administrators can change this value."
-												: null
+												: setting.branchScoped && activeBranchId === null
+													? "Choose a branch to change this value. You can then set it for every branch from this row."
+													: null
 
 										return (
 											<SettingRow
@@ -196,11 +202,11 @@ export function SettingsPage() {
 												pending={
 													updateMutation.isPending && updateMutation.variables?.key === setting.key
 												}
-												onSave={(value) => {
+												onSave={(value, scope) => {
 													updateMutation.mutate({
 														key: setting.key,
 														value,
-														branchId: setting.branchScoped ? (activeBranchId ?? null) : null,
+														branchId: saveTargetBranchId(setting, scope, activeBranchId),
 													})
 												}}
 											/>

@@ -1,4 +1,4 @@
-import type { ResolvedSetting } from "../types"
+import type { ResolvedSetting, SettingScope } from "../types"
 import { metaFor } from "./meta"
 
 /**
@@ -83,6 +83,28 @@ export function groupLabel(prefix: string): string {
 
 export function groupDescription(prefix: string): string | null {
 	return GROUP_META[prefix]?.description ?? null
+}
+
+/**
+ * Which row a save targets, and the one place a null branch id can be produced.
+ *
+ * A branch-scoped key is written to the selected branch — unless the person has explicitly
+ * chosen "all branches" on that row. The absence of a selected branch is never treated as that
+ * choice: with "all" on the switcher the row is read-only, so a stray save cannot become a
+ * global override (P14-D43). The throw is a tripwire, not a user path: the row is disabled
+ * before it can call this.
+ */
+export function saveTargetBranchId(
+	setting: ResolvedSetting,
+	scope: SettingScope,
+	activeBranchId: string | null,
+): string | null {
+	if (!setting.branchScoped) return null
+	if (scope === "all") return null
+	if (activeBranchId === null) {
+		throw new Error("A branch value needs a selected branch; choose a branch first")
+	}
+	return activeBranchId
 }
 
 export interface SettingGroup {
