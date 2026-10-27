@@ -604,6 +604,62 @@ export async function findConflictRow(
   return row ? toConflictRow(row) : null
 }
 
+/**
+ * The branch a conflict belongs to, without the joins: the scope check before the
+ * lock, so a manager reaching into another branch is a 403 and never a transaction
+ * that took a row lock to say so (P14-D7, OWASP A01).
+ */
+export async function selectConflictScope(
+  conflictId: string,
+  executor: DbExecutor = db,
+): Promise<{ id: string; branchId: string } | null> {
+  const rows = await executor
+    .select({ id: syncConflict.id, branchId: syncConflict.branchId })
+    .from(syncConflict)
+    .where(eq(syncConflict.id, conflictId))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** Locks the row for the resolution, so two managers pressing the button serialise. */
+export async function lockConflictForUpdate(
+  conflictId: string,
+  executor: DbExecutor,
+): Promise<typeof syncConflict.$inferSelect | null> {
+  const rows = await executor
+    .select()
+    .from(syncConflict)
+    .where(eq(syncConflict.id, conflictId))
+    .for('update')
+  return rows[0] ?? null
+}
+
+export interface ConflictResolutionPatch {
+  status: 'RESOLVED' | 'DISMISSED'
+  resolutionCode: ConflictRow['resolutionCode']
+  resolutionNote: string | null
+  resolvedBy: string | null
+  resolvedAt: Date
+}
+
+/**
+ * The one write a resolution performs. It names all five columns explicitly so a
+ * later field added to the table cannot be swept into a resolution by accident,
+ * and it never touches anything the conflict points at.
+ */
+export async function updateConflictResolution(
+  conflictId: string,
+  patch: ConflictResolutionPatch,
+  executor: DbExecutor,
+): Promise<typeof syncConflict.$inferSelect | null> {
+  const rows = await executor
+    .update(syncConflict)
+    .set(patch)
+    .where(eq(syncConflict.id, conflictId))
+    .returning()
+  return rows[0] ?? null
+}
+
 // --- Sales -----------------------------------------------------------------
 
 /** Products and their branch price override in one query. */

@@ -86,11 +86,13 @@ import {
   insertSaleTenders,
   insertShift,
   insertShiftReport,
+  lockConflictForUpdate,
   lockTerminal,
   refundedLineTotals,
   revokeBinding,
   revokeStaffBindings,
   selectConflictRows,
+  selectConflictScope,
   selectRefundedLines,
   selectRefundedTenderAmounts,
   selectRefundedTotalForSale,
@@ -103,6 +105,7 @@ import {
   selectShiftReportFigures,
   selectSoldValueByProduct,
   touchBinding,
+  updateConflictResolution,
   updateRefundApprovalId,
   updateSaleConflictCount,
   updateShiftClose,
@@ -117,6 +120,7 @@ import type {
   CashMovementPayload,
   ConflictDetail,
   ConflictList,
+  ConflictResolutionInput,
   ConflictRow,
   ConflictSubject,
   DeviceStaffRecord,
@@ -3237,4 +3241,83 @@ export async function getConflict(user: SessionUser, conflictId: string): Promis
   resolveBranchFilter(user, row.branchId)
 
   return { ...row, subject: await loadConflictSubject(row) }
+}
+
+/**
+ * Resolve one conflict, or dismiss it with a reason.
+ *
+ * The order is the contract:
+ *
+ * 1. the row's branch against `resolveBranchFilter` — a foreign branch is a 403;
+ * 2. `SELECT … FOR UPDATE`, so two managers pressing the same button serialise;
+ * 3. refuse unless `OPEN` — a 409, because the second press is normal, not an
+ *    error worth a 400 and certainly not a second audit row;
+ * 4. write the five resolution columns;
+ * 5. append exactly one audit row, `pos.conflict.resolved`, with the before and
+ *    the after.
+ *
+ * Nothing else is written. There is deliberately no "resolve and retry": a
+ * resolution is a judgement, and if the judgement is that the fact was wrong, the
+ * correction is a new document.
+ */
+export async function resolveConflict(
+  user: SessionUser,
+  actor: AuditActor,
+  conflictId: string,
+  input: ConflictResolutionInput,
+): Promise<ConflictDetail> {
+  // The scope read is outside the transaction: a 403 should not open one.
+  const scope = await selectConflictScope(conflictId)
+  if (!scope) throw new NotFoundError('Conflict not found')
+  resolveBranchFilter(user, scope.branchId)
+
+  // `resolved_by` prefers the staff id the shops use, and falls back to the user
+  // id for an account that has none; one of the two is always present on a session.
+  const resolvedBy = actor.actorStaffId ?? actor.actorId ?? null
+  const resolutionNote = input.note?.trim() || null
+  const resolvedAt = new Date()
+
+  await db.transaction(async (tx) => {
+    const current = await lockConflictForUpdate(conflictId, tx)
+    if (!current) throw new NotFoundError('Conflict not found')
+    // Re-checked against the locked row: the pre-read is a gate, this is the row
+    // the update will touch.
+    resolveBranchFilter(user, current.branchId)
+
+    if (current.status !== 'OPEN') {
+      throw new AppError(409, 'CONFLICT_ALREADY_RESOLVED', 'This conflict is already closed')
+    }
+
+    await updateConflictResolution(
+      conflictId,
+      {
+        status: input.status,
+        resolutionCode: input.code,
+        resolutionNote,
+        resolvedBy,
+        resolvedAt,
+      },
+      tx,
+    )
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'pos.conflict.resolved',
+        entity: 'sync_conflict',
+        entityId: conflictId,
+        branchId: current.branchId,
+        terminalId: current.terminalId,
+        before: { status: 'OPEN', resolutionCode: null },
+        after: {
+          status: input.status,
+          resolutionCode: input.code,
+          resolutionNote,
+        },
+      },
+      tx,
+    )
+  })
+
+  return getConflict(user, conflictId)
 }

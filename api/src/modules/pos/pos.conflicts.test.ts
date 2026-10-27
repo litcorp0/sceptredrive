@@ -1,6 +1,6 @@
 import { db } from '@sceptre/db'
 import { priceCart, type TenderMethod, tenderBalance } from '@sceptre/shared'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   authedHeaders,
@@ -86,6 +86,9 @@ describe.skipIf(!available)('POS conflict queue', () => {
   let home: Counter
   let other: Counter
 
+  let managerUserId = ''
+  let managerStaffId = ''
+  let foreignManagerUserId = ''
   let cashierUserId = ''
   let cashierStaffId = ''
   let cashierBindingId = ''
@@ -124,6 +127,14 @@ describe.skipIf(!available)('POS conflict queue', () => {
 
   async function get(path: string, cookie: string = managerCookie): Promise<Response> {
     return app.request(path, { headers: sessionHeaders(cookie) })
+  }
+
+  async function patch(path: string, cookie: string, body: unknown): Promise<Response> {
+    return app.request(path, {
+      method: 'PATCH',
+      headers: sessionHeaders(cookie),
+      body: JSON.stringify(body),
+    })
   }
 
   async function expectError(response: Response, status: number, code: string): Promise<void> {
@@ -358,10 +369,15 @@ describe.skipIf(!available)('POS conflict queue', () => {
 
     const manager = await createTestUser({ role: 'MANAGER', branchId: home.branchId })
     createdUserIds.push(manager.id)
+    managerUserId = manager.id
+    // A staff id the shops use: `resolved_by` prefers it over the account id.
+    managerStaffId = `GA-CM${suffix.slice(0, 2)}`
+    await db.update(userTable).set({ staffId: managerStaffId }).where(eq(userTable.id, manager.id))
     managerCookie = await signIn(manager.email)
 
     const foreignManager = await createTestUser({ role: 'MANAGER', branchId: other.branchId })
     createdUserIds.push(foreignManager.id)
+    foreignManagerUserId = foreignManager.id
     foreignManagerCookie = await signIn(foreignManager.email)
 
     const cashier = await createTestUser({ role: 'CASHIER', branchId: home.branchId })
@@ -798,12 +814,250 @@ describe.skipIf(!available)('POS conflict queue', () => {
     )
   })
 
-  it('denies a cashier the queue', async () => {
+  it('denies a cashier the queue and the resolution', async () => {
     await expectError(await get('/api/pos/oversight/conflicts', cashierCookie), 403, 'FORBIDDEN')
     await expectError(
       await get(`/api/pos/oversight/conflicts/${stockConflictId}`, cashierCookie),
       403,
       'FORBIDDEN',
     )
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${stockConflictId}`, cashierCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+      }),
+      403,
+      'FORBIDDEN',
+    )
+  })
+
+  it('writes the status, the code, the note, the actor and the time, and one audit row', async () => {
+    const response = await patch(`/api/pos/oversight/conflicts/${stockConflictId}`, managerCookie, {
+      status: 'RESOLVED',
+      code: 'CONFIRMED',
+      note: '  Counted twice at handover  ',
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+    const body = await readJson<{
+      id: string
+      status: string
+      resolutionCode: string | null
+      resolutionNote: string | null
+      resolvedBy: string | null
+      resolvedAt: string | null
+      subject: { kind: string }
+    }>(response)
+
+    const stored = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, stockConflictId))
+    )[0]
+    expect(stored?.status).toBe('RESOLVED')
+    expect(stored?.resolutionCode).toBe('CONFIRMED')
+    // Trimmed by the validator, stored as written.
+    expect(stored?.resolutionNote).toBe('Counted twice at handover')
+    expect(stored?.resolvedBy).toBe(managerStaffId)
+    expect(stored?.resolvedAt?.toISOString()).toBe(body.resolvedAt)
+    expect(body.status).toBe('RESOLVED')
+    expect(body.resolutionCode).toBe('CONFIRMED')
+    expect(body.resolutionNote).toBe('Counted twice at handover')
+    expect(body.resolvedBy).toBe(managerStaffId)
+    // The response is the detail, so the console replaces the row in place.
+    expect(body.subject.kind).toBe('sale')
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.entity, 'sync_conflict'),
+          eq(auditLog.entityId, stockConflictId),
+          eq(auditLog.action, 'pos.conflict.resolved'),
+        ),
+      )
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.before).toEqual({ status: 'OPEN', resolutionCode: null })
+    expect(audits[0]?.after).toEqual({
+      status: 'RESOLVED',
+      resolutionCode: 'CONFIRMED',
+      resolutionNote: 'Counted twice at handover',
+    })
+    expect(audits[0]?.branchId).toBe(home.branchId)
+    expect(audits[0]?.terminalId).toBe(home.terminalId)
+    expect(audits[0]?.actorId).toBe(managerUserId)
+    expect(audits[0]?.actorStaffId).toBe(managerStaffId)
+  })
+
+  it('refuses a second resolution with a 409 and changes nothing', async () => {
+    const before = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, stockConflictId))
+    )[0]
+    const auditsBefore = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.entity, 'sync_conflict'),
+          eq(auditLog.entityId, stockConflictId),
+          eq(auditLog.action, 'pos.conflict.resolved'),
+        ),
+      )
+
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${stockConflictId}`, managerCookie, {
+        status: 'DISMISSED',
+        code: 'ACCEPTED_RISK',
+        note: 'A second manager pressing the same button',
+      }),
+      409,
+      'CONFLICT_ALREADY_RESOLVED',
+    )
+
+    const after = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, stockConflictId))
+    )[0]
+    expect(after?.status).toBe('RESOLVED')
+    expect(after?.resolutionCode).toBe('CONFIRMED')
+    expect(after?.resolvedAt?.toISOString()).toBe(before?.resolvedAt?.toISOString())
+
+    const auditsAfter = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.entity, 'sync_conflict'),
+          eq(auditLog.entityId, stockConflictId),
+          eq(auditLog.action, 'pos.conflict.resolved'),
+        ),
+      )
+    expect(auditsAfter).toHaveLength(auditsBefore.length)
+  })
+
+  it('validates the body with the shared rule and scopes the row', async () => {
+    // `DISMISSED` needs a note, and the sentence is `resolutionProblem`'s.
+    const dismissed = await patch(
+      `/api/pos/oversight/conflicts/${clockConflictId}`,
+      managerCookie,
+      { status: 'DISMISSED', code: 'DUPLICATE' },
+    )
+    expect(dismissed.status).toBe(400)
+    const dismissedBody = await readJson<{ error: { code: string; message: string } }>(dismissed)
+    expect(dismissedBody.error.code).toBe('VALIDATION_ERROR')
+    expect(dismissedBody.error.message).toContain('A dismissal needs a note')
+
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${clockConflictId}`, managerCookie, {
+        status: 'RESOLVED',
+      }),
+      400,
+      'VALIDATION_ERROR',
+    )
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${clockConflictId}`, managerCookie, {
+        status: 'RESOLVED',
+        code: 'NOT_A_CODE',
+      }),
+      400,
+      'VALIDATION_ERROR',
+    )
+    // `.strict()`: a field the service ignores is a resolution that recorded less
+    // than the client thought it did.
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${clockConflictId}`, managerCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+        resolutionCode: 'CONFIRMED',
+      }),
+      400,
+      'VALIDATION_ERROR',
+    )
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${clockConflictId}`, managerCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+        note: 'x'.repeat(501),
+      }),
+      400,
+      'VALIDATION_ERROR',
+    )
+
+    // A foreign row is a 403, and it is not a 404: the manager may learn it exists.
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${foreignConflictId}`, managerCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+      }),
+      403,
+      'FORBIDDEN',
+    )
+    await expectError(
+      await patch(`/api/pos/oversight/conflicts/${crypto.randomUUID()}`, managerCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+      }),
+      404,
+      'NOT_FOUND',
+    )
+    await expectError(
+      await patch('/api/pos/oversight/conflicts/not-a-uuid', managerCookie, {
+        status: 'RESOLVED',
+        code: 'CONFIRMED',
+      }),
+      400,
+      'VALIDATION_ERROR',
+    )
+
+    // None of the refusals wrote anything.
+    const untouched = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, clockConflictId))
+    )[0]
+    expect(untouched?.status).toBe('OPEN')
+    expect(untouched?.resolvedAt).toBeNull()
+    const foreign = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, foreignConflictId))
+    )[0]
+    expect(foreign?.status).toBe('OPEN')
+  })
+
+  it('records a dismissal with its note, on the branch that owns it', async () => {
+    const response = await patch(
+      `/api/pos/oversight/conflicts/${foreignConflictId}`,
+      foreignManagerCookie,
+      {
+        status: 'DISMISSED',
+        code: 'ACCEPTED_RISK',
+        note: 'Known stock error at the other shop; the count was corrected by hand.',
+      },
+    )
+    expect(response.status, await response.clone().text()).toBe(200)
+    const body = await readJson<{
+      status: string
+      resolutionCode: string
+      resolvedBy: string | null
+    }>(response)
+    expect(body.status).toBe('DISMISSED')
+    expect(body.resolutionCode).toBe('ACCEPTED_RISK')
+    // The foreign manager has no staff id, so the account id is the fallback.
+    expect(body.resolvedBy).toBe(foreignManagerUserId)
+
+    const stored = (
+      await db.select().from(syncConflict).where(eq(syncConflict.id, foreignConflictId))
+    )[0]
+    expect(stored?.status).toBe('DISMISSED')
+    expect(stored?.resolutionNote).toContain('Known stock error')
+    expect(stored?.resolvedBy).not.toBeNull()
+    // The note the dismissal needed is in the audit row as well as the column.
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.entity, 'sync_conflict'),
+          eq(auditLog.entityId, foreignConflictId),
+          eq(auditLog.action, 'pos.conflict.resolved'),
+        ),
+      )
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.branchId).toBe(other.branchId)
+    expect(audits[0]?.after).toMatchObject({ status: 'DISMISSED', resolutionCode: 'ACCEPTED_RISK' })
   })
 })

@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { resolveBranchFilter } from '../../auth/scope.ts'
+import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as oversightService from './pos.oversight.service.ts'
@@ -7,6 +8,7 @@ import { reconcilePos } from './pos.reconciliation.ts'
 import * as posService from './pos.service.ts'
 import type {
   ConflictListQuery,
+  ConflictResolutionBody,
   OversightRefundsQuery,
   OversightSalesQuery,
   OversightShiftsQuery,
@@ -84,5 +86,15 @@ export async function listConflicts(c: Context<AppEnv>, query: ConflictListQuery
 
 export async function getConflict(c: Context<AppEnv>, id: string) {
   const result = await posService.getConflict(currentUser(c), id)
+  return c.json(result)
+}
+
+export async function resolveConflict(
+  c: Context<AppEnv>,
+  id: string,
+  input: ConflictResolutionBody,
+) {
+  const actor = actorFromContext(c)
+  const result = await posService.resolveConflict(currentUser(c), actor, id, input)
   return c.json(result)
 }

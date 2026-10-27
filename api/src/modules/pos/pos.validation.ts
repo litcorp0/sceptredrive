@@ -1,6 +1,12 @@
-import { CONFLICT_TYPE_LABELS, REFUND_REASONS, TENDER_METHODS } from '@sceptre/shared'
+import {
+  CONFLICT_RESOLUTION_CODES,
+  CONFLICT_TYPE_LABELS,
+  REFUND_REASONS,
+  resolutionProblem,
+  TENDER_METHODS,
+} from '@sceptre/shared'
 import { z } from 'zod'
-import { validateParam, validateQuery } from '../../http/validation.ts'
+import { validateJson, validateParam, validateQuery } from '../../http/validation.ts'
 
 /** Admin reconciliation read; managers are pinned to their own branch. */
 export const reconciliationQuerySchema = z.object({
@@ -78,8 +84,10 @@ export type ShiftReportQuery = z.infer<typeof shiftReportQuerySchema>
 
 // --- The conflict queue (Phase 14, Plan 04) ---------------------------------
 //
-// The queue's filters, `.strict()`: a filter a route silently ignores is a manager
-// believing they narrowed a list (OWASP A05).
+// Two schemas: the queue's filters and the resolution's body. Both are `.strict()`
+// — a filter a route silently ignores is a manager believing they narrowed a list,
+// and a body field a route ignores is a resolution that recorded less than the
+// client thought it did (OWASP A05).
 
 /**
  * The 16 conflict types, taken from the shared label map so the filter, the
@@ -101,6 +109,30 @@ export const conflictListQuerySchema = z
   })
   .strict()
 
+/**
+ * The resolution body. `code` is required by the enum, `note` is required only for
+ * a dismissal, and that rule is `resolutionProblem`'s — the same function the
+ * console calls, so the two cannot disagree about when the note is needed
+ * (P14-D14). A code outside the enum is a 400 before the service is reached.
+ */
+export const conflictResolutionSchema = z
+  .object({
+    status: z.enum(['RESOLVED', 'DISMISSED']),
+    code: z.enum(CONFLICT_RESOLUTION_CODES),
+    note: z.string().trim().max(500).nullish(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const problem = resolutionProblem({
+      status: value.status,
+      code: value.code,
+      note: value.note ?? null,
+    })
+    if (problem) ctx.addIssue({ code: 'custom', message: problem })
+  })
+
 export const validateConflictListQuery = validateQuery(conflictListQuerySchema)
+export const validateConflictResolution = validateJson(conflictResolutionSchema)
 
 export type ConflictListQuery = z.infer<typeof conflictListQuerySchema>
+export type ConflictResolutionBody = z.infer<typeof conflictResolutionSchema>

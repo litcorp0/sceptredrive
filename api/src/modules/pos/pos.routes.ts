@@ -5,6 +5,7 @@ import { requireSession } from '../../http/session.ts'
 import * as posController from './pos.controller.ts'
 import {
   validateConflictListQuery,
+  validateConflictResolution,
   validateOversightIdParam,
   validateOversightRefundsQuery,
   validateOversightSalesQuery,
@@ -136,4 +137,16 @@ posRoutes.get(
   oversightRateLimit,
   validateOversightIdParam,
   (c) => posController.getConflict(c, c.req.valid('param').id),
+)
+
+// A resolution is a record, not a repair: the service writes five columns on the
+// conflict and one audit row, and nothing else (P14-D13).
+posRoutes.patch(
+  '/api/pos/oversight/conflicts/:id',
+  requireSession,
+  requirePermission('conflict.resolve'),
+  oversightRateLimit,
+  validateOversightIdParam,
+  validateConflictResolution,
+  (c) => posController.resolveConflict(c, c.req.valid('param').id, c.req.valid('json')),
 )
