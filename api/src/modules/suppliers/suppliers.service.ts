@@ -10,6 +10,7 @@ import {
   ValidationError,
 } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { getPaymentProvider, type TransferRecipientInput } from '../payments/payments.provider.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
@@ -60,6 +61,16 @@ import type {
 
 const INVALID_PHONE = 'Enter a valid Ghana phone number (e.g. 024 123 4567)'
 
+/** The fields that identify a Paystack destination; a change to any clears the recipient. */
+const RECIPIENT_IDENTITY_FIELDS = [
+  'method',
+  'accountNumber',
+  'bankCode',
+  'bankName',
+  'momoNetwork',
+  'phone',
+] as const
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&')
 }
@@ -96,6 +107,11 @@ function toPaymentDetailView(
     phone: row.phone,
     isDefault: row.isDefault,
     isActive: row.isActive,
+    /**
+     * Whether Paystack holds a recipient for this destination. The code itself
+     * is never returned: it is money-routing state, not a display field (P14-D28).
+     */
+    recipientReady: row.paystackRecipientCode !== null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -262,6 +278,70 @@ export async function requirePaymentDetail(
   }
   if (!row.isActive) throw new ConflictError('The payment detail is inactive')
   return row
+}
+
+/**
+ * The Paystack recipient for a saved destination, created once and then reused
+ * (P14-D27). It is called from the transfer path, never from the detail form: a
+ * supplier may be saved with a typo, and creating a recipient for every edit
+ * would mint codes nobody asked for.
+ *
+ * The code lives on `supplier_payment_detail` and never leaves it. A provider
+ * timeout propagates as `ProviderUnavailableError`, so the caller can leave the
+ * transfer `PENDING` rather than inventing a destination.
+ */
+export async function ensurePaystackRecipient(
+  supplierId: string,
+  detailId: string,
+  executor: DbExecutor = db,
+): Promise<string> {
+  const detail = await requirePaymentDetail(supplierId, detailId, executor)
+  if (detail.paystackRecipientCode) return detail.paystackRecipientCode
+
+  const supplierRow = await findSupplierById(detail.supplierId, executor)
+  if (!supplierRow) throw new NotFoundError('Supplier not found')
+
+  const recipient = transferRecipientFor(detail, supplierRow.name)
+  const { recipientCode } = await getPaymentProvider().createTransferRecipient(recipient)
+  const updated = await updatePaymentDetailRow(
+    detail.id,
+    { paystackRecipientCode: recipientCode },
+    executor,
+  )
+  return updated?.paystackRecipientCode ?? recipientCode
+}
+
+/**
+ * Maps the stored detail onto Paystack's two Ghana recipient kinds: `ghipss`
+ * takes the GHIPSS bank code, `mobile_money` takes the telco code (P14 research 1).
+ */
+function transferRecipientFor(
+  detail: SupplierPaymentDetailRow,
+  supplierName: string,
+): TransferRecipientInput {
+  const accountNumber = detail.accountNumber ?? detail.phone
+  if (!accountNumber) throw new ConflictError('The payment detail has no account number')
+  const name = detail.accountName ?? supplierName
+
+  if (detail.method === 'BANK') {
+    if (!detail.bankCode) {
+      throw new ConflictError(
+        'This bank detail has no bank code, so Paystack cannot create a recipient',
+      )
+    }
+    return { type: 'ghipss', name, accountNumber, bankCode: detail.bankCode, currency: 'GHS' }
+  }
+
+  if (!detail.momoNetwork) {
+    throw new ConflictError('This mobile-money detail has no network')
+  }
+  return {
+    type: 'mobile_money',
+    name,
+    accountNumber,
+    bankCode: detail.momoNetwork,
+    currency: 'GHS',
+  }
 }
 
 export async function getSupplierDetail(id: string): Promise<SupplierDetail> {
@@ -472,6 +552,17 @@ export async function updatePaymentDetail(
   }
   if (input.isDefault !== undefined) patch.isDefault = input.isDefault
 
+  /**
+   * A destination that changed is a destination Paystack does not know, and a
+   * stale recipient is money sent to a closed account (P14-D27). The code is
+   * cleared only when something that identifies the account actually moved.
+   */
+  const changedIdentity = RECIPIENT_IDENTITY_FIELDS.filter(
+    (field) => patch[field] !== undefined && patch[field] !== existing[field],
+  )
+  const recipientCleared = changedIdentity.length > 0 && existing.paystackRecipientCode !== null
+  if (recipientCleared) patch.paystackRecipientCode = null
+
   try {
     return await db.transaction(async (tx) => {
       if (patch.isDefault === true) await clearDefaultPaymentDetails(supplierId, tx)
@@ -499,6 +590,24 @@ export async function updatePaymentDetail(
         },
         tx,
       )
+
+      if (recipientCleared) {
+        await writeAudit(
+          {
+            ...actor,
+            action: 'supplier.payment_detail.recipient_cleared',
+            entity: 'supplier_payment_detail',
+            entityId: detailId,
+            after: {
+              supplierId,
+              // Field names only: an account number is PII and never reaches the log.
+              changed: changedIdentity,
+              reason: 'the destination changed, so the stored recipient no longer matches it',
+            },
+          },
+          tx,
+        )
+      }
       return toPaymentDetailView(row, { raw: true })
     })
   } catch (error) {

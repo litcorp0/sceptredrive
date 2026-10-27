@@ -13,6 +13,11 @@ import {
   validatePaymentIdParam,
   validatePaymentListQuery,
   validatePaymentVoid,
+  validateTransferCreate,
+  validateTransferFinalize,
+  validateTransferIdParam,
+  validateTransferListQuery,
+  validateTransferReconciliationQuery,
 } from './payables.validation.ts'
 
 export const payablesRoutes = factory.createApp()
@@ -105,4 +110,62 @@ payablesRoutes.get(
   requirePermission('payable.read'),
   validateAgingQuery,
   (c) => payablesController.exportAging(c, c.req.valid('query')),
+)
+
+payablesRoutes.get(
+  '/api/payables/provider-balance',
+  requireSession,
+  requirePermission('payable.transfer'),
+  (c) => payablesController.getProviderBalance(c),
+)
+
+// Before `/transfers/:id`: `reconciliation` is not a uuid, and a 400 from the
+// param validator would look like a client bug.
+payablesRoutes.get(
+  '/api/payables/transfers/reconciliation',
+  requireSession,
+  requirePermission('payable.read'),
+  validateTransferReconciliationQuery,
+  (c) => payablesController.getTransferReconciliation(c, c.req.valid('query')),
+)
+
+payablesRoutes.get(
+  '/api/payables/transfers',
+  requireSession,
+  requirePermission('payable.read'),
+  validateTransferListQuery,
+  (c) => payablesController.listTransfers(c, c.req.valid('query')),
+)
+
+payablesRoutes.post(
+  '/api/payables/transfers',
+  requireSession,
+  requirePermission('payable.transfer'),
+  validateTransferCreate,
+  (c) => payablesController.createTransfer(c, c.req.valid('json')),
+)
+
+payablesRoutes.get(
+  '/api/payables/transfers/:id',
+  requireSession,
+  requirePermission('payable.read'),
+  validateTransferIdParam,
+  (c) => payablesController.getTransfer(c, c.req.valid('param').id),
+)
+
+payablesRoutes.post(
+  '/api/payables/transfers/:id/finalize',
+  requireSession,
+  requirePermission('payable.transfer'),
+  validateTransferIdParam,
+  validateTransferFinalize,
+  (c) => payablesController.finalizeTransfer(c, c.req.valid('param').id, c.req.valid('json')),
+)
+
+payablesRoutes.post(
+  '/api/payables/transfers/:id/verify',
+  requireSession,
+  requirePermission('payable.transfer'),
+  validateTransferIdParam,
+  (c) => payablesController.verifyTransfer(c, c.req.valid('param').id),
 )

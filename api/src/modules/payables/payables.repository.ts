@@ -1,5 +1,19 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, asc, count, desc, eq, gte, inArray, lt, lte, ne, type SQL, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  type SQL,
+  sql,
+} from 'drizzle-orm'
 import { stockReceipt, stockReceiptLine } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { purchaseOrder, purchaseOrderLine } from '../procurement/procurement.schema.ts'
@@ -10,6 +24,8 @@ import {
   supplierInvoiceLine,
   supplierPayment,
   supplierPaymentAllocation,
+  supplierTransfer,
+  supplierTransferAllocation,
 } from './payables.schema.ts'
 import type {
   InvoiceAllocationRow,
@@ -19,6 +35,7 @@ import type {
   InvoiceListRow,
   InvoiceReconciliationRow,
   InvoiceStatus,
+  ManualPaymentSourceRow,
   PayableAgingInvoiceSourceRow,
   PaymentAllocationView,
   PaymentDetailHeader,
@@ -29,6 +46,11 @@ import type {
   SupplierOutstandingRow,
   SupplierPaymentAllocationRow,
   SupplierPaymentRow,
+  SupplierTransferRow,
+  TransferAllocationView,
+  TransferListFilters,
+  TransferListRow,
+  TransferReconciliationSourceRow,
 } from './payables.types.ts'
 
 const paymentSelection = {
@@ -894,4 +916,266 @@ export async function selectInvoiceMatchDetail(
     previouslyInvoicedQuantity: invoicedByLine.get(row.purchaseOrderLineId ?? '') ?? 0,
     matchStatus: row.matchStatus,
   }))
+}
+
+/**
+ * Supplier transfers (P14-D22). The transfer is an intent: the row and its
+ * allocation plan are written before the provider is called, and the settled
+ * `supplier_payment` is written by the service on `transfer.success`.
+ */
+
+export async function insertTransfer(
+  values: typeof supplierTransfer.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow | null> {
+  const rows = await executor.insert(supplierTransfer).values(values).returning()
+  return rows[0] ?? null
+}
+
+export async function insertTransferAllocations(
+  values: (typeof supplierTransferAllocation.$inferInsert)[],
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (values.length === 0) return
+  await executor.insert(supplierTransferAllocation).values(values)
+}
+
+const transferSelection = {
+  id: supplierTransfer.id,
+  branchId: supplierTransfer.branchId,
+  supplierId: supplierTransfer.supplierId,
+  paymentDetailId: supplierTransfer.paymentDetailId,
+  method: supplierTransfer.method,
+  amountMinor: supplierTransfer.amountMinor,
+  reference: supplierTransfer.reference,
+  idempotencyKey: supplierTransfer.idempotencyKey,
+  status: supplierTransfer.status,
+  provider: supplierTransfer.provider,
+  recipientCode: supplierTransfer.recipientCode,
+  providerTransferCode: supplierTransfer.providerTransferCode,
+  providerTransferId: supplierTransfer.providerTransferId,
+  reason: supplierTransfer.reason,
+  note: supplierTransfer.note,
+  failureCode: supplierTransfer.failureCode,
+  failureMessage: supplierTransfer.failureMessage,
+  paymentId: supplierTransfer.paymentId,
+  unallocatedMinor: supplierTransfer.unallocatedMinor,
+  initiatedBy: supplierTransfer.initiatedBy,
+  finalizedAt: supplierTransfer.finalizedAt,
+  settledAt: supplierTransfer.settledAt,
+  lastVerifiedAt: supplierTransfer.lastVerifiedAt,
+  createdAt: supplierTransfer.createdAt,
+  updatedAt: supplierTransfer.updatedAt,
+}
+
+/** The transfer with the supplier summary a list or detail row needs. */
+export async function findTransferById(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<TransferListRow | null> {
+  const rows = await executor
+    .select({ ...transferSelection, supplierCode: supplier.code, supplierName: supplier.name })
+    .from(supplierTransfer)
+    .innerJoin(supplier, eq(supplier.id, supplierTransfer.supplierId))
+    .where(eq(supplierTransfer.id, id))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** Locks the intent before a state transition; the settlement's first move. */
+export async function findTransferByIdForUpdate(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierTransfer)
+    .where(eq(supplierTransfer.id, id))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
+export async function findTransferByReferenceForUpdate(
+  reference: string,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierTransfer)
+    .where(eq(supplierTransfer.reference, reference))
+    .limit(1)
+    .for('update')
+  return rows[0] ?? null
+}
+
+export async function findTransferByIdempotency(
+  branchId: string,
+  idempotencyKey: string,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow | null> {
+  const rows = await executor
+    .select()
+    .from(supplierTransfer)
+    .where(
+      and(
+        eq(supplierTransfer.branchId, branchId),
+        eq(supplierTransfer.idempotencyKey, idempotencyKey),
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function updateTransfer(
+  id: string,
+  patch: Partial<typeof supplierTransfer.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow | null> {
+  const rows = await executor
+    .update(supplierTransfer)
+    .set(patch)
+    .where(eq(supplierTransfer.id, id))
+    .returning()
+  return rows[0] ?? null
+}
+
+export async function selectTransferAllocations(
+  transferId: string,
+  executor: DbExecutor = db,
+): Promise<TransferAllocationView[]> {
+  return executor
+    .select({
+      id: supplierTransferAllocation.id,
+      invoiceId: supplierTransferAllocation.invoiceId,
+      invoiceNumber: supplierInvoice.number,
+      supplierInvoiceNumber: supplierInvoice.supplierInvoiceNumber,
+      amountMinor: supplierTransferAllocation.amountMinor,
+    })
+    .from(supplierTransferAllocation)
+    .innerJoin(supplierInvoice, eq(supplierInvoice.id, supplierTransferAllocation.invoiceId))
+    .where(eq(supplierTransferAllocation.transferId, transferId))
+    .orderBy(asc(supplierTransferAllocation.invoiceId), asc(supplierTransferAllocation.id))
+}
+
+function transferConditions(filters: TransferListFilters): SQL[] {
+  const conditions: SQL[] = []
+  if (filters.supplierId) conditions.push(eq(supplierTransfer.supplierId, filters.supplierId))
+  if (filters.branchId) conditions.push(eq(supplierTransfer.branchId, filters.branchId))
+  if (filters.status) conditions.push(eq(supplierTransfer.status, filters.status))
+  if (filters.from) conditions.push(gte(supplierTransfer.createdAt, filters.from))
+  // `to` is exclusive: the day after the requested range end.
+  if (filters.to) conditions.push(lt(supplierTransfer.createdAt, filters.to))
+  return conditions
+}
+
+export async function selectTransferPage(filters: TransferListFilters): Promise<TransferListRow[]> {
+  return db
+    .select({ ...transferSelection, supplierCode: supplier.code, supplierName: supplier.name })
+    .from(supplierTransfer)
+    .innerJoin(supplier, eq(supplier.id, supplierTransfer.supplierId))
+    .where(and(...transferConditions(filters)))
+    .orderBy(desc(supplierTransfer.createdAt), desc(supplierTransfer.id))
+    .limit(filters.limit)
+    .offset(filters.offset)
+}
+
+export async function countTransfers(filters: TransferListFilters): Promise<number> {
+  const rows = await db
+    .select({ value: count() })
+    .from(supplierTransfer)
+    .where(and(...transferConditions(filters)))
+  return rows[0]?.value ?? 0
+}
+
+/**
+ * The catch-up sweep's candidates: anything still open after a window wide
+ * enough that a transfer the console is watching is not taken from under it.
+ * `AWAITING_OTP` is included on purpose — it is verified, never finalised
+ * (P14-D31, P14-D47).
+ */
+export async function selectTransfersToVerify(
+  olderThan: Date,
+  limit: number,
+  executor: DbExecutor = db,
+): Promise<SupplierTransferRow[]> {
+  return executor
+    .select()
+    .from(supplierTransfer)
+    .where(
+      and(
+        inArray(supplierTransfer.status, ['PENDING', 'AWAITING_OTP']),
+        lt(supplierTransfer.createdAt, olderThan),
+      ),
+    )
+    .orderBy(asc(supplierTransfer.createdAt))
+    .limit(limit)
+}
+
+const RECONCILIATION_ROW_CAP = 1_000
+
+/** Transfers whose intent was recorded in the period, with the payment when one exists. */
+export async function selectTransferReconciliationRows(filters: {
+  branchId: string | null
+  from: Date | null
+  to: Date | null
+}): Promise<TransferReconciliationSourceRow[]> {
+  const conditions: SQL[] = []
+  if (filters.branchId) conditions.push(eq(supplierTransfer.branchId, filters.branchId))
+  if (filters.from) conditions.push(gte(supplierTransfer.createdAt, filters.from))
+  if (filters.to) conditions.push(lt(supplierTransfer.createdAt, filters.to))
+
+  return db
+    .select({
+      id: supplierTransfer.id,
+      branchId: supplierTransfer.branchId,
+      supplierId: supplierTransfer.supplierId,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      reference: supplierTransfer.reference,
+      status: supplierTransfer.status,
+      amountMinor: supplierTransfer.amountMinor,
+      unallocatedMinor: supplierTransfer.unallocatedMinor,
+      failureCode: supplierTransfer.failureCode,
+      failureMessage: supplierTransfer.failureMessage,
+      paymentId: supplierTransfer.paymentId,
+      paymentAmountMinor: supplierPayment.amountMinor,
+      createdAt: supplierTransfer.createdAt,
+    })
+    .from(supplierTransfer)
+    .innerJoin(supplier, eq(supplier.id, supplierTransfer.supplierId))
+    .leftJoin(supplierPayment, eq(supplierPayment.id, supplierTransfer.paymentId))
+    .where(and(...conditions))
+    .orderBy(desc(supplierTransfer.createdAt), desc(supplierTransfer.id))
+    .limit(RECONCILIATION_ROW_CAP)
+}
+
+/** Completed payments in the period that no transfer settled: the manual fallback. */
+export async function selectManualPaymentsForReconciliation(filters: {
+  branchId: string | null
+  from: Date | null
+  to: Date | null
+}): Promise<ManualPaymentSourceRow[]> {
+  const conditions: SQL[] = [eq(supplierPayment.status, 'COMPLETED'), isNull(supplierTransfer.id)]
+  if (filters.branchId) conditions.push(eq(supplierPayment.branchId, filters.branchId))
+  if (filters.from) conditions.push(gte(supplierPayment.paidAt, filters.from))
+  if (filters.to) conditions.push(lt(supplierPayment.paidAt, filters.to))
+
+  return db
+    .select({
+      id: supplierPayment.id,
+      branchId: supplierPayment.branchId,
+      supplierId: supplierPayment.supplierId,
+      supplierCode: supplier.code,
+      supplierName: supplier.name,
+      number: supplierPayment.number,
+      amountMinor: supplierPayment.amountMinor,
+      paidAt: supplierPayment.paidAt,
+    })
+    .from(supplierPayment)
+    .innerJoin(supplier, eq(supplier.id, supplierPayment.supplierId))
+    .leftJoin(supplierTransfer, eq(supplierTransfer.paymentId, supplierPayment.id))
+    .where(and(...conditions))
+    .orderBy(desc(supplierPayment.paidAt), desc(supplierPayment.number))
+    .limit(RECONCILIATION_ROW_CAP)
 }

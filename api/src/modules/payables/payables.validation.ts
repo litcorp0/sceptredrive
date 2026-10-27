@@ -3,6 +3,7 @@ import { validateJson, validateParam, validateQuery } from '../../http/validatio
 
 export const invoiceIdParamSchema = z.object({ id: z.uuid() })
 export const paymentIdParamSchema = z.object({ id: z.uuid() })
+export const transferIdParamSchema = z.object({ id: z.uuid() })
 
 const limitSchema = z.coerce.number().int().min(1).max(100).default(50)
 const offsetSchema = z.coerce.number().int().min(0).default(0)
@@ -130,8 +131,60 @@ export const agingQuerySchema = z.object({
   supplierId: z.uuid().optional(),
 })
 
+/**
+ * A supplier transfer (P14-D22). There is deliberately no `method`: it comes from
+ * the saved payment detail, so a `CASH` payment can never be sent to Paystack.
+ */
+export const transferCreateSchema = z
+  .object({
+    supplierId: z.uuid(),
+    /** Required for admins; managers default to their own branch. */
+    branchId: z.uuid().optional(),
+    paymentDetailId: z.uuid(),
+    amountMinor: z.number().int().min(1).max(1_000_000_000),
+    allocations: z.array(paymentAllocationSchema).max(20).optional(),
+    note: z.string().trim().min(1).max(500).optional(),
+    /** The client's key: a retried initiation returns the transfer it already made. */
+    idempotencyKey: z.string().trim().min(1).max(120),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      (value.allocations ?? []).reduce((sum, allocation) => sum + allocation.amountMinor, 0) <=
+      value.amountMinor,
+    { message: 'Allocations cannot exceed the transfer amount' },
+  )
+
+export const transferFinalizeSchema = z
+  .object({
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{4,8}$/),
+  })
+  .strict()
+
+export const transferListQuerySchema = z.object({
+  supplierId: z.uuid().optional(),
+  branchId: z.uuid().optional(),
+  status: z
+    .enum(['PENDING', 'AWAITING_OTP', 'SUCCESS', 'FAILED', 'REVERSED', 'BLOCKED', 'REJECTED'])
+    .optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  limit: limitSchema,
+  offset: offsetSchema,
+})
+
+export const transferReconciliationQuerySchema = z.object({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  branchId: z.uuid().optional(),
+})
+
 export const validateInvoiceIdParam = validateParam(invoiceIdParamSchema)
 export const validatePaymentIdParam = validateParam(paymentIdParamSchema)
+export const validateTransferIdParam = validateParam(transferIdParamSchema)
 export const validateInvoiceCreate = validateJson(invoiceCreateSchema)
 export const validateInvoiceVoid = validateJson(invoiceVoidSchema)
 export const validateInvoiceListQuery = validateQuery(invoiceListQuerySchema)
@@ -140,3 +193,7 @@ export const validatePaymentVoid = validateJson(paymentVoidSchema)
 export const validatePaymentListQuery = validateQuery(paymentListQuerySchema)
 export const validateBalancesQuery = validateQuery(balancesQuerySchema)
 export const validateAgingQuery = validateQuery(agingQuerySchema)
+export const validateTransferCreate = validateJson(transferCreateSchema)
+export const validateTransferFinalize = validateJson(transferFinalizeSchema)
+export const validateTransferListQuery = validateQuery(transferListQuerySchema)
+export const validateTransferReconciliationQuery = validateQuery(transferReconciliationQuerySchema)

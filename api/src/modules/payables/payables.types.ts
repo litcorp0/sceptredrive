@@ -4,6 +4,8 @@ import type {
   supplierInvoiceLine,
   supplierPayment,
   supplierPaymentAllocation,
+  supplierTransfer,
+  supplierTransferAllocation,
 } from './payables.schema.ts'
 import type {
   agingQuerySchema,
@@ -14,12 +16,18 @@ import type {
   paymentCreateSchema,
   paymentListQuerySchema,
   paymentVoidSchema,
+  transferCreateSchema,
+  transferFinalizeSchema,
+  transferListQuerySchema,
+  transferReconciliationQuerySchema,
 } from './payables.validation.ts'
 
 export type SupplierInvoiceRow = typeof supplierInvoice.$inferSelect
 export type SupplierInvoiceLineRow = typeof supplierInvoiceLine.$inferSelect
 export type SupplierPaymentRow = typeof supplierPayment.$inferSelect
 export type SupplierPaymentAllocationRow = typeof supplierPaymentAllocation.$inferSelect
+export type SupplierTransferRow = typeof supplierTransfer.$inferSelect
+export type SupplierTransferAllocationRow = typeof supplierTransferAllocation.$inferSelect
 
 export type InvoiceStatus = SupplierInvoiceRow['status']
 export type InvoiceVoidReason = NonNullable<SupplierInvoiceRow['voidReason']>
@@ -34,7 +42,13 @@ export type PaymentVoidBody = z.infer<typeof paymentVoidSchema>
 export type PaymentListQuery = z.infer<typeof paymentListQuerySchema>
 export type BalancesQuery = z.infer<typeof balancesQuerySchema>
 export type AgingQuery = z.infer<typeof agingQuerySchema>
+export type TransferCreateBody = z.infer<typeof transferCreateSchema>
+export type TransferFinalizeBody = z.infer<typeof transferFinalizeSchema>
+export type TransferListQuery = z.infer<typeof transferListQuerySchema>
+export type TransferReconciliationQuery = z.infer<typeof transferReconciliationQuerySchema>
 export type PaymentVoidReason = NonNullable<SupplierPaymentRow['voidReason']>
+export type TransferStatus = SupplierTransferRow['status']
+export type TransferMethod = SupplierTransferRow['method']
 export type InvoiceLineInput = InvoiceCreateBody['lines'] extends (infer T)[] | undefined
   ? T
   : never
@@ -323,4 +337,189 @@ export interface InvoiceReconciliationRow {
   totalMinor: number
   amountPaidMinor: number
   netAllocatedMinor: number
+}
+
+/**
+ * What a caller of the allocation core supplies. `idempotencyKey` is nullable
+ * because the manual form has always allowed it to be omitted; the settlement
+ * path always supplies `transfer:<transferId>` (P14-D25).
+ */
+export interface PostPaymentInput {
+  branchId: string
+  supplierId: string
+  method: PaymentMethod
+  amountMinor: number
+  paidAt: Date
+  paymentDetailId: string | null
+  reference: string | null
+  note: string | null
+  idempotencyKey: string | null
+  allocations: Array<{ invoiceId: string; amountMinor: number }>
+}
+
+/** The transfer as the API returns it: no `recipientCode`, ever (P14-D28). */
+export interface TransferView {
+  id: string
+  branchId: string
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  paymentDetailId: string
+  method: TransferMethod
+  amountMinor: number
+  reference: string
+  idempotencyKey: string
+  status: TransferStatus
+  provider: 'PAYSTACK' | 'MOCK'
+  providerTransferCode: string | null
+  providerTransferId: string | null
+  reason: string
+  note: string | null
+  failureCode: string | null
+  failureMessage: string | null
+  paymentId: string | null
+  unallocatedMinor: number
+  initiatedBy: string | null
+  finalizedAt: string | null
+  settledAt: string | null
+  lastVerifiedAt: string | null
+  createdAt: string
+}
+
+export interface TransferAllocationView {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  supplierInvoiceNumber: string
+  amountMinor: number
+}
+
+export interface TransferDetail {
+  transfer: TransferView
+  /** The plan: which invoices the transfer was meant to settle. */
+  allocations: TransferAllocationView[]
+  /** The fact, when it exists: the `supplier_payment` written on `transfer.success`. */
+  payment: PaymentDetail | null
+  /** A success without a payment, or a reversal with one. A person must look (P14-D46). */
+  attention: boolean
+}
+
+export interface TransferCreateResult {
+  transfer: TransferDetail
+  replayed: boolean
+  /** The provider did not answer; the row stays `PENDING` and the sweep verifies. */
+  providerUnavailable: boolean
+}
+
+export interface TransferListFilters {
+  supplierId: string | null
+  branchId: string | null
+  status: TransferStatus | null
+  from: Date | null
+  to: Date | null
+  limit: number
+  offset: number
+}
+
+export interface TransferListRow extends SupplierTransferRow {
+  supplierCode: string
+  supplierName: string
+}
+
+export interface TransferListResult {
+  transfers: TransferView[]
+  total: number
+  branchId: string | null
+}
+
+/** One provider event about a transfer, from the webhook or from `verify`. */
+export interface TransferEvent {
+  reference: string
+  status: 'pending' | 'otp' | 'success' | 'failed' | 'reversed' | 'blocked' | 'rejected'
+  transferCode: string | null
+  transferId: string | null
+  amountMinor: number | null
+  failureCode: string | null
+  failureMessage: string | null
+  occurredAt: Date | null
+  feeMinor: number | null
+}
+
+export interface TransferEventOutcome {
+  /** False when the reference names no transfer: the event is stored as IGNORED. */
+  matched: boolean
+  transferId: string | null
+  paymentId: string | null
+  status: TransferStatus | null
+}
+
+export type ReconciliationState = 'manual' | 'settled' | 'unposted'
+
+export interface TransferReconciliationRow {
+  state: ReconciliationState
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  branchId: string
+  transferId: string | null
+  paymentId: string | null
+  /** The transfer reference, or the payment number for a manual payment. */
+  reference: string
+  status: TransferStatus | null
+  /** The supplier's money: the transfer's `amount_minor`, or the payment's `amount_minor`. */
+  amountMinor: number
+  /** The posted payment's figure; equal to `amountMinor` for a settled transfer by construction. */
+  paymentAmountMinor: number | null
+  unallocatedMinor: number
+  /** Paystack's fee, reported beside the amount and never netted into it (P14-D29). */
+  feeMinor: number | null
+  failureCode: string | null
+  failureMessage: string | null
+  occurredAt: string
+  attention: boolean
+}
+
+export interface TransferReconciliationResult {
+  from: string | null
+  to: string | null
+  branchId: string | null
+  rows: TransferReconciliationRow[]
+  totals: {
+    settledMinor: number
+    manualMinor: number
+    /** Money that left the provider balance and has no `supplier_payment`. */
+    unpostedMinor: number
+    failedCount: number
+    reversedCount: number
+  }
+}
+
+/** A transfer in the reconciliation period, with its posted payment's figure. */
+export interface TransferReconciliationSourceRow {
+  id: string
+  branchId: string
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  reference: string
+  status: TransferStatus
+  amountMinor: number
+  unallocatedMinor: number
+  failureCode: string | null
+  failureMessage: string | null
+  paymentId: string | null
+  paymentAmountMinor: number | null
+  createdAt: Date
+}
+
+/** A completed manual payment in the period that no transfer settled. */
+export interface ManualPaymentSourceRow {
+  id: string
+  branchId: string
+  supplierId: string
+  supplierCode: string
+  supplierName: string
+  number: string
+  amountMinor: number
+  paidAt: Date
 }

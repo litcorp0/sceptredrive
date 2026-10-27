@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import { taxBreakdown, toCsv } from '@sceptre/shared'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
@@ -5,9 +6,15 @@ import { actorLabel } from '../../http/audit-context.ts'
 import { type CsvExport, csvFilename, enforceExportCap } from '../../http/csv.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { logger } from '../../logger.ts'
 import { attachReceiptSupplier, loadReceiptForPayables } from '../inventory/inventory.service.ts'
 import type { ReceiptForPayables } from '../inventory/inventory.types.ts'
 import * as branchesService from '../org/branches.service.ts'
+import {
+  getPaymentProvider,
+  type ProviderTransferResult,
+  ProviderUnavailableError,
+} from '../payments/payments.provider.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation, uniqueViolationConstraint } from '../platform/db-errors.ts'
@@ -17,6 +24,7 @@ import { getOrderLinesForMatch } from '../procurement/procurement.service.ts'
 import { findProductById } from '../products/products.repository.ts'
 import { sumSupplierOwed } from '../suppliers/suppliers.repository.ts'
 import {
+  ensurePaystackRecipient,
   lockSupplier,
   recordInvoiceCosts,
   requirePaymentDetail,
@@ -25,14 +33,21 @@ import {
 import {
   countInvoices,
   countPayments,
+  countTransfers,
+  findInvoiceById,
   findInvoiceByIdempotency,
   findInvoiceByReceipt,
   findInvoiceBySupplierNumber,
   findPaymentByIdempotency,
+  findTransferById,
+  findTransferByIdempotency,
+  findTransferByReferenceForUpdate,
   insertAllocation,
   insertInvoice,
   insertInvoiceLines,
   insertPayment,
+  insertTransfer,
+  insertTransferAllocations,
   lockInvoiceForUpdate,
   lockInvoicesForUpdate,
   lockPaymentForUpdate,
@@ -45,14 +60,20 @@ import {
   selectInvoiceMatchDetail,
   selectInvoicePage,
   selectInvoiceReconciliationRows,
+  selectManualPaymentsForReconciliation,
   selectOnAccountBySupplier,
   selectOutstandingBySupplier,
   selectPaymentDetailHeader,
   selectPaymentPage,
   selectSupplierIdsWithActivity,
+  selectTransferAllocations,
+  selectTransferPage,
+  selectTransferReconciliationRows,
+  selectTransfersToVerify,
   setInvoiceAmountPaid,
   sumAllocationsForInvoice,
   updateInvoiceLineMatch,
+  updateTransfer,
   voidInvoiceRow,
   voidPaymentRow,
 } from './payables.repository.ts'
@@ -82,9 +103,25 @@ import type {
   PaymentListQuery,
   PaymentListResult,
   PaymentVoidReason,
+  PostPaymentInput,
   SupplierBalanceResult,
   SupplierBalanceRow,
   SupplierInvoiceRow,
+  SupplierPaymentRow,
+  SupplierTransferRow,
+  TransferCreateBody,
+  TransferCreateResult,
+  TransferDetail,
+  TransferEvent,
+  TransferEventOutcome,
+  TransferListFilters,
+  TransferListQuery,
+  TransferListResult,
+  TransferListRow,
+  TransferReconciliationQuery,
+  TransferReconciliationResult,
+  TransferReconciliationRow,
+  TransferView,
 } from './payables.types.ts'
 
 /** Effective invoice line after receipt copy or operator input. */
@@ -596,6 +633,18 @@ export async function voidInvoice(
 /** Clock-skew tolerance for paidAt; anything further ahead is a typo. */
 const PAYMENT_CLOCK_SKEW_MS = 5 * 60_000
 
+/**
+ * The settlement actor. A webhook has no staff behind it, and the audit says so
+ * rather than borrowing the manager who initiated the transfer (P14-D25).
+ */
+const SYSTEM_PAYSTACK_ACTOR: AuditActor = {
+  actorId: 'system:paystack',
+  actorStaffId: null,
+  ip: null,
+  userAgent: null,
+  requestId: null,
+}
+
 async function loadPayment(paymentId: string, executor: DbExecutor = db): Promise<PaymentDetail> {
   const header = await selectPaymentDetailHeader(paymentId, executor)
   if (!header) throw new NotFoundError('Supplier payment not found')
@@ -610,11 +659,155 @@ async function loadPayment(paymentId: string, executor: DbExecutor = db): Promis
   }
 }
 
+export interface PostPaymentOptions {
+  /**
+   * The session-shaped guard only an HTTP caller can make. The settlement path
+   * has no session and passes nothing; the structural branch rule below still
+   * applies to both, so dropping the session check does not widen either caller.
+   */
+  authorizeInvoice?: (invoice: SupplierInvoiceRow) => void
+}
+
 /**
- * Records a payment to a supplier with explicit allocations (D7). The
- * unallocated remainder is held on account. Allocations lock their invoices
- * FOR UPDATE in id order so two concurrent payments can never over-apply an
- * invoice; the status projection is recomputed from the allocation ledger.
+ * The allocation core: the one place a `supplier_payment` is written, called by
+ * the manual form and by a settled Paystack transfer (P14-D22).
+ *
+ * Every money rule lives here, in this order: the supplier is locked and ACTIVE,
+ * the invoices are locked FOR UPDATE in sorted id order, each invoice belongs to
+ * the supplier, the branch and is not VOID, and each allocation fits the
+ * remaining balance. The invoice projection is recomputed from the ledger and the
+ * audit row carries `onAccountMinor`.
+ *
+ * What is *not* here is session-shaped: branch access and the paid-at clock. The
+ * caller keeps those, and the settlement supplies its own actor and clock.
+ */
+export async function postSupplierPaymentInTransaction(
+  input: PostPaymentInput,
+  actor: AuditActor,
+  executor: DbExecutor,
+  options: PostPaymentOptions = {},
+): Promise<SupplierPaymentRow> {
+  // A retried key returns the payment it already wrote. The unique index on
+  // `(branch_id, idempotency_key)` is the backstop beyond this read.
+  if (input.idempotencyKey) {
+    const replay = await findPaymentByIdempotency(input.branchId, input.idempotencyKey, executor)
+    if (replay) return replay
+  }
+
+  const seenInvoices = new Set<string>()
+  for (const allocation of input.allocations) {
+    if (!Number.isSafeInteger(allocation.amountMinor) || allocation.amountMinor < 1) {
+      throw new ValidationError('Allocation amounts must be positive whole numbers')
+    }
+    if (seenInvoices.has(allocation.invoiceId)) {
+      throw new ValidationError('Each invoice may appear only once in a payment')
+    }
+    seenInvoices.add(allocation.invoiceId)
+  }
+  const allocatedTotal = input.allocations.reduce((sum, row) => sum + row.amountMinor, 0)
+  if (allocatedTotal > input.amountMinor) {
+    throw new ValidationError('Allocations cannot exceed the payment amount')
+  }
+
+  await lockSupplier(input.supplierId, executor)
+  const number = await allocateFromSequence('payable.paymentSequence', executor)
+
+  const lockedInvoices = await lockInvoicesForUpdate(
+    input.allocations.map((allocation) => allocation.invoiceId),
+    executor,
+  )
+  const invoicesById = new Map(lockedInvoices.map((row) => [row.id, row]))
+
+  // Validate in sorted id order (matches the lock order above).
+  const sortedAllocations = [...input.allocations].sort((a, b) =>
+    a.invoiceId.localeCompare(b.invoiceId),
+  )
+  for (const allocation of sortedAllocations) {
+    const invoice = invoicesById.get(allocation.invoiceId)
+    if (!invoice) throw new NotFoundError('Supplier invoice not found')
+    if (invoice.supplierId !== input.supplierId) {
+      throw new ConflictError('The invoice belongs to another supplier')
+    }
+    if (invoice.status === 'VOID') {
+      throw new ConflictError(`Invoice ${invoice.number} is void and cannot receive payments`)
+    }
+    options.authorizeInvoice?.(invoice)
+    if (invoice.branchId !== input.branchId) {
+      throw new ConflictError('The invoice belongs to another branch')
+    }
+    const outstanding = invoice.totalMinor - invoice.amountPaidMinor
+    if (allocation.amountMinor > outstanding) {
+      throw new ConflictError(
+        `Allocation exceeds the outstanding balance of invoice ${invoice.number}`,
+        { invoiceId: invoice.id, outstandingMinor: outstanding },
+      )
+    }
+  }
+
+  const payment = await insertPayment(
+    {
+      number,
+      supplierId: input.supplierId,
+      branchId: input.branchId,
+      method: input.method,
+      amountMinor: input.amountMinor,
+      reference: input.reference,
+      paidAt: input.paidAt,
+      paymentDetailId: input.paymentDetailId,
+      note: input.note,
+      idempotencyKey: input.idempotencyKey,
+      createdBy: actorLabel(actor),
+    },
+    executor,
+  )
+  if (!payment) {
+    throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create the supplier payment')
+  }
+
+  for (const allocation of sortedAllocations) {
+    await insertAllocation(
+      {
+        paymentId: payment.id,
+        invoiceId: allocation.invoiceId,
+        kind: 'APPLY',
+        amountMinor: allocation.amountMinor,
+        createdBy: actorLabel(actor),
+      },
+      executor,
+    )
+    const invoice = invoicesById.get(allocation.invoiceId)
+    if (!invoice) continue
+    const paid = invoice.amountPaidMinor + allocation.amountMinor
+    const status: InvoiceStatus =
+      paid >= invoice.totalMinor ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OPEN'
+    await setInvoiceAmountPaid(invoice.id, paid, status, executor)
+  }
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'supplier_payment.created',
+      entity: 'supplier_payment',
+      entityId: payment.id,
+      branchId: input.branchId,
+      after: {
+        number,
+        supplierId: input.supplierId,
+        method: input.method,
+        amountMinor: input.amountMinor,
+        allocations: sortedAllocations,
+        onAccountMinor: input.amountMinor - allocatedTotal,
+      },
+    },
+    executor,
+  )
+
+  return payment
+}
+
+/**
+ * The manual form: authorise, check the clock, hand the money rules to the core.
+ * Nothing else about a payment is decided here (P14-D22).
  */
 export async function createPayment(
   user: SessionUser,
@@ -639,125 +832,32 @@ export async function createPayment(
     await requirePaymentDetail(supplier.id, input.paymentDetailId)
   }
 
-  const allocations = input.allocations ?? []
-  const seenInvoices = new Set<string>()
-  for (const allocation of allocations) {
-    if (!Number.isSafeInteger(allocation.amountMinor) || allocation.amountMinor < 1) {
-      throw new ValidationError('Allocation amounts must be positive whole numbers')
-    }
-    if (seenInvoices.has(allocation.invoiceId)) {
-      throw new ValidationError('Each invoice may appear only once in a payment')
-    }
-    seenInvoices.add(allocation.invoiceId)
-  }
-  const allocatedTotal = allocations.reduce((sum, row) => sum + row.amountMinor, 0)
-  if (allocatedTotal > input.amountMinor) {
-    throw new ValidationError('Allocations cannot exceed the payment amount')
-  }
-
   if (input.idempotencyKey) {
     const replay = await findPaymentByIdempotency(branchId, input.idempotencyKey)
     if (replay) return { payment: await loadPayment(replay.id), replayed: true }
   }
 
-  let outcome: { id: string; replayed: boolean }
+  let paymentId: string
   try {
-    outcome = await db.transaction(async (tx) => {
-      if (input.idempotencyKey) {
-        const raced = await findPaymentByIdempotency(branchId, input.idempotencyKey, tx)
-        if (raced) return { id: raced.id, replayed: true }
-      }
-
-      await lockSupplier(supplier.id, tx)
-      const number = await allocateFromSequence('payable.paymentSequence', tx)
-
-      const lockedInvoices = await lockInvoicesForUpdate(
-        allocations.map((allocation) => allocation.invoiceId),
-        tx,
-      )
-      const invoicesById = new Map(lockedInvoices.map((row) => [row.id, row]))
-
-      // Validate in sorted id order (matches the lock order above).
-      const sortedAllocations = [...allocations].sort((a, b) =>
-        a.invoiceId.localeCompare(b.invoiceId),
-      )
-      for (const allocation of sortedAllocations) {
-        const invoice = invoicesById.get(allocation.invoiceId)
-        if (!invoice) throw new NotFoundError('Supplier invoice not found')
-        if (invoice.supplierId !== supplier.id) {
-          throw new ConflictError('The invoice belongs to another supplier')
-        }
-        if (invoice.status === 'VOID') {
-          throw new ConflictError(`Invoice ${invoice.number} is void and cannot receive payments`)
-        }
-        assertBranchAccess(user, invoice.branchId)
-        const outstanding = invoice.totalMinor - invoice.amountPaidMinor
-        if (allocation.amountMinor > outstanding) {
-          throw new ConflictError(
-            `Allocation exceeds the outstanding balance of invoice ${invoice.number}`,
-            { invoiceId: invoice.id, outstandingMinor: outstanding },
-          )
-        }
-      }
-
-      const payment = await insertPayment(
+    paymentId = await db.transaction(async (tx) => {
+      const payment = await postSupplierPaymentInTransaction(
         {
-          number,
-          supplierId: supplier.id,
           branchId,
+          supplierId: supplier.id,
           method: input.method,
           amountMinor: input.amountMinor,
-          reference: input.reference ?? null,
           paidAt,
           paymentDetailId: input.paymentDetailId ?? null,
+          reference: input.reference ?? null,
           note: input.note ?? null,
           idempotencyKey: input.idempotencyKey ?? null,
-          createdBy: actorLabel(actor),
+          allocations: input.allocations ?? [],
         },
+        actor,
         tx,
+        { authorizeInvoice: (invoice) => assertBranchAccess(user, invoice.branchId) },
       )
-      if (!payment)
-        throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create the supplier payment')
-
-      for (const allocation of sortedAllocations) {
-        await insertAllocation(
-          {
-            paymentId: payment.id,
-            invoiceId: allocation.invoiceId,
-            kind: 'APPLY',
-            amountMinor: allocation.amountMinor,
-            createdBy: actorLabel(actor),
-          },
-          tx,
-        )
-        const invoice = invoicesById.get(allocation.invoiceId)
-        if (!invoice) continue
-        const paid = invoice.amountPaidMinor + allocation.amountMinor
-        const status: InvoiceStatus =
-          paid >= invoice.totalMinor ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OPEN'
-        await setInvoiceAmountPaid(invoice.id, paid, status, tx)
-      }
-
-      await writeAudit(
-        {
-          ...actor,
-          action: 'supplier_payment.created',
-          entity: 'supplier_payment',
-          entityId: payment.id,
-          branchId,
-          after: {
-            number,
-            supplierId: supplier.id,
-            method: input.method,
-            amountMinor: input.amountMinor,
-            allocations: sortedAllocations,
-            onAccountMinor: input.amountMinor - allocatedTotal,
-          },
-        },
-        tx,
-      )
-
-      return { id: payment.id, replayed: false }
+      return payment.id
     })
   } catch (error) {
     if (isUniqueViolation(error) && input.idempotencyKey) {
@@ -767,7 +867,7 @@ export async function createPayment(
     throw error
   }
 
-  return { payment: await loadPayment(outcome.id), replayed: outcome.replayed }
+  return { payment: await loadPayment(paymentId), replayed: false }
 }
 
 /**
@@ -1289,4 +1389,952 @@ export async function reconcilePayables(
   }
 
   return { invoicesChecked: invoiceRows.length, suppliersChecked: supplierIds.length }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       Supplier transfers (P14-D22 … D47)                   */
+/* -------------------------------------------------------------------------- */
+
+/** A transfer must be verifiable for at least a quarter of an hour before the sweep takes it. */
+export const TRANSFER_RECONCILE_STALE_MINUTES = 10
+export const TRANSFER_RECONCILE_LIMIT = 100
+
+/** `sdt-<uuid>`: 40 characters of Paystack's 16–50 alphabet (P14 research 2). */
+export function mintTransferReference(): string {
+  return `sdt-${randomUUID()}`
+}
+
+/** Integer-only minor-unit formatting for operator-facing messages. */
+function formatMinor(minor: number): string {
+  const sign = minor < 0 ? '-' : ''
+  const absolute = Math.abs(minor)
+  return `${sign}GHS ${Math.trunc(absolute / 100)}.${String(absolute % 100).padStart(2, '0')}`
+}
+
+/**
+ * The transfer as the API returns it. `recipientCode` is deliberately absent: it
+ * is money-routing state that is never returned, logged or exported (P14-D28).
+ */
+function toTransferView(row: TransferListRow): TransferView {
+  return {
+    id: row.id,
+    branchId: row.branchId,
+    supplierId: row.supplierId,
+    supplierCode: row.supplierCode,
+    supplierName: row.supplierName,
+    paymentDetailId: row.paymentDetailId,
+    method: row.method,
+    amountMinor: row.amountMinor,
+    reference: row.reference,
+    idempotencyKey: row.idempotencyKey,
+    status: row.status,
+    provider: row.provider,
+    providerTransferCode: row.providerTransferCode,
+    providerTransferId: row.providerTransferId,
+    reason: row.reason,
+    note: row.note,
+    failureCode: row.failureCode,
+    failureMessage: row.failureMessage,
+    paymentId: row.paymentId,
+    unallocatedMinor: row.unallocatedMinor,
+    initiatedBy: row.initiatedBy,
+    finalizedAt: row.finalizedAt?.toISOString() ?? null,
+    settledAt: row.settledAt?.toISOString() ?? null,
+    lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
+/** The provider's result, in the shape the one state writer consumes. */
+export function transferEventFromProvider(result: ProviderTransferResult): TransferEvent {
+  return {
+    reference: result.reference,
+    status: result.status,
+    transferCode: result.transferCode,
+    transferId: result.transferId,
+    amountMinor: Number.isSafeInteger(result.amountMinor) ? result.amountMinor : null,
+    failureCode: result.failureCode,
+    failureMessage: result.failureMessage,
+    occurredAt: result.transferredAt ? new Date(result.transferredAt) : null,
+    feeMinor: result.feeMinor,
+  }
+}
+
+async function loadTransferDetail(
+  transferId: string,
+  executor: DbExecutor = db,
+): Promise<TransferDetail> {
+  const row = await findTransferById(transferId, executor)
+  if (!row) throw new NotFoundError('Supplier transfer not found')
+  const [allocations, payment] = await Promise.all([
+    selectTransferAllocations(transferId, executor),
+    row.paymentId ? loadPayment(row.paymentId, executor) : Promise.resolve(null),
+  ])
+  return {
+    transfer: toTransferView(row),
+    allocations,
+    payment,
+    // A success with no payment is money that moved and is not in the books; a
+    // reversal with a payment is money that came back and is still posted. Both
+    // need a person, and neither is fixed by a webhook (P14-D46).
+    attention:
+      (row.status === 'SUCCESS' && row.paymentId === null) ||
+      (row.status === 'REVERSED' && row.paymentId !== null),
+  }
+}
+
+/**
+ * The settlement: a `supplier_payment` through the same allocation core the
+ * manual form uses, with the transfer's own identity (P14-D22–D26).
+ *
+ * The plan is re-read against each invoice's remaining balance. What still fits
+ * is applied; the rest stays on account and is written to `unallocated_minor`.
+ * A shortfall is not a failure: the supplier has the money either way, and a
+ * settlement that threw would leave money gone with no payment row.
+ */
+async function settleTransfer(
+  executor: DbExecutor,
+  transfer: SupplierTransferRow,
+  event: TransferEvent,
+  providerPatch: Partial<SupplierTransferRow>,
+): Promise<TransferEventOutcome> {
+  const plan = await selectTransferAllocations(transfer.id, executor)
+  const locked = await lockInvoicesForUpdate(
+    plan.map((row) => row.invoiceId),
+    executor,
+  )
+  const invoicesById = new Map(locked.map((row) => [row.id, row]))
+
+  const survivors: { invoiceId: string; amountMinor: number }[] = []
+  const shortfall: {
+    invoiceId: string
+    invoiceNumber: string
+    plannedMinor: number
+    remainingMinor: number
+  }[] = []
+
+  for (const planned of plan) {
+    const invoice = invoicesById.get(planned.invoiceId)
+    const eligible =
+      invoice &&
+      invoice.status !== 'VOID' &&
+      invoice.supplierId === transfer.supplierId &&
+      invoice.branchId === transfer.branchId
+    if (!eligible) {
+      shortfall.push({
+        invoiceId: planned.invoiceId,
+        invoiceNumber: invoice?.number ?? '',
+        plannedMinor: planned.amountMinor,
+        remainingMinor: 0,
+      })
+      continue
+    }
+    const remaining = Math.max(0, invoice.totalMinor - invoice.amountPaidMinor)
+    const applied = Math.min(planned.amountMinor, remaining)
+    if (applied < planned.amountMinor) {
+      shortfall.push({
+        invoiceId: planned.invoiceId,
+        invoiceNumber: invoice.number,
+        plannedMinor: planned.amountMinor,
+        remainingMinor: remaining,
+      })
+    }
+    if (applied > 0) survivors.push({ invoiceId: planned.invoiceId, amountMinor: applied })
+  }
+
+  const allocatedMinor = survivors.reduce((sum, row) => sum + row.amountMinor, 0)
+  const unallocatedMinor = transfer.amountMinor - allocatedMinor
+  const paidAt = event.occurredAt ?? new Date()
+
+  const payment = await postSupplierPaymentInTransaction(
+    {
+      branchId: transfer.branchId,
+      supplierId: transfer.supplierId,
+      method: transfer.method,
+      amountMinor: transfer.amountMinor,
+      paidAt,
+      paymentDetailId: transfer.paymentDetailId,
+      reference: transfer.reference,
+      note: transfer.note,
+      // The replay guard: one settled payment per transfer, enforced by the
+      // unique `(branch_id, idempotency_key)` the manual form already uses.
+      idempotencyKey: `transfer:${transfer.id}`,
+      allocations: survivors,
+    },
+    SYSTEM_PAYSTACK_ACTOR,
+    executor,
+  )
+
+  await updateTransfer(
+    transfer.id,
+    {
+      ...providerPatch,
+      status: 'SUCCESS',
+      paymentId: payment.id,
+      settledAt: paidAt,
+      unallocatedMinor,
+      failureCode: null,
+      failureMessage: null,
+    },
+    executor,
+  )
+
+  await writeAudit(
+    {
+      ...SYSTEM_PAYSTACK_ACTOR,
+      action: 'supplier_transfer.settled',
+      entity: 'supplier_transfer',
+      entityId: transfer.id,
+      branchId: transfer.branchId,
+      after: {
+        paymentId: payment.id,
+        reference: transfer.reference,
+        plannedMinor: transfer.amountMinor,
+        allocatedMinor,
+        unallocatedMinor,
+        feeMinor: event.feeMinor,
+      },
+    },
+    executor,
+  )
+
+  // Only when the plan and the posting disagree. A zero-shortfall settlement is
+  // the normal case and does not deserve a second row nobody reads.
+  if (unallocatedMinor > 0) {
+    await writeAudit(
+      {
+        ...SYSTEM_PAYSTACK_ACTOR,
+        action: 'supplier_transfer.allocation_shortfall',
+        entity: 'supplier_transfer',
+        entityId: transfer.id,
+        branchId: transfer.branchId,
+        after: {
+          paymentId: payment.id,
+          reference: transfer.reference,
+          plannedMinor: transfer.amountMinor,
+          allocatedMinor,
+          unallocatedMinor,
+          invoices: shortfall,
+        },
+      },
+      executor,
+    )
+  }
+
+  return {
+    matched: true,
+    transferId: transfer.id,
+    paymentId: payment.id,
+    status: 'SUCCESS',
+  }
+}
+
+const TRANSFER_TERMINAL_STATUSES = new Set<SupplierTransferRow['status']>([
+  'SUCCESS',
+  'FAILED',
+  'REVERSED',
+  'BLOCKED',
+  'REJECTED',
+])
+
+const TRANSFER_FAILURE_STATUSES: Partial<
+  Record<TransferEvent['status'], SupplierTransferRow['status']>
+> = {
+  failed: 'FAILED',
+  blocked: 'BLOCKED',
+  rejected: 'REJECTED',
+  reversed: 'REVERSED',
+}
+
+/**
+ * The one transfer state writer. The webhook, `verify`, the initiate response and
+ * the sweep all land here, so there is a single state machine (P14-D31).
+ *
+ * Only `success` posts a payment. A failed, blocked or rejected transfer writes
+ * a status and nothing else. A reversal never un-posts what was posted: the
+ * payment stays and the reconciliation raises it for a person (P14-D46).
+ */
+export async function applyTransferEvent(
+  executor: DbExecutor,
+  event: TransferEvent,
+): Promise<TransferEventOutcome> {
+  const transfer = await findTransferByReferenceForUpdate(event.reference, executor)
+  if (!transfer) {
+    // An event that names no transfer is not a failure: the webhook records it
+    // as IGNORED so Paystack stops retrying.
+    return { matched: false, transferId: null, paymentId: null, status: null }
+  }
+
+  const providerPatch: Partial<SupplierTransferRow> = {
+    providerTransferCode: event.transferCode ?? transfer.providerTransferCode,
+    providerTransferId: event.transferId ?? transfer.providerTransferId,
+    lastVerifiedAt: new Date(),
+  }
+
+  if (event.status === 'success') {
+    // The provider's amount is not ours to book: a success for another amount is
+    // never posted, and the transfer stays open with the reason attached.
+    if (event.amountMinor !== null && event.amountMinor !== transfer.amountMinor) {
+      await updateTransfer(
+        transfer.id,
+        {
+          ...providerPatch,
+          failureCode: 'AMOUNT_MISMATCH',
+          failureMessage: `The provider reported ${event.amountMinor} pesewas for a ${transfer.amountMinor}-pesewa transfer`,
+        },
+        executor,
+      )
+      await writeAudit(
+        {
+          ...SYSTEM_PAYSTACK_ACTOR,
+          action: 'supplier_transfer.amount_mismatch',
+          entity: 'supplier_transfer',
+          entityId: transfer.id,
+          branchId: transfer.branchId,
+          after: {
+            reference: transfer.reference,
+            expectedAmountMinor: transfer.amountMinor,
+            providerAmountMinor: event.amountMinor,
+          },
+        },
+        executor,
+      )
+      return {
+        matched: true,
+        transferId: transfer.id,
+        paymentId: transfer.paymentId,
+        status: transfer.status,
+      }
+    }
+
+    // Already settled: a replayed webhook inserts its event row and changes
+    // nothing else (P14-D25).
+    if (transfer.paymentId) {
+      await updateTransfer(transfer.id, providerPatch, executor)
+      return {
+        matched: true,
+        transferId: transfer.id,
+        paymentId: transfer.paymentId,
+        status: transfer.status,
+      }
+    }
+
+    return settleTransfer(executor, transfer, event, providerPatch)
+  }
+
+  const failureStatus = TRANSFER_FAILURE_STATUSES[event.status]
+  if (failureStatus) {
+    // Money that already moved is never downgraded by a stale failure event; a
+    // reversal is the one terminal move a success may take.
+    if (
+      transfer.status === 'REVERSED' ||
+      (transfer.status === 'SUCCESS' && event.status !== 'reversed')
+    ) {
+      await updateTransfer(transfer.id, providerPatch, executor)
+      return {
+        matched: true,
+        transferId: transfer.id,
+        paymentId: transfer.paymentId,
+        status: transfer.status,
+      }
+    }
+
+    await updateTransfer(
+      transfer.id,
+      {
+        ...providerPatch,
+        status: failureStatus,
+        failureCode: event.failureCode ?? failureStatus.toLowerCase(),
+        failureMessage:
+          event.failureMessage ??
+          `The provider reported the transfer ${failureStatus.toLowerCase()}`,
+      },
+      executor,
+    )
+    await writeAudit(
+      {
+        ...SYSTEM_PAYSTACK_ACTOR,
+        action:
+          failureStatus === 'REVERSED' ? 'supplier_transfer.reversed' : 'supplier_transfer.failed',
+        entity: 'supplier_transfer',
+        entityId: transfer.id,
+        branchId: transfer.branchId,
+        after: {
+          reference: transfer.reference,
+          status: failureStatus,
+          failureCode: event.failureCode,
+          failureMessage: event.failureMessage,
+          // A reversal keeps the payment: only a manager's `voidPayment` reverses
+          // a ledger entry (P14-D46).
+          paymentId: transfer.paymentId,
+        },
+      },
+      executor,
+    )
+    return {
+      matched: true,
+      transferId: transfer.id,
+      paymentId: transfer.paymentId,
+      status: failureStatus,
+    }
+  }
+
+  // pending / otp: the provider has moved nothing. A terminal row is never
+  // reopened by a late or replayed event.
+  if (!TRANSFER_TERMINAL_STATUSES.has(transfer.status)) {
+    await updateTransfer(
+      transfer.id,
+      {
+        ...providerPatch,
+        status: event.status === 'otp' ? 'AWAITING_OTP' : 'PENDING',
+      },
+      executor,
+    )
+    return {
+      matched: true,
+      transferId: transfer.id,
+      paymentId: null,
+      status: event.status === 'otp' ? 'AWAITING_OTP' : 'PENDING',
+    }
+  }
+
+  await updateTransfer(transfer.id, providerPatch, executor)
+  return {
+    matched: true,
+    transferId: transfer.id,
+    paymentId: transfer.paymentId,
+    status: transfer.status,
+  }
+}
+
+async function assertTransferPlan(
+  user: SessionUser,
+  input: { supplierId: string; branchId: string; amountMinor: number },
+  allocations: readonly { invoiceId: string; amountMinor: number }[],
+): Promise<void> {
+  const seen = new Set<string>()
+  let total = 0
+  for (const allocation of allocations) {
+    if (!Number.isSafeInteger(allocation.amountMinor) || allocation.amountMinor < 1) {
+      throw new ValidationError('Allocation amounts must be positive whole numbers')
+    }
+    if (seen.has(allocation.invoiceId)) {
+      throw new ValidationError('Each invoice may appear only once in a transfer')
+    }
+    seen.add(allocation.invoiceId)
+    total += allocation.amountMinor
+  }
+  if (total > input.amountMinor) {
+    throw new ValidationError('Allocations cannot exceed the transfer amount')
+  }
+
+  // The plan is validated here so a transfer cannot name a foreign invoice; the
+  // settlement re-reads the balances and is authoritative about what fits.
+  for (const allocation of allocations) {
+    const invoice = await findInvoiceById(allocation.invoiceId)
+    if (!invoice) throw new NotFoundError('Supplier invoice not found')
+    if (invoice.supplierId !== input.supplierId) {
+      throw new ConflictError('The invoice belongs to another supplier')
+    }
+    assertBranchAccess(user, invoice.branchId)
+    if (invoice.branchId !== input.branchId) {
+      throw new ConflictError('The invoice belongs to another branch')
+    }
+    if (invoice.status === 'VOID') {
+      throw new ConflictError(`Invoice ${invoice.number} is void and cannot receive a transfer`)
+    }
+  }
+}
+
+/**
+ * Records the intent: the transfer row, its plan and the balance precheck, all
+ * before the provider is called (P14-D29). The supplier is paid when the
+ * provider says the money moved, not here.
+ */
+export async function createSupplierTransfer(
+  user: SessionUser,
+  actor: AuditActor,
+  input: TransferCreateBody,
+): Promise<TransferCreateResult> {
+  const branchId = input.branchId ?? user.branchId
+  if (!branchId) throw new ValidationError('branchId is required for admins')
+  assertBranchAccess(user, branchId)
+  const branchRow = await branchesService.getBranch(user, branchId)
+  if (!branchRow.isActive) throw new ConflictError('The branch is inactive')
+
+  const supplier = await requireSupplier(input.supplierId)
+  const detail = await requirePaymentDetail(supplier.id, input.paymentDetailId)
+  // A destination Paystack cannot address is refused before the intent exists:
+  // a `PENDING` transfer nobody can send is a row the sweep will verify forever.
+  if (detail.method === 'BANK' && !detail.bankCode) {
+    throw new ConflictError(
+      'This bank detail has no bank code, so Paystack cannot create a recipient',
+    )
+  }
+  if (detail.method === 'MOMO' && !detail.momoNetwork) {
+    throw new ConflictError('This mobile-money detail has no network')
+  }
+  const allocations = input.allocations ?? []
+  await assertTransferPlan(
+    user,
+    { supplierId: supplier.id, branchId, amountMinor: input.amountMinor },
+    allocations,
+  )
+
+  const replay = await findTransferByIdempotency(branchId, input.idempotencyKey)
+  if (replay) {
+    return {
+      transfer: await loadTransferDetail(replay.id),
+      replayed: true,
+      providerUnavailable: false,
+    }
+  }
+
+  // The balance is a precondition, not a hope: a console that submits a 2 000 GHS
+  // transfer against a 200 GHS balance has produced a support ticket (P14-D29).
+  const provider = getPaymentProvider()
+  let balanceMinor: number | null
+  try {
+    balanceMinor = (await provider.getBalance())?.balanceMinor ?? null
+  } catch (error) {
+    if (error instanceof ProviderUnavailableError) {
+      throw new AppError(503, 'PROVIDER_UNAVAILABLE', 'The payment provider is unavailable')
+    }
+    throw error
+  }
+  if (balanceMinor === null) {
+    throw new AppError(
+      409,
+      'PROVIDER_BALANCE_UNAVAILABLE',
+      'Paystack reports no GHS balance to transfer from',
+    )
+  }
+  if (balanceMinor < input.amountMinor) {
+    throw new AppError(
+      409,
+      'INSUFFICIENT_PROVIDER_BALANCE',
+      `The Paystack balance is ${formatMinor(balanceMinor)} but this transfer needs ${formatMinor(input.amountMinor)}`,
+      { balanceMinor, amountMinor: input.amountMinor },
+    )
+  }
+
+  const reference = mintTransferReference()
+  const reason = input.note ?? `Supplier payment ${supplier.code}`
+
+  let created: { id: string; replayed: boolean }
+  try {
+    created = await db.transaction(async (tx) => {
+      const raced = await findTransferByIdempotency(branchId, input.idempotencyKey, tx)
+      if (raced) return { id: raced.id, replayed: true }
+
+      const row = await insertTransfer(
+        {
+          branchId,
+          supplierId: supplier.id,
+          paymentDetailId: detail.id,
+          method: detail.method,
+          amountMinor: input.amountMinor,
+          reference,
+          idempotencyKey: input.idempotencyKey,
+          status: 'PENDING',
+          provider: provider.name,
+          reason,
+          note: input.note ?? null,
+          initiatedBy: actorLabel(actor),
+        },
+        tx,
+      )
+      if (!row) throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create the supplier transfer')
+
+      await insertTransferAllocations(
+        allocations.map((allocation) => ({
+          transferId: row.id,
+          invoiceId: allocation.invoiceId,
+          amountMinor: allocation.amountMinor,
+        })),
+        tx,
+      )
+
+      await writeAudit(
+        {
+          ...actor,
+          action: 'supplier_transfer.created',
+          entity: 'supplier_transfer',
+          entityId: row.id,
+          branchId,
+          after: {
+            reference,
+            supplierId: supplier.id,
+            supplierCode: supplier.code,
+            paymentDetailId: detail.id,
+            method: detail.method,
+            amountMinor: input.amountMinor,
+            allocations,
+            balanceMinor,
+          },
+        },
+        tx,
+      )
+
+      return { id: row.id, replayed: false }
+    })
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const replay = await findTransferByIdempotency(branchId, input.idempotencyKey)
+      if (replay) {
+        return {
+          transfer: await loadTransferDetail(replay.id),
+          replayed: true,
+          providerUnavailable: false,
+        }
+      }
+    }
+    throw error
+  }
+
+  if (created.replayed) {
+    return {
+      transfer: await loadTransferDetail(created.id),
+      replayed: true,
+      providerUnavailable: false,
+    }
+  }
+
+  let recipientCode: string
+  let result: ProviderTransferResult
+  try {
+    recipientCode = await ensurePaystackRecipient(supplier.id, detail.id)
+    await updateTransfer(created.id, { recipientCode })
+    result = await provider.initiateTransfer({
+      reference,
+      amountMinor: input.amountMinor,
+      recipientCode,
+      reason,
+      currency: 'GHS',
+    })
+  } catch (error) {
+    // "We do not know" is `PENDING`, never a failure: the sweep verifies.
+    if (error instanceof ProviderUnavailableError) {
+      return {
+        transfer: await loadTransferDetail(created.id),
+        replayed: false,
+        providerUnavailable: true,
+      }
+    }
+    throw error
+  }
+
+  await db.transaction(async (tx) => {
+    await applyTransferEvent(tx, transferEventFromProvider(result))
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_transfer.initiated',
+        entity: 'supplier_transfer',
+        entityId: created.id,
+        branchId,
+        after: { reference, transferCode: result.transferCode, status: result.status },
+      },
+      tx,
+    )
+  })
+
+  return {
+    transfer: await loadTransferDetail(created.id),
+    replayed: false,
+    providerUnavailable: false,
+  }
+}
+
+/**
+ * The OTP a bank or the business owner's phone received. Only a transfer the
+ * provider is actually holding an OTP for may be finalised; anything else is a
+ * conflict, and a wrong code is the provider's own message with no row change
+ * (P14-D24).
+ */
+export async function finalizeSupplierTransfer(
+  user: SessionUser,
+  actor: AuditActor,
+  transferId: string,
+  otp: string,
+): Promise<TransferDetail> {
+  const row = await findTransferById(transferId)
+  if (!row) throw new NotFoundError('Supplier transfer not found')
+  assertBranchAccess(user, row.branchId)
+  if (row.status !== 'AWAITING_OTP') {
+    throw new ConflictError('This transfer is not waiting for an OTP', { status: row.status })
+  }
+  if (!row.providerTransferCode) {
+    throw new ConflictError('The transfer has no provider code to finalise')
+  }
+
+  let result: ProviderTransferResult
+  try {
+    result = await getPaymentProvider().finalizeTransfer({
+      transferCode: row.providerTransferCode,
+      otp,
+    })
+  } catch (error) {
+    if (error instanceof ProviderUnavailableError) {
+      throw new AppError(503, 'PROVIDER_UNAVAILABLE', 'The payment provider is unavailable')
+    }
+    throw error
+  }
+
+  // `otp` means the provider refused the code: 400 with its words, and the row
+  // stays exactly where it was.
+  if (result.status === 'otp') {
+    throw new ValidationError(result.failureMessage ?? 'The provider did not accept the OTP')
+  }
+
+  await db.transaction(async (tx) => {
+    await applyTransferEvent(tx, {
+      ...transferEventFromProvider(result),
+      reference: result.reference || row.reference,
+    })
+    await writeAudit(
+      {
+        ...actor,
+        action: 'supplier_transfer.finalized',
+        entity: 'supplier_transfer',
+        entityId: row.id,
+        branchId: row.branchId,
+        after: {
+          reference: row.reference,
+          transferCode: result.transferCode,
+          status: result.status,
+        },
+      },
+      tx,
+    )
+  })
+
+  return loadTransferDetail(row.id)
+}
+
+/** One manual refresh through the same state writer the webhook uses. */
+export async function verifySupplierTransfer(
+  user: SessionUser,
+  transferId: string,
+): Promise<TransferDetail> {
+  const row = await findTransferById(transferId)
+  if (!row) throw new NotFoundError('Supplier transfer not found')
+  assertBranchAccess(user, row.branchId)
+
+  await updateTransfer(row.id, { lastVerifiedAt: new Date() })
+
+  try {
+    const result = await getPaymentProvider().verifyTransfer(row.reference)
+    await db.transaction(async (tx) => {
+      await applyTransferEvent(tx, transferEventFromProvider(result))
+    })
+  } catch (error) {
+    if (!(error instanceof ProviderUnavailableError)) throw error
+  }
+
+  return loadTransferDetail(row.id)
+}
+
+export interface TransferReconcileSummary {
+  checked: number
+  settled: number
+  failed: number
+}
+
+/**
+ * The catch-up sweep (P14-D31, P14-D47). It verifies; it never finalises: an OTP
+ * is a human's second factor, and a job that guesses it can drain the balance.
+ *
+ * One transfer's failure is logged and the loop continues — one stranded
+ * transfer must not hide the other 99.
+ */
+export async function reconcileStaleTransfers(
+  options: { olderThanMinutes?: number; limit?: number } = {},
+): Promise<TransferReconcileSummary> {
+  const minutes = options.olderThanMinutes ?? TRANSFER_RECONCILE_STALE_MINUTES
+  const stale = await selectTransfersToVerify(
+    new Date(Date.now() - minutes * 60_000),
+    options.limit ?? TRANSFER_RECONCILE_LIMIT,
+  )
+
+  let settled = 0
+  let failed = 0
+
+  for (const transfer of stale) {
+    try {
+      const result = await getPaymentProvider().verifyTransfer(transfer.reference)
+      const outcome = await db.transaction(async (tx) =>
+        applyTransferEvent(tx, transferEventFromProvider(result)),
+      )
+      if (outcome.status === 'SUCCESS') settled += 1
+      logger.info({ transferId: transfer.id, status: outcome.status }, 'transfer verified')
+    } catch (error) {
+      failed += 1
+      logger.warn(
+        {
+          transferId: transfer.id,
+          message: error instanceof Error ? error.message.slice(0, 200) : 'unknown error',
+        },
+        'transfer reconcile failed',
+      )
+    }
+  }
+
+  return { checked: stale.length, settled, failed }
+}
+
+export async function listTransfers(
+  user: SessionUser,
+  query: TransferListQuery,
+): Promise<TransferListResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const filters: TransferListFilters = {
+    supplierId: query.supplierId ?? null,
+    branchId,
+    status: query.status ?? null,
+    from: query.from ? new Date(`${query.from}T00:00:00.000Z`) : null,
+    to: query.to ? new Date(`${addDaysToIsoDate(query.to, 1)}T00:00:00.000Z`) : null,
+    limit: query.limit,
+    offset: query.offset,
+  }
+  const [rows, total] = await Promise.all([selectTransferPage(filters), countTransfers(filters)])
+  return { transfers: rows.map(toTransferView), total, branchId }
+}
+
+export async function getTransfer(user: SessionUser, transferId: string): Promise<TransferDetail> {
+  const detail = await loadTransferDetail(transferId)
+  assertBranchAccess(user, detail.transfer.branchId)
+  return detail
+}
+
+export interface ProviderBalanceView {
+  currency: 'GHS'
+  /** Null when the provider could not be asked: the console shows "unavailable". */
+  balanceMinor: number | null
+}
+
+/** Thirty seconds: opening a dialog must not be a provider call per keystroke. */
+const PROVIDER_BALANCE_CACHE_MS = 30_000
+let providerBalanceCache: { at: number; value: ProviderBalanceView } | null = null
+
+/** A test resets the cache between cases; nothing else calls this. */
+export function resetProviderBalanceCache(): void {
+  providerBalanceCache = null
+}
+
+/**
+ * The balance the console reads before offering a transfer. A failure is
+ * reported as "unknown" rather than as a number, and cached for the same window
+ * so a provider outage does not become a request storm. The create path asks
+ * again and refuses on a real figure (P14-D29).
+ */
+export async function getProviderBalance(): Promise<ProviderBalanceView> {
+  const now = Date.now()
+  if (providerBalanceCache && now - providerBalanceCache.at < PROVIDER_BALANCE_CACHE_MS) {
+    return providerBalanceCache.value
+  }
+
+  let value: ProviderBalanceView
+  try {
+    const balance = await getPaymentProvider().getBalance()
+    value = { currency: 'GHS', balanceMinor: balance?.balanceMinor ?? null }
+  } catch (error) {
+    if (!(error instanceof ProviderUnavailableError)) throw error
+    value = { currency: 'GHS', balanceMinor: null }
+  }
+
+  providerBalanceCache = { at: now, value }
+  return value
+}
+
+/**
+ * Manual payments, settled transfers and unposted money in one list (Plan §7).
+ *
+ * `settled` compares the transfer's own `amount_minor` with the posted payment's
+ * `amount_minor` — equal by construction, because the settlement writes the
+ * transfer's amount. The fee is Paystack's and is reported beside the figure,
+ * never netted into it (P14-D29).
+ */
+export async function getTransferReconciliation(
+  user: SessionUser,
+  query: TransferReconciliationQuery,
+): Promise<TransferReconciliationResult> {
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const from = query.from ? new Date(`${query.from}T00:00:00.000Z`) : null
+  const to = query.to ? new Date(`${addDaysToIsoDate(query.to, 1)}T00:00:00.000Z`) : null
+
+  const [transferRows, manualRows] = await Promise.all([
+    selectTransferReconciliationRows({ branchId, from, to }),
+    selectManualPaymentsForReconciliation({ branchId, from, to }),
+  ])
+
+  const rows: TransferReconciliationRow[] = []
+  const totals = {
+    settledMinor: 0,
+    manualMinor: 0,
+    unpostedMinor: 0,
+    failedCount: 0,
+    reversedCount: 0,
+  }
+
+  for (const row of transferRows) {
+    const settled = row.status === 'SUCCESS' && row.paymentId !== null
+    const attention =
+      (row.status === 'SUCCESS' && row.paymentId === null) ||
+      (row.status === 'REVERSED' && row.paymentId !== null)
+
+    rows.push({
+      state: settled ? 'settled' : 'unposted',
+      supplierId: row.supplierId,
+      supplierCode: row.supplierCode,
+      supplierName: row.supplierName,
+      branchId: row.branchId,
+      transferId: row.id,
+      paymentId: row.paymentId,
+      reference: row.reference,
+      status: row.status,
+      amountMinor: row.amountMinor,
+      paymentAmountMinor: row.paymentAmountMinor,
+      unallocatedMinor: row.unallocatedMinor,
+      feeMinor: null,
+      failureCode: row.failureCode,
+      failureMessage: row.failureMessage,
+      occurredAt: row.createdAt.toISOString(),
+      attention,
+    })
+
+    if (settled) totals.settledMinor += row.amountMinor
+    else if (row.status === 'SUCCESS') totals.unpostedMinor += row.amountMinor
+    if (row.status === 'FAILED' || row.status === 'BLOCKED' || row.status === 'REJECTED') {
+      totals.failedCount += 1
+    }
+    if (row.status === 'REVERSED') totals.reversedCount += 1
+  }
+
+  for (const row of manualRows) {
+    rows.push({
+      state: 'manual',
+      supplierId: row.supplierId,
+      supplierCode: row.supplierCode,
+      supplierName: row.supplierName,
+      branchId: row.branchId,
+      transferId: null,
+      paymentId: row.id,
+      reference: row.number,
+      status: null,
+      amountMinor: row.amountMinor,
+      paymentAmountMinor: row.amountMinor,
+      unallocatedMinor: 0,
+      feeMinor: null,
+      failureCode: null,
+      failureMessage: null,
+      occurredAt: row.paidAt.toISOString(),
+      attention: false,
+    })
+    totals.manualMinor += row.amountMinor
+  }
+
+  rows.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+
+  return { from: query.from ?? null, to: query.to ?? null, branchId, rows, totals }
 }

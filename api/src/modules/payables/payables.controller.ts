@@ -13,6 +13,10 @@ import type {
   PaymentCreateBody,
   PaymentListQuery,
   PaymentVoidBody,
+  TransferCreateBody,
+  TransferFinalizeBody,
+  TransferListQuery,
+  TransferReconciliationQuery,
 } from './payables.types.ts'
 
 export async function listInvoices(c: Context<AppEnv>, query: InvoiceListQuery) {
@@ -82,4 +86,57 @@ export async function getAging(c: Context<AppEnv>, query: AgingQuery) {
 export async function exportAging(c: Context<AppEnv>, query: AgingQuery) {
   const user = currentUser(c)
   return sendCsv(c, await payablesService.exportAging(user, query))
+}
+
+export async function listTransfers(c: Context<AppEnv>, query: TransferListQuery) {
+  const user = currentUser(c)
+  return c.json(await payablesService.listTransfers(user, query))
+}
+
+export async function createTransfer(c: Context<AppEnv>, input: TransferCreateBody) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await payablesService.createSupplierTransfer(user, actor, input)
+  return c.json(
+    {
+      transfer: result.transfer,
+      replayed: result.replayed,
+      providerUnavailable: result.providerUnavailable,
+    },
+    result.replayed ? 200 : 201,
+  )
+}
+
+export async function getTransfer(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  return c.json(await payablesService.getTransfer(user, id))
+}
+
+export async function finalizeTransfer(
+  c: Context<AppEnv>,
+  id: string,
+  input: TransferFinalizeBody,
+) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  return c.json({
+    transfer: await payablesService.finalizeSupplierTransfer(user, actor, id, input.otp),
+  })
+}
+
+export async function verifyTransfer(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  return c.json({ transfer: await payablesService.verifySupplierTransfer(user, id) })
+}
+
+export async function getProviderBalance(c: Context<AppEnv>) {
+  return c.json(await payablesService.getProviderBalance())
+}
+
+export async function getTransferReconciliation(
+  c: Context<AppEnv>,
+  query: TransferReconciliationQuery,
+) {
+  const user = currentUser(c)
+  return c.json(await payablesService.getTransferReconciliation(user, query))
 }
