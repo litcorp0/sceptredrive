@@ -43,6 +43,8 @@ export const IPC_CHANNELS = {
   printerPrint: 'printer:print',
   printerOpenDrawer: 'printer:open-drawer',
   printerTest: 'printer:test',
+  checkoutOpen: 'payments:checkout:open',
+  checkoutClose: 'payments:checkout:close',
 } as const
 
 /** Keys stored encrypted with the OS keychain (async `safeStorage`). */
@@ -71,6 +73,15 @@ export type DesktopErrorCode =
 export type IpcOk<T> = { ok: true; data: T }
 export type IpcErr = { ok: false; error: { code: DesktopErrorCode; message: string } }
 export type IpcResult<T> = IpcOk<T> | IpcErr
+
+/**
+ * The checkout window's answer. A refusal is data, not an exception: a
+ * `UNTRUSTED_URL` is a server (or a compromised renderer) trying to put a page
+ * we do not own on the till, and the cashier must be able to carry on with cash.
+ */
+export type CheckoutOpenResult =
+  | { ok: true }
+  | { ok: false; reason: 'UNTRUSTED_URL' | 'NO_PARENT' | 'OPEN_FAILED' }
 
 export type SecureStorageStatus = {
   /** OS-backed encryption is available at all. */
@@ -133,6 +144,21 @@ export type DesktopApi = {
       target: PrinterTarget
       encoding: PrintEncoding
     }): Promise<IpcResult<PrintOutcome>>
+  }
+  /**
+   * Paystack Checkout for the card tender. The window is created in the main
+   * process with no preload; the renderer only ever opens and closes it. The
+   * result of the payment arrives through the server, never from this bridge.
+   *
+   * Optional because a preload built before this feature has no `payments`
+   * branch: the card tender must then say the window is unavailable instead of
+   * crashing the till.
+   */
+  payments?: {
+    checkout: {
+      open(url: string): Promise<IpcResult<CheckoutOpenResult>>
+      close(): Promise<IpcResult<null>>
+    }
   }
 }
 

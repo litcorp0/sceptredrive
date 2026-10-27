@@ -12,6 +12,7 @@ import type { PrinterRuntime } from '../printing/printer'
 import { isTrustedIpcSender, type NavigationPolicy } from '../security'
 import { getAppInfo } from './app-info'
 import { type Keychain, KeychainError } from './keychain'
+import { registerPaymentHandlers } from './payments'
 import { hashPin, PinCryptoError, verifyPin } from './pin'
 import { registerPrinterHandlers } from './printer'
 
@@ -119,6 +120,10 @@ export function registerIpcHandlers(options: IpcRegistrationOptions): void {
   )
 
   registerPrinterHandlers(handle, options.printing)
+  registerPaymentHandlers(handle, {
+    mainWindow: options.mainWindow,
+    log: options.log,
+  })
 }
 
 /** Test seam: removes every handler registered above. */

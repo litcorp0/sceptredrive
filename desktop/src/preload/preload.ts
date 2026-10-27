@@ -38,6 +38,12 @@ const api: DesktopApi = {
     test: (request: { target: PrinterTarget; encoding: PrintEncoding }) =>
       ipcRenderer.invoke(IPC_CHANNELS.printerTest, request),
   },
+  payments: {
+    checkout: {
+      open: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.checkoutOpen, url),
+      close: () => ipcRenderer.invoke(IPC_CHANNELS.checkoutClose),
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('sceptreDrive', api)
