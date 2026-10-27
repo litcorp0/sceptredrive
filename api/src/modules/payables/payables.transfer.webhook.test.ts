@@ -397,6 +397,20 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
     expect(auditRows).toHaveLength(1)
   })
 
+  it('never posts a payment for a success that arrives after a reversal', async () => {
+    const { transferId, reference } = await createScenario()
+
+    expect((await send(transferBody('transfer.reversed', reference))).status).toBe(200)
+    expect((await send(transferBody('transfer.success', reference))).status).toBe(200)
+
+    expect(await paymentFor(transferId)).toBeNull()
+    const [transfer] = await db
+      .select()
+      .from(supplierTransfer)
+      .where(eq(supplierTransfer.id, transferId))
+    expect(transfer).toMatchObject({ status: 'REVERSED', paymentId: null })
+  })
+
   it('ignores a delivery that names no transfer and answers 200', async () => {
     const reference = `sdt-${crypto.randomUUID()}`
     references.push(reference)

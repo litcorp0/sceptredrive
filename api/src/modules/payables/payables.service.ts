@@ -1673,8 +1673,13 @@ export async function applyTransferEvent(
 
   if (event.status === 'success') {
     // The provider's amount is not ours to book: a success for another amount is
-    // never posted, and the transfer stays open with the reason attached.
-    if (event.amountMinor !== null && event.amountMinor !== transfer.amountMinor) {
+    // never posted, and the transfer stays open with the reason attached. A
+    // missing amount (0 is not a legal transfer) is not a mismatch.
+    if (
+      event.amountMinor !== null &&
+      event.amountMinor > 0 &&
+      event.amountMinor !== transfer.amountMinor
+    ) {
       await updateTransfer(
         transfer.id,
         {
@@ -1699,6 +1704,18 @@ export async function applyTransferEvent(
         },
         executor,
       )
+      return {
+        matched: true,
+        transferId: transfer.id,
+        paymentId: transfer.paymentId,
+        status: transfer.status,
+      }
+    }
+
+    // Money that came back is never posted again by a stale success. A reversal
+    // is terminal for the intent; a person settles what really happened.
+    if (transfer.status === 'REVERSED') {
+      await updateTransfer(transfer.id, providerPatch, executor)
       return {
         matched: true,
         transferId: transfer.id,
