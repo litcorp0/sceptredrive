@@ -657,6 +657,26 @@ describe.skipIf(!available)('analytics overview', () => {
     expect(page2.rows).toHaveLength(1)
   })
 
+  it('carries the sale id on every sales row, so a receipt links to its own detail', async () => {
+    const response = await get('/api/analytics/sales', adminCookie, PERIOD)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      rows: Array<{ saleId: string; receiptNumber: string }>
+    }
+    expect(body.rows.length).toBeGreaterThan(0)
+
+    const sales = await db
+      .select({ id: sale.id, receiptNumber: sale.receiptNumber })
+      .from(sale)
+      .where(inArray(sale.id, createdSaleIds))
+    const idByReceipt = new Map(sales.map((row) => [row.receiptNumber, row.id]))
+    for (const row of body.rows) {
+      // One column, no second query: the id is the row the console opens.
+      expect(idByReceipt.get(row.receiptNumber)).toBe(row.saleId)
+      expect(row.saleId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/)
+    }
+  })
+
   it('rejects an unknown sort instead of interpolating it', async () => {
     const response = await get('/api/analytics/sales', adminCookie, {
       ...PERIOD,
