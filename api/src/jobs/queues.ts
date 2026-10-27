@@ -6,6 +6,7 @@ import {
   scanOversellTriggers,
 } from '../modules/counts/counts.service.ts'
 import { expireDueLots } from '../modules/loyalty/loyalty.service.ts'
+import { dispatchPendingRefunds } from '../modules/payments/payments.service.ts'
 
 export const LOYALTY_EXPIRY_QUEUE = 'loyalty-expiry'
 
@@ -37,6 +38,12 @@ export const POS_PAYMENT_RECONCILE_QUEUE = 'pos-payment-reconcile'
 /** Nightly at 01:20 Africa/Accra, after the inventory jobs, before the sweep is due. */
 export const POS_PAYMENT_RECONCILE_CRON = '20 1 * * *'
 
+/**
+ * The refund sweep. The enqueue after a commit is the fast path; this catches a
+ * tender whose enqueue was lost while the process was down (P13-D16, P13-D26).
+ */
+export const POS_REFUND_DISPATCH_CRON = '*/15 * * * *'
+
 /** Accra is UTC+0 all year, but the zone is named rather than assumed. */
 export const INVENTORY_JOB_TZ = 'Africa/Accra'
 
@@ -45,12 +52,39 @@ async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   if (!existing) await boss.createQueue(name)
 }
 
+/**
+ * The live boss, published by `registerJobHandlers`. The upload path enqueues
+ * through `enqueueRefundDispatch` rather than importing pg-boss, so a process
+ * without the job runner (a test, a one-off script) degrades to the sweep.
+ */
+let jobBoss: PgBoss | null = null
+
+/**
+ * Enqueues one refund's provider dispatch. Called **after** the upload
+ * transaction commits (P13-D26): a provider call cannot be rolled back with the
+ * document, so it never runs inside that transaction. A missing or failing queue
+ * is a warning, not a throw — the sweep reads the same rows from the database.
+ */
+export async function enqueueRefundDispatch(refundId: string): Promise<void> {
+  if (!jobBoss) {
+    logger.warn(
+      { queue: POS_REFUND_DISPATCH_QUEUE, refundId },
+      'no queue runner; the refund sweep will dispatch it',
+    )
+    return
+  }
+  await jobBoss.send(POS_REFUND_DISPATCH_QUEUE, { refundId })
+}
+
 /** Registers queues, workers, and schedules on a started pg-boss instance. */
 export async function registerJobHandlers(boss: PgBoss): Promise<void> {
+  jobBoss = boss
+
   await ensureQueue(boss, LOYALTY_EXPIRY_QUEUE)
   await ensureQueue(boss, INVENTORY_COUNT_SCHEDULE_QUEUE)
   await ensureQueue(boss, INVENTORY_ABC_RECOMPUTE_QUEUE)
   await ensureQueue(boss, INVENTORY_TRIGGER_SCAN_QUEUE)
+  await ensureQueue(boss, POS_REFUND_DISPATCH_QUEUE)
 
   await boss.work(LOYALTY_EXPIRY_QUEUE, async () => {
     const summary = await expireDueLots()
@@ -79,6 +113,12 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
       { queue: INVENTORY_TRIGGER_SCAN_QUEUE, ...summary },
       'oversell trigger scan complete',
     )
+    return summary
+  })
+
+  await boss.work(POS_REFUND_DISPATCH_QUEUE, async () => {
+    const summary = await dispatchPendingRefunds()
+    logger.info({ queue: POS_REFUND_DISPATCH_QUEUE, ...summary }, 'refund dispatch run complete')
     return summary
   })
 
@@ -114,5 +154,16 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   logger.info(
     { queue: LOYALTY_EXPIRY_QUEUE, cron: LOYALTY_EXPIRY_CRON, tz: 'Africa/Accra' },
     'loyalty expiry schedule registered',
+  )
+
+  // The sweep, not the happy path: an immediate enqueue usually wins the race,
+  // and this finds anything that was enqueued while the process was down.
+  await boss.schedule(POS_REFUND_DISPATCH_QUEUE, POS_REFUND_DISPATCH_CRON, null, {
+    tz: INVENTORY_JOB_TZ,
+    missed: 'once',
+  })
+  logger.info(
+    { queue: POS_REFUND_DISPATCH_QUEUE, cron: POS_REFUND_DISPATCH_CRON, tz: INVENTORY_JOB_TZ },
+    'refund dispatch sweep registered',
   )
 }

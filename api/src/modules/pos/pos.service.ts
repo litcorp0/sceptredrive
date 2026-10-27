@@ -1,10 +1,15 @@
 import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import {
+  allocateProportionally,
   can,
   isElectronicTender,
   MAX_TENDERS_PER_SALE,
+  movesStockBack,
   priceCart,
+  refundAllocationProblem,
+  refundApprovalRequired,
+  refundableQuantity,
   type TaxMode,
   TENDER_PROBLEM_MESSAGES,
   tenderBalance,
@@ -32,7 +37,7 @@ import { payment } from '../payments/payments.schema.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
-import type { DeviceAuthContext } from '../sync/sync.types.ts'
+import type { DeviceAuthContext, RefundApplyResult, RefundPayload } from '../sync/sync.types.ts'
 import { addConflict } from './pos.conflicts.ts'
 import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
@@ -43,6 +48,10 @@ import {
   findBindingByTokenHash,
   findCreditProfileRow,
   findOpenShiftByTerminal,
+  findRefundById,
+  findRefundByNumber,
+  findSaleById,
+  findSaleByIdForUpdate,
   findSaleByReceiptNumber,
   findShiftByIdForUpdate,
   findShiftWithTerminal,
@@ -52,16 +61,28 @@ import {
   insertBinding,
   insertCashMovement,
   insertConflict,
+  insertRefund,
+  insertRefundLines,
+  insertRefundTenders,
   insertSale,
   insertSaleLines,
   insertSaleTenders,
   insertShift,
   lockTerminal,
+  refundedLineTotals,
   revokeBinding,
   revokeStaffBindings,
+  selectRefundedLines,
+  selectRefundedTenderAmounts,
+  selectRefundedTotalForSale,
+  selectRefundLines,
+  selectRefundTenders,
+  selectSaleLinesForRefund,
+  selectSaleTendersForRefund,
   selectShiftCashTotals,
   selectSoldValueByProduct,
   touchBinding,
+  updateRefundApprovalId,
   updateSaleConflictCount,
   updateShiftClose,
   updateShiftReview,
@@ -778,7 +799,7 @@ async function validateOverrideProof(
   tx: DbExecutor,
   device: DeviceAuthContext,
   proof: OverrideProof | null | undefined,
-  permission: 'pos.discount' | 'credit.override',
+  permission: 'pos.discount' | 'credit.override' | 'pos.refund',
 ): Promise<OverrideValidation> {
   const invalid: OverrideValidation = { valid: false, actor: null, reasonCode: null }
   if (!proof) return invalid
@@ -1586,6 +1607,592 @@ export async function applySale(
   return { saleId, conflicts: applied, resolvedCustomerId }
 }
 
+// --- Refund application (Plan 05) -------------------------------------------
+
+type RefundComponent =
+  | 'baseMinor'
+  | 'vatMinor'
+  | 'nhilMinor'
+  | 'getfundMinor'
+  | 'taxTotalMinor'
+  | 'totalMinor'
+
+const REFUND_COMPONENTS: readonly RefundComponent[] = [
+  'baseMinor',
+  'vatMinor',
+  'nhilMinor',
+  'getfundMinor',
+  'taxTotalMinor',
+  'totalMinor',
+]
+
+function refundRejected(
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+): AppError {
+  // 409: a refund cap is a business refusal, not a malformed request. The upload
+  // dispatcher stores it as REJECTED so the till learns the code and moves on.
+  return new AppError(409, code, message, details)
+}
+
+function refundInvalid(message: string): AppError {
+  return new AppError(400, 'REFUND_INVALID', message)
+}
+
+/** A readable amount for a refusal message. Money stays integer pesewas. */
+function formatRefundMinor(minor: number): string {
+  return `GHS ${Math.trunc(minor / 100)}.${String(minor % 100).padStart(2, '0')}`
+}
+
+/**
+ * The rules a single document can be checked against without reading the sale.
+ * The wire schema says the same; a direct service call is not allowed to be
+ * less careful than the wire (the same discipline `assertSaleShape` keeps).
+ */
+function assertRefundShape(payload: RefundPayload): void {
+  if (!payload.number?.trim() || payload.number.length > 64) {
+    throw refundInvalid('A refund needs a valid number')
+  }
+  if (payload.lines.length === 0 || payload.lines.length > 200) {
+    throw refundInvalid('A refund needs between 1 and 200 lines')
+  }
+
+  const seen = new Set<string>()
+  for (const line of payload.lines) {
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 10_000) {
+      throw refundInvalid('Refund quantities must be between 1 and 10,000')
+    }
+    if (seen.has(line.saleLineId)) {
+      // Two rows for one sale line would make the restock choice ambiguous and
+      // the per-line cap a sum of two documents. One line, one decision.
+      throw refundInvalid('A sale line may appear only once on a refund')
+    }
+    seen.add(line.saleLineId)
+
+    if (line.restock === 'DAMAGED') {
+      if (!line.damageReason || line.damageReason.trim().length < 3) {
+        throw refundInvalid('A damaged line needs a damage reason of at least 3 characters')
+      }
+    } else if (line.damageReason) {
+      throw refundInvalid('Only a damaged line carries a damage reason')
+    }
+  }
+
+  if (payload.tenders.length === 0 || payload.tenders.length > MAX_TENDERS_PER_SALE) {
+    throw refundInvalid(`A refund needs between 1 and ${MAX_TENDERS_PER_SALE} tender allocations`)
+  }
+  for (const tender of payload.tenders) {
+    if (!Number.isSafeInteger(tender.amountMinor) || tender.amountMinor < 1) {
+      throw refundInvalid('A refund tender allocation must be a positive whole amount')
+    }
+  }
+  if (!Number.isSafeInteger(payload.refundedMinor) || payload.refundedMinor < 1) {
+    throw refundInvalid('A refund must return a positive whole amount')
+  }
+}
+
+/** Which refusal a shared allocation problem becomes on the wire. */
+function refundProblemError(problem: string): AppError {
+  switch (problem) {
+    case 'EXCEEDS_LINE':
+      return refundRejected('REFUND_EXCEEDS_LINE', 'That is more than is left of this line')
+    case 'EXCEEDS_TENDER':
+      return refundRejected('REFUND_EXCEEDS_TENDER', 'That is more than this tender holds')
+    case 'EXCEEDS_SALE':
+      return refundRejected('REFUND_EXCEEDS_SALE', 'That is more than this sale kept')
+    case 'SUM_MISMATCH':
+      return refundRejected(
+        'REFUND_SUM_MISMATCH',
+        'The tender allocations must add up to the refunded amount',
+      )
+    default:
+      return refundInvalid('A refund needs at least one line and one tender allocation')
+  }
+}
+
+/**
+ * Applies one refund in the caller's transaction, under a lock on the sale.
+ *
+ * A refund is a new document (P13-D17): the sale, its lines and its tenders are
+ * read and never written. The caps are re-derived here rather than trusted from
+ * the till, because the till may have been offline for a day and the same sale
+ * may have been refunded at another till since (P13-D19).
+ */
+export async function applyRefund(
+  context: SaleContext,
+  payload: RefundPayload,
+  executor: DbExecutor = db,
+): Promise<RefundApplyResult> {
+  assertRefundShape(payload)
+
+  const device = context.device
+  const refundId = context.clientTransactionId
+  const number = payload.number.trim()
+  const occurredAt = parseOccurredAt(payload.occurredAt)
+
+  // 1. Lock the sale first: two tills refunding one sale serialise here, before
+  //    either reads a cap (P13-D19).
+  const saleRow = await findSaleByIdForUpdate(payload.saleId, executor)
+  if (!saleRow) {
+    throw new AppError(404, 'REFUND_SALE_MISSING', 'The sale this refund names does not exist')
+  }
+  if (saleRow.branchId !== device.branchId || saleRow.terminalId !== device.terminalId) {
+    // P13-D25: a sale is refundable at the terminal that took it. The console's
+    // cross-terminal path is a later phase, not a quiet widening of this one.
+    throw new AppError(
+      403,
+      'REFUND_SALE_FOREIGN',
+      'A sale is refundable only at the terminal that recorded it',
+    )
+  }
+
+  // The refund's own shift is where the money left the drawer; the sale's shift
+  // may already be closed, which is why the sale's shift is not compared.
+  const refundShift = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!refundShift) {
+    throw refundInvalid('The refund references a shift that does not exist')
+  }
+  if (refundShift.branchId !== device.branchId || refundShift.terminalId !== device.terminalId) {
+    throw new AppError(
+      409,
+      'SHIFT_DEVICE_MISMATCH',
+      'The refund shift does not belong to this terminal',
+    )
+  }
+
+  // Idempotency at the service seam: a replay that got past the reservation
+  // ledger must not write a second document.
+  const existingNumber = await findRefundByNumber(number, executor)
+  if (existingNumber) {
+    if (existingNumber.id === refundId) {
+      const stored = await findRefundById(refundId, executor)
+      if (stored) {
+        return {
+          refundId: stored.id,
+          number: stored.number,
+          refundedMinor: stored.refundedMinor,
+          pendingDispatch: [],
+        }
+      }
+    }
+    throw refundRejected('REFUND_NUMBER_CONFLICT', 'This refund number is already used')
+  }
+
+  // 2. Authorise: the manager PIN is the authority, and the approver may not be
+  //    the person handing the money back (P13-D24).
+  const approval = await validateOverrideProof(executor, device, payload.approval, 'pos.refund')
+  if (!approval.valid || !approval.actor) {
+    throw new AppError(403, 'OVERRIDE_INVALID', 'A refund needs a live manager approval')
+  }
+
+  const resolvedCashier = await findBindingByTokenHash(
+    hashDeviceToken(payload.cashier.bindingToken),
+    executor,
+  )
+  const cashier =
+    resolvedCashier &&
+    resolvedCashier.binding.id === payload.cashier.bindingId &&
+    resolvedCashier.staff.userId === payload.cashier.userId &&
+    resolvedCashier.staff.pinVersion === payload.cashier.pinVersion &&
+    bindingIsLive(device, resolvedCashier.binding, resolvedCashier.staff)
+      ? { userId: resolvedCashier.staff.userId, staffId: resolvedCashier.staff.staffId }
+      : { userId: payload.cashier.userId, staffId: payload.cashier.staffId }
+
+  if (payload.approval.userId === cashier.userId || payload.approval.staffId === cashier.staffId) {
+    throw new AppError(403, 'OVERRIDE_INVALID', 'A cashier cannot authorise their own refund')
+  }
+  const actor = auditActorFor(cashier)
+  const approver = approval.actor
+
+  // 3-5. Caps, from the sale and the refunds already booked against it.
+  const [saleLines, saleTenders, refundedLines, refundedTenders, alreadyRefundedMinor] =
+    await Promise.all([
+      selectSaleLinesForRefund(saleRow.id, executor),
+      selectSaleTendersForRefund(saleRow.id, executor),
+      selectRefundedLines(saleRow.id, executor),
+      selectRefundedTenderAmounts(saleRow.id, executor),
+      selectRefundedTotalForSale(saleRow.id, executor),
+    ])
+
+  const saleLinesById = new Map(saleLines.map((line) => [line.id, line]))
+  const saleTendersById = new Map(saleTenders.map((tender) => [tender.id, tender]))
+
+  for (const line of payload.lines) {
+    if (!saleLinesById.has(line.saleLineId)) {
+      throw refundInvalid('A refund line names a sale line that is not on this sale')
+    }
+  }
+  for (const tender of payload.tenders) {
+    if (!saleTendersById.has(tender.saleTenderId)) {
+      throw refundInvalid('A refund tender names a tender that is not on this sale')
+    }
+  }
+
+  // The sale cap is checked first so the till gets the headline number: change
+  // was never money we kept, so it is not refundable (P13-D19). The shared
+  // allocation helper keeps the same check as its second line of defence.
+  const keptMinor = saleRow.tenderTotalMinor - saleRow.changeMinor
+  if (alreadyRefundedMinor + payload.refundedMinor > keptMinor) {
+    throw refundProblemError('EXCEEDS_SALE')
+  }
+
+  const problem = refundAllocationProblem({
+    allocation: {
+      lines: payload.lines.map((line) => ({
+        saleLineId: line.saleLineId,
+        quantity: line.quantity,
+      })),
+      tenders: payload.tenders.map((tender) => ({
+        saleTenderId: tender.saleTenderId,
+        amountMinor: tender.amountMinor,
+      })),
+    },
+    lines: saleLines.map((line) => ({
+      saleLineId: line.id,
+      quantity: line.quantity,
+      refundedQuantity: refundedLineTotals(refundedLines, line.id).quantity,
+    })),
+    tenders: saleTenders.map((tender) => ({
+      saleTenderId: tender.id,
+      method: tender.method,
+      amountMinor: tender.amountMinor,
+      refundedMinor: refundedTenders.get(tender.id) ?? 0,
+    })),
+    refundedMinor: payload.refundedMinor,
+    saleTenderTotalMinor: saleRow.tenderTotalMinor,
+    saleChangeMinor: saleRow.changeMinor,
+    previouslyRefundedMinor: alreadyRefundedMinor,
+  })
+  if (problem) throw refundProblemError(problem)
+
+  // 6. Money per line. Each component is allocated over the quantity *still*
+  //    unrefunded, so the last refund of a line takes that line's exact
+  //    remainder and the components of every refund sum to the line's own
+  //    figures (P13-D17). Allocating over the original quantity would not
+  //    telescope: 1 of 3 then 2 of 3 would not add up to the line.
+  const pricedLines = payload.lines.map((line) => {
+    const saleLine = saleLinesById.get(line.saleLineId) as (typeof saleLines)[number]
+    const already = refundedLineTotals(refundedLines, saleLine.id)
+    const remainingQuantity = refundableQuantity({
+      saleLineId: saleLine.id,
+      quantity: saleLine.quantity,
+      refundedQuantity: already.quantity,
+    })
+    const weights = [line.quantity, remainingQuantity - line.quantity]
+
+    const components = {} as Record<RefundComponent, number>
+    for (const component of REFUND_COMPONENTS) {
+      // The caps above make a negative remainder impossible; clamping keeps a
+      // drifted row from throwing a RangeError mid-transaction.
+      const remaining = Math.max(0, saleLine[component] - already[component])
+      components[component] = allocateProportionally(remaining, weights)[0] ?? 0
+    }
+
+    return {
+      saleLineId: saleLine.id,
+      productId: saleLine.productId,
+      quantity: line.quantity,
+      unitPriceMinor: saleLine.unitPriceMinor,
+      // The cost the goods were sold at, not today's average (P13-D22).
+      unitCostMinor: saleLine.unitCostMinor,
+      restock: line.restock,
+      damageReason: line.restock === 'DAMAGED' ? (line.damageReason?.trim() ?? null) : null,
+      ...components,
+    }
+  })
+
+  const header = REFUND_COMPONENTS.reduce(
+    (totals, component) => {
+      totals[component] = pricedLines.reduce((sum, line) => sum + line[component], 0)
+      return totals
+    },
+    {} as Record<RefundComponent, number>,
+  )
+
+  // What the shop gives back must equal what came back, restocked or not
+  // (P13-D17, P13-D19). Without this the header's tax reversal can exceed the
+  // money that actually left, and the Z-report's VAT would be wrong by the
+  // difference. Checked before a row is written, like every other cap.
+  if (header.totalMinor !== payload.refundedMinor) {
+    throw refundRejected(
+      'REFUND_LINE_TOTAL_MISMATCH',
+      `The refunded amount (${formatRefundMinor(payload.refundedMinor)}) does not match the value of the lines returned (${formatRefundMinor(header.totalMinor)})`,
+      { refundedMinor: payload.refundedMinor, lineTotalMinor: header.totalMinor },
+    )
+  }
+
+  // 7. The document.
+  const created = await insertRefund(
+    {
+      id: refundId,
+      number,
+      saleId: saleRow.id,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      deviceId: device.deviceId,
+      shiftId: payload.shiftId,
+      customerId: saleRow.customerId,
+      reasonCode: payload.reasonCode,
+      note: payload.note?.trim() || null,
+      refundedMinor: payload.refundedMinor,
+      ...header,
+      approvedByUserId: approver.actorId ?? payload.approval.userId,
+      approvedByStaffId: approver.actorStaffId ?? payload.approval.staffId,
+      approvalPinVersion: payload.approval.pinVersion,
+      approvalReasonCode: payload.approval.reasonCode,
+      approvedAt: parseOccurredAt(payload.approval.occurredAt),
+      occurredAt,
+      receivedAt: context.receivedAt,
+    },
+    executor,
+  )
+
+  // 8. The lines.
+  await insertRefundLines(
+    pricedLines.map((line, index) => ({
+      refundId: created.id,
+      saleLineId: line.saleLineId,
+      productId: line.productId,
+      lineNumber: index + 1,
+      quantity: line.quantity,
+      unitPriceMinor: line.unitPriceMinor,
+      unitCostMinor: line.unitCostMinor,
+      restock: line.restock,
+      damageReason: line.damageReason,
+      baseMinor: line.baseMinor,
+      vatMinor: line.vatMinor,
+      nhilMinor: line.nhilMinor,
+      getfundMinor: line.getfundMinor,
+      taxTotalMinor: line.taxTotalMinor,
+      totalMinor: line.totalMinor,
+    })),
+    executor,
+  )
+
+  // 9. The tenders. Cash and credit settle now; electronic money waits for the
+  //    provider, because only Paystack can move it (P13-D26).
+  const settledAt = new Date()
+  await insertRefundTenders(
+    payload.tenders.map((tender, index) => {
+      const saleTenderRow = saleTendersById.get(tender.saleTenderId) as (typeof saleTenders)[number]
+      const electronic = isElectronicTender(saleTenderRow.method)
+      if (electronic && !saleTenderRow.paymentId) {
+        throw refundRejected(
+          'REFUND_TENDER_UNPAID',
+          'An electronic tender has no payment to refund against',
+        )
+      }
+      return {
+        refundId: created.id,
+        sequence: index + 1,
+        method: saleTenderRow.method,
+        amountMinor: tender.amountMinor,
+        saleTenderId: saleTenderRow.id,
+        paymentId: saleTenderRow.paymentId,
+        status: electronic ? ('PENDING' as const) : ('SETTLED' as const),
+        settledAt: electronic ? null : settledAt,
+      }
+    }),
+    executor,
+  )
+  const refundTenderRows = await selectRefundTenders(created.id, executor)
+
+  // 10. Stock: only resalable goods come back. A damaged or unreturned unit
+  //     never left sellable stock, so posting anything would decrement twice
+  //     or invent a unit (P13-D22).
+  const stockByProduct = new Map<string, { quantity: number; unitCostMinor: number }>()
+  for (const line of pricedLines) {
+    if (!movesStockBack(line.restock)) continue
+    const entry = stockByProduct.get(line.productId) ?? {
+      quantity: 0,
+      unitCostMinor: line.unitCostMinor,
+    }
+    entry.quantity += line.quantity
+    stockByProduct.set(line.productId, entry)
+  }
+  if (stockByProduct.size > 0) {
+    await postMovements(
+      actor,
+      [...stockByProduct.entries()].map(([productId, entry]) => ({
+        productId,
+        branchId: device.branchId,
+        type: 'RETURN' as const,
+        quantityDelta: entry.quantity,
+        unitCostMinor: entry.unitCostMinor,
+        referenceType: 'REFUND' as const,
+        referenceId: created.id,
+        referenceNumber: created.number,
+        note: `Return on receipt ${saleRow.receiptNumber}`,
+      })),
+      { executor },
+    )
+  }
+
+  // 11. Credit: refunding a credit tender shrinks the debt and pays no cash
+  //     (P13-D20). The customer never handed that money over.
+  const creditMinor = refundTenderRows
+    .filter((tender) => tender.method === 'CREDIT')
+    .reduce((sum, tender) => sum + tender.amountMinor, 0)
+  if (creditMinor > 0) {
+    if (!saleRow.customerId) {
+      // A credit tender always had a customer; a sale without one is corruption,
+      // and inventing a ledger row against nobody would be worse.
+      throw new AppError(500, 'INTERNAL', 'A credit refund has no customer to credit')
+    }
+    await postCreditEntry(
+      executor,
+      actor,
+      null,
+      {
+        customerId: saleRow.customerId,
+        branchId: device.branchId,
+        kind: 'REFUND',
+        amountMinor: -creditMinor,
+        reasonCode: 'RETURN',
+        referenceType: 'REFUND',
+        referenceId: created.id,
+        referenceNumber: created.number,
+        occurredAt,
+        idempotencyKey: `${created.id}:credit`,
+      },
+      undefined,
+    )
+  }
+
+  // 12. The retrospective approval (P13-D21, P13-D23). It is raised here, on the
+  //     server, whenever the upload arrives — an offline refund therefore raises
+  //     it at sync time, and the till is never blocked or told.
+  const threshold = await getSettingValue(
+    'pos.refundApprovalThresholdMinor',
+    { branchId: device.branchId },
+    executor,
+  )
+  let approvalId: string | null = null
+  if (refundApprovalRequired(created.refundedMinor, threshold)) {
+    const raised = await requestApproval(
+      actor,
+      {
+        type: 'REFUND',
+        entityId: created.id,
+        branchId: device.branchId,
+        amountMinor: created.refundedMinor,
+        note: created.note,
+        deciderRole: 'ADMIN',
+        deciderBranchId: null,
+        payload: {
+          refundId: created.id,
+          number: created.number,
+          saleId: saleRow.id,
+          receiptNumber: saleRow.receiptNumber,
+          refundedMinor: created.refundedMinor,
+          reasonCode: created.reasonCode,
+          lineCount: pricedLines.length,
+          cashTendersMinor: refundTenderRows
+            .filter((tender) => tender.method === 'CASH')
+            .reduce((sum, tender) => sum + tender.amountMinor, 0),
+          creditMinor,
+          electronicMinor: refundTenderRows
+            .filter((tender) => isElectronicTender(tender.method))
+            .reduce((sum, tender) => sum + tender.amountMinor, 0),
+          approvedBy: approver.actorStaffId ?? null,
+        },
+      },
+      executor,
+    )
+    approvalId = raised.id
+    await updateRefundApprovalId(created.id, raised.id, executor)
+  }
+
+  // 13. Audit: the figures before and after, the approver, and the raise.
+  await writeAudit(
+    {
+      ...actor,
+      action: 'pos.refund.applied',
+      entity: 'refund',
+      entityId: created.id,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      before: {
+        saleTotalMinor: saleRow.totalMinor,
+        refundedMinorBefore: alreadyRefundedMinor,
+      },
+      after: {
+        number: created.number,
+        saleId: saleRow.id,
+        receiptNumber: saleRow.receiptNumber,
+        refundedMinor: created.refundedMinor,
+        refundedMinorAfter: alreadyRefundedMinor + created.refundedMinor,
+        reasonCode: created.reasonCode,
+        tenders: refundTenderRows.map((tender) => ({
+          method: tender.method,
+          amountMinor: tender.amountMinor,
+          status: tender.status,
+        })),
+        restock: pricedLines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          restock: line.restock,
+        })),
+        approvalId,
+      },
+    },
+    executor,
+  )
+
+  await writeAudit(
+    {
+      ...approver,
+      action: 'pos.refund.override',
+      entity: 'refund',
+      entityId: created.id,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      after: {
+        number: created.number,
+        reasonCode: payload.approval.reasonCode,
+        note: payload.approval.note ?? null,
+        pinVersion: payload.approval.pinVersion,
+        refundedMinor: created.refundedMinor,
+      },
+    },
+    executor,
+  )
+
+  if (approvalId) {
+    await writeAudit(
+      {
+        ...actor,
+        action: 'pos.refund.approval_raised',
+        entity: 'refund',
+        entityId: created.id,
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+        after: {
+          approvalId,
+          refundedMinor: created.refundedMinor,
+          thresholdMinor: threshold,
+        },
+      },
+      executor,
+    )
+  }
+
+  return {
+    refundId: created.id,
+    number: created.number,
+    refundedMinor: created.refundedMinor,
+    pendingDispatch: refundTenderRows
+      .filter((tender) => tender.status === 'PENDING' && tender.paymentId)
+      .map((tender) => ({
+        refundTenderId: tender.id,
+        saleTenderId: tender.saleTenderId,
+        paymentId: tender.paymentId as string,
+        amountMinor: tender.amountMinor,
+      })),
+  }
+}
+
 // --- Variance review (Plan 12-08) -------------------------------------------
 
 /** The reviewer's staff label; a user id is the fallback, never the PIN. */
@@ -1754,6 +2361,90 @@ registerSubjectLoader('SHIFT_VARIANCE_REVIEW', async (approval) => {
     clientExpectedMinor: row.clientExpectedCashMinor ?? fallback.clientExpectedMinor ?? 0,
   }
   return subject
+})
+
+/**
+ * The refund's half of the decision registry (P13-D21, P13-D23).
+ *
+ * The money has already gone back by the time an admin reads this: cash left the
+ * drawer at the till, and the electronic portion is with the provider. A decision
+ * is therefore a judgement recorded after the fact, and this handler writes
+ * **only** an audit row. It has no writer for a refund money column — the patch
+ * types in `pos.repository.ts` do not even represent one — so a decided refund
+ * is byte-identical afterwards (Plan 05 §3).
+ */
+registerDecisionHandler('REFUND', async (tx, approval, actor, decision, input) => {
+  if (!approval.entityId) {
+    throw new AppError(500, 'INTERNAL', 'A refund approval has no refund')
+  }
+  if (decision === 'REJECTED' && !input.reasonCode) {
+    throw new ValidationError('A rejection needs a reason code')
+  }
+
+  const row = await findRefundById(approval.entityId, tx)
+  if (!row) throw new NotFoundError('Refund not found')
+
+  await writeAudit(
+    {
+      ...actor,
+      action: 'pos.refund.reviewed',
+      entity: 'refund',
+      entityId: row.id,
+      branchId: row.branchId,
+      terminalId: row.terminalId,
+      after: {
+        decision,
+        reasonCode: input.reasonCode ?? null,
+        note: input.note?.trim() || null,
+        refundedMinor: row.refundedMinor,
+      },
+    },
+    tx,
+  )
+})
+
+/**
+ * The refund's half of the subject registry. The reviewer sees the document as
+ * the customer would: the receipt it unwinds, what came back, how much of it can
+ * be resold, and how the money was returned. Read-only, no transaction.
+ */
+registerSubjectLoader('REFUND', async (approval) => {
+  if (!approval.entityId) throw new NotFoundError('Refund not found')
+
+  const row = await findRefundById(approval.entityId)
+  if (!row) throw new NotFoundError('Refund not found')
+
+  const [lines, tenders, saleRow] = await Promise.all([
+    selectRefundLines(row.id),
+    selectRefundTenders(row.id),
+    findSaleById(row.saleId),
+  ])
+
+  return {
+    kind: 'refund',
+    refundId: row.id,
+    number: row.number,
+    saleId: row.saleId,
+    receiptNumber: saleRow?.receiptNumber ?? '',
+    refundedMinor: row.refundedMinor,
+    reasonCode: row.reasonCode,
+    lineCount: lines.length,
+    itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+    // Counted in lines, not units: each line is one restock decision.
+    restock: {
+      resalable: lines.filter((line) => line.restock === 'RESALABLE').length,
+      damaged: lines.filter((line) => line.restock === 'DAMAGED').length,
+      notReturned: lines.filter((line) => line.restock === 'NOT_RETURNED').length,
+    },
+    tenders: tenders.map((tender) => ({
+      method: tender.method,
+      amountMinor: tender.amountMinor,
+      status: tender.status,
+    })),
+    approvedBy: row.approvedByStaffId,
+    occurredAt: row.occurredAt.toISOString(),
+    originalTotalMinor: saleRow?.totalMinor ?? row.refundedMinor,
+  }
 })
 
 /**

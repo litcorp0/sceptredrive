@@ -3,15 +3,25 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { normalizeGhanaPhone } from '@sceptre/shared'
 import { env } from '../../config/env.ts'
 import { AppError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import { writeAudit } from '../platform/audit.service.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { addConflict } from '../pos/pos.conflicts.ts'
-import { findShiftByIdForUpdate } from '../pos/pos.repository.ts'
+import {
+  findRefundTenderByIdForUpdate,
+  findRefundTenderByPaymentReferenceForUpdate,
+  findRefundTenderByProviderReferenceForUpdate,
+  findShiftByIdForUpdate,
+  type RefundTenderState,
+  selectRefundTendersToDispatch,
+  updateRefundTender,
+} from '../pos/pos.repository.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { settleMockPayment } from './payments.mock.provider.ts'
 import {
   getPaymentProvider,
   type PaymentProvider,
   type ProviderChargeResult,
+  type ProviderRefund,
   ProviderUnavailableError,
   type ProviderVerification,
 } from './payments.provider.ts'
@@ -217,6 +227,183 @@ export async function applyProviderCharge(
   }
 
   // pending / ongoing / reversed: the provider has not settled anything.
+}
+
+/**
+ * The provider's refund vocabulary, and the only place the webhook's event names
+ * are translated. `refund.needs-attention` is money Paystack could not move to
+ * the customer: it is never retried into `SETTLED` by us (P13-D26).
+ */
+const REFUND_EVENT_STATUS: Record<string, ProviderRefund['status']> = {
+  'refund.pending': 'pending',
+  'refund.processing': 'processing',
+  'refund.processed': 'processed',
+  'refund.failed': 'failed',
+  'refund.needs-attention': 'needs-attention',
+}
+
+export const REFUND_EVENT_NAMES = new Set(Object.keys(REFUND_EVENT_STATUS))
+
+/**
+ * The single state writer for an electronic refund, called by the dispatch job
+ * and by the webhook.
+ *
+ * A `SETTLED` row is terminal: a late or replayed event must not un-settle money
+ * the customer already received. Any other row follows the provider, and a
+ * failure is an audit row on the tender itself rather than a `sync_conflict`,
+ * because the ledgers can express it — Phase 14 lists it (Plan 05 §4).
+ */
+export async function applyProviderRefund(
+  tx: DbExecutor,
+  row: RefundTenderState,
+  result: ProviderRefund,
+  message: string | null = null,
+): Promise<void> {
+  if (row.status === 'SETTLED') return
+
+  const status: RefundTenderState['status'] =
+    result.status === 'processed'
+      ? 'SETTLED'
+      : result.status === 'failed'
+        ? 'FAILED'
+        : result.status === 'needs-attention'
+          ? 'NEEDS_ATTENTION'
+          : 'PENDING'
+
+  await updateRefundTender(
+    row.id,
+    {
+      status,
+      providerRefundReference: result.refundReference ?? row.providerRefundReference,
+      settledAt: status === 'SETTLED' ? new Date() : null,
+      failedMessage:
+        status === 'FAILED' || status === 'NEEDS_ATTENTION'
+          ? (message ?? 'The provider did not complete the refund')
+          : null,
+    },
+    tx,
+  )
+
+  if (status === 'FAILED' || status === 'NEEDS_ATTENTION') {
+    await writeAudit(
+      {
+        action: 'pos.refund.failed',
+        entity: 'refund_tender',
+        entityId: row.id,
+        branchId: row.branchId,
+        after: {
+          refundId: row.refundId,
+          refundNumber: row.refundNumber,
+          amountMinor: row.amountMinor,
+          providerStatus: result.status,
+          providerRefundReference: result.refundReference ?? row.providerRefundReference,
+          // A provider message is operational text, never PII or card data.
+          message: message ? message.slice(0, 200) : null,
+        },
+      },
+      tx,
+    )
+  }
+}
+
+export interface RefundDispatchSummary {
+  examined: number
+  dispatched: number
+  skipped: number
+}
+
+/**
+ * Sends every pending electronic refund to the provider, once.
+ *
+ * Idempotency is structural: the query excludes a tender that already carries a
+ * provider refund reference, and the write re-reads the row under a lock before
+ * it moves a status. A provider timeout leaves the row `PENDING` for the next
+ * sweep — a timeout is "we do not know", never a failure to report.
+ */
+export async function dispatchPendingRefunds(limit = 50): Promise<RefundDispatchSummary> {
+  const pending = await selectRefundTendersToDispatch(new Date(Date.now() - 2_000), limit)
+  if (pending.length === 0) return { examined: 0, dispatched: 0, skipped: 0 }
+
+  const provider = getPaymentProvider()
+  let dispatched = 0
+  let skipped = 0
+
+  for (const tender of pending) {
+    if (tender.providerRefundReference || !tender.paymentProviderReference) {
+      skipped += 1
+      continue
+    }
+
+    let result: ProviderRefund
+    try {
+      result = await provider.refund({
+        reference: tender.paymentProviderReference,
+        amountMinor: tender.amountMinor,
+        note: `Refund ${tender.refundNumber}`,
+      })
+    } catch (error) {
+      if (error instanceof ProviderUnavailableError) {
+        skipped += 1
+        continue
+      }
+      throw error
+    }
+
+    await db.transaction(async (tx) => {
+      const locked = await findRefundTenderByIdForUpdate(tender.id, tx)
+      if (!locked || locked.status !== 'PENDING' || locked.providerRefundReference) return
+      await applyProviderRefund(tx, locked, result)
+    })
+    dispatched += 1
+  }
+
+  return { examined: pending.length, dispatched, skipped }
+}
+
+/**
+ * The `refund.*` webhook arm. The tender is found by the provider's refund
+ * reference once dispatch — or an earlier event — has stored it, and before that
+ * only by the charge's own reference plus the amount among rows still `PENDING`:
+ * a tender a provider already flagged for attention is not guessed at. An event
+ * that names nothing we know is ignored, not failed, so Paystack stops retrying.
+ */
+async function applyRefundEvent(
+  tx: DbExecutor,
+  eventName: string,
+  data: Record<string, unknown>,
+): Promise<boolean> {
+  const providerStatus = REFUND_EVENT_STATUS[eventName]
+  if (!providerStatus) return false
+
+  const refundReference = asString(data.refund_reference)
+  const transactionReference = asString(data.transaction_reference) ?? asString(data.reference)
+  const amountMinor = asInteger(data.amount)
+  const message = asString(data.gateway_response) ?? asString(data.message)
+
+  let tender = refundReference
+    ? await findRefundTenderByProviderReferenceForUpdate(refundReference, tx)
+    : null
+  if (!tender && transactionReference && amountMinor !== null) {
+    tender = await findRefundTenderByPaymentReferenceForUpdate(
+      transactionReference,
+      amountMinor,
+      tx,
+    )
+  }
+  if (!tender) return false
+
+  await applyProviderRefund(
+    tx,
+    tender,
+    {
+      reference: transactionReference ?? tender.paymentProviderReference ?? '',
+      status: providerStatus,
+      refundReference: refundReference ?? tender.providerRefundReference,
+      expectedAt: asString(data.expected_at),
+    },
+    message,
+  )
+  return true
 }
 
 function verificationFromCharge(
@@ -573,9 +760,11 @@ function verificationFromWebhook(
 export async function processPaystackEvent(rawBody: string, body: unknown): Promise<void> {
   const event = asRecord(body)
   const eventName = asString(event.event)
-  const handled = eventName !== null && HANDLED_EVENTS.has(eventName)
+  const refundEvent = eventName !== null && REFUND_EVENT_NAMES.has(eventName)
+  const handled = eventName !== null && (HANDLED_EVENTS.has(eventName) || refundEvent)
   const data = asRecord(event.data)
   const reference = asString(data.reference)
+  const providerReference = refundEvent ? (asString(data.refund_reference) ?? reference) : reference
   const bodySha256 = createHash('sha256').update(rawBody).digest('hex')
   const detail = projectProviderDetail(data)
   const eventType = handled && eventName ? eventName : 'IGNORED'
@@ -586,7 +775,7 @@ export async function processPaystackEvent(rawBody: string, body: unknown): Prom
         provider: 'PAYSTACK',
         eventType,
         bodySha256,
-        providerReference: reference,
+        providerReference,
         status: 'RECEIVED',
         detail,
       },
@@ -594,7 +783,28 @@ export async function processPaystackEvent(rawBody: string, body: unknown): Prom
     )
     if (!inserted) return
 
-    if (!handled || !eventName || !reference) {
+    if (!handled || !eventName) {
+      await repo.markEventProcessed(
+        inserted.id,
+        { status: 'IGNORED', paymentId: null, processedAt: new Date() },
+        tx,
+      )
+      return
+    }
+
+    // A refund event names a refund tender, not a payment; it never moves a
+    // payment's status (P13-D26).
+    if (refundEvent) {
+      const applied = await applyRefundEvent(tx, eventName, data)
+      await repo.markEventProcessed(
+        inserted.id,
+        { status: applied ? 'PROCESSED' : 'IGNORED', paymentId: null, processedAt: new Date() },
+        tx,
+      )
+      return
+    }
+
+    if (!reference) {
       await repo.markEventProcessed(
         inserted.id,
         { status: 'IGNORED', paymentId: null, processedAt: new Date() },

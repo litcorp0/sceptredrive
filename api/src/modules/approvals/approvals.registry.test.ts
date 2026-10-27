@@ -1,17 +1,16 @@
 import { db } from '@sceptre/db'
+import type { ApprovalType } from '@sceptre/shared'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  authedHeaders,
-  createTestUser,
-  databaseAvailable,
-  deleteTestUser,
-  signIn,
-} from '../../../test/integration.ts'
-import { app } from '../../app.ts'
+import { createTestUser, databaseAvailable, deleteTestUser } from '../../../test/integration.ts'
 import { branch } from '../org/branches.schema.ts'
 import { approval } from './approvals.schema.ts'
-import { registeredDecisionTypes, registeredSubjectTypes } from './approvals.service.ts'
+import {
+  assertDecisionHandlersRegistered,
+  assertSubjectLoadersRegistered,
+  registeredDecisionTypes,
+  registeredSubjectTypes,
+} from './approvals.service.ts'
 
 /**
  * The two registries are the contract between this module and the services that
@@ -24,8 +23,12 @@ if (!available) console.warn('[approvals.registry.test] database unavailable; te
 
 const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
 
-/** What Plans 06–08 leave wired; Plan 09 appends its own type in its commit. */
-const BOOT_LIST = [
+/**
+ * What every plan leaves wired. Phase 13 appended `REFUND`; there is no
+ * unregistered `ApprovalType` left, which is why the guard below is proven with
+ * a deliberately wrong list rather than with an honest gap in this one.
+ */
+const BOOT_LIST: ApprovalType[] = [
   'PRODUCT_CREATE',
   'PURCHASE_ORDER',
   'TRANSFER_REQUEST',
@@ -33,11 +36,11 @@ const BOOT_LIST = [
   'PRICE_CHANGE',
   'CREDIT_LIMIT_CHANGE',
   'SHIFT_VARIANCE_REVIEW',
+  'REFUND',
 ]
 
 let branchId = ''
 let adminId = ''
-let adminCookie = ''
 
 beforeAll(async () => {
   if (!available) return
@@ -50,7 +53,6 @@ beforeAll(async () => {
 
   const admin = await createTestUser({ role: 'ADMIN', email: `registry-${suffix}@test.local` })
   adminId = admin.id
-  adminCookie = await signIn(admin.email)
 })
 
 afterAll(async () => {
@@ -69,32 +71,16 @@ describe.skipIf(!available)('approval registries', () => {
     expect([...registeredSubjectTypes()].sort()).toEqual([...BOOT_LIST].sort())
   })
 
-  it('answers 500 when a type has no decision handler', async () => {
-    // `REFUND` is the honest unregistered type: Phase 13 registers it, so this
-    // assertion does not need editing when Plans 05–08 land their handlers.
-    const [row] = await db
-      .insert(approval)
-      .values({
-        type: 'REFUND',
-        branchId,
-        requestedBy: 'someone-else',
-        deciderRole: 'ADMIN',
-        deciderBranchId: null,
-      })
-      .returning({ id: approval.id })
+  it('refuses to boot with a type nobody registered a handler or a loader for', () => {
+    // The registries have no unregister seam on purpose, so the guard is proven
+    // against a list that is wrong rather than a type that is honestly absent.
+    // Phase 13 registered the last real type, which retired the old fixture.
+    const wrongHandlers = [...BOOT_LIST, 'REFUND_UNHANDLED' as ApprovalType]
+    expect(() => assertDecisionHandlersRegistered(wrongHandlers)).toThrow(/REFUND_UNHANDLED/)
+    expect(() => assertDecisionHandlersRegistered(BOOT_LIST)).not.toThrow()
 
-    const response = await app.request(`/api/approvals/${row?.id}/decide`, {
-      method: 'POST',
-      headers: authedHeaders(adminCookie),
-      body: JSON.stringify({ decision: 'APPROVED' }),
-    })
-    expect(response.status).toBe(500)
-
-    // Nothing was recorded: the handler is checked before the status change.
-    const after = await db
-      .select({ status: approval.status })
-      .from(approval)
-      .where(eq(approval.id, row?.id ?? ''))
-    expect(after[0]?.status).toBe('PENDING')
+    const wrongLoaders = ['REFUND_UNRENDERED' as ApprovalType]
+    expect(() => assertSubjectLoadersRegistered(wrongLoaders)).toThrow(/REFUND_UNRENDERED/)
+    expect(() => assertSubjectLoadersRegistered(BOOT_LIST)).not.toThrow()
   })
 })

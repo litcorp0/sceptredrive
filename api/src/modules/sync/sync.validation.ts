@@ -3,6 +3,8 @@ import {
   MAX_TENDERS_PER_SALE,
   PIN_PROBLEM_MESSAGES,
   pinProblem,
+  REFUND_REASONS,
+  REFUND_RESTOCK_OPTIONS,
   TENDER_METHODS,
 } from '@sceptre/shared'
 import { z } from 'zod'
@@ -201,6 +203,91 @@ const transactionBase = {
   payloadVersion: z.literal(1),
 }
 
+/**
+ * A refund is a document the till numbers offline, so the number is a shape
+ * rule here and a uniqueness rule in the database (P13-D37). The D17/D22 rules
+ * a client can check alone live in the `superRefine`: `DAMAGED` requires a
+ * reason of substance, every other restock forbids one, and the tenders must
+ * add up to the money returned. The caps that need the sale live in the
+ * service, under a row lock.
+ */
+const refundLineSchema = z
+  .object({
+    saleLineId: z.uuid(),
+    quantity: z.number().int().min(1).max(10_000),
+    restock: z.enum(REFUND_RESTOCK_OPTIONS),
+    damageReason: z.string().trim().max(120).nullish(),
+  })
+  .strict()
+
+const refundTenderSchema = z
+  .object({
+    saleTenderId: z.uuid(),
+    amountMinor: minorUnits,
+  })
+  .strict()
+
+const refundPayloadSchema = z
+  .object({
+    saleId: z.uuid(),
+    number: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9-]+$/),
+    shiftId: z.uuid(),
+    cashier: z
+      .object({
+        userId: z.string().trim().min(1).max(64),
+        staffId: z.string().trim().min(1).max(64),
+        bindingId: z.uuid(),
+        bindingToken: z
+          .string()
+          .min(20)
+          .max(128)
+          .regex(/^[A-Za-z0-9_-]+$/),
+        pinVersion: z.number().int().min(0),
+      })
+      .strict(),
+    reasonCode: z.enum(REFUND_REASONS),
+    note: z.string().trim().max(300).nullish(),
+    approval: overrideProofSchema,
+    lines: z.array(refundLineSchema).min(1).max(200),
+    tenders: z.array(refundTenderSchema).min(1).max(MAX_TENDERS_PER_SALE),
+    refundedMinor: z.number().int().min(1).max(1_000_000_000),
+    occurredAt: z.iso.datetime(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    for (const line of value.lines) {
+      if (line.restock === 'DAMAGED') {
+        if (!line.damageReason || line.damageReason.length < 3) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'A damaged line needs a damage reason of at least 3 characters',
+            path: ['lines'],
+          })
+        }
+      } else if (line.damageReason) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Only a damaged line carries a damage reason',
+          path: ['lines'],
+        })
+      }
+    }
+
+    const allocated = value.tenders.reduce((sum, tender) => sum + tender.amountMinor, 0)
+    if (allocated !== value.refundedMinor) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'The tender allocations must add up to the refunded amount',
+        path: ['tenders'],
+      })
+    }
+  })
+
 export const uploadTransactionSchema = z.discriminatedUnion('type', [
   z.object({ ...transactionBase, type: z.literal('SALE'), payload: salePayloadSchema }).strict(),
   z
@@ -219,6 +306,9 @@ export const uploadTransactionSchema = z.discriminatedUnion('type', [
       type: z.literal('SHIFT_CLOSE'),
       payload: shiftClosePayloadSchema,
     })
+    .strict(),
+  z
+    .object({ ...transactionBase, type: z.literal('REFUND'), payload: refundPayloadSchema })
     .strict(),
 ])
 
@@ -241,4 +331,5 @@ export const validateConflictsQuery = validateQuery(conflictsQuerySchema)
 
 export type UploadBody = z.infer<typeof uploadSchema>
 export type UploadTransactionBody = z.infer<typeof uploadTransactionSchema>
+export type RefundBody = z.infer<typeof refundPayloadSchema>
 export type ConflictsQuery = z.infer<typeof conflictsQuerySchema>

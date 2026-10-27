@@ -459,9 +459,7 @@ const SUBJECT_KIND: Record<ApprovalType, ApprovalSubject['kind']> = {
   PRICE_CHANGE: 'price_change',
   CREDIT_LIMIT_CHANGE: 'credit_limit_change',
   SHIFT_VARIANCE_REVIEW: 'shift_variance',
-  // Phase 13 registers the refund subject; until then the inbox renders it as
-  // "other" rather than pretending to know a shape that does not exist.
-  REFUND: 'other',
+  REFUND: 'refund',
 }
 
 /** The list's discriminator. Cheap by construction: no loader, no query. */

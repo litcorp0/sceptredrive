@@ -1,4 +1,4 @@
-import type { TaxMode } from '@sceptre/shared'
+import type { RefundReason, RefundRestock, TaxMode } from '@sceptre/shared'
 
 /** The identity attached to a device-authenticated request. */
 export interface DeviceAuthContext {
@@ -56,7 +56,12 @@ export interface PowersyncTokenPayload {
   expiresAt: string
 }
 
-export type UploadTransactionType = 'SALE' | 'SHIFT_OPEN' | 'CASH_MOVEMENT' | 'SHIFT_CLOSE'
+export type UploadTransactionType =
+  | 'SALE'
+  | 'SHIFT_OPEN'
+  | 'CASH_MOVEMENT'
+  | 'SHIFT_CLOSE'
+  | 'REFUND'
 
 export interface UploadTransaction {
   clientTransactionId: string
@@ -73,6 +78,74 @@ export interface PosUploadBody {
   transactions: UploadTransaction[]
 }
 
+// --- Refund payload (Plan 05) ------------------------------------------------
+
+/** The staff member taking the return; the same proof a sale carries. */
+export interface RefundCashier {
+  userId: string
+  staffId: string
+  bindingId: string
+  bindingToken: string
+  pinVersion: number
+}
+
+export interface RefundLinePayload {
+  saleLineId: string
+  quantity: number
+  restock: RefundRestock
+  /** Required for `DAMAGED`, forbidden otherwise (P13-D22). */
+  damageReason?: string | null
+}
+
+/** How much of the refund the customer gets back on one sale tender (P13-D19). */
+export interface RefundTenderPayload {
+  saleTenderId: string
+  amountMinor: number
+}
+
+/**
+ * A refund as the till uploads it. `refund.id` is the upload's
+ * `clientTransactionId` (P13-D18), the number comes from the till's local
+ * sequence because a refund must be numberable offline (P13-D37), and the
+ * approver is proven once per document (P13-D24).
+ */
+export interface RefundPayload {
+  saleId: string
+  number: string
+  shiftId: string
+  cashier: RefundCashier
+  reasonCode: RefundReason
+  note?: string | null
+  approval: {
+    staffId: string
+    userId: string
+    bindingId: string
+    pinVersion: number
+    reasonCode: string
+    note?: string | null
+    occurredAt: string
+  }
+  lines: RefundLinePayload[]
+  tenders: RefundTenderPayload[]
+  refundedMinor: number
+  occurredAt: string
+}
+
+/** An electronic tender written `PENDING` for the post-commit dispatch (P13-D26). */
+export interface RefundPendingTender {
+  refundTenderId: string
+  saleTenderId: string
+  paymentId: string
+  amountMinor: number
+}
+
+export interface RefundApplyResult {
+  refundId: string
+  number: string
+  refundedMinor: number
+  pendingDispatch: RefundPendingTender[]
+}
+
 export type UploadItemStatus = 'APPLIED' | 'REPLAYED' | 'REJECTED'
 
 export interface UploadItemResult {
@@ -80,7 +153,7 @@ export interface UploadItemResult {
   status: UploadItemStatus
   serverId: string | null
   conflicts: Array<{ id: string; type: string; severity: string }>
-  resolved: { customerId?: string; saleId?: string; shiftId?: string }
+  resolved: { customerId?: string; saleId?: string; shiftId?: string; refundId?: string }
   error?: { code: string; message: string }
 }
 
@@ -95,7 +168,7 @@ export interface StoredTransactionResult {
   status: 'APPLIED' | 'REJECTED'
   serverId: string | null
   conflicts: Array<{ id: string; type: string; severity: string }>
-  resolved: { customerId?: string; saleId?: string; shiftId?: string }
+  resolved: { customerId?: string; saleId?: string; shiftId?: string; refundId?: string }
   error?: { code: string; message: string }
 }
 

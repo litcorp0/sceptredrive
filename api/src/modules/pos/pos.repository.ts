@@ -1,14 +1,18 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { isRole } from '@sceptre/shared'
-import { and, desc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { creditProfile } from '../credit/credit.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { terminal } from '../org/terminals.schema.ts'
+import { payment } from '../payments/payments.schema.ts'
 import { setting } from '../platform/settings.schema.ts'
 import { product, productPrice } from '../products/products.schema.ts'
 import {
   cashMovement,
   posStaffBinding,
+  refund,
+  refundLine,
+  refundTender,
   type ShiftReviewStatus,
   sale,
   saleLine,
@@ -580,6 +584,389 @@ export async function findSaleByReceiptNumber(
     .where(eq(sale.receiptNumber, receiptNumber))
     .limit(1)
   return rows[0] ?? null
+}
+
+/**
+ * Locks one sale for the length of a refund (P13-D19). Two tills refunding the
+ * same sale must serialise here or both can pass the same cap check.
+ */
+export async function findSaleByIdForUpdate(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<typeof sale.$inferSelect | null> {
+  const rows = await executor.select().from(sale).where(eq(sale.id, saleId)).for('update')
+  return rows[0] ?? null
+}
+
+/** A plain read for the subject loader and the refund view; no lock, no writes. */
+export async function findSaleById(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<typeof sale.$inferSelect | null> {
+  const rows = await executor.select().from(sale).where(eq(sale.id, saleId)).limit(1)
+  return rows[0] ?? null
+}
+
+// --- Refunds (Plan 05) -------------------------------------------------------
+
+export async function selectSaleLinesForRefund(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<Array<typeof saleLine.$inferSelect>> {
+  return executor
+    .select()
+    .from(saleLine)
+    .where(eq(saleLine.saleId, saleId))
+    .orderBy(asc(saleLine.lineNumber))
+}
+
+export async function selectSaleTendersForRefund(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<Array<typeof saleTender.$inferSelect>> {
+  return executor
+    .select()
+    .from(saleTender)
+    .where(eq(saleTender.saleId, saleId))
+    .orderBy(asc(saleTender.sequence))
+}
+
+/** What has already been returned on each line, quantity and every component. */
+export interface RefundedLineTotals {
+  quantity: number
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  totalMinor: number
+}
+
+const ZERO_REFUNDED_LINE: RefundedLineTotals = {
+  quantity: 0,
+  baseMinor: 0,
+  vatMinor: 0,
+  nhilMinor: 0,
+  getfundMinor: 0,
+  taxTotalMinor: 0,
+  totalMinor: 0,
+}
+
+/**
+ * One grouped read for all of a sale's refunded lines. A per-line query inside
+ * the cap loop would be a round trip per product; this is one statement under
+ * the sale lock.
+ */
+export async function selectRefundedLines(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<Map<string, RefundedLineTotals>> {
+  const rows = await executor.execute<{
+    sale_line_id: string
+    quantity: string
+    base_minor: string
+    vat_minor: string
+    nhil_minor: string
+    getfund_minor: string
+    tax_total_minor: string
+    total_minor: string
+  }>(sql`
+    SELECT
+      rl.sale_line_id,
+      SUM(rl.quantity)::text AS quantity,
+      SUM(rl.base_minor)::text AS base_minor,
+      SUM(rl.vat_minor)::text AS vat_minor,
+      SUM(rl.nhil_minor)::text AS nhil_minor,
+      SUM(rl.getfund_minor)::text AS getfund_minor,
+      SUM(rl.tax_total_minor)::text AS tax_total_minor,
+      SUM(rl.total_minor)::text AS total_minor
+    FROM refund_line rl
+    JOIN refund r ON r.id = rl.refund_id
+    WHERE r.sale_id = ${saleId}
+    GROUP BY rl.sale_line_id
+  `)
+
+  const totals = new Map<string, RefundedLineTotals>()
+  for (const row of rows.rows) {
+    totals.set(row.sale_line_id, {
+      quantity: Number(row.quantity),
+      baseMinor: Number(row.base_minor),
+      vatMinor: Number(row.vat_minor),
+      nhilMinor: Number(row.nhil_minor),
+      getfundMinor: Number(row.getfund_minor),
+      taxTotalMinor: Number(row.tax_total_minor),
+      totalMinor: Number(row.total_minor),
+    })
+  }
+  return totals
+}
+
+export function refundedLineTotals(
+  totals: Map<string, RefundedLineTotals>,
+  saleLineId: string,
+): RefundedLineTotals {
+  return totals.get(saleLineId) ?? ZERO_REFUNDED_LINE
+}
+
+/** Money already returned per sale tender, for the per-tender cap. */
+export async function selectRefundedTenderAmounts(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<Map<string, number>> {
+  const rows = await executor.execute<{ sale_tender_id: string; amount_minor: string }>(sql`
+    SELECT rt.sale_tender_id, SUM(rt.amount_minor)::text AS amount_minor
+    FROM refund_tender rt
+    JOIN refund r ON r.id = rt.refund_id
+    WHERE r.sale_id = ${saleId}
+    GROUP BY rt.sale_tender_id
+  `)
+  return new Map(rows.rows.map((row) => [row.sale_tender_id, Number(row.amount_minor)]))
+}
+
+/** Every earlier refund's gross on this sale, for the sale-level cap. */
+export async function selectRefundedTotalForSale(
+  saleId: string,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const rows = await executor.execute<{ refunded_minor: string }>(sql`
+    SELECT COALESCE(SUM(refunded_minor), 0)::text AS refunded_minor
+    FROM refund
+    WHERE sale_id = ${saleId}
+  `)
+  return Number(rows.rows[0]?.refunded_minor ?? 0)
+}
+
+/** The till allocates the number offline, so the server only checks it is free. */
+export async function findRefundByNumber(
+  number: string,
+  executor: DbExecutor = db,
+): Promise<{ id: string } | null> {
+  const rows = await executor
+    .select({ id: refund.id })
+    .from(refund)
+    .where(eq(refund.number, number))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export async function insertRefund(
+  values: typeof refund.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<typeof refund.$inferSelect> {
+  const rows = await executor.insert(refund).values(values).returning()
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert the refund')
+  return row
+}
+
+export async function insertRefundLines(
+  values: Array<typeof refundLine.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (values.length === 0) return
+  await executor.insert(refundLine).values(values)
+}
+
+export async function insertRefundTenders(
+  values: Array<typeof refundTender.$inferInsert>,
+  executor: DbExecutor = db,
+): Promise<Array<typeof refundTender.$inferSelect>> {
+  if (values.length === 0) return []
+  return executor.insert(refundTender).values(values).returning()
+}
+
+/**
+ * The approval link and nothing else. The refund's money columns have no writer
+ * after the document is written (P13-D17, Plan 05 §3).
+ */
+export async function updateRefundApprovalId(
+  refundId: string,
+  approvalId: string,
+  executor: DbExecutor = db,
+): Promise<void> {
+  await executor.update(refund).set({ approvalId }).where(eq(refund.id, refundId))
+}
+
+export async function findRefundById(
+  refundId: string,
+  executor: DbExecutor = db,
+): Promise<typeof refund.$inferSelect | null> {
+  const rows = await executor.select().from(refund).where(eq(refund.id, refundId)).limit(1)
+  return rows[0] ?? null
+}
+
+export async function selectRefundLines(
+  refundId: string,
+  executor: DbExecutor = db,
+): Promise<Array<typeof refundLine.$inferSelect>> {
+  return executor
+    .select()
+    .from(refundLine)
+    .where(eq(refundLine.refundId, refundId))
+    .orderBy(asc(refundLine.lineNumber))
+}
+
+export async function selectRefundTenders(
+  refundId: string,
+  executor: DbExecutor = db,
+): Promise<Array<typeof refundTender.$inferSelect>> {
+  return executor
+    .select()
+    .from(refundTender)
+    .where(eq(refundTender.refundId, refundId))
+    .orderBy(asc(refundTender.sequence))
+}
+
+/** The facts the dispatch job and the refund webhook both need. */
+export interface RefundTenderState {
+  id: string
+  refundId: string
+  refundNumber: string
+  branchId: string
+  status: 'SETTLED' | 'PENDING' | 'FAILED' | 'NEEDS_ATTENTION'
+  amountMinor: number
+  providerRefundReference: string | null
+  settledAt: Date | null
+  paymentId: string | null
+  paymentProviderReference: string | null
+}
+
+const REFUND_TENDER_STATE_COLUMNS = {
+  id: refundTender.id,
+  refundId: refundTender.refundId,
+  refundNumber: refund.number,
+  branchId: refund.branchId,
+  status: refundTender.status,
+  amountMinor: refundTender.amountMinor,
+  providerRefundReference: refundTender.providerRefundReference,
+  settledAt: refundTender.settledAt,
+  paymentId: saleTender.paymentId,
+  paymentProviderReference: payment.providerReference,
+}
+
+/**
+ * Electronic refunds waiting for the provider. `createdBefore` is the 2-second
+ * guard that keeps a job from racing the transaction that wrote the row; a row
+ * that already carries a provider refund is excluded for the same reason the
+ * worker also re-checks it: a retry must never refund twice (P13-D26).
+ */
+export async function selectRefundTendersToDispatch(
+  createdBefore: Date,
+  limit: number,
+  executor: DbExecutor = db,
+): Promise<RefundTenderState[]> {
+  return executor
+    .select(REFUND_TENDER_STATE_COLUMNS)
+    .from(refundTender)
+    .innerJoin(refund, eq(refund.id, refundTender.refundId))
+    .innerJoin(saleTender, eq(saleTender.id, refundTender.saleTenderId))
+    .leftJoin(payment, eq(payment.id, saleTender.paymentId))
+    .where(
+      and(
+        eq(refundTender.status, 'PENDING'),
+        isNull(refundTender.providerRefundReference),
+        lt(refundTender.createdAt, createdBefore),
+      ),
+    )
+    .orderBy(asc(refundTender.createdAt))
+    .limit(limit)
+}
+
+export async function findRefundTenderByProviderReferenceForUpdate(
+  providerRefundReference: string,
+  executor: DbExecutor = db,
+): Promise<RefundTenderState | null> {
+  const rows = await executor
+    .select(REFUND_TENDER_STATE_COLUMNS)
+    .from(refundTender)
+    .innerJoin(refund, eq(refund.id, refundTender.refundId))
+    .innerJoin(saleTender, eq(saleTender.id, refundTender.saleTenderId))
+    .leftJoin(payment, eq(payment.id, saleTender.paymentId))
+    .where(eq(refundTender.providerRefundReference, providerRefundReference))
+    .for('update', { of: refundTender })
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** The dispatch job re-reads the row it just called the provider for, under a lock. */
+export async function findRefundTenderByIdForUpdate(
+  id: string,
+  executor: DbExecutor = db,
+): Promise<RefundTenderState | null> {
+  const rows = await executor
+    .select(REFUND_TENDER_STATE_COLUMNS)
+    .from(refundTender)
+    .innerJoin(refund, eq(refund.id, refundTender.refundId))
+    .innerJoin(saleTender, eq(saleTender.id, refundTender.saleTenderId))
+    .leftJoin(payment, eq(payment.id, saleTender.paymentId))
+    .where(eq(refundTender.id, id))
+    .for('update', { of: refundTender })
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/**
+ * Before dispatch has stored a provider refund reference, the only handle a
+ * webhook gives us is the charge's own reference and the amount. The earliest
+ * unsettled row matching both is the one the event is about.
+ */
+export async function findRefundTenderByPaymentReferenceForUpdate(
+  providerReference: string,
+  amountMinor: number,
+  executor: DbExecutor = db,
+): Promise<RefundTenderState | null> {
+  const rows = await executor
+    .select(REFUND_TENDER_STATE_COLUMNS)
+    .from(refundTender)
+    .innerJoin(refund, eq(refund.id, refundTender.refundId))
+    .innerJoin(saleTender, eq(saleTender.id, refundTender.saleTenderId))
+    .innerJoin(payment, eq(payment.id, saleTender.paymentId))
+    .where(
+      and(
+        eq(payment.providerReference, providerReference),
+        eq(refundTender.amountMinor, amountMinor),
+        eq(refundTender.status, 'PENDING'),
+        isNull(refundTender.providerRefundReference),
+      ),
+    )
+    .orderBy(asc(refundTender.createdAt))
+    .for('update', { of: refundTender })
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/**
+ * The provider's answer, and nothing else. The status patch is the allow-list:
+ * a refund tender's amount, method and sale tender cannot be restated by a
+ * callback (OWASP A08).
+ */
+export interface RefundTenderPatch {
+  status?: RefundTenderState['status']
+  providerRefundReference?: string | null
+  settledAt?: Date | null
+  failedMessage?: string | null
+}
+
+const REFUND_TENDER_COLUMNS = new Set([
+  'status',
+  'providerRefundReference',
+  'settledAt',
+  'failedMessage',
+])
+
+export async function updateRefundTender(
+  refundTenderId: string,
+  patch: RefundTenderPatch,
+  executor: DbExecutor = db,
+): Promise<void> {
+  const columns = Object.keys(patch)
+  for (const column of columns) {
+    if (!REFUND_TENDER_COLUMNS.has(column)) {
+      throw new Error(`updateRefundTender refuses a non-provider column: ${column}`)
+    }
+  }
+  if (columns.length === 0) return
+  await executor.update(refundTender).set(patch).where(eq(refundTender.id, refundTenderId))
 }
 
 /**

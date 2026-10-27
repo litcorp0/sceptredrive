@@ -2,6 +2,8 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { and, eq } from 'drizzle-orm'
 import { env } from '../../config/env.ts'
 import { AppError } from '../../http/errors.ts'
+import { enqueueRefundDispatch } from '../../jobs/queues.ts'
+import { logger } from '../../logger.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import * as settingsService from '../platform/settings.service.ts'
 import { addConflict } from '../pos/pos.conflicts.ts'
@@ -12,7 +14,13 @@ import {
   selectSettingsVersion,
 } from '../pos/pos.repository.ts'
 import { posSyncTransaction } from '../pos/pos.schema.ts'
-import { applySale, closeShift, openShift, recordCashMovement } from '../pos/pos.service.ts'
+import {
+  applyRefund,
+  applySale,
+  closeShift,
+  openShift,
+  recordCashMovement,
+} from '../pos/pos.service.ts'
 import type {
   CashMovementPayload,
   SalePayload,
@@ -33,6 +41,7 @@ import type {
   PosUploadBody,
   PosUploadResponse,
   PowersyncTokenPayload,
+  RefundPayload,
   StoredTransactionResult,
   UploadItemResult,
   UploadItemStatus,
@@ -188,6 +197,27 @@ export async function issuePowersyncToken(auth: DeviceAuthContext): Promise<Powe
 // --- Upload and device sync reads (Plan 05) ---------------------------------
 
 /**
+ * A side effect that must not run inside the upload transaction: an HTTP call to
+ * the provider cannot be rolled back, so it is enqueued after the commit and a
+ * failure to enqueue is logged rather than thrown — the 15-minute sweep is the
+ * backstop (P13-D26).
+ */
+type PostCommitHook = () => Promise<void>
+
+interface DispatchOutcome {
+  stored: StoredTransactionResult
+  postCommit?: PostCommitHook
+}
+
+export interface UploadOptions {
+  /**
+   * Where a refund's dispatch goes. Production uses pg-boss; a test substitutes
+   * its own collector, which is also how the post-commit ordering is proven.
+   */
+  enqueueRefund?: (refundId: string) => Promise<void>
+}
+
+/**
  * Applies a batch in array order, one DB transaction per client transaction.
  * Business conflicts are part of a 200 response; 401/403 are auth/scope only,
  * and unexpected failures bubble as 5xx so the client retries.
@@ -195,6 +225,7 @@ export async function issuePowersyncToken(auth: DeviceAuthContext): Promise<Powe
 export async function applyUpload(
   auth: DeviceAuthContext,
   body: PosUploadBody,
+  options: UploadOptions = {},
 ): Promise<PosUploadResponse> {
   if (body.deviceId !== auth.deviceId || body.terminalId !== auth.terminalId) {
     throw new AppError(403, 'DEVICE_MISMATCH', 'This batch does not belong to this device')
@@ -205,7 +236,7 @@ export async function applyUpload(
   )
   const results: UploadItemResult[] = []
   for (const transaction of body.transactions) {
-    results.push(await applyTransaction(auth, transaction, clockSkewToleranceMinutes))
+    results.push(await applyTransaction(auth, transaction, clockSkewToleranceMinutes, options))
   }
 
   return {
@@ -298,7 +329,8 @@ async function dispatchTransaction(
   item: UploadTransaction,
   receivedAt: Date,
   clockSkewToleranceMinutes: number,
-): Promise<StoredTransactionResult> {
+  options: UploadOptions,
+): Promise<DispatchOutcome> {
   switch (item.type) {
     case 'SALE': {
       const result = await applySale(
@@ -312,48 +344,85 @@ async function dispatchTransaction(
         tx,
       )
       return {
-        status: 'APPLIED',
-        serverId: result.saleId,
-        conflicts: result.conflicts,
-        resolved: {
-          saleId: result.saleId,
-          ...(result.resolvedCustomerId ? { customerId: result.resolvedCustomerId } : {}),
+        stored: {
+          status: 'APPLIED',
+          serverId: result.saleId,
+          conflicts: result.conflicts,
+          resolved: {
+            saleId: result.saleId,
+            ...(result.resolvedCustomerId ? { customerId: result.resolvedCustomerId } : {}),
+          },
         },
+      }
+    }
+    case 'REFUND': {
+      const payload = item.payload as RefundPayload
+      const result = await applyRefund(
+        {
+          clientTransactionId: item.clientTransactionId,
+          device: auth,
+          receivedAt,
+          clockSkewToleranceMinutes,
+        },
+        payload,
+        tx,
+      )
+      const enqueue = options.enqueueRefund ?? enqueueRefundDispatch
+      return {
+        stored: {
+          status: 'APPLIED',
+          serverId: result.refundId,
+          conflicts: [],
+          resolved: { refundId: result.refundId, saleId: payload.saleId },
+        },
+        // Only an electronic tender needs the provider; a cash-and-credit refund
+        // is settled by the time this transaction commits.
+        ...(result.pendingDispatch.length > 0
+          ? {
+              postCommit: () => enqueue(result.refundId),
+            }
+          : {}),
       }
     }
     case 'SHIFT_OPEN': {
       const result = await openShift(auth, item.payload as ShiftOpenPayload, tx)
       return {
-        status: 'APPLIED',
-        serverId: result.shiftId,
-        conflicts: [],
-        resolved: { shiftId: result.shiftId },
+        stored: {
+          status: 'APPLIED',
+          serverId: result.shiftId,
+          conflicts: [],
+          resolved: { shiftId: result.shiftId },
+        },
       }
     }
     case 'CASH_MOVEMENT': {
       const result = await recordCashMovement(auth, item.payload as CashMovementPayload, tx)
       return {
-        status: 'APPLIED',
-        serverId: (item.payload as CashMovementPayload).id,
-        conflicts: [],
-        resolved: { shiftId: result.shiftId },
+        stored: {
+          status: 'APPLIED',
+          serverId: (item.payload as CashMovementPayload).id,
+          conflicts: [],
+          resolved: { shiftId: result.shiftId },
+        },
       }
     }
     case 'SHIFT_CLOSE': {
       const result = await closeShift(auth, item.payload as ShiftClosePayload, tx)
       return {
-        status: 'APPLIED',
-        serverId: result.shiftId,
-        conflicts: result.conflictId
-          ? [
-              {
-                id: result.conflictId,
-                type: 'SHIFT_VARIANCE_MISMATCH',
-                severity: 'MEDIUM',
-              },
-            ]
-          : [],
-        resolved: { shiftId: result.shiftId },
+        stored: {
+          status: 'APPLIED',
+          serverId: result.shiftId,
+          conflicts: result.conflictId
+            ? [
+                {
+                  id: result.conflictId,
+                  type: 'SHIFT_VARIANCE_MISMATCH',
+                  severity: 'MEDIUM',
+                },
+              ]
+            : [],
+          resolved: { shiftId: result.shiftId },
+        },
       }
     }
   }
@@ -368,6 +437,7 @@ async function applyTransaction(
   auth: DeviceAuthContext,
   item: UploadTransaction,
   clockSkewToleranceMinutes: number,
+  options: UploadOptions,
 ): Promise<UploadItemResult> {
   const receivedAt = new Date()
 
@@ -375,18 +445,37 @@ async function applyTransaction(
     const outcome = await db.transaction(async (tx) => {
       const reservationId = await reserveTransaction(tx, auth, item)
       if (!reservationId) {
-        return { replayed: true as const, stored: await readStoredResult(tx, auth, item) }
+        return {
+          replayed: true as const,
+          stored: await readStoredResult(tx, auth, item),
+          postCommit: undefined,
+        }
       }
-      const stored = await dispatchTransaction(
+      const dispatched = await dispatchTransaction(
         tx,
         auth,
         item,
         receivedAt,
         clockSkewToleranceMinutes,
+        options,
       )
-      await finishTransaction(tx, reservationId, stored)
-      return { replayed: false as const, stored }
+      await finishTransaction(tx, reservationId, dispatched.stored)
+      return { replayed: false as const, ...dispatched }
     })
+
+    // After the commit, never inside it: the provider call cannot be rolled back
+    // with the document, and a lost enqueue is the sweep's job, not the till's
+    // error (P13-D26).
+    if (outcome.postCommit) {
+      try {
+        await outcome.postCommit()
+      } catch (error) {
+        logger.error(
+          { err: error, clientTransactionId: item.clientTransactionId, type: item.type },
+          'failed to enqueue a post-commit job; the sweep will pick it up',
+        )
+      }
+    }
 
     return toItemResult(
       item.clientTransactionId,

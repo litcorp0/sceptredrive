@@ -64,8 +64,7 @@ export interface ApprovalDecisionBody {
 /**
  * What the decision is about, rendered by the console without a second request.
  * One arm per type that can be requested; `other` is the honest fallback for a
- * type whose owning plan has not registered a loader yet (only `REFUND`, until
- * Phase 13).
+ * type whose owning plan has not registered a loader yet.
  */
 export type ApprovalSubject =
   | { kind: 'purchase_order'; purchaseOrderId: string }
@@ -131,6 +130,26 @@ export type ApprovalSubject =
       closedAt: string
       saleCount: number
       clientExpectedMinor: number
+    }
+  | {
+      kind: 'refund'
+      refundId: string
+      number: string
+      saleId: string
+      /** The receipt the customer brought back. */
+      receiptNumber: string
+      refundedMinor: number
+      reasonCode: string
+      lineCount: number
+      itemCount: number
+      /** Restock decisions counted in lines, one decision per line (P13-D22). */
+      restock: { resalable: number; damaged: number; notReturned: number }
+      tenders: Array<{ method: string; amountMinor: number; status: string }>
+      /** The manager whose PIN authorised the return, by staff id. */
+      approvedBy: string
+      occurredAt: string
+      /** What the sale was worth before it was refunded. */
+      originalTotalMinor: number
     }
   | { kind: 'other' }
 
