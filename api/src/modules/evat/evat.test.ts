@@ -101,6 +101,10 @@ describe.skipIf(!available)('E-VAT submissions', () => {
   let managerCookie = ''
   let receiptSequence = 0
   let refundSequence = 0
+  /** Whatever the demo seed left in these globals, restored after the suite. */
+  let previousSellerSettings: Array<{ key: string; value: string }> = []
+
+  const SELLER_SETTING_KEYS = ['tax.sellerTin', 'tax.sellerVatNumber']
 
   const deviceContext = (): DeviceAuthContext => ({ deviceId, terminalId, branchId })
 
@@ -489,7 +493,15 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     shiftId = shiftRow[0]?.id ?? ''
 
     // The seller's identity is the company's (P14-D38), and a blank TIN is a
-    // refusal rather than a submission, so the suite sets both.
+    // refusal rather than a submission, so the suite sets both. They are globals
+    // the demo seed also writes, so the suite snapshots what it finds and puts it
+    // back: a test may not decide another suite's defaults.
+    const existing = await db
+      .select({ key: setting.key, value: setting.value })
+      .from(setting)
+      .where(inArray(setting.key, SELLER_SETTING_KEYS))
+    previousSellerSettings = existing.map((row) => ({ key: row.key, value: row.value as string }))
+    await db.delete(setting).where(inArray(setting.key, SELLER_SETTING_KEYS))
     await db.insert(setting).values([
       { key: 'tax.sellerTin', value: 'C0012345678', branchId: null },
       { key: 'tax.sellerVatNumber', value: 'VAT-0012345', branchId: null },
@@ -537,9 +549,15 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     if (deviceId) await db.delete(posStaffBinding).where(eq(posStaffBinding.deviceId, deviceId))
     if (deviceId) await db.delete(device).where(eq(device.id, deviceId))
     if (terminalId) await db.delete(terminal).where(eq(terminal.id, terminalId))
-    // Only the two global settings this suite wrote: a leftover row would make
-    // the schema suite read a default that is not a default.
-    await db.delete(setting).where(inArray(setting.key, ['tax.sellerTin', 'tax.sellerVatNumber']))
+    // Put the seller identity back the way it was found: a leftover test value
+    // would make another suite read a default that is not a default, and a
+    // deleted seed value would make it read a default that is not the seed's.
+    await db.delete(setting).where(inArray(setting.key, SELLER_SETTING_KEYS))
+    if (previousSellerSettings.length > 0) {
+      await db
+        .insert(setting)
+        .values(previousSellerSettings.map((row) => ({ ...row, branchId: null })))
+    }
     for (const userId of createdUserIds) await deleteTestUser(userId)
     if (createdBranchIds.length > 0) {
       await db.delete(branch).where(inArray(branch.id, createdBranchIds))
