@@ -67,9 +67,12 @@ const LINE: SaleLineRow = {
 
 const CASH: SaleTenderRow = {
   saleId: SALE.id,
+  sequence: 1,
   method: 'CASH',
   amountMinor: 15_000,
   reference: null,
+  paymentId: null,
+  providerReference: null,
   createdAt: SALE.occurredAt,
 }
 

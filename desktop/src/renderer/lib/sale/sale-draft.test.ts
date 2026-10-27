@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { cartReducer, emptyCart } from '../cart/reducer'
 import { computeCartTotals } from '../cart/totals'
 import type { CartOverrideProof, CartState, SellableProduct } from '../cart/types'
-import { buildSaleDraft, SaleDraftError, toSaleProof } from './sale-draft'
+import { buildSaleDraft, parseTenderMethod, SaleDraftError, toSaleProof } from './sale-draft'
 
 const NOW = '2026-10-23T10:00:00.000Z'
 const CONTEXT = {
@@ -56,6 +56,11 @@ function cartWith(lines: Array<[string, number, number]>): CartState {
 function draftFor(
   cart: CartState,
   tender: { method: 'CASH' | 'CREDIT'; amountMinor: number; override?: CartOverrideProof | null },
+  extra: Array<{
+    method: 'CASH' | 'CREDIT'
+    amountMinor: number
+    override?: CartOverrideProof | null
+  }> = [],
 ) {
   return buildSaleDraft({
     cart,
@@ -63,11 +68,13 @@ function draftFor(
     cashier: CASHIER,
     shiftId: 'shift-1',
     receiptNumber: 'SPX-T01-20261023-0001',
-    tender: {
-      method: tender.method,
-      amountMinor: tender.amountMinor,
-      override: tender.override ?? null,
-    },
+    tenders: [tender, ...extra].map((line) => ({
+      method: line.method,
+      amountMinor: line.amountMinor,
+      override: line.override ?? null,
+      paymentId: null,
+      providerReference: null,
+    })),
     occurredAt: NOW,
     appVersion: '0.1.0',
   })
@@ -164,7 +171,15 @@ describe('buildSaleDraft — cash', () => {
         cashier: CASHIER,
         shiftId: '',
         receiptNumber: 'X-1',
-        tender: { method: 'CASH', amountMinor: 1_000, override: null },
+        tenders: [
+          {
+            method: 'CASH',
+            amountMinor: 1_000,
+            override: null,
+            paymentId: null,
+            providerReference: null,
+          },
+        ],
         occurredAt: NOW,
       }),
     ).toThrow(/Open a shift/)
@@ -187,7 +202,16 @@ describe('buildSaleDraft — zero total', () => {
     })
     cart = cartReducer(cart, { type: 'setLoyaltyRedeem', points: 1_000, now: NOW })
 
-    const draft = draftFor(cart, { method: 'CASH', amountMinor: 0 })
+    const draft = buildSaleDraft({
+      cart,
+      totals: computeCartTotals(cart, CONTEXT),
+      cashier: CASHIER,
+      shiftId: 'shift-1',
+      receiptNumber: 'SPX-T01-20261023-0001',
+      tenders: [],
+      occurredAt: NOW,
+      appVersion: '0.1.0',
+    })
     expect(draft.payload.totals.totalMinor).toBe(0)
     expect(draft.payload.tenders).toEqual([])
     expect(draft.payload.totals.changeMinor).toBe(0)
@@ -300,6 +324,85 @@ describe('buildSaleDraft — discounts', () => {
   it('sends no discount object and no proof for a plain sale', () => {
     const draft = draftFor(cartWith([['p1', 1_000, 1]]), { method: 'CASH', amountMinor: 1_000 })
     expect(draft.payload.saleDiscount).toBeNull()
+  })
+})
+
+describe('buildSaleDraft — split tender', () => {
+  const customer = {
+    customerId: '44444444-4444-7444-8444-444444444444',
+    draftId: null,
+    name: 'Akosua',
+    phone: '+233241234567',
+    isDraft: false,
+  }
+
+  it('carries both tenders in payment order with no change', () => {
+    let cart = cartWith([['p1', 10_000, 1]])
+    cart = cartReducer(cart, { type: 'setCustomer', customer, now: NOW })
+
+    const draft = draftFor(cart, { method: 'CASH', amountMinor: 4_000 }, [
+      { method: 'CREDIT', amountMinor: 6_000 },
+    ])
+
+    expect(draft.payload.totals.totalMinor).toBe(10_000)
+    expect(draft.payload.tenders).toEqual([
+      { method: 'CASH', amountMinor: 4_000, override: null },
+      { method: 'CREDIT', amountMinor: 6_000, override: null },
+    ])
+    expect(draft.payload.totals.changeMinor).toBe(0)
+  })
+
+  it('takes change from cash that overpays the whole sale', () => {
+    const draft = draftFor(cartWith([['p1', 10_000, 1]]), { method: 'CASH', amountMinor: 12_000 })
+    expect(draft.payload.totals.changeMinor).toBe(2_000)
+  })
+
+  it('refuses credit larger than the sale total', () => {
+    let cart = cartWith([['p1', 10_000, 1]])
+    cart = cartReducer(cart, { type: 'setCustomer', customer, now: NOW })
+
+    try {
+      draftFor(cart, { method: 'CREDIT', amountMinor: 10_001 })
+      throw new Error('expected failure')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SaleDraftError)
+      expect((error as SaleDraftError).code).toBe('CREDIT_EXCEEDS_TOTAL')
+    }
+  })
+
+  it('refuses a proof on a cash tender — only credit can be approved', () => {
+    const cart = cartWith([['p1', 1_000, 1]])
+    expect(() => draftFor(cart, { method: 'CASH', amountMinor: 1_000, override: PROOF })).toThrow(
+      /Only a credit payment/,
+    )
+  })
+
+  it('refuses a zero-total sale that carries a tender', () => {
+    let cart = cartWith([['p1', 1_000, 1]])
+    cart = cartReducer(cart, {
+      type: 'setCustomer',
+      customer,
+      now: NOW,
+    })
+    cart = cartReducer(cart, { type: 'setLoyaltyRedeem', points: 1_000, now: NOW })
+    expect(() => draftFor(cart, { method: 'CASH', amountMinor: 500 })).toThrow(/takes no payment/)
+  })
+})
+
+describe('parseTenderMethod', () => {
+  it('reads a stored method back as itself', () => {
+    expect(parseTenderMethod('MOMO')).toBe('MOMO')
+    expect(parseTenderMethod('CASH')).toBe('CASH')
+  })
+
+  it('throws instead of reading an unknown value as cash', () => {
+    // The old coercion would have printed a stored MOMO row as cash on a reprint.
+    try {
+      parseTenderMethod('MOMO_LEGACY')
+      throw new Error('expected failure')
+    } catch (error) {
+      expect((error as SaleDraftError).code).toBe('INVALID_TENDER')
+    }
   })
 })
 

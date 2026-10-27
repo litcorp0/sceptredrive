@@ -1,4 +1,4 @@
-import { formatAccraDateTime } from '@sceptre/shared'
+import { formatAccraDateTime, formatTenderLabel } from '@sceptre/shared'
 import { Card } from '@/components/ui/card'
 import { formatMinorWithSymbol } from '@/lib/format'
 import type { ReceiptModel } from '@/lib/receipt/render'
@@ -33,7 +33,8 @@ function Row({ label, value, bold = false }: { label: string; value: string; bol
 }
 
 export function ReceiptView({ model }: { model: ReceiptModel }) {
-  const { header, totals, tender, loyalty } = model
+  const { header, totals, loyalty } = model
+  const cashTendered = model.tenders.some((tender) => tender.method === 'CASH')
 
   return (
     <Card
@@ -124,15 +125,26 @@ export function ReceiptView({ model }: { model: ReceiptModel }) {
         <div className="my-2 border-t border-dashed border-foreground/30" />
 
         <div className="grid gap-0.5">
-          {tender.method === 'NONE' ? (
-            <Row label="Payment" value="No payment due" />
-          ) : tender.method === 'CASH' ? (
-            <>
-              <Row label="Cash" value={money(tender.amountMinor)} />
-              <Row label="Change" value={money(tender.changeMinor)} />
-            </>
+          {model.tenders.length === 0 ? (
+            totals.totalMinor === 0 ? (
+              <Row label="Payment" value="No payment due" />
+            ) : null
           ) : (
-            <Row label="Credit" value={money(tender.amountMinor)} />
+            <>
+              {model.tenders.map((tender, index) => (
+                <Row
+                  key={`${tender.method}-${index}`}
+                  label={formatTenderLabel(tender.method)}
+                  value={money(tender.amountMinor)}
+                />
+              ))}
+              {model.tenders.length > 1 ? (
+                <Row label="Tendered" value={money(model.tenderedMinor)} />
+              ) : null}
+              {model.changeMinor > 0 || cashTendered ? (
+                <Row label="Change" value={money(model.changeMinor)} />
+              ) : null}
+            </>
           )}
 
           {loyalty && loyalty.earnedPoints > 0 ? (

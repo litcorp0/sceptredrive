@@ -77,7 +77,7 @@ function baseLine(): CartState['lines'][number] {
 function input(overrides: Partial<Parameters<typeof prepareSale>[0]> = {}) {
   return {
     cart: cart(),
-    tender: { method: 'CASH' as const, amountMinor: 15_000 },
+    tenders: [{ method: 'CASH' as const, amountMinor: 15_000 }],
     cashier: CASHIER,
     identity: IDENTITY,
     pricing: PRICING,
@@ -103,9 +103,12 @@ describe('prepareSale', () => {
     expect(prepared.tenders).toEqual([
       {
         saleId: SALE_ID,
+        sequence: 1,
         method: 'CASH',
         amountMinor: 15_000,
         reference: null,
+        paymentId: null,
+        providerReference: null,
         createdAt: NOW,
       },
     ])
@@ -129,7 +132,7 @@ describe('prepareSale', () => {
             },
           ],
         }),
-        tender: { method: 'CASH', amountMinor: 40_000 },
+        tenders: [{ method: 'CASH', amountMinor: 40_000 }],
       }),
       'ACC-SPX-T01-20261023-0008',
       NOW,
@@ -152,7 +155,7 @@ describe('prepareSale', () => {
             isDraft: true,
           },
         }),
-        tender: { method: 'CREDIT', amountMinor: 12_000 },
+        tenders: [{ method: 'CREDIT', amountMinor: 12_000 }],
       }),
       'ACC-SPX-T01-20261023-0009',
       NOW,
@@ -162,6 +165,106 @@ describe('prepareSale', () => {
     expect(prepared.sale.customerId).toBe(CUSTOMER_DRAFT)
     expect(prepared.creditDelta).toEqual({ customerId: CUSTOMER_DRAFT, amountMinor: 12_000 })
     expect(prepared.tenders[0]?.method).toBe('CREDIT')
+  })
+
+  it('splits one basket across cash and credit, in payment order', () => {
+    const prepared = prepareSale(
+      input({
+        cart: cart({
+          customer: {
+            customerId: '77777777-7777-7777-8777-777777777777',
+            draftId: null,
+            name: 'Akosua Mensah',
+            phone: '+233201112222',
+            isDraft: false,
+          },
+        }),
+        tenders: [
+          { method: 'CASH', amountMinor: 4_000 },
+          { method: 'CREDIT', amountMinor: 8_000 },
+        ],
+      }),
+      'ACC-SPX-T01-20261023-0012',
+      NOW,
+    )
+
+    // GH₵40 at the drawer and GH₵80 on the account, for a GH₵120 basket.
+    expect(prepared.sale.totalMinor).toBe(12_000)
+    expect(prepared.sale.tenderTotalMinor).toBe(12_000)
+    expect(prepared.sale.changeMinor).toBe(0)
+    expect(prepared.sale.creditAmountMinor).toBe(8_000)
+    expect(prepared.creditDelta).toEqual({
+      customerId: '77777777-7777-7777-8777-777777777777',
+      amountMinor: 8_000,
+    })
+    expect(prepared.tenders.map((tender) => [tender.sequence, tender.method])).toEqual([
+      [1, 'CASH'],
+      [2, 'CREDIT'],
+    ])
+    expect(prepared.draft.payload.tenders).toEqual([
+      { method: 'CASH', amountMinor: 4_000, override: null },
+      { method: 'CREDIT', amountMinor: 8_000, override: null },
+    ])
+  })
+
+  it('lets cash overpay and produces the change from cash alone', () => {
+    const prepared = prepareSale(
+      input({
+        cart: cart({
+          customer: {
+            customerId: '77777777-7777-7777-8777-777777777777',
+            draftId: null,
+            name: 'Akosua Mensah',
+            phone: '+233201112222',
+            isDraft: false,
+          },
+        }),
+        tenders: [
+          { method: 'CASH', amountMinor: 10_000 },
+          { method: 'CREDIT', amountMinor: 8_000 },
+        ],
+      }),
+      'ACC-SPX-T01-20261023-0013',
+      NOW,
+    )
+
+    expect(prepared.sale.tenderTotalMinor).toBe(18_000)
+    expect(prepared.sale.changeMinor).toBe(6_000)
+    expect(prepared.sale.creditAmountMinor).toBe(8_000)
+  })
+
+  it('refuses a second credit tender and a credit larger than what is owed', () => {
+    const customer = {
+      customerId: '77777777-7777-7777-8777-777777777777',
+      draftId: null,
+      name: 'Akosua Mensah',
+      phone: '+233201112222',
+      isDraft: false,
+    }
+    try {
+      prepareSale(
+        input({
+          cart: cart({ customer }),
+          tenders: [
+            { method: 'CREDIT', amountMinor: 6_000 },
+            { method: 'CREDIT', amountMinor: 6_000 },
+          ],
+        }),
+        'X-1',
+        NOW,
+      )
+      throw new Error('expected failure')
+    } catch (error) {
+      expect((error as SaleCompletionError).code).toBe('INVALID_TENDER')
+    }
+
+    expect(() =>
+      prepareSale(
+        input({ cart: cart({ customer }), tenders: [{ method: 'CREDIT', amountMinor: 12_001 }] }),
+        'X-1',
+        NOW,
+      ),
+    ).toThrow(SaleCompletionError)
   })
 
   it('completes a zero-total sale with no tender', () => {
@@ -174,7 +277,7 @@ describe('prepareSale', () => {
     const prepared = prepareSale(
       input({
         cart: cart({ lines: [free] }),
-        tender: { method: 'CASH', amountMinor: 0 },
+        tenders: [],
       }),
       'ACC-SPX-T01-20261023-0010',
       NOW,
@@ -199,7 +302,7 @@ describe('prepareSale', () => {
           },
           loyaltyRedeemPoints: 250,
         }),
-        tender: { method: 'CASH', amountMinor: 15_000 },
+        tenders: [{ method: 'CASH', amountMinor: 15_000 }],
       }),
       'ACC-SPX-T01-20261023-0011',
       NOW,
@@ -219,10 +322,10 @@ describe('prepareSale', () => {
 
   it('refuses cash below the total', () => {
     expect(() =>
-      prepareSale(input({ tender: { method: 'CASH', amountMinor: 11_999 } }), 'X-1', NOW),
+      prepareSale(input({ tenders: [{ method: 'CASH', amountMinor: 11_999 }] }), 'X-1', NOW),
     ).toThrow(SaleCompletionError)
     try {
-      prepareSale(input({ tender: { method: 'CASH', amountMinor: 11_999 } }), 'X-1', NOW)
+      prepareSale(input({ tenders: [{ method: 'CASH', amountMinor: 11_999 }] }), 'X-1', NOW)
     } catch (error) {
       expect((error as SaleCompletionError).code).toBe('CASH_BELOW_TOTAL')
     }
@@ -230,7 +333,7 @@ describe('prepareSale', () => {
 
   it('refuses a credit sale without a customer', () => {
     try {
-      prepareSale(input({ tender: { method: 'CREDIT', amountMinor: 12_000 } }), 'X-1', NOW)
+      prepareSale(input({ tenders: [{ method: 'CREDIT', amountMinor: 12_000 }] }), 'X-1', NOW)
       throw new Error('expected failure')
     } catch (error) {
       expect((error as SaleCompletionError).code).toBe('NO_CUSTOMER_FOR_CREDIT')
@@ -250,7 +353,7 @@ describe('prepareSale', () => {
               isDraft: false,
             },
           }),
-          tender: { method: 'CREDIT', amountMinor: 12_001 },
+          tenders: [{ method: 'CREDIT', amountMinor: 12_001 }],
         }),
         'X-1',
         NOW,
@@ -387,7 +490,7 @@ describe('completeSale transaction', () => {
 
     expect(result.receiptNumber).toBe('ACC-SPX-T01-20261023-0005')
     expect(result.saleId).toBe(SALE_ID)
-    expect(result.tenderMethod).toBe('CASH')
+    expect(result.tenders).toEqual([{ method: 'CASH', amountMinor: 15_000 }])
 
     const sql = committed.map((row) => row.sql)
     expect(sql.some((statement) => statement.includes('INSERT INTO sale ('))).toBe(true)
@@ -407,6 +510,57 @@ describe('completeSale transaction', () => {
     }
     expect(payload.receiptNumber).toBe('ACC-SPX-T01-20261023-0005')
     expect(payload.totals.totalMinor).toBe(12_000)
+  })
+
+  it('writes one sale_tender row per tender, clears the draft tenders, and uploads both', async () => {
+    startCashier()
+    const { db, committed } = fakeDb({ lastReceiptValue: 4 })
+
+    const result = await completeSale(db, {
+      ...input({
+        cart: cart({
+          customer: {
+            customerId: '77777777-7777-7777-8777-777777777777',
+            draftId: null,
+            name: 'Akosua Mensah',
+            phone: '+233201112222',
+            isDraft: false,
+          },
+        }),
+        tenders: [
+          { method: 'CASH', amountMinor: 4_000 },
+          { method: 'CREDIT', amountMinor: 8_000 },
+        ],
+      }),
+      now: new Date(NOW),
+    })
+
+    expect(result.tenders).toEqual([
+      { method: 'CASH', amountMinor: 4_000 },
+      { method: 'CREDIT', amountMinor: 8_000 },
+    ])
+
+    const tenderRows = committed.filter((row) => row.sql.includes('INSERT INTO sale_tender'))
+    expect(tenderRows).toHaveLength(2)
+    expect(tenderRows.map((row) => row.parameters?.[2])).toEqual([1, 2])
+    expect(tenderRows.map((row) => row.parameters?.[3])).toEqual(['CASH', 'CREDIT'])
+    expect(tenderRows.map((row) => row.parameters?.[4])).toEqual([4_000, 8_000])
+
+    // The in-flight tender set has no meaning once the sale exists (P13-D31).
+    expect(committed.some((row) => row.sql === 'DELETE FROM cart_tender WHERE draft_id = ?')).toBe(
+      true,
+    )
+
+    const outbox = committed.find((row) => row.sql.includes('INSERT INTO outbox'))
+    const payload = JSON.parse(String(outbox?.parameters?.[4])) as {
+      tenders: Array<{ method: string; amountMinor: number }>
+      totals: { changeMinor: number }
+    }
+    expect(payload.tenders).toEqual([
+      { method: 'CASH', amountMinor: 4_000, override: null },
+      { method: 'CREDIT', amountMinor: 8_000, override: null },
+    ])
+    expect(payload.totals.changeMinor).toBe(0)
   })
 
   it('rolls the whole sale back if any write fails (and burns no number)', async () => {

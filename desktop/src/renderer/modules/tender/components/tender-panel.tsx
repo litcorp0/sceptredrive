@@ -1,9 +1,15 @@
-import { Check } from 'lucide-react'
+import {
+  isElectronicTender,
+  TENDER_LABELS,
+  TENDER_METHODS,
+  type TenderMethod,
+  tenderBalance,
+} from '@sceptre/shared'
+import { Check, X } from 'lucide-react'
 import { StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatGhs } from '@/lib/format'
-import type { TenderMethod } from '@/lib/sale/sale-draft'
 import { appendPesewaDigit, removePesewaDigit } from '../utils/pesewa'
 import { nextTenderMethod } from '../utils/tender-method'
 
@@ -23,21 +29,29 @@ import { nextTenderMethod } from '../utils/tender-method'
  * *Short* only in the short case, it carries a `--danger` dot as reinforcement,
  * and the figure is always `text-foreground` — colour is never the signal
  * (WCAG 2.2 SC 1.4.1).
+ *
+ * Since Phase 13 the keypad is one tender of several: `appliedMinor` is what the
+ * tenders already added cover, so "Exact" means "the rest of the bill" and the
+ * change shown is the sale's change, not this keypad's arithmetic.
  */
 
 const QUICK_NOTES_MINOR = [2_000, 5_000, 10_000, 20_000, 50_000]
 
 export function CashKeypad({
   totalMinor,
+  appliedMinor,
   tenderedMinor,
   onChange,
 }: {
   totalMinor: number
+  /** What the tenders already added on this sale cover. */
+  appliedMinor: number
   tenderedMinor: number
   onChange: (minor: number) => void
 }) {
-  const change = tenderedMinor > totalMinor ? tenderedMinor - totalMinor : 0
-  const short = tenderedMinor < totalMinor
+  const coveredMinor = appliedMinor + tenderedMinor
+  const change = coveredMinor > totalMinor ? coveredMinor - totalMinor : 0
+  const short = coveredMinor < totalMinor
 
   return (
     <div className="grid gap-3" data-testid="cash-keypad">
@@ -69,7 +83,7 @@ export function CashKeypad({
             data-testid="change-due"
             data-state={short ? 'short' : 'change'}
           >
-            {formatGhs(short ? totalMinor - tenderedMinor : change)}
+            {formatGhs(short ? totalMinor - coveredMinor : change)}
           </span>
         </div>
       </div>
@@ -78,7 +92,7 @@ export function CashKeypad({
         <Button
           type="button"
           variant="outline"
-          onClick={() => onChange(totalMinor)}
+          onClick={() => onChange(Math.max(0, totalMinor - appliedMinor))}
           className="h-11"
           data-testid="exact-cash"
         >
@@ -152,6 +166,109 @@ export function NoPaymentDue() {
   )
 }
 
+export interface TenderDraftLine {
+  id: string
+  method: TenderMethod
+  amountMinor: number
+}
+
+/**
+ * The tenders already added to this sale, in payment order.
+ *
+ * A split sale is read down this list by the customer, so the row order is the
+ * receipt order and the remove button is the only control: changing an amount
+ * is "remove it and type it again", which is one gesture at a counter.
+ */
+export function TenderList({
+  lines,
+  onRemove,
+}: {
+  lines: TenderDraftLine[]
+  onRemove: (id: string) => void
+}) {
+  if (lines.length === 0) return null
+
+  return (
+    <ul className="grid gap-1" data-testid="tender-list">
+      {lines.map((line, index) => (
+        <li
+          key={line.id}
+          data-testid="tender-line"
+          className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-1.5"
+        >
+          <span className="text-sm">
+            <span className="mr-2 font-mono text-xs text-muted-foreground tabular-nums">
+              {index + 1}
+            </span>
+            {TENDER_LABELS[line.method]}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-sm tabular-nums">{formatGhs(line.amountMinor)}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label={`Remove ${TENDER_LABELS[line.method]} payment`}
+              onClick={() => onRemove(line.id)}
+              className="h-8 w-8 px-0 text-muted-foreground"
+            >
+              <X className="size-4" />
+            </Button>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * Applied, still owed, and change — the three numbers `tenderBalance` decides.
+ *
+ * It is driven by the shared function rather than by local subtraction so this
+ * panel cannot disagree with the receipt, the sale row, or the server.
+ */
+export function TenderSummary({
+  totalMinor,
+  lines,
+}: {
+  totalMinor: number
+  lines: Array<{ method: TenderMethod; amountMinor: number }>
+}) {
+  const balance = tenderBalance(
+    totalMinor,
+    lines.map((line, index) => ({
+      method: line.method,
+      amountMinor: line.amountMinor,
+      sequence: index + 1,
+    })),
+  )
+
+  return (
+    <dl
+      className="grid gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs"
+      data-testid="tender-summary"
+    >
+      <div className="flex items-baseline justify-between gap-4">
+        <dt className="text-muted-foreground">Applied</dt>
+        <dd className="font-mono tabular-nums" data-testid="tender-applied">
+          {formatGhs(balance.appliedMinor)}
+        </dd>
+      </div>
+      <div className="flex items-baseline justify-between gap-4">
+        <dt className="text-muted-foreground">Remaining</dt>
+        <dd className="font-mono tabular-nums" data-testid="tender-remaining">
+          {formatGhs(balance.remainingMinor)}
+        </dd>
+      </div>
+      <div className="flex items-baseline justify-between gap-4">
+        <dt className="text-muted-foreground">Change</dt>
+        <dd className="font-mono tabular-nums" data-testid="tender-change">
+          {formatGhs(balance.changeMinor)}
+        </dd>
+      </div>
+    </dl>
+  )
+}
+
 /**
  * Cash or credit, as one 44 px segmented pair.
  *
@@ -162,6 +279,10 @@ export function NoPaymentDue() {
  * Radix reports `''` when the pressed item is pressed again; `nextTenderMethod`
  * turns that — and any other unexpected value — back into the current choice,
  * because a till always has a payment method.
+ *
+ * The list is the shared method vocabulary minus the electronic methods: MoMo,
+ * card and bank arrive with the payment provider in Plan 09, and offering a
+ * button that cannot be completed would be a lie at the counter.
  */
 export function TenderMethodToggle({
   method,
@@ -172,6 +293,8 @@ export function TenderMethodToggle({
   onChange: (method: TenderMethod) => void
   creditDisabled: boolean
 }) {
+  const methods = TENDER_METHODS.filter((candidate) => !isElectronicTender(candidate))
+
   return (
     <ToggleGroup
       type="single"
@@ -181,23 +304,18 @@ export function TenderMethodToggle({
       aria-label="Payment method"
       className="mb-4 flex w-full"
     >
-      {(
-        [
-          { value: 'CASH', label: 'Cash', testId: 'method-cash', disabled: false },
-          { value: 'CREDIT', label: 'Credit', testId: 'method-credit', disabled: creditDisabled },
-        ] as const
-      ).map((option) => (
+      {methods.map((option) => (
         <ToggleGroupItem
-          key={option.value}
-          value={option.value}
-          disabled={option.disabled}
+          key={option}
+          value={option}
+          disabled={option === 'CREDIT' && creditDisabled}
           className="h-12 min-h-12 flex-1 gap-2 text-sm font-semibold data-[state=on]:border-2 data-[state=on]:border-foreground data-[state=on]:font-bold"
-          data-testid={option.testId}
+          data-testid={option === 'CASH' ? 'method-cash' : 'method-credit'}
         >
           <span aria-hidden="true" className="flex size-4 items-center justify-center">
-            {method === option.value ? <Check className="size-4" /> : null}
+            {method === option ? <Check className="size-4" /> : null}
           </span>
-          {option.label}
+          {TENDER_LABELS[option]}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

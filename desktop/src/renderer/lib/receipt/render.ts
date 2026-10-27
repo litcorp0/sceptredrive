@@ -1,4 +1,4 @@
-import { formatAccraDateTime } from '@sceptre/shared'
+import { formatAccraDateTime, formatTenderLabel, type TenderMethod } from '@sceptre/shared'
 import type { PrintLine } from '../../../shared/printing'
 import { formatMinorWithSymbol } from '../format'
 import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repository'
@@ -10,6 +10,10 @@ import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repositor
  * screen cannot disagree about a money field. It is built from the **local sale
  * row**, not from a server response: the receipt must exist the instant a sale
  * commits, offline.
+ *
+ * The payment block is an ordered tender set since Phase 13 (P13-D1): one line
+ * per tender, then the total paid and the change when the sale was split. A
+ * single cash sale still prints the two lines it always printed.
  *
  * E-VAT fields are present but empty until Phase 8 (GRA onboarding); rendering
  * them is out of scope for this phase.
@@ -45,6 +49,11 @@ export interface ReceiptLine {
   taxCategory: string
 }
 
+export interface ReceiptTenderLine {
+  method: TenderMethod
+  amountMinor: number
+}
+
 export interface ReceiptModel {
   header: {
     seller: string
@@ -70,11 +79,16 @@ export interface ReceiptModel {
     taxTotalMinor: number
     totalMinor: number
   }
-  tender: {
-    method: 'CASH' | 'CREDIT' | 'NONE'
-    amountMinor: number
-    changeMinor: number
-  }
+  /**
+   * The tenders in the order the customer paid (P13-D1). A single cash sale
+   * prints exactly one `Cash` line, as it always has; the split adds lines, not
+   * a different document.
+   */
+  tenders: ReceiptTenderLine[]
+  /** `Σ tenders`, printed only when there is more than one. */
+  tenderedMinor: number
+  /** Change produced by cash alone (P13-D3). */
+  changeMinor: number
   loyalty: {
     earnedPoints: number
     redeemedPoints: number
@@ -98,12 +112,11 @@ export interface BuildReceiptInput {
 
 export function buildReceiptModel(input: BuildReceiptInput): ReceiptModel {
   const { sale, lines, tenders, context } = input
-  const tender = tenders[0]
-  const method: ReceiptModel['tender']['method'] = tender
-    ? tender.method
-    : sale.totalMinor === 0
-      ? 'NONE'
-      : 'CASH'
+  const ordered = [...tenders].sort((left, right) => left.sequence - right.sequence)
+  const receiptTenders: ReceiptTenderLine[] = ordered.map((tender) => ({
+    method: tender.method,
+    amountMinor: tender.amountMinor,
+  }))
 
   return {
     header: {
@@ -144,11 +157,9 @@ export function buildReceiptModel(input: BuildReceiptInput): ReceiptModel {
       taxTotalMinor: sale.taxTotalMinor,
       totalMinor: sale.totalMinor,
     },
-    tender: {
-      method,
-      amountMinor: tender?.amountMinor ?? 0,
-      changeMinor: sale.changeMinor,
-    },
+    tenders: receiptTenders,
+    tenderedMinor: receiptTenders.reduce((sum, tender) => sum + tender.amountMinor, 0),
+    changeMinor: sale.changeMinor,
     loyalty:
       input.customer && (sale.loyaltyEarnedPoints > 0 || sale.loyaltyRedeemPoints > 0)
         ? {
@@ -301,13 +312,18 @@ export function toEscPosLines(model: ReceiptModel, options: RenderOptions = {}):
   pair('TOTAL', money(model.totals.totalMinor), true)
   rows.push({ text: divider })
 
-  if (model.tender.method === 'NONE') {
-    pair('Payment', 'No payment due')
-  } else if (model.tender.method === 'CASH') {
-    pair('Cash', money(model.tender.amountMinor))
-    pair('Change', money(model.tender.changeMinor))
+  if (model.tenders.length === 0) {
+    if (model.totals.totalMinor === 0) pair('Payment', 'No payment due')
   } else {
-    pair('Credit', money(model.tender.amountMinor))
+    for (const tender of model.tenders) {
+      pair(formatTenderLabel(tender.method), money(tender.amountMinor))
+    }
+    // A total-paid line only earns its space when the payment was split; a
+    // single cash sale already prints the amount it took and the change.
+    if (model.tenders.length > 1) pair('Tendered', money(model.tenderedMinor))
+    if (model.changeMinor > 0 || model.tenders.some((tender) => tender.method === 'CASH')) {
+      pair('Change', money(model.changeMinor))
+    }
   }
 
   if (model.loyalty) {

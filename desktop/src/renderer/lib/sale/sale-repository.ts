@@ -1,4 +1,6 @@
 import type { PowerSyncDatabase, Transaction } from '@powersync/web'
+import type { TenderMethod } from '@sceptre/shared'
+import { parseTenderMethod } from './sale-draft'
 
 /**
  * Local-only sale data access (D8/D11).
@@ -72,9 +74,27 @@ export interface SaleLineRow {
 
 export interface SaleTenderRow {
   saleId: string
-  method: 'CASH' | 'CREDIT'
+  /** The payment order on the receipt; 1-based. */
+  sequence: number
+  method: TenderMethod
   amountMinor: number
   reference: string | null
+  paymentId: string | null
+  providerReference: string | null
+  createdAt: string
+}
+
+/** A tender in flight on the current draft (P13-D31). */
+export interface CartTenderRow {
+  draftId: string
+  sequence: number
+  method: TenderMethod
+  amountMinor: number
+  paymentId: string | null
+  providerReference: string | null
+  status: string
+  displayText: string | null
+  expiresAt: string | null
   createdAt: string
 }
 
@@ -112,7 +132,11 @@ const SALE_LINE_COLUMNS = `sale_id, line_number, product_id, sku, name, barcode,
   loyalty_discount_minor, net_minor, taxable_minor, base_minor, vat_minor, nhil_minor,
   getfund_minor, tax_total_minor, total_minor, tax_category`
 
-const TENDER_COLUMNS = `sale_id, method, amount_minor, reference, created_at`
+const TENDER_COLUMNS = `sale_id, sequence, method, amount_minor, reference, payment_id,
+  provider_reference, created_at`
+
+const CART_TENDER_COLUMNS = `draft_id, sequence, method, amount_minor, payment_id,
+  provider_reference, status, display_text, expires_at, created_at`
 
 interface SaleDbRow {
   id: string
@@ -175,9 +199,25 @@ interface SaleLineDbRow {
 
 interface TenderDbRow {
   sale_id: string
+  sequence: number | null
   method: string
   amount_minor: number
   reference: string | null
+  payment_id: string | null
+  provider_reference: string | null
+  created_at: string
+}
+
+interface CartTenderDbRow {
+  draft_id: string
+  sequence: number | null
+  method: string
+  amount_minor: number
+  payment_id: string | null
+  provider_reference: string | null
+  status: string
+  display_text: string | null
+  expires_at: string | null
   created_at: string
 }
 
@@ -250,12 +290,38 @@ function toLine(row: SaleLineDbRow): SaleLineRow {
   }
 }
 
+/**
+ * A stored tender method, parsed rather than guessed.
+ *
+ * This used to coerce anything that was not `CREDIT` to `CASH`, which would read
+ * a stored `MOMO` back as cash on a reprint — a different number in a different
+ * column on a document the customer keeps. An unknown value is now an error the
+ * caller has to see (P13-D1).
+ */
 function toTender(row: TenderDbRow): SaleTenderRow {
   return {
     saleId: row.sale_id,
-    method: row.method === 'CREDIT' ? 'CREDIT' : 'CASH',
+    sequence: row.sequence ?? 1,
+    method: parseTenderMethod(row.method),
     amountMinor: row.amount_minor,
     reference: row.reference,
+    paymentId: row.payment_id,
+    providerReference: row.provider_reference,
+    createdAt: row.created_at,
+  }
+}
+
+function toCartTender(row: CartTenderDbRow): CartTenderRow {
+  return {
+    draftId: row.draft_id,
+    sequence: row.sequence ?? 1,
+    method: parseTenderMethod(row.method),
+    amountMinor: row.amount_minor,
+    paymentId: row.payment_id,
+    providerReference: row.provider_reference,
+    status: row.status,
+    displayText: row.display_text,
+    expiresAt: row.expires_at,
     createdAt: row.created_at,
   }
 }
@@ -338,14 +404,20 @@ export async function insertSaleLines(tx: Transaction, lines: SaleLineRow[]): Pr
 
 export async function insertSaleTenders(tx: Transaction, tenders: SaleTenderRow[]): Promise<void> {
   for (const tender of tenders) {
-    await tx.execute(`INSERT INTO sale_tender (id, ${TENDER_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)`, [
-      crypto.randomUUID(),
-      tender.saleId,
-      tender.method,
-      tender.amountMinor,
-      tender.reference,
-      tender.createdAt,
-    ])
+    await tx.execute(
+      `INSERT INTO sale_tender (id, ${TENDER_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        crypto.randomUUID(),
+        tender.saleId,
+        tender.sequence,
+        tender.method,
+        tender.amountMinor,
+        tender.reference,
+        tender.paymentId,
+        tender.providerReference,
+        tender.createdAt,
+      ],
+    )
   }
 }
 
@@ -386,6 +458,15 @@ export async function clearCartDraftRows(tx: Transaction, draftId: string): Prom
   await tx.execute('DELETE FROM cart_draft WHERE id = ?', [draftId])
 }
 
+/**
+ * Removes the draft's in-flight tenders, in the same transaction that writes
+ * `sale_tender` (P13-D31): once the sale exists the money is settled, and a
+ * crash-recovered draft must not offer the same GH₵50 a second time.
+ */
+export async function clearCartTenders(tx: Transaction, draftId: string): Promise<void> {
+  await tx.execute('DELETE FROM cart_tender WHERE draft_id = ?', [draftId])
+}
+
 // --- reads -----------------------------------------------------------------
 
 export interface SqlReader {
@@ -410,10 +491,25 @@ export async function listSaleLines(db: SqlReader, saleId: string): Promise<Sale
 
 export async function listSaleTenders(db: SqlReader, saleId: string): Promise<SaleTenderRow[]> {
   const rows = await db.getAll<TenderDbRow>(
-    `SELECT ${TENDER_COLUMNS} FROM sale_tender WHERE sale_id = ? ORDER BY created_at`,
+    // Sequence first: a split's rows share `created_at`, so it cannot order them.
+    // Rows written before Phase 13 have no sequence and fall back to 1.
+    `SELECT ${TENDER_COLUMNS} FROM sale_tender
+      WHERE sale_id = ?
+      ORDER BY COALESCE(sequence, 1), created_at`,
     [saleId],
   )
   return rows.map(toTender)
+}
+
+/** The draft's in-flight tenders, oldest first — the resume screen's read. */
+export async function listCartTenders(db: SqlReader, draftId: string): Promise<CartTenderRow[]> {
+  const rows = await db.getAll<CartTenderDbRow>(
+    `SELECT ${CART_TENDER_COLUMNS} FROM cart_tender
+      WHERE draft_id = ?
+      ORDER BY COALESCE(sequence, 1), created_at`,
+    [draftId],
+  )
+  return rows.map(toCartTender)
 }
 
 export async function listShiftSales(db: SqlReader, shiftId: string): Promise<SaleRow[]> {

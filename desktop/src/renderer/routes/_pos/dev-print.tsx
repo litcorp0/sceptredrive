@@ -69,7 +69,9 @@ function sampleModel(reprint: boolean): ReceiptModel {
       taxTotalMinor: 2_000,
       totalMinor: 14_500,
     },
-    tender: { method: 'CASH', amountMinor: 20_000, changeMinor: 5_500 },
+    tenders: [{ method: 'CASH', amountMinor: 20_000 }],
+    tenderedMinor: 20_000,
+    changeMinor: 5_500,
     loyalty: { earnedPoints: 125, redeemedPoints: 0 },
     footer: 'Thank you for choosing Sceptre Drive. Goods sold are not returnable after 7 days.',
     evatSerial: null,
@@ -216,7 +218,7 @@ export function DevPrintRoute() {
               <li>VAT: {formatGhs(sampleModel(reprint).totals.vatMinor)}</li>
               <li>NHIL: {formatGhs(sampleModel(reprint).totals.nhilMinor)}</li>
               <li>GETFund: {formatGhs(sampleModel(reprint).totals.getfundMinor)}</li>
-              <li>Change: {formatGhs(sampleModel(reprint).tender.changeMinor)}</li>
+              <li>Change: {formatGhs(sampleModel(reprint).changeMinor)}</li>
             </ul>
           </section>
         </div>

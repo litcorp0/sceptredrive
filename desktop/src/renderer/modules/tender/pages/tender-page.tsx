@@ -1,3 +1,10 @@
+import {
+  isElectronicTender,
+  TENDER_LABELS,
+  TENDER_PROBLEM_MESSAGES,
+  type TenderMethod,
+  tenderBalance,
+} from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import { ManagerOverrideDialog, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
@@ -23,30 +30,40 @@ import { usePosDatabase } from '@/lib/powersync/provider'
 import { navigate } from '@/lib/router'
 import { completeSale, SaleCompletionError } from '@/lib/sale/complete-sale'
 import { peekReceiptNumber } from '@/lib/sale/document-sequence'
-import type { TenderMethod } from '@/lib/sale/sale-draft'
 import { usePosShortcuts } from '@/lib/shortcuts'
 import { CartTotalsPanel } from '@/modules/cart'
-import { CashKeypad, NoPaymentDue, TenderMethodToggle } from '../components/tender-panel'
+import {
+  CashKeypad,
+  NoPaymentDue,
+  type TenderDraftLine,
+  TenderList,
+  TenderMethodToggle,
+  TenderSummary,
+} from '../components/tender-panel'
 import { appendPesewaDigit, removePesewaDigit } from '../utils/pesewa'
 
 /**
- * Tender screen (Plan 06 Task 7).
+ * Tender screen (Plan 06 Task 7; a tender **builder** since Phase 13 Plan 08).
  *
- * Cash or credit, then hand the sale draft to Plan 07, which writes it and
- * prints the receipt. Nothing here writes: the draft is pure data built from
- * the cart and the cashier's binding, so a cashier can back out at any point
- * and the cart is unchanged.
+ * The cashier builds the payment from one or more tenders and the screen adds up
+ * as it goes: remaining balance, change, and what has already been taken. The
+ * arithmetic is `tenderBalance` from `@sceptre/shared` — the same function the
+ * server asserts with — so the till cannot produce a set the upload will reject.
+ *
+ * Only cash and credit are offered here. MoMo, card and bank need a payment
+ * provider round trip and arrive in Plan 09; the filter below is the whole
+ * change that has to happen for them, because everything after this screen
+ * already carries an ordered tender set.
  *
  * A credit sale that needs a manager opens the override dialog instead of
  * silently completing — and that dialog always offers "continue without
  * approval", so the till never blocks (D17).
  *
- * Plan 07 of Phase 10 retuned it for counter distance: the total became muted
- * context so the change is the largest figure on the screen, the method pair
- * became a 44 px segmented control whose selected state survives colour
- * blindness, and the credit panel now states the limit, what is already owed,
- * and what is left — the three numbers a cashier is asked about.
+ * The keypad, quick notes, change and shortfall readouts, and the credit /
+ * override flow keep their Phase 10 test ids verbatim: the counter audit drives
+ * them, and a screen that renamed them would be a screen nobody checked.
  */
+
 export function TenderScreen({
   identity,
   shift,
@@ -65,8 +82,9 @@ export function TenderScreen({
   const totalMinor = totals.priced.totalMinor
   const zeroTotal = totalMinor === 0
 
-  const [method, setMethod] = useState<TenderMethod>('CASH')
-  const [tendered, setTendered] = useState(0)
+  const [lines, setLines] = useState<TenderDraftLine[]>([])
+  const [activeMethod, setActiveMethod] = useState<TenderMethod>('CASH')
+  const [inputMinor, setInputMinor] = useState(0)
   // A cashier who chooses "Continue without approval" proceeds with the sale;
   // the server records CREDIT_OVER_LIMIT/CREDIT_HOLD for manager review (D17:
   // the till never blocks). Without this flag the override dialog would reopen
@@ -98,32 +116,72 @@ export function TenderScreen({
     }
   }, [db, identity.terminalId, identity.terminalCode])
 
-  useEffect(() => {
-    setTendered(0)
-    setError(null)
-    setCreditBypass(false)
-  }, [method])
-
   // A different customer invalidates both an approval and a bypass.
   const customerKey = state.customer?.customerId ?? state.customer?.draftId ?? ''
   useEffect(() => {
     setCreditBypass(false)
   }, [customerKey])
 
+  const appliedMinor = lines.reduce((sum, line) => sum + line.amountMinor, 0)
+  const pending: TenderDraftLine[] =
+    inputMinor > 0 ? [{ id: 'pending', method: activeMethod, amountMinor: inputMinor }] : []
+  const effective = [...lines, ...pending]
+  const balance = tenderBalance(
+    totalMinor,
+    effective.map((line, index) => ({
+      method: line.method,
+      amountMinor: line.amountMinor,
+      sequence: index + 1,
+    })),
+  )
+
+  const creditHasLine = lines.some((line) => line.method === 'CREDIT')
+  const creditPortionMinor = balance.creditMinor
+  const showCreditPanel = !zeroTotal && (activeMethod === 'CREDIT' || creditPortionMinor > 0)
+
   const decision = creditDecision({
     hasCustomer: Boolean(state.customer),
     snapshot: customerContext.credit,
-    amountMinor: totalMinor,
+    amountMinor: creditPortionMinor,
   })
 
   // The local read of the credit profile is asynchronous. Until it answers, "no account here"
   // and "not looked yet" are indistinguishable, and acting on the first would offer a manager
   // override to a customer who has a limit (Plan 09's audit found exactly that).
-  const creditChecking = method === 'CREDIT' && customerContext.creditLoading
+  const creditChecking = showCreditPanel && customerContext.creditLoading
 
-  const cashShort = method === 'CASH' && !zeroTotal && tendered < totalMinor
+  const balanceProblem = balance.problem
   const ready =
-    Boolean(binding) && Boolean(shift) && Boolean(receiptNumber) && !cashShort && !creditChecking
+    Boolean(binding) &&
+    Boolean(shift) &&
+    Boolean(receiptNumber) &&
+    !creditChecking &&
+    !balanceProblem
+
+  function selectMethod(next: TenderMethod): void {
+    if (isElectronicTender(next)) return
+    setActiveMethod(next)
+    setError(null)
+    // The method button is also the "pay the rest this way" gesture: prefill what
+    // is still owed so a cashier who switches to credit does not have to retype it.
+    setInputMinor(Math.max(0, totalMinor - appliedMinor))
+  }
+
+  function addTender(): void {
+    const remaining = Math.max(0, totalMinor - appliedMinor)
+    const requested = inputMinor > 0 ? inputMinor : remaining
+    // Credit never exceeds what is left: the debt cannot be for change.
+    const amount = activeMethod === 'CREDIT' ? Math.min(requested, remaining) : requested
+    if (amount <= 0) return
+    setLines([...lines, { id: crypto.randomUUID(), method: activeMethod, amountMinor: amount }])
+    setInputMinor(0)
+    setError(null)
+  }
+
+  function removeLastLine(): void {
+    if (lines.length === 0) return
+    setLines(lines.slice(0, -1))
+  }
 
   function complete() {
     if (completing) return
@@ -139,9 +197,14 @@ export function TenderScreen({
       setError('Still checking this customer’s credit account. Press Complete again.')
       return
     }
+    if (!zeroTotal && balance.problem) {
+      setError(TENDER_PROBLEM_MESSAGES[balance.problem])
+      return
+    }
     if (
+      creditPortionMinor > 0 &&
       creditNeedsApproval({
-        method,
+        method: 'CREDIT',
         decision,
         hasOverride: Boolean(state.creditOverride),
         bypassed: creditBypass,
@@ -156,10 +219,12 @@ export function TenderScreen({
 
     void completeSale(db, {
       cart: state,
-      tender: {
-        method,
-        amountMinor: zeroTotal ? 0 : method === 'CASH' ? tendered : totalMinor,
-      },
+      tenders: zeroTotal
+        ? []
+        : effective.map((line) => ({
+            method: line.method,
+            amountMinor: line.amountMinor,
+          })),
       cashier: {
         userId: binding.userId,
         staffId: binding.staffId,
@@ -195,13 +260,13 @@ export function TenderScreen({
    * the keypad's own (`appendPesewaDigit`), so typing and tapping cannot disagree, and the
    * shortcut layer already ignores printable keys while a field has focus.
    */
-  const cashEntry = method === 'CASH' && !zeroTotal
+  const cashEntry = activeMethod === 'CASH' && !zeroTotal
   const digitHandlers = Object.fromEntries(
     [...'0123456789'].map((digit) => [
       digit,
       () => {
         if (!cashEntry) return
-        setTendered((current) => appendPesewaDigit(current, digit))
+        setInputMinor((current) => appendPesewaDigit(current, digit))
       },
     ]),
   )
@@ -209,9 +274,15 @@ export function TenderScreen({
   usePosShortcuts(
     {
       ...digitHandlers,
+      Enter: () => addTender(),
       Backspace: () => {
-        if (!cashEntry) return
-        setTendered((current) => removePesewaDigit(current))
+        // Backspace edits the amount being typed; with nothing typed it takes the
+        // last tender off the sale, which is the one gesture a cashier expects.
+        if (cashEntry && inputMinor > 0) {
+          setInputMinor((current) => removePesewaDigit(current))
+          return
+        }
+        removeLastLine()
       },
       F9: complete,
       Escape: () => navigate('pos'),
@@ -271,9 +342,9 @@ export function TenderScreen({
           </div>
 
           <TenderMethodToggle
-            method={method}
-            onChange={setMethod}
-            creditDisabled={!state.customer}
+            method={activeMethod}
+            onChange={selectMethod}
+            creditDisabled={!state.customer || creditHasLine}
           />
           {state.customer ? null : (
             <p className="mb-4 text-xs text-muted-foreground">
@@ -283,86 +354,115 @@ export function TenderScreen({
 
           {zeroTotal ? (
             <NoPaymentDue />
-          ) : method === 'CASH' ? (
-            <CashKeypad totalMinor={totalMinor} tenderedMinor={tendered} onChange={setTendered} />
           ) : (
-            <div className="grid gap-3" data-testid="credit-tender">
-              <div className="rounded-lg border border-border bg-card p-4">
-                <dl className="grid gap-1">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <dt className="text-xs text-muted-foreground">Credit limit</dt>
-                    <dd className="font-mono text-sm tabular-nums">
-                      {formatGhs(customerContext.credit.limitMinor)}
-                    </dd>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-4">
-                    <dt className="text-xs text-muted-foreground">Owed at this branch</dt>
-                    <dd className="font-mono text-sm tabular-nums">
-                      {formatGhs(creditUsed(customerContext.credit))}
-                    </dd>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-4 border-t border-border pt-1">
-                    <dt className="text-xs font-medium text-muted-foreground">Available</dt>
-                    <dd
-                      className="font-mono text-lg font-semibold tabular-nums"
-                      data-testid="credit-available"
-                    >
-                      {formatGhs(creditHeadroom(customerContext.credit))}
-                    </dd>
-                  </div>
-                </dl>
+            <>
+              {activeMethod === 'CASH' ? (
+                <CashKeypad
+                  totalMinor={totalMinor}
+                  appliedMinor={appliedMinor}
+                  tenderedMinor={inputMinor}
+                  onChange={setInputMinor}
+                />
+              ) : (
+                <div className="grid gap-3" data-testid="credit-tender">
+                  <div className="rounded-lg border border-border bg-card p-4">
+                    <dl className="grid gap-1">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <dt className="text-xs text-muted-foreground">Credit limit</dt>
+                        <dd className="font-mono text-sm tabular-nums">
+                          {formatGhs(customerContext.credit.limitMinor)}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-4">
+                        <dt className="text-xs text-muted-foreground">Owed at this branch</dt>
+                        <dd className="font-mono text-sm tabular-nums">
+                          {formatGhs(creditUsed(customerContext.credit))}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-4 border-t border-border pt-1">
+                        <dt className="text-xs font-medium text-muted-foreground">Available</dt>
+                        <dd
+                          className="font-mono text-lg font-semibold tabular-nums"
+                          data-testid="credit-available"
+                        >
+                          {formatGhs(creditHeadroom(customerContext.credit))}
+                        </dd>
+                      </div>
+                    </dl>
 
-                {creditChecking ? (
-                  <StatusNote tone="info" role="status" className="mt-2">
-                    Checking this customer’s credit account…
-                  </StatusNote>
-                ) : (
-                  <StatusNote
-                    tone={decision === 'OK' ? 'ok' : 'notice'}
-                    className="mt-2"
-                    data-testid="credit-tender-decision"
-                    data-decision={decision}
-                  >
-                    {CREDIT_DECISION_MESSAGES[decision]}
-                    {decision === 'OVER_LIMIT'
-                      ? ` — over by ${formatGhs(overLimitMinor(customerContext.credit, totalMinor))}`
-                      : ''}
-                    {decision !== 'OK' ? ' A manager can approve it.' : ''}
-                  </StatusNote>
-                )}
-
-                {decision !== 'OK' ? (
-                  state.creditOverride ? (
-                    <StatusNote tone="ok" className="mt-2">
-                      Approved by {state.creditOverride.approverStaffId} ·{' '}
-                      {state.creditOverride.reasonCode}
-                      <Button
-                        type="button"
-                        variant="link"
-                        onClick={() => dispatch({ type: 'setCreditOverride', override: null })}
-                        className="ml-1 h-11 px-2 text-xs text-foreground"
+                    {creditChecking ? (
+                      <StatusNote tone="info" role="status" className="mt-2">
+                        Checking this customer’s credit account…
+                      </StatusNote>
+                    ) : (
+                      <StatusNote
+                        tone={decision === 'OK' ? 'ok' : 'notice'}
+                        className="mt-2"
+                        data-testid="credit-tender-decision"
+                        data-decision={decision}
                       >
-                        Remove
-                      </Button>
-                    </StatusNote>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowOverride(true)}
-                      className="mt-2 h-11 w-full"
-                      data-testid="tender-request-approval"
-                    >
-                      Ask a manager
-                    </Button>
-                  )
-                ) : null}
+                        {CREDIT_DECISION_MESSAGES[decision]}
+                        {decision === 'OVER_LIMIT'
+                          ? ` — over by ${formatGhs(overLimitMinor(customerContext.credit, creditPortionMinor))}`
+                          : ''}
+                        {decision !== 'OK' ? ' A manager can approve it.' : ''}
+                      </StatusNote>
+                    )}
+
+                    {decision !== 'OK' ? (
+                      state.creditOverride ? (
+                        <StatusNote tone="ok" className="mt-2">
+                          Approved by {state.creditOverride.approverStaffId} ·{' '}
+                          {state.creditOverride.reasonCode}
+                          <Button
+                            type="button"
+                            variant="link"
+                            onClick={() => dispatch({ type: 'setCreditOverride', override: null })}
+                            className="ml-1 h-11 px-2 text-xs text-foreground"
+                          >
+                            Remove
+                          </Button>
+                        </StatusNote>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowOverride(true)}
+                          className="mt-2 h-11 w-full"
+                          data-testid="tender-request-approval"
+                        >
+                          Ask a manager
+                        </Button>
+                      )
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatGhs(creditPortionMinor)} goes on the customer&apos;s account at this
+                    branch. The debt is recorded even if the limit is exceeded — a manager conflict
+                    is raised for review.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-3 grid gap-2">
+                <TenderList
+                  lines={lines}
+                  onRemove={(id) => setLines(lines.filter((line) => line.id !== id))}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addTender}
+                  disabled={balance.remainingMinor === 0 && inputMinor === 0}
+                  className="h-11"
+                  data-testid="add-tender"
+                >
+                  Add {TENDER_LABELS[activeMethod].toLowerCase()} payment
+                  <span className="ml-1 font-mono text-xs font-normal opacity-70">Enter</span>
+                </Button>
+                <TenderSummary totalMinor={totalMinor} lines={effective} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                The full total is charged to the customer's account at this branch. The debt is
-                recorded even if the limit is exceeded — a manager conflict is raised for review.
-              </p>
-            </div>
+            </>
           )}
         </section>
 
@@ -403,9 +503,9 @@ export function TenderScreen({
               {completing ? 'Recording sale…' : 'Complete sale'}{' '}
               <span className="ml-1 font-mono text-xs font-normal tabular-nums opacity-70">F9</span>
             </Button>
-            {cashShort ? (
+            {!zeroTotal && balance.remainingMinor > 0 ? (
               <StatusNote tone="notice" role="status">
-                Cash received is {formatGhs(totalMinor - tendered)} short of the total.
+                The payments are {formatGhs(balance.remainingMinor)} short of the total.
               </StatusNote>
             ) : null}
           </div>
@@ -417,8 +517,8 @@ export function TenderScreen({
           title="Credit approval"
           description="A manager approves selling on credit beyond the limit or on a held account."
           permission="credit.override"
-          amountMinor={totalMinor}
-          overByMinor={overLimitMinor(customerContext.credit, totalMinor)}
+          amountMinor={creditPortionMinor}
+          overByMinor={overLimitMinor(customerContext.credit, creditPortionMinor)}
           policy={lockoutPolicyFor(config)}
           onClose={() => setShowOverride(false)}
           onApproved={(proof) => {

@@ -71,11 +71,24 @@ const LINE: SaleLineRow = {
 
 const CASH: SaleTenderRow = {
   saleId: SALE.id,
+  sequence: 1,
   method: 'CASH',
   amountMinor: 15_000,
   reference: null,
+  paymentId: null,
+  providerReference: null,
   createdAt: SALE.occurredAt,
 }
+
+const CREDIT: SaleTenderRow = {
+  ...CASH,
+  sequence: 2,
+  method: 'CREDIT',
+  amountMinor: 8_000,
+}
+
+/** The Done-when basket: GH₵40 at the drawer, GH₵80 on the account. */
+const CASH_PART: SaleTenderRow = { ...CASH, amountMinor: 4_000 }
 
 const CONTEXT = {
   branchName: 'Accra - Spintex',
@@ -93,7 +106,7 @@ function model(overrides: Partial<ReceiptModel> = {}): ReceiptModel {
 }
 
 describe('receipt model', () => {
-  it('is built from the local sale row and its tender', () => {
+  it('is built from the local sale row and its tenders', () => {
     const built = buildReceiptModel({
       sale: SALE,
       lines: [LINE],
@@ -104,9 +117,26 @@ describe('receipt model', () => {
     expect(built.header.receiptNumber).toBe('ACC-SPX-T01-20261023-0007')
     expect(built.header.branch).toBe('Accra - Spintex')
     expect(built.header.reprint).toBe(false)
-    expect(built.tender).toEqual({ method: 'CASH', amountMinor: 15_000, changeMinor: 3_000 })
+    expect(built.tenders).toEqual([{ method: 'CASH', amountMinor: 15_000 }])
+    expect(built.tenderedMinor).toBe(15_000)
+    expect(built.changeMinor).toBe(3_000)
     expect(built.totals.taxableMinor).toBe(10_000)
     expect(built.lines[0]?.totalMinor).toBe(12_000)
+  })
+
+  it('orders the tenders by sequence, not by the order they were read', () => {
+    const built = buildReceiptModel({
+      sale: { ...SALE, changeMinor: 0 },
+      lines: [LINE],
+      tenders: [CREDIT, CASH_PART],
+      context: CONTEXT,
+    })
+
+    expect(built.tenders).toEqual([
+      { method: 'CASH', amountMinor: 4_000 },
+      { method: 'CREDIT', amountMinor: 8_000 },
+    ])
+    expect(built.tenderedMinor).toBe(12_000)
   })
 
   it('describes a zero-total sale without a tender', () => {
@@ -118,6 +148,7 @@ describe('receipt model', () => {
         vatMinor: 0,
         nhilMinor: 0,
         getfundMinor: 0,
+        changeMinor: 0,
       },
       lines: [
         {
@@ -133,7 +164,8 @@ describe('receipt model', () => {
       tenders: [],
       context: CONTEXT,
     })
-    expect(built.tender.method).toBe('NONE')
+    expect(built.tenders).toEqual([])
+    expect(built.tenderedMinor).toBe(0)
     expect(built.totals.totalMinor).toBe(0)
   })
 
@@ -151,6 +183,74 @@ describe('receipt model', () => {
 })
 
 describe('42-column ESC/POS text', () => {
+  /*
+   * The document a single cash sale prints, captured from the Phase 12 build
+   * before the tender set landed. It is a literal on purpose: a split-tender
+   * receipt must not have quietly changed what a plain cash sale looks like, and
+   * a regenerated expectation would have hidden exactly that.
+   */
+  const SINGLE_CASH_DOCUMENT = [
+    '              Sceptre Drive',
+    '             Accra - Spintex',
+    '          ACC-SPX - ACC-SPX-T01',
+    '------------------------------------------',
+    '    RECEIPT ACC-SPX-T01-20261023-0007',
+    'Date                     23 Oct 2026 10:15',
+    'Cashier                            GA-0003',
+    '------------------------------------------',
+    'Brake Pad Set',
+    '  2 x GHS 60.00                 GHS 120.00',
+    '  Tax (20%)                      GHS 20.00',
+    '------------------------------------------',
+    'Subtotal                        GHS 120.00',
+    'Taxable base                    GHS 100.00',
+    'VAT 15%                          GHS 15.00',
+    'NHIL 2.5%                         GHS 2.50',
+    'GETFund 2.5%                      GHS 2.50',
+    'TOTAL                           GHS 120.00',
+    '------------------------------------------',
+    'Cash                            GHS 150.00',
+    'Change                           GHS 30.00',
+    '------------------------------------------',
+    'Thank you',
+  ]
+
+  it('prints a single cash sale exactly as it printed before split tender', () => {
+    expect(toEscPosLines(model()).map((line) => line.text)).toEqual(SINGLE_CASH_DOCUMENT)
+  })
+
+  it('prints one line per tender, then the total paid, for a split', () => {
+    const text = toEscPosLines(
+      buildReceiptModel({
+        sale: { ...SALE, changeMinor: 0 },
+        lines: [LINE],
+        tenders: [CASH_PART, CREDIT],
+        context: CONTEXT,
+      }),
+    ).map((line) => line.text)
+
+    expect(text).toContain(leftRight('Cash', 'GHS 40.00'))
+    expect(text).toContain(leftRight('Credit', 'GHS 80.00'))
+    expect(text).toContain(leftRight('Tendered', 'GHS 120.00'))
+    // A split always states the change, even when it is zero: the customer has
+    // just watched two numbers go in and needs the third.
+    expect(text).toContain(leftRight('Change', 'GHS 0.00'))
+  })
+
+  it('prints no change line when a credit tender is the whole payment', () => {
+    const text = toEscPosLines(
+      buildReceiptModel({
+        sale: { ...SALE, changeMinor: 0 },
+        lines: [LINE],
+        tenders: [{ ...CREDIT, sequence: 1, amountMinor: 12_000 }],
+        context: CONTEXT,
+      }),
+    ).map((line) => line.text)
+
+    expect(text).toContain(leftRight('Credit', 'GHS 120.00'))
+    expect(text).not.toContain(leftRight('Change', 'GHS 0.00'))
+  })
+
   it('never exceeds the paper width and prints every money field', () => {
     const lines = toEscPosLines(model())
     const text = lines.map((line) => line.text)
@@ -228,7 +328,9 @@ describe('42-column ESC/POS text', () => {
         totalMinor: 0,
       },
       lines: [],
-      tender: { method: 'NONE', amountMinor: 0, changeMinor: 0 },
+      tenders: [],
+      tenderedMinor: 0,
+      changeMinor: 0,
       loyalty: null,
     })
       .map((line) => line.text)
