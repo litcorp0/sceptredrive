@@ -95,6 +95,13 @@ export const transferListQuerySchema = z.object({
     ])
     .optional(),
   direction: z.enum(['from', 'to']).optional(),
+  /**
+   * The period, in Accra days, applied to `dispatched_at` (P14-D19/D20). A transfer that
+   * has not been dispatched has no date to fall in, so it is excluded by a ranged list —
+   * which is the honest answer to "what left the branch between these dates".
+   */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   limit: limitSchema,
   offset: offsetSchema,
 })

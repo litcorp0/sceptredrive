@@ -31,6 +31,9 @@ export const countLinesUpdateSchema = z
 export const countListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   status: z.enum(stockCountStatusEnum.enumValues).optional(),
+  /** The period, in Accra days, applied to `created_at` (P14-D19/D20). */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   limit: limitSchema,
   offset: offsetSchema,
 })

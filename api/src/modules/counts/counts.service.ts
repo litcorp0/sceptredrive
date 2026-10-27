@@ -242,6 +242,16 @@ export async function createCount(
   return loadCountDetail(countId)
 }
 
+/** A date-only boundary (midnight UTC = midnight Accra) means the whole day, inclusive. */
+function inclusiveEnd(date: Date): Date {
+  const isMidnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  return isMidnight ? new Date(date.getTime() + 86_400_000 - 1) : date
+}
+
 export async function listCounts(
   user: SessionUser,
   query: CountListQuery,
@@ -250,6 +260,8 @@ export async function listCounts(
   const filters = {
     branchId,
     status: query.status,
+    from: query.from,
+    to: query.to ? inclusiveEnd(query.to) : undefined,
     limit: query.limit,
     offset: query.offset,
   }

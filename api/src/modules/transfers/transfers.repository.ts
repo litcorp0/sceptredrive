@@ -1,5 +1,5 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -156,6 +156,9 @@ function transferConditions(filters: TransferListFilters) {
     }
   }
   if (filters.status) conditions.push(eq(transfer.status, filters.status))
+  // A period is about dispatch: a DRAFT has not left the building yet.
+  if (filters.from) conditions.push(gte(transfer.dispatchedAt, filters.from))
+  if (filters.to) conditions.push(lte(transfer.dispatchedAt, filters.to))
   return conditions
 }
 

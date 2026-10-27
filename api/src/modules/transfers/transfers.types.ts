@@ -52,6 +52,8 @@ export interface TransferListQuery {
   branchId?: string
   status?: TransferStatus
   direction?: TransferDirection
+  from?: Date
+  to?: Date
   limit: number
   offset: number
 }
@@ -60,6 +62,10 @@ export interface TransferListFilters {
   branchId: string | null
   status?: TransferStatus | undefined
   direction?: TransferDirection | undefined
+  /** Inclusive lower bound on `dispatched_at`. */
+  from?: Date | undefined
+  /** Inclusive upper bound on `dispatched_at`; the service widens a day boundary. */
+  to?: Date | undefined
   limit: number
   offset: number
 }

@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { abcClassFromShare, countAccuracyBp, ratioBp } from '@sceptre/shared'
-import { and, asc, count, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from 'drizzle-orm'
 import { category } from '../catalog/catalog.schema.ts'
 import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -264,6 +264,8 @@ function countConditions(filters: CountListFilters) {
   const conditions = []
   if (filters.branchId) conditions.push(eq(stockCount.branchId, filters.branchId))
   if (filters.status) conditions.push(eq(stockCount.status, filters.status))
+  if (filters.from) conditions.push(gte(stockCount.createdAt, filters.from))
+  if (filters.to) conditions.push(lte(stockCount.createdAt, filters.to))
   return conditions
 }
 

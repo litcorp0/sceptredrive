@@ -34,6 +34,8 @@ export interface CountLinesUpdateInput {
 export interface CountListQuery {
   branchId?: string
   status?: StockCountStatus
+  from?: Date
+  to?: Date
   limit: number
   offset: number
 }
@@ -41,6 +43,10 @@ export interface CountListQuery {
 export interface CountListFilters {
   branchId: string | null
   status?: StockCountStatus | undefined
+  /** Inclusive lower bound on `created_at`. */
+  from?: Date | undefined
+  /** Inclusive upper bound on `created_at`; the service widens a day boundary. */
+  to?: Date | undefined
   limit: number
   offset: number
 }
