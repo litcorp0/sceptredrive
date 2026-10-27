@@ -133,6 +133,8 @@ async function signIn(page, email, password) {
 const SECTIONS = [
 	["/", "Today at"],
 	["/analytics", "Analytics"],
+	["/approvals", "Approvals"],
+	["/operations", "Branch operations"],
 	["/branches", "Branches"],
 	["/terminals", "Terminals"],
 	["/staff", "Staff"],
@@ -147,8 +149,10 @@ const SECTIONS = [
 	["/inventory/transfers/new", "New transfer"],
 	["/inventory/counts", "Counts"],
 	["/inventory/counts/new", "New stock count"],
+	["/inventory/write-offs", "Write-offs"],
 	["/customers", "Customers"],
 	["/customers/aging", "Aging"],
+	["/customers/over-limit", "Over the credit limit"],
 	["/loyalty", "Loyalty"],
 	["/suppliers", "Suppliers"],
 	["/suppliers/invoices", "Invoices"],
@@ -161,6 +165,128 @@ const SECTIONS = [
 	["/audit", "Audit"],
 	["/settings", "Settings"],
 ]
+
+/** Screenshots land in the run's evidence directory, never a hard-coded phase folder. */
+async function shot(page, name) {
+	await page.screenshot({ path: path.join(evidenceDir, name), fullPage: true })
+}
+
+/** The column headings a table actually rendered, in document order. */
+function tableHeaders(page) {
+	return page.locator('main [data-slot="table-head"]').allInnerTexts()
+}
+
+function bodyRows(page) {
+	return page.locator('main [data-slot="table-body"] [data-slot="table-row"]')
+}
+
+/**
+ * Per-section data assertions for the screens Phase 12 added.
+ *
+ * A title proves the route rendered; it does not prove the screen queried its own list and
+ * showed the answer. Each callback runs after the generic `visit()` check, so a screen that
+ * throws still fails there first, and these assertions fail if the table or empty state is
+ * missing.
+ */
+const SECTION_ASSERTIONS = new Map([
+	[
+		"/approvals",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Type", "Request", "Branch", "Value", "Requester", "Status"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/approvals renders its inbox columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 ||
+					/Nothing is waiting for a decision\.|No requests match these filters\./.test(text),
+				"/approvals shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			await shot(page, "plan12-approvals-1440.png")
+		},
+	],
+	[
+		"/operations",
+		async (page) => {
+			const text = await page.locator("main").innerText()
+			const queueLabels = [
+				"Pending approvals",
+				"Transfer requests",
+				"Write-offs awaiting decision",
+				"Shift variances awaiting review",
+				"Products at or below threshold",
+				"Customers over their limit",
+			].filter((label) => text.includes(label))
+			const cards = await page.locator('main [data-slot="card"]').count()
+			check(
+				cards > 0 && queueLabels.length > 0,
+				"/operations renders its queue cards",
+				`${cards} cards, queues: ${queueLabels.join(", ") || "none"}`,
+			)
+			check(
+				text.includes("What needs a decision or a look today"),
+				"/operations says what the page is for",
+			)
+			await shot(page, "plan12-operations-1440.png")
+		},
+	],
+	[
+		"/inventory/write-offs",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Number", "Branch", "Status", "Lines", "Frozen value"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/inventory/write-offs renders its document columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No write-offs match these filters."),
+				"/inventory/write-offs shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			await shot(page, "plan12-write-offs-1440.png")
+		},
+	],
+	[
+		"/customers/over-limit",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Customer", "Branch", "Limit", "Balance", "Over by"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/customers/over-limit renders its exposure columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No customer is over their limit in this branch."),
+				"/customers/over-limit shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(
+				!/NaN|undefined/.test(text),
+				"/customers/over-limit formats every figure",
+				text.slice(0, 120),
+			)
+			await shot(page, "plan12-over-limit-1440.png")
+		},
+	],
+])
 
 /** Copy that means the screen did not actually work. */
 const BROKEN = [
@@ -204,14 +330,26 @@ function watch(page) {
 async function visit(page, route, expected) {
 	const before = { errors: consoleErrors.length, failed: failedRequests.length }
 	await page.goto(`${adminUrl}${route}`, { waitUntil: "networkidle" })
-	await page.locator("main").waitFor({ timeout: 20_000 })
+	// A route that throws inside its page component renders the router's error boundary instead
+	// of `<main>`. Record that as a failed check (with the boundary's text) and keep walking, so
+	// one broken screen cannot hide every section after it.
+	let rendered = true
+	await page
+		.locator("main")
+		.waitFor({ timeout: 20_000 })
+		.catch(() => {
+			rendered = false
+		})
 
-	const text = await page.locator("main").innerText()
+	const text = rendered
+		? await page.locator("main").innerText()
+		: await page.locator("body").innerText()
 	const newErrors = consoleErrors.slice(before.errors)
 	const newFailed = failedRequests.slice(before.failed)
 	const broken = BROKEN.find((pattern) => pattern.test(text))
 
 	const ok =
+		rendered &&
 		page.url().includes(route.split("?")[0]) &&
 		!broken &&
 		newErrors.length === 0 &&
@@ -221,15 +359,17 @@ async function visit(page, route, expected) {
 	check(
 		ok,
 		`${route} renders${expected ? ` "${expected}"` : ""}`,
-		broken
-			? `page contains ${broken}`
-			: newErrors.length > 0
-				? `console: ${newErrors[0].slice(0, 120)}`
-				: newFailed.length > 0
-					? `request: ${newFailed[0]}`
-					: expected && !text.includes(expected)
-						? `missing "${expected}"`
-						: undefined,
+		!rendered
+			? `no <main> rendered: ${text.slice(0, 120).replace(/\s+/g, " ")}`
+			: broken
+				? `page contains ${broken}`
+				: newErrors.length > 0
+					? `console: ${newErrors[0].slice(0, 120)}`
+					: newFailed.length > 0
+						? `request: ${newFailed[0]}`
+						: expected && !text.includes(expected)
+							? `missing "${expected}"`
+							: undefined,
 	)
 	return text
 }
@@ -259,17 +399,135 @@ async function firstHref(page, pattern, timeoutMs = 8_000) {
 }
 
 /** API calls from the browser context, so the session cookie the UI holds is the one used. */
-async function contextApi(request, method, path, data) {
+async function contextFetch(request, method, path, { data, token } = {}) {
 	const base = process.env.API_BASE_URL ?? envValue("VITE_API_URL") ?? "http://localhost:4000"
-	const response = await request.fetch(`${base}${path}`, {
-		method,
-		headers: {
-			origin: adminUrl,
-			...(data === undefined ? {} : { "content-type": "application/json" }),
-		},
-		data,
-	})
+	const headers = { origin: adminUrl }
+	if (token) headers.authorization = `Bearer ${token}`
+	if (data !== undefined) headers["content-type"] = "application/json"
+	const response = await request.fetch(`${base}${path}`, { method, headers, data })
 	return { status: response.status(), body: await response.json().catch(() => null) }
+}
+
+function contextApi(request, method, path, data) {
+	return contextFetch(request, method, path, { data })
+}
+
+/** The pending-approval badge in the sidebar; absent means a clean queue, i.e. zero. */
+async function badgeCount(page) {
+	const badge = page.locator('[aria-label$="pending approvals"]').first()
+	if ((await badge.count()) === 0) return 0
+	return Number.parseInt((await badge.innerText()).trim(), 10)
+}
+
+/** Poll a value that a background query will change; no fixed sleeps. */
+async function waitUntil(page, read, predicate, timeoutMs = 20_000) {
+	const deadline = Date.now() + timeoutMs
+	let value = await read()
+	while (!predicate(value) && Date.now() < deadline) {
+		await page.waitForTimeout(250)
+		value = await read()
+	}
+	return value
+}
+
+/**
+ * A real closed shift with a variance over the branch tolerance, driven the way a terminal
+ * drives it: enrol a device, mint a device JWT, then POST the same sync upload the POS posts.
+ * Returns the id of the pending `SHIFT_VARIANCE_REVIEW` it raised, or null with the failure
+ * recorded rather than faked.
+ */
+async function createShiftVarianceApproval(request, branchId, cashierEmail) {
+	const terminalResponse = await contextApi(request, "POST", "/api/terminals", {
+		branchId,
+		name: `Console walkthrough ${Date.now()}`,
+	})
+	const terminal = terminalResponse.body?.terminal
+	if (!terminal) return null
+
+	const enrollment = (await contextApi(request, "POST", `/api/terminals/${terminal.id}/enrollment`))
+		.body?.enrollment
+	if (!enrollment) return null
+
+	const redeemed = await contextApi(request, "POST", "/api/enrollments/redeem", {
+		code: enrollment.code,
+		fingerprint: `console-walkthrough-${Date.now()}`,
+	})
+	const deviceToken = redeemed.body?.deviceToken
+	if (!deviceToken) return null
+
+	const deviceSession = await contextFetch(request, "POST", "/api/pos/session", {
+		token: deviceToken,
+	})
+	const device = deviceSession.body
+	if (!device?.accessToken) return null
+
+	const settings = await contextApi(request, "GET", `/api/settings?branchId=${branchId}`)
+	const tolerance = (settings.body?.settings ?? []).find(
+		(row) => row.key === "pos.shiftVarianceToleranceMinor",
+	)?.value
+	const staff = (
+		await contextApi(
+			request,
+			"GET",
+			`/api/staff?search=${encodeURIComponent(cashierEmail)}&limit=20`,
+		)
+	).body?.staff?.find((row) => row.email === cashierEmail)
+	if (typeof tolerance !== "number" || !staff?.id || !staff?.staffId) return null
+
+	const shiftId = crypto.randomUUID()
+	const upload = (transactions) =>
+		contextFetch(request, "POST", "/api/pos/sync/upload", {
+			token: device.accessToken,
+			data: {
+				batchId: crypto.randomUUID(),
+				deviceId: device.deviceId,
+				terminalId: device.terminal.id,
+				transactions,
+			},
+		})
+
+	const opened = await upload([
+		{
+			clientTransactionId: crypto.randomUUID(),
+			type: "SHIFT_OPEN",
+			occurredAt: new Date().toISOString(),
+			payloadVersion: 1,
+			payload: {
+				shiftId,
+				number: `CW-${Date.now()}`,
+				openingFloatMinor: 0,
+				cashierUserId: staff.id,
+				cashierStaffId: staff.staffId,
+				occurredAt: new Date().toISOString(),
+			},
+		},
+	])
+	if (opened.body?.results?.[0]?.status !== "APPLIED") return null
+
+	// One pesewa over tolerance, so the server raises the review and this is not a fake row.
+	const closed = await upload([
+		{
+			clientTransactionId: crypto.randomUUID(),
+			type: "SHIFT_CLOSE",
+			occurredAt: new Date().toISOString(),
+			payloadVersion: 1,
+			payload: {
+				shiftId,
+				countedCashMinor: tolerance + 1,
+				clientExpectedCashMinor: 0,
+				closeNote: "Console walkthrough: drawer one pesewa over tolerance.",
+				occurredAt: new Date().toISOString(),
+			},
+		},
+	])
+	if (closed.body?.results?.[0]?.status !== "APPLIED") return null
+
+	const approvals = await contextApi(
+		request,
+		"GET",
+		`/api/approvals?type=SHIFT_VARIANCE_REVIEW&entityId=${shiftId}&status=PENDING`,
+	)
+	return approvals.body?.approvals?.[0]?.id ?? null
 }
 
 // --- run --------------------------------------------------------------------
@@ -288,6 +546,8 @@ try {
 	section("every section")
 	for (const [route, expected] of SECTIONS) {
 		await visit(page, route, expected)
+		const assertions = SECTION_ASSERTIONS.get(route)
+		if (assertions) await assertions(page)
 	}
 
 	section("detail screens")
@@ -601,6 +861,431 @@ try {
 		fullPage: true,
 	})
 
+	section("branch operations (manager)")
+
+	const managerBranchesResponse = await contextApi(managerPage.request, "GET", "/api/branches")
+	const managerBranch = managerBranchesResponse.body?.branches?.[0]
+	const managerSessionResponse = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/auth/get-session",
+	)
+	const managerStaffId = managerSessionResponse.body?.user?.staffId ?? ""
+	const managerBranchId = managerBranch?.id ?? ""
+	check(
+		Boolean(managerBranchId && managerStaffId),
+		"the manager session names its branch and its staff id",
+		`${managerBranch?.code ?? "no branch"} ${managerStaffId || "no staff id"}`,
+	)
+
+	// Enough stock to write one off, and a product with no pending price change so the
+	// override row is editable. Both come from the API the screen itself reads.
+	const managerStock = await contextApi(
+		managerPage.request,
+		"GET",
+		`/api/inventory/stock?branchId=${managerBranchId}&limit=200`,
+	)
+	const pendingPrices = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/approvals?type=PRICE_CHANGE&status=PENDING&limit=100",
+	)
+	const blockedPriceProducts = new Set(
+		(pendingPrices.body?.approvals ?? []).map((row) => row.entityId),
+	)
+	const priceProduct = (managerStock.body?.stock ?? []).find(
+		(row) => !blockedPriceProducts.has(row.productId),
+	)
+	const writeOffProduct = (managerStock.body?.stock ?? []).find((row) => row.quantityOnHand >= 1)
+	check(
+		Boolean(priceProduct && writeOffProduct),
+		"the manager has a product to price and one to write off",
+		JSON.stringify({ price: priceProduct?.sku, writeOff: writeOffProduct?.sku }),
+	)
+
+	// 1. Raise a transfer request through the form.
+	await managerPage.goto(`${adminUrl}/inventory/transfers/new`, { waitUntil: "networkidle" })
+	await managerPage.locator("main").waitFor()
+	await managerPage.locator("#from-branch").click()
+	const sourceOptionText = (await managerPage.getByRole("option").allInnerTexts()).find(
+		(text) => !text.includes(managerBranch?.code ?? ""),
+	)
+	await managerPage.getByRole("option", { name: sourceOptionText, exact: true }).click()
+	const transferSearch = managerPage.getByRole("textbox", { name: "Search products" })
+	await transferSearch.fill(writeOffProduct.sku)
+	const transferResults = managerPage.getByRole("list", { name: "Product results" })
+	const transferResult = transferResults
+		.getByRole("button")
+		.filter({ hasText: writeOffProduct.sku })
+	await transferResult.waitFor({ timeout: 10_000 })
+	await transferResult.click()
+	// The picker loads the product detail before it calls onSelect. Typing the quantity while
+	// that request is in flight lets the late onSelect overwrite the draft line and clear it.
+	await transferSearch.waitFor({ state: "detached", timeout: 10_000 })
+	const transferQuantity = managerPage.getByLabel("Requested quantity for line 1")
+	await transferQuantity.fill("2")
+	if ((await transferQuantity.inputValue()) !== "2") {
+		throw new Error("the transfer line did not keep the requested quantity")
+	}
+	await managerPage.getByRole("button", { name: "Request transfer" }).click()
+	await managerPage.waitForURL(/\/inventory\/transfers\/[0-9a-f-]{36}$/, { timeout: 20_000 })
+	await managerPage.getByRole("heading", { name: /^Transfer TRF-/ }).waitFor({ timeout: 20_000 })
+
+	const transferPath = new URL(managerPage.url()).pathname
+	const transferId = transferPath.split("/").pop()
+	const transferText = await managerPage.locator("main").innerText()
+	const transferNumber = (transferText.match(/Transfer\s+(TRF-\S+)/) ?? [])[1] ?? ""
+	check(
+		Boolean(transferId && transferNumber),
+		"the manager raises a transfer request through the form",
+		transferNumber,
+	)
+	check(
+		transferText.includes("Waiting for the source branch") &&
+			transferText.includes("Withdraw request"),
+		"the new request waits for the source branch and stays withdrawable by its requester",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-transfer-request-manager.png"),
+		fullPage: true,
+	})
+
+	// 2. The inbox shows it, attributed to the requester, with no decision controls.
+	await managerPage.goto(`${adminUrl}/approvals?type=TRANSFER_REQUEST`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	const transferApprovalLookup = await contextApi(
+		managerPage.request,
+		"GET",
+		`/api/approvals?type=TRANSFER_REQUEST&status=PENDING&entityId=${transferId}`,
+	)
+	const transferApprovalRow = transferApprovalLookup.body?.approvals?.[0]
+	const transferRow = transferApprovalRow
+		? managerPage.locator('main [data-slot="table-body"] [data-slot="table-row"]').filter({
+				has: managerPage.locator(`a[href="/approvals/${transferApprovalRow.id}"]`),
+			})
+		: managerPage
+				.locator('main [data-slot="table-body"] [data-slot="table-row"]')
+				.filter({ hasText: "__missing approval__" })
+	const transferRowCount = await transferRow.count()
+	check(
+		transferRowCount === 1,
+		"the manager's own transfer request is in their inbox",
+		`${transferRowCount} rows for ${transferNumber || "(no number)"}`,
+	)
+	let transferApprovalId = ""
+	if (transferRowCount === 1) {
+		check(
+			(await transferRow.innerText()).includes(managerStaffId),
+			"the inbox names the manager as the requester",
+			managerStaffId,
+		)
+		await transferRow.locator('a[href^="/approvals/"]').last().click()
+		await managerPage.waitForURL(/\/approvals\/[0-9a-f-]{36}$/, { timeout: 20_000 })
+		await managerPage
+			.getByText(/Requested by/)
+			.first()
+			.waitFor({ timeout: 20_000 })
+		transferApprovalId = new URL(managerPage.url()).pathname.split("/").pop()
+		const requesterView = await managerPage.locator("main").innerText()
+		check(
+			requesterView.includes(`Requested by ${managerStaffId}`),
+			"the request detail names the manager as its requester",
+		)
+		check(
+			(await managerPage.getByRole("button", { name: "Approve" }).count()) === 0 &&
+				(await managerPage.getByRole("button", { name: "Reject" }).count()) === 0,
+			"the requester is offered no decision controls",
+		)
+		check(
+			requesterView.includes("Only the authorised decider can act on this request."),
+			"the detail says why the requester cannot decide it",
+		)
+		await managerPage.screenshot({
+			path: path.join(evidenceDir, "plan12-approval-requester.png"),
+			fullPage: true,
+		})
+	} else {
+		check(false, "the requester can open their own transfer request")
+	}
+
+	// 3. A price outside the band states the band and asks for a request, not a save.
+	await managerPage.goto(`${adminUrl}/catalog/products/${priceProduct.productId}`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	const priceInput = managerPage.locator(
+		`input[aria-label="Override price for ${managerBranch.name}"]`,
+	)
+	check(
+		(await priceInput.count()) === 1,
+		"the manager's branch has a price override row",
+		managerBranch.name,
+	)
+	const priceForm = priceInput.locator("xpath=ancestor::form")
+	const priceRowText = await priceForm.innerText()
+	const effectivePrice = Number.parseFloat(
+		(priceRowText.match(/Effective:\s*GHS\s*([\d,]+\.\d{2})/) ?? [])[1]?.replace(/,/g, "") ?? "",
+	)
+	check(
+		Number.isFinite(effectivePrice) && effectivePrice > 0,
+		"the override row prints the effective price the band is judged from",
+		priceRowText.slice(0, 100),
+	)
+	await priceInput.fill((effectivePrice * 1.5).toFixed(2))
+	const bandText = await priceForm.innerText()
+	check(
+		/outside the \d+% manager band/.test(bandText),
+		"a value outside the band prints the band sentence",
+		bandText.slice(-160),
+	)
+	check(
+		(await priceForm.getByRole("button", { name: "Request price change" }).count()) === 1,
+		"the submit button becomes Request price change",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-price-band.png"),
+		fullPage: true,
+	})
+	await priceForm.getByRole("button", { name: "Request price change" }).click()
+	await managerPage.getByText("Waiting for approval.").first().waitFor({ timeout: 20_000 })
+	check(
+		await priceInput.isDisabled(),
+		"the price row locks once its change is waiting for a decision",
+	)
+	const priceApprovals = await contextApi(
+		managerPage.request,
+		"GET",
+		`/api/approvals?type=PRICE_CHANGE&status=PENDING&entityId=${priceProduct.productId}&limit=5`,
+	)
+	const priceApprovalId = priceApprovals.body?.approvals?.[0]?.id ?? ""
+	check(Boolean(priceApprovalId), "the price change exists as a pending approval")
+
+	// 4. A higher credit limit is a request with a reason; the direct path is refused.
+	const creditCustomer = (
+		await contextApi(managerPage.request, "GET", "/api/customers?q=Kwame&limit=5")
+	).body?.customers?.[0]
+	check(Boolean(creditCustomer?.id), "the demo customer for the credit request exists")
+	await managerPage.goto(`${adminUrl}/customers/${creditCustomer.id}`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	await managerPage.getByRole("tab", { name: "Credit" }).click()
+	const creditButton = managerPage.getByRole("button", { name: /Set up credit|Credit settings/ })
+	await creditButton.waitFor({ timeout: 20_000 })
+	await creditButton.click()
+	const creditDialog = managerPage.getByRole("dialog")
+	await creditDialog.waitFor()
+	const limitInput = creditDialog.locator("#credit-limit")
+	const currentLimit = Number.parseFloat(await limitInput.inputValue())
+	const proposedLimit = (currentLimit + 500).toFixed(2)
+	await limitInput.fill(proposedLimit)
+	check(
+		(await creditDialog.locator("#credit-limit-reason").count()) === 1,
+		"a higher limit reveals the reason field",
+	)
+	check(
+		(await creditDialog.getByRole("button", { name: "Request increase" }).count()) === 1,
+		"the dialog offers Request increase instead of Save settings",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-credit-request-dialog.png"),
+		fullPage: true,
+	})
+	const directIncrease = await contextApi(
+		managerPage.request,
+		"PUT",
+		`/api/credit/profiles/${creditCustomer.id}`,
+		{ branchId: managerBranchId, limitMinor: Math.round(Number(proposedLimit) * 100) },
+	)
+	check(
+		directIncrease.status === 403,
+		"the manager's direct limit increase is refused",
+		`${directIncrease.status} ${JSON.stringify(directIncrease.body)}`,
+	)
+	await creditDialog
+		.locator("#credit-limit-reason")
+		.fill("Console walkthrough: the customer needs a higher trade limit.")
+	await creditDialog.getByRole("button", { name: "Request increase" }).click()
+	await managerPage
+		.getByText("Credit limit increase requested")
+		.first()
+		.waitFor({ timeout: 20_000 })
+	const creditApprovals = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/approvals?type=CREDIT_LIMIT_CHANGE&status=PENDING&sort=newest&limit=20",
+	)
+	const creditApproval = (creditApprovals.body?.approvals ?? []).find(
+		(row) => row.payload?.customerId === creditCustomer.id,
+	)
+	check(Boolean(creditApproval?.id), "the credit increase exists as a pending approval")
+
+	// 5. The write-off form requires a note for a theft, and refuses to submit without it.
+	await managerPage.goto(`${adminUrl}/inventory/write-offs/new`, { waitUntil: "networkidle" })
+	await managerPage.locator("main").waitFor()
+	const writeOffSearch = managerPage.getByRole("textbox", { name: "Search products" })
+	await writeOffSearch.fill(writeOffProduct.sku)
+	const writeOffResults = managerPage.getByRole("list", { name: "Product results" })
+	const writeOffResult = writeOffResults
+		.getByRole("button")
+		.filter({ hasText: writeOffProduct.sku })
+	await writeOffResult.waitFor({ timeout: 10_000 })
+	await writeOffResult.click()
+	// Same race as the transfer line: wait for the picker to resolve the product detail and call
+	// onSelect before typing, otherwise that late call rebuilds the line and clears the quantity.
+	await writeOffSearch.waitFor({ state: "detached", timeout: 10_000 })
+	const writeOffQuantity = managerPage.getByLabel("Quantity for line 1")
+	await writeOffQuantity.fill("1")
+	if ((await writeOffQuantity.inputValue()) !== "1") {
+		throw new Error("the write-off line did not keep the quantity typed into it")
+	}
+	await managerPage.locator('[id^="write-off-reason-"]').click()
+	await managerPage.getByRole("option", { name: "Stolen", exact: true }).click()
+	const lineNote = managerPage.locator('[id^="write-off-note-"][aria-required="true"]')
+	check((await lineNote.count()) === 1, "a theft write-off marks its line note as required")
+	check(
+		(await managerPage.getByText("(required for this reason)").count()) > 0,
+		"the form says the note is required for this reason",
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-write-off-form.png"),
+		fullPage: true,
+	})
+	await managerPage.getByRole("button", { name: "Submit for approval" }).click()
+	const writeOffAlert = managerPage.getByRole("alert")
+	await writeOffAlert.waitFor({ timeout: 10_000 })
+	const writeOffAlertText = await writeOffAlert.innerText()
+	check(
+		/needs a note explaining what happened/i.test(writeOffAlertText),
+		"submitting without the note is refused with an explanation",
+		writeOffAlertText,
+	)
+	await lineNote.fill("Console walkthrough: one unit missing at the stock take.")
+	await managerPage.getByRole("button", { name: "Submit for approval" }).click()
+	await managerPage.waitForURL(/\/inventory\/write-offs\/[0-9a-f-]{36}$/, { timeout: 20_000 })
+	await managerPage.getByRole("heading", { name: /^Write-off WO-/ }).waitFor({
+		timeout: 20_000,
+	})
+	const writeOffText = await managerPage.locator("main").innerText()
+	const writeOffNumber = (writeOffText.match(/Write-off\s+(WO-\S+)/) ?? [])[1] ?? ""
+	check(
+		Boolean(writeOffNumber),
+		"the manager raises the write-off through the form",
+		writeOffNumber,
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-write-off-detail.png"),
+		fullPage: true,
+	})
+	const writeOffApprovals = await contextApi(
+		managerPage.request,
+		"GET",
+		"/api/approvals?type=STOCK_WRITE_OFF&status=PENDING&sort=newest&limit=20",
+	)
+	const writeOffApproval = (writeOffApprovals.body?.approvals ?? []).find(
+		(row) => row.payload?.number === writeOffNumber,
+	)
+	check(Boolean(writeOffApproval?.id), "the write-off is waiting as an approval")
+
+	// 6. 1024 x 768: the inbox scrolls its wide table; both request forms stay usable.
+	section("1024x768 layout")
+	await managerPage.setViewportSize({ width: 1024, height: 768 })
+
+	await managerPage.goto(`${adminUrl}/approvals?type=TRANSFER_REQUEST`, {
+		waitUntil: "networkidle",
+	})
+	await managerPage.locator("main").waitFor()
+	await managerPage.locator('main [data-slot="table-container"]').first().waitFor()
+	const inboxGeometry = await managerPage.evaluate(() => {
+		const container = document.querySelector('main [data-slot="table-container"]')
+		const heads = container.querySelectorAll('[data-slot="table-head"]')
+		const last = heads[heads.length - 1]
+		const box = container.getBoundingClientRect()
+		container.scrollLeft = container.scrollWidth
+		const after = last.getBoundingClientRect()
+		return {
+			viewport: window.innerWidth,
+			document: document.documentElement.scrollWidth,
+			scrollWidth: container.scrollWidth,
+			clientWidth: container.clientWidth,
+			boxLeft: Math.round(box.left),
+			boxRight: Math.round(box.right),
+			afterLeft: Math.round(after.left),
+			afterRight: Math.round(after.right),
+		}
+	})
+	check(
+		inboxGeometry.document <= inboxGeometry.viewport + 1,
+		"1024 inbox: no page-level horizontal scroll",
+		`${inboxGeometry.document} > ${inboxGeometry.viewport}`,
+	)
+	check(
+		inboxGeometry.scrollWidth > inboxGeometry.clientWidth,
+		"1024 inbox: the wide table scrolls inside its container",
+		`${inboxGeometry.scrollWidth} vs ${inboxGeometry.clientWidth}`,
+	)
+	check(
+		inboxGeometry.afterLeft >= inboxGeometry.boxLeft - 1 &&
+			inboxGeometry.afterRight <= inboxGeometry.boxRight + 1,
+		"1024 inbox: the last column is reachable, not clipped",
+		JSON.stringify(inboxGeometry),
+	)
+	await managerPage.screenshot({
+		path: path.join(evidenceDir, "plan12-inbox-1024.png"),
+		fullPage: true,
+	})
+
+	const assertControlsAt1024 = async (route, label, controls, screenshotName) => {
+		await managerPage.goto(`${adminUrl}${route}`, { waitUntil: "networkidle" })
+		await managerPage.locator("main").waitFor()
+		const width = await managerPage.evaluate(() => ({
+			viewport: window.innerWidth,
+			document: document.documentElement.scrollWidth,
+		}))
+		check(
+			width.document <= width.viewport + 1,
+			`${label}: no horizontal scroll at 1024`,
+			`${width.document} > ${width.viewport}`,
+		)
+		for (const [name, locator] of controls) {
+			const box = await locator.boundingBox()
+			check(
+				Boolean(box && box.x >= 0 && box.x + box.width <= width.viewport + 1 && box.height > 0),
+				`${label}: ${name} is fully visible at 1024`,
+				JSON.stringify(box),
+			)
+		}
+		await managerPage.screenshot({
+			path: path.join(evidenceDir, screenshotName),
+			fullPage: true,
+		})
+	}
+
+	await assertControlsAt1024(
+		"/inventory/transfers/new",
+		"transfer request form",
+		[
+			["the source branch select", managerPage.locator("#from-branch")],
+			["the product search", managerPage.getByRole("textbox", { name: "Search products" })],
+			["the request button", managerPage.getByRole("button", { name: "Request transfer" })],
+		],
+		"plan12-transfer-form-1024.png",
+	)
+	await assertControlsAt1024(
+		"/inventory/write-offs/new",
+		"write-off form",
+		[
+			["the product search", managerPage.getByRole("textbox", { name: "Search products" })],
+			["the quantity input", managerPage.getByLabel("Quantity for line 1")],
+			["the reason select", managerPage.locator('[id^="write-off-reason-"]')],
+			["the submit button", managerPage.getByRole("button", { name: "Submit for approval" })],
+		],
+		"plan12-write-off-form-1024.png",
+	)
+	await managerPage.setViewportSize({ width: 1440, height: 1000 })
+
 	await managerContext.close()
 
 	section("procurement (admin)")
@@ -719,6 +1404,271 @@ try {
 	})
 	await page.emulateMedia({ media: "screen" })
 	check(true, "the order renders a printable sheet")
+
+	section("branch operations (admin)")
+
+	const varianceApprovalId = await createShiftVarianceApproval(
+		page.request,
+		demoBranch.id,
+		managerEmail,
+	)
+	if (!varianceApprovalId) {
+		console.log(
+			"  SKIP a shift variance review row: the device upload did not raise one in this environment, so its single action was not asserted",
+		)
+	}
+
+	// The badge is a cached query with a 60s staleTime. Reloading after the fixtures exist makes
+	// the starting number the server's, not a number from before the manager raised anything.
+	await page.reload({ waitUntil: "networkidle" })
+	const badgeBefore = await badgeCount(page)
+	check(
+		badgeBefore > 0,
+		"the sidebar badge counts the pending approvals in the selected branch",
+		String(badgeBefore),
+	)
+
+	let decided = 0
+	let badgeAfterFirst = badgeBefore
+	const approveFromDetail = async (confirmLabel = "Approve") => {
+		await page.getByRole("button", { name: confirmLabel }).first().click()
+		await page.getByRole("dialog").waitFor()
+		await page.getByRole("dialog").getByRole("button", { name: confirmLabel }).click()
+		await page
+			.getByText(/Decided by/)
+			.first()
+			.waitFor({ timeout: 20_000 })
+		decided += 1
+	}
+
+	// 1. A transfer request: the admin decides what a requester could not, and focus returns.
+	if (transferApprovalId) {
+		await page.goto(`${adminUrl}/approvals/${transferApprovalId}`, {
+			waitUntil: "networkidle",
+		})
+		await page.locator("main").waitFor()
+		const detailText = await page.locator("main").innerText()
+		check(
+			detailText.includes(`Requested by ${managerStaffId}`),
+			"the admin sees the manager as the transfer requester",
+		)
+		check(
+			detailText.includes("Goods value") && detailText.includes("Open the transfer"),
+			"the transfer request renders its goods value and a link to the document",
+		)
+		await shot(page, "plan12-approval-transfer-admin.png")
+
+		await page.getByRole("button", { name: "Approve" }).click()
+		await page.getByRole("dialog").waitFor()
+		await page.keyboard.press("Escape")
+		await page.getByRole("dialog").waitFor({ state: "hidden" })
+		await page.waitForTimeout(150)
+		const focusedControl = await page.evaluate(() =>
+			(document.activeElement?.textContent ?? "").trim(),
+		)
+		check(
+			focusedControl === "Approve",
+			"closing the decision dialog returns focus to the control that opened it",
+			focusedControl || "nothing focused",
+		)
+
+		await approveFromDetail("Approve")
+		check(
+			/Decided by/.test(await page.locator("main").innerText()),
+			"the admin approves the transfer request",
+		)
+		const badgeAfterTransfer = await waitUntil(
+			page,
+			() => badgeCount(page),
+			(value) => value < badgeBefore,
+		)
+		badgeAfterFirst = badgeAfterTransfer
+		check(
+			badgeAfterTransfer < badgeBefore,
+			"the sidebar badge falls after a decision",
+			`${badgeBefore} → ${badgeAfterTransfer}`,
+		)
+	}
+
+	// 2. A price change: the band it broke is visible before the decision.
+	if (priceApprovalId) {
+		await page.goto(`${adminUrl}/approvals/${priceApprovalId}`, { waitUntil: "networkidle" })
+		await page.locator("main").waitFor()
+		const detailText = await page.locator("main").innerText()
+		check(
+			/Outside the band/.test(detailText) && detailText.includes("Proposed price"),
+			"the price request shows the proposed price and the band it broke",
+		)
+		await shot(page, "plan12-approval-price.png")
+		await approveFromDetail("Approve")
+		check(
+			/Decided by/.test(await page.locator("main").innerText()),
+			"the admin approves the price change",
+		)
+	}
+
+	// 3. A credit limit change: both limits are visible, with a way to the customer.
+	if (creditApproval?.id) {
+		await page.goto(`${adminUrl}/approvals/${creditApproval.id}`, { waitUntil: "networkidle" })
+		await page.locator("main").waitFor()
+		const detailText = await page.locator("main").innerText()
+		check(
+			detailText.includes("Current limit") && detailText.includes("Proposed limit"),
+			"the credit request shows the current and proposed limits",
+		)
+		check(
+			detailText.includes("Open the customer profile"),
+			"the credit request links to the customer it changes",
+		)
+		await shot(page, "plan12-approval-credit.png")
+		await approveFromDetail("Approve")
+		check(
+			/Decided by/.test(await page.locator("main").innerText()),
+			"the admin approves the credit limit increase",
+		)
+	}
+
+	// 4. A stock write-off: the frozen value and the line are what the admin approves.
+	if (writeOffApproval?.id) {
+		await page.goto(`${adminUrl}/approvals/${writeOffApproval.id}`, {
+			waitUntil: "networkidle",
+		})
+		await page.locator("main").waitFor()
+		const detailText = await page.locator("main").innerText()
+		check(
+			/Write-off WO-/.test(detailText) && detailText.includes("Frozen value"),
+			"the write-off request renders its frozen value",
+		)
+		check(
+			detailText.includes(writeOffProduct.sku),
+			"the write-off request names the product written off",
+			writeOffProduct.sku,
+		)
+		await shot(page, "plan12-approval-write-off.png")
+		await approveFromDetail("Approve")
+		check(
+			/Decided by/.test(await page.locator("main").innerText()),
+			"the admin approves the write-off",
+		)
+	}
+
+	// 5. A variance review records an outcome; it is the only action it offers.
+	if (varianceApprovalId) {
+		await page.goto(`${adminUrl}/approvals/${varianceApprovalId}`, {
+			waitUntil: "networkidle",
+		})
+		await page.locator("main").waitFor()
+		const detailText = await page.locator("main").innerText()
+		check(
+			detailText.includes("Expected by the server") &&
+				detailText.includes("Counted by the cashier"),
+			"the variance review shows the drawer's arithmetic",
+		)
+		check(
+			(await page.getByRole("button", { name: "Record outcome" }).count()) === 1,
+			"a variance review offers exactly one action",
+		)
+		check(
+			(await page.getByRole("button", { name: "Approve" }).count()) === 0 &&
+				(await page.getByRole("button", { name: "Reject" }).count()) === 0,
+			"a variance review offers neither approve nor reject",
+		)
+		await shot(page, "plan12-approval-variance.png")
+		await page.getByRole("button", { name: "Record outcome" }).click()
+		await page.getByRole("dialog").waitFor()
+		check(
+			/cannot be rejected/.test(await page.getByRole("dialog").innerText()),
+			"the outcome dialog says a variance review cannot be rejected",
+		)
+		await page
+			.getByRole("dialog")
+			.locator("#decision-note")
+			.fill("Console walkthrough: the drawer was counted short; no sale is missing.")
+		await page.getByRole("dialog").getByRole("button", { name: "Record outcome" }).click()
+		await page
+			.getByText(/Decided by/)
+			.first()
+			.waitFor({ timeout: 20_000 })
+		decided += 1
+		check(
+			/Decided by/.test(await page.locator("main").innerText()),
+			"the admin records the variance outcome",
+		)
+	}
+
+	if (decided > 1) {
+		const badgeAfterAll = await waitUntil(
+			page,
+			() => badgeCount(page),
+			(value) => value < badgeAfterFirst,
+		)
+		check(
+			badgeAfterAll < badgeAfterFirst,
+			"the sidebar badge keeps falling as more decisions are recorded",
+			`${badgeAfterFirst} → ${badgeAfterAll} after ${decided} decisions`,
+		)
+	}
+
+	section("analytics accuracy")
+	await visit(page, "/analytics?tab=inventory", null)
+	const accuracyCard = page
+		.locator('main [data-slot="card"]')
+		.filter({ hasText: "Count accuracy" })
+		.first()
+	check((await accuracyCard.count()) === 1, "the inventory tab renders the Count accuracy card")
+	const accuracyValue = (await accuracyCard.locator('[data-slot="card-title"]').innerText()).trim()
+	const accuracyText = await accuracyCard.innerText()
+	check(
+		/^([+-]?\d+\.\d{2}%|—)$/.test(accuracyValue),
+		"the accuracy card renders a percentage or an em dash, never NaN",
+		accuracyValue,
+	)
+	if (accuracyText.includes("No count posted in this period.")) {
+		check(
+			accuracyValue === "—",
+			"a period with no counts renders an em dash, not 0.00%",
+			accuracyValue,
+		)
+	} else {
+		check(accuracyValue !== "—", "a period with posted counts renders a percentage", accuracyValue)
+	}
+	check(
+		!/NaN|Infinity/.test(accuracyText),
+		"the accuracy card contains no NaN or Infinity",
+		accuracyText.slice(0, 120),
+	)
+
+	// The same card on a branch with no posted counts must say "—", never "0.00%".
+	const warehouseBranch = (
+		await contextApi(page.request, "GET", "/api/branches")
+	).body?.branches?.find((row) => row.code === "ACC-WH1")
+	check(Boolean(warehouseBranch), "the warehouse branch exists for the no-counts case")
+	if (warehouseBranch) {
+		await visit(page, `/analytics?tab=inventory&branchId=${warehouseBranch.id}`, null)
+		const noCountsCard = page
+			.locator('main [data-slot="card"]')
+			.filter({ hasText: "Count accuracy" })
+			.first()
+		const noCountsValue = (
+			await noCountsCard.locator('[data-slot="card-title"]').innerText()
+		).trim()
+		const noCountsText = await noCountsCard.innerText()
+		check(
+			/No count posted in this period/.test(noCountsText),
+			"the warehouse branch reports no posted counts",
+		)
+		check(
+			noCountsValue === "—",
+			"a period with no counts renders an em dash, not 0.00%",
+			noCountsValue,
+		)
+		check(
+			!/NaN|0\.00%/.test(noCountsText),
+			"the no-counts card contains neither NaN nor 0.00%",
+			noCountsText.slice(0, 120),
+		)
+		await shot(page, "plan12-accuracy-no-counts.png")
+	}
 
 	section("analytics responsive matrix")
 	const WIDTHS = [320, 768, 1024, 1440]
