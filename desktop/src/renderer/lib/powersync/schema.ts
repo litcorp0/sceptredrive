@@ -283,15 +283,34 @@ export const saleLine = new Table(
   { localOnly: true, indexes: { sale_line_sale: ['sale_id'], sale_line_product: ['product_id'] } },
 )
 
+/**
+ * One row per tender, in the order the customer paid (P13-D1).
+ *
+ * `sequence` is what makes a split receipt deterministic: two cash tenders on
+ * one sale have the same `created_at`, so the order has to be a column. The
+ * three new columns are additive — a till upgrading from Phase 12 keeps its old
+ * rows, which read back with `sequence` null and are ordered by `created_at`.
+ */
 export const saleTender = new Table(
   {
     sale_id: column.text,
+    sequence: minor,
     method: column.text,
     amount_minor: minor,
     reference: column.text,
+    /** The server `payment` behind an electronic tender; null for cash/credit. */
+    payment_id: column.text,
+    /** The provider's own reference, kept for a reprint after the sale uploads. */
+    provider_reference: column.text,
     created_at: isoText,
   },
-  { localOnly: true, indexes: { sale_tender_sale: ['sale_id'] } },
+  {
+    localOnly: true,
+    indexes: {
+      sale_tender_sale: ['sale_id'],
+      sale_tender_sale_sequence: ['sale_id', 'sequence'],
+    },
+  },
 )
 
 export const cashMovement = new Table(
@@ -357,6 +376,219 @@ export const cartDraftLine = new Table(
     line_discount_override: column.text,
   },
   { localOnly: true, indexes: { cart_draft_line_draft: ['draft_id'] } },
+)
+
+/**
+ * The tenders in flight on the current draft (P13-D31).
+ *
+ * A MoMo authorisation lasts up to 180 seconds and the till can crash inside
+ * it. The draft's tenders are therefore persisted beside the draft, in the same
+ * debounced write, so a restart resumes at the pending tender instead of
+ * forgetting that GH₵50 is in flight. Cleared in the transaction that writes
+ * `sale_tender`.
+ *
+ * `status` is `PENDING | PAID | FAILED | EXPIRED` — this is the *payment's*
+ * state, copied for the screen; the sale itself is only written once the set
+ * balances (P13-D5).
+ */
+export const cartTender = new Table(
+  {
+    draft_id: column.text,
+    sequence: minor,
+    method: column.text,
+    amount_minor: minor,
+    /** Paystack mobile-money network (`mtn`, `vod`, ...) for an in-flight charge. */
+    momo_provider: column.text,
+    phone: column.text,
+    payment_id: column.text,
+    provider_reference: column.text,
+    status: column.text,
+    /** The sentence the screen shows while waiting; never a secret. */
+    display_text: column.text,
+    expires_at: isoText,
+    created_at: isoText,
+  },
+  { localOnly: true, indexes: { cart_tender_draft: ['draft_id'] } },
+)
+
+/**
+ * A parked cart (P13-D29), deliberately not `cart_draft`: the draft is
+ * single-active by construction and is pruned by shift, while a hold must
+ * survive a restart and a shift change and be visible to every cashier on the
+ * terminal.
+ *
+ * The discount proofs are the JSON a recall re-prices against; nothing here is
+ * money the server has seen yet.
+ */
+export const heldCart = new Table(
+  {
+    label: column.text,
+    held_at: isoText,
+    held_by_user_id: column.text,
+    held_by_staff_id: column.text,
+    shift_id: column.text,
+    customer_id: column.text,
+    customer_name: column.text,
+    customer_phone: column.text,
+    loyalty_redeem_points: minor,
+    sale_discount_minor: minor,
+    sale_discount_reason: column.text,
+    sale_discount_note: column.text,
+    sale_discount_override: column.text,
+    subtotal_minor: minor,
+    total_minor: minor,
+    item_count: minor,
+  },
+  { localOnly: true, indexes: { held_cart_held_at: ['held_at'] } },
+)
+
+export const heldCartLine = new Table(
+  {
+    hold_id: column.text,
+    line_number: minor,
+    product_id: column.text,
+    sku: column.text,
+    name: column.text,
+    barcode: column.text,
+    quantity: minor,
+    unit_price_minor: minor,
+    tax_category: column.text,
+    line_discount_minor: minor,
+    line_discount_reason: column.text,
+    line_discount_note: column.text,
+    line_discount_override: column.text,
+  },
+  { localOnly: true, indexes: { held_cart_line_hold: ['hold_id'] } },
+)
+
+/**
+ * A voided cart (P13-D28): a reason-coded fact with no money and no PIN, kept so
+ * a report can count abandoned baskets instead of leaving them invisible.
+ */
+export const cartVoid = new Table(
+  {
+    shift_id: column.text,
+    reason_code: column.text,
+    note: column.text,
+    item_count: minor,
+    gross_minor: minor,
+    label: column.text,
+    /** JSON snapshot of the abandoned lines, so the void can be read. */
+    lines: column.text,
+    occurred_at: isoText,
+    created_at: isoText,
+  },
+  { localOnly: true, indexes: { cart_void_created: ['created_at'] } },
+)
+
+/**
+ * The local mirror of a refund document (P13-D17/D19).
+ *
+ * The till has to know what is still refundable with the network unplugged, so
+ * the caps are computed from these rows, not from a server answer. The tax
+ * columns are the reversal as `taxBreakdown` computed it, never `total × 0.2`.
+ */
+export const refund = new Table(
+  {
+    number: column.text,
+    sale_id: column.text,
+    shift_id: column.text,
+    reason_code: column.text,
+    note: column.text,
+    refunded_minor: minor,
+    base_minor: minor,
+    vat_minor: minor,
+    nhil_minor: minor,
+    getfund_minor: minor,
+    tax_total_minor: minor,
+    total_minor: minor,
+    approved_by_staff_id: column.text,
+    approved_at: isoText,
+    occurred_at: isoText,
+    created_at: isoText,
+  },
+  { localOnly: true, indexes: { refund_sale: ['sale_id'] } },
+)
+
+export const refundLine = new Table(
+  {
+    refund_id: column.text,
+    sale_line_id: column.text,
+    quantity: minor,
+    /** `RESALABLE | DAMAGED | NOT_RETURNED`; only the first moves stock back. */
+    restock: column.text,
+    damage_reason: column.text,
+    total_minor: minor,
+  },
+  {
+    localOnly: true,
+    indexes: {
+      refund_line_refund: ['refund_id'],
+      refund_line_sale_line: ['sale_line_id'],
+    },
+  },
+)
+
+export const refundTender = new Table(
+  {
+    refund_id: column.text,
+    sequence: minor,
+    method: column.text,
+    amount_minor: minor,
+    sale_tender_id: column.text,
+    payment_id: column.text,
+    status: column.text,
+  },
+  { localOnly: true, indexes: { refund_tender_refund: ['refund_id'] } },
+)
+
+/**
+ * The Z-report snapshot (P13-D32), written by the close in the same transaction
+ * that closes the shift. One row per shift, no update path: a correction is a
+ * new document, never an edit. The columns mirror the server table so a printed
+ * report and the console cannot disagree about the figures.
+ */
+export const shiftReport = new Table(
+  {
+    shift_id: column.text,
+    branch_id: column.text,
+    terminal_id: column.text,
+    device_id: column.text,
+    number: column.text,
+    opened_at: isoText,
+    closed_at: isoText,
+    opening_float_minor: minor,
+    sale_count: minor,
+    item_count: minor,
+    refund_count: minor,
+    void_count: minor,
+    gross_minor: minor,
+    refund_minor: minor,
+    net_minor: minor,
+    line_discount_minor: minor,
+    sale_discount_minor: minor,
+    loyalty_discount_minor: minor,
+    loyalty_redeem_points: minor,
+    loyalty_earned_points: minor,
+    base_minor: minor,
+    vat_minor: minor,
+    nhil_minor: minor,
+    getfund_minor: minor,
+    tax_total_minor: minor,
+    cash_minor: minor,
+    credit_minor: minor,
+    momo_minor: minor,
+    card_minor: minor,
+    bank_transfer_minor: minor,
+    change_minor: minor,
+    cash_in_minor: minor,
+    cash_out_minor: minor,
+    expected_cash_minor: minor,
+    counted_cash_minor: minor,
+    variance_minor: minor,
+    created_at: isoText,
+  },
+  { localOnly: true, indexes: { shift_report_shift: ['shift_id'] } },
 )
 
 /** Offline-created customer. `acked_at` is set once the server resolves the id. */
@@ -521,6 +753,14 @@ export const PosSchema = new Schema({
   cash_movement: cashMovement,
   cart_draft: cartDraft,
   cart_draft_line: cartDraftLine,
+  cart_tender: cartTender,
+  held_cart: heldCart,
+  held_cart_line: heldCartLine,
+  cart_void: cartVoid,
+  refund,
+  refund_line: refundLine,
+  refund_tender: refundTender,
+  shift_report: shiftReport,
   customer_draft: customerDraft,
   outbox,
   local_stock_delta: localStockDelta,

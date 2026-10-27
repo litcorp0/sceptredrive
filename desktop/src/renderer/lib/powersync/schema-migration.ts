@@ -25,7 +25,9 @@ import { PosSchema } from './schema'
  *      day's trading — an open shift, two sales with their lines and tenders, a
  *      cash movement, and three pending outbox rows — then close it;
  *   2. reopen the same file with `PosSchema` and read every row back, then assert
- *      that the home screen's day window plans through the new index.
+ *      that the home screen's day window plans through the new index, that the
+ *      split-tender columns and index arrived, and that every table Plan 08 added
+ *      takes a row.
  *
  * Nothing here is mocked: the engine, worker, VFS, and cipher are the till's.
  * The in-page seam is the `#dev/sync` diagnostics page, driven by
@@ -87,14 +89,39 @@ const previousSale = new Table(
 ).copyWithName('sale')
 
 /**
- * The previous local schema: every current table, with the frozen `sale`.
+ * FROZEN — `sale_tender` as it shipped before Phase 13.
  *
- * Built from `PosSchema.tables` (already-resolved tables) rather than the module's
- * table objects, so a new table added to `schema.ts` is part of both schemas and
- * the only difference under proof stays the one index.
+ * Split tender adds `sequence`, `payment_id` and `provider_reference` to a table
+ * every terminal already has rows in, so the proof has to start from the *old*
+ * shape. Building the previous schema from the current table would put the new
+ * columns in the "before" database too and silently prove nothing (P10-D15).
+ */
+const previousSaleTender = new Table(
+  {
+    sale_id: column.text,
+    method: column.text,
+    amount_minor: column.integer,
+    reference: column.text,
+    created_at: column.text,
+  },
+  { localOnly: true, indexes: { sale_tender_sale: ['sale_id'] } },
+).copyWithName('sale_tender')
+
+/**
+ * The previous local schema: every current table, with the two frozen tables
+ * that changed under proof.
+ *
+ * Everything else is taken from `PosSchema.tables` (already-resolved tables), so
+ * a new table added to `schema.ts` is created by the migration and the only
+ * differences under proof stay the ones this phase caused: `sale`'s index and
+ * `sale_tender`'s three new columns.
  */
 export const PreviousPosSchema = new Schema(
-  PosSchema.tables.map((table) => (table.name === 'sale' ? previousSale : table)),
+  PosSchema.tables.map((table) => {
+    if (table.name === 'sale') return previousSale
+    if (table.name === 'sale_tender') return previousSaleTender
+    return table
+  }),
 )
 
 export type SchemaMigrationStep = { name: string; ok: boolean; detail?: string }
@@ -319,6 +346,70 @@ const OUTBOX_ROWS = [
 
 const PLAN_SQL =
   'EXPLAIN QUERY PLAN SELECT * FROM sale WHERE terminal_id = ? AND occurred_at >= ? AND occurred_at < ?'
+
+/**
+ * One row per table Plan 08 added or changed, written **after** the migration.
+ *
+ * The previous schema already declares the new tables (it is built from the
+ * current one), so this is not a table-creation proof; what it proves is that
+ * the shipped schema and every declared index exist and take a row in the same
+ * database that just carried a day of trading.
+ */
+const NEW_TABLE_FIXTURES: ReadonlyArray<{
+  table: string
+  columns: readonly string[]
+  values: readonly unknown[]
+  index: string
+}> = [
+  {
+    table: 'cart_tender',
+    columns: ['draft_id', 'sequence', 'method', 'amount_minor', 'status', 'created_at'],
+    values: ['draft-migration-01', 1, 'MOMO', 5_000, 'PENDING', FIXTURE.from],
+    index: 'cart_tender_draft',
+  },
+  {
+    table: 'held_cart',
+    columns: ['label', 'held_at', 'item_count', 'total_minor'],
+    values: ['Brake pads for Kofi', FIXTURE.from, 2, 11_520],
+    index: 'held_cart_held_at',
+  },
+  {
+    table: 'held_cart_line',
+    columns: ['hold_id', 'line_number', 'product_id', 'quantity', 'unit_price_minor'],
+    values: ['hold-migration-01', 1, 'product-migration-01', 2, 4_800],
+    index: 'held_cart_line_hold',
+  },
+  {
+    table: 'cart_void',
+    columns: ['shift_id', 'reason_code', 'item_count', 'gross_minor', 'occurred_at'],
+    values: [FIXTURE.shiftId, 'CUSTOMER_LEFT', 1, 4_800, FIXTURE.from],
+    index: 'cart_void_created',
+  },
+  {
+    table: 'refund',
+    columns: ['number', 'sale_id', 'shift_id', 'refunded_minor', 'occurred_at'],
+    values: ['RF-MIG-01', 'sale-migration-01', FIXTURE.shiftId, 5_760, FIXTURE.from],
+    index: 'refund_sale',
+  },
+  {
+    table: 'refund_line',
+    columns: ['refund_id', 'sale_line_id', 'quantity', 'restock'],
+    values: ['refund-migration-01', 'sale-migration-01-line-1', 1, 'RESALABLE'],
+    index: 'refund_line_sale_line',
+  },
+  {
+    table: 'refund_tender',
+    columns: ['refund_id', 'sequence', 'method', 'amount_minor', 'status'],
+    values: ['refund-migration-01', 1, 'CASH', 5_760, 'SETTLED'],
+    index: 'refund_tender_refund',
+  },
+  {
+    table: 'shift_report',
+    columns: ['shift_id', 'branch_id', 'terminal_id', 'number', 'closed_at'],
+    values: [FIXTURE.shiftId, FIXTURE.branchId, FIXTURE.terminalId, 'SHIFT-MIG-01', FIXTURE.to],
+    index: 'shift_report_shift',
+  },
+] as const
 
 const STEP_TIMEOUT_MS = 30_000
 
@@ -548,12 +639,21 @@ async function readValues(db: PowerSyncDatabase): Promise<string> {
       throw new Error(`sale ${sale.id} line values changed`)
     }
 
-    const tender = await db.getOptional<{ method: string; amount_minor: number }>(
-      'SELECT method, amount_minor FROM sale_tender WHERE sale_id = ?',
-      [sale.id],
-    )
+    const tender = await db.getOptional<{
+      method: string
+      amount_minor: number
+      sequence: number | null
+      payment_id: string | null
+    }>('SELECT method, amount_minor, sequence, payment_id FROM sale_tender WHERE sale_id = ?', [
+      sale.id,
+    ])
     if (tender?.method !== 'CASH' || tender?.amount_minor !== sale.tenderMinor) {
       throw new Error(`sale ${sale.id} tender changed`)
+    }
+    // The row was written without these columns, so a null proves the migration
+    // added them instead of the "previous" database already having them.
+    if (tender?.sequence !== null || tender?.payment_id !== null) {
+      throw new Error(`sale ${sale.id} tender gained values the old schema never wrote`)
     }
   }
 
@@ -579,16 +679,58 @@ async function readValues(db: PowerSyncDatabase): Promise<string> {
 const SALE_TABLE =
   PosSchema.tables.find((table) => table.name === 'sale')?.internalName ?? 'ps_data_local__sale'
 
-async function readIndexes(db: PowerSyncDatabase): Promise<string[]> {
+function internalName(declared: string): string {
+  return (
+    PosSchema.tables.find((table) => table.name === declared)?.internalName ??
+    `ps_data_local__${declared}`
+  )
+}
+
+async function readIndexes(db: PowerSyncDatabase, declared = 'sale'): Promise<string[]> {
+  const table = declared === 'sale' ? SALE_TABLE : internalName(declared)
   const rows = await db.getAll<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ? ORDER BY name",
-    [SALE_TABLE],
+    [table],
   )
   // PowerSync creates a local-only index as `<internal table>__<declared name>`
   // (`ps_data_local__sale__sale_terminal_occurred`), so the report speaks the
   // declared names and the schema stays the single source of the index names.
-  const prefix = `${SALE_TABLE}__`
+  const prefix = `${table}__`
   return rows.map((row) => (row.name.startsWith(prefix) ? row.name.slice(prefix.length) : row.name))
+}
+
+/** Writes and re-reads one row in every table this plan added or changed. */
+async function writeNewTableFixtures(db: PowerSyncDatabase): Promise<string> {
+  await db.writeTransaction(async (tx) => {
+    for (const fixture of NEW_TABLE_FIXTURES) {
+      await tx.execute(insertSql(fixture.table, fixture.columns), [
+        `${fixture.table}-migration-01`,
+        ...fixture.values,
+      ])
+    }
+  })
+
+  for (const fixture of NEW_TABLE_FIXTURES) {
+    const row = await db.getOptional<{ total: number }>(
+      `SELECT count(*) AS total FROM "${fixture.table}"`,
+    )
+    if ((row?.total ?? 0) !== 1) throw new Error(`${fixture.table} did not accept a row`)
+
+    const indexes = await readIndexes(db, fixture.table)
+    if (!indexes.includes(fixture.index)) {
+      throw new Error(`${fixture.index} is missing (found: ${indexes.join(', ') || 'none'})`)
+    }
+  }
+
+  const tender = await db.getOptional<{ amount_minor: number; sequence: number }>(
+    'SELECT amount_minor, sequence FROM sale_tender WHERE id = ?',
+    ['sale-migration-01-tender-1'],
+  )
+  if (tender?.sequence !== null) {
+    throw new Error('the old tender row gained a sequence the fixture never wrote')
+  }
+
+  return `${NEW_TABLE_FIXTURES.length} new tables, indexed and writable`
 }
 
 export async function runSchemaMigrationProof(
@@ -715,6 +857,18 @@ export async function runSchemaMigrationProof(
         }
         return queryPlan.join(' | ')
       })
+
+      await record('the split-tender index exists', async () => {
+        const tenderIndexes = await readIndexes(db, 'sale_tender')
+        if (!tenderIndexes.includes('sale_tender_sale_sequence')) {
+          throw new Error(
+            `sale_tender_sale_sequence is missing (found: ${tenderIndexes.join(', ') || 'none'})`,
+          )
+        }
+        return tenderIndexes.join(', ')
+      })
+
+      await record('every new local table takes a row', async () => writeNewTableFixtures(db))
     }
 
     await record('close the migrated database', async () => {
