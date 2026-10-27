@@ -60,6 +60,7 @@ const FIGURES_ROW: Record<string, number> = {
   change_minor: 2_000,
   cash_in_minor: 5_000,
   cash_out_minor: 1_000,
+  cash_refunds_minor: 7_500,
 }
 
 const COLUMN_FIELD: Record<string, keyof LocalShiftReport> = {
@@ -153,15 +154,37 @@ describe('readShiftFigures', () => {
       changeMinor: 2_000,
       cashInMinor: 5_000,
       cashOutMinor: 1_000,
+      cashRefundsMinor: 7_500,
     })
     // Every placeholder is the shift: a figure can never leak across shifts.
-    expect(parameters).toEqual(Array.from({ length: 24 }, () => SHIFT.id))
+    expect(parameters).toEqual(Array.from({ length: 25 }, () => SHIFT.id))
   })
 
   it('treats a missing row as zero rather than undefined money', async () => {
     const result = await readShiftFigures({ getOptional: async () => null }, SHIFT.id)
     expect(result.grossMinor).toBe(0)
     expect(result.saleCount).toBe(0)
+    expect(result.cashRefundsMinor).toBe(0)
+  })
+
+  it('reads cash refunds from the refund tender of the shift that paid them', async () => {
+    let sql = ''
+    await readShiftFigures(
+      {
+        getOptional: async <T>(statement: string): Promise<T | null> => {
+          sql = statement
+          return FIGURES_ROW as T
+        },
+      },
+      SHIFT.id,
+    )
+
+    expect(sql).toContain('FROM refund_tender rt')
+    expect(sql).toContain('JOIN refund r ON r.id = rt.refund_id')
+    // The refund's own shift: that is the drawer the money left.
+    expect(sql).toContain('r.shift_id = ?')
+    expect(sql).toContain("rt.method = 'CASH'")
+    expect(sql).toContain("rt.status = 'SETTLED'")
   })
 })
 

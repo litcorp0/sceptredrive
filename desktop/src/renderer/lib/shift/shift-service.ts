@@ -58,13 +58,22 @@ export function formatShiftNumber(terminalCode: string, day: string, sequence: n
   return `${terminalCode}-S-${day}-${String(sequence).padStart(2, '0')}`
 }
 
+/**
+ * Expected cash = float + cash tenders − change + cash in − cash out − cash refunds.
+ *
+ * The refund term is not optional bookkeeping: a settled cash refund is money
+ * that physically left this drawer, so without it the till expects cash it has
+ * already given back. Card and MoMo refunds are absent by construction — they
+ * never touched the notes (`selectShiftCashTotals` filters `CASH`/`SETTLED`).
+ */
 export function computeExpectedCash(totals: ShiftCashTotals): number {
   return (
     totals.openingFloatMinor +
     totals.cashTendersMinor -
     totals.changeMinor +
     totals.cashInMinor -
-    totals.cashOutMinor
+    totals.cashOutMinor -
+    totals.cashRefundsMinor
   )
 }
 

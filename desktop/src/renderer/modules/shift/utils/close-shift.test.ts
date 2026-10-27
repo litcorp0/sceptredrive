@@ -139,6 +139,8 @@ const FIGURES = {
   change_minor: 2_000,
   cash_in_minor: 5_000,
   cash_out_minor: 1_000,
+  cash_refunds: 0,
+  cash_refunds_minor: 0,
 }
 
 interface Write {
@@ -164,8 +166,15 @@ function hold(id: string, label: string): HoldRow {
   }
 }
 
-function fakeDb(options: { holds?: HoldRow[]; failOn?: (sql: string) => boolean } = {}) {
+function fakeDb(
+  options: {
+    holds?: HoldRow[]
+    figures?: Partial<typeof FIGURES>
+    failOn?: (sql: string) => boolean
+  } = {},
+) {
   const holds = [...(options.holds ?? [])]
+  const figures = { ...FIGURES, ...options.figures }
   const written: Write[] = []
   const outbox = new Map<string, string>()
   let shiftRow = { ...SHIFT_ROW }
@@ -200,8 +209,8 @@ function fakeDb(options: { holds?: HoldRow[]; failOn?: (sql: string) => boolean 
       const payload = outbox.get(String(parameters?.[0]))
       return payload ? { payload } : null
     }
-    if (/AS sale_count/.test(sql)) return FIGURES
-    if (/AS cash_tenders/.test(sql)) return FIGURES
+    if (/AS sale_count/.test(sql)) return figures
+    if (/AS cash_tenders/.test(sql)) return figures
     if (/FROM held_cart hc/.test(sql)) {
       return holds.map((row) => ({
         id: row.id,
@@ -466,7 +475,8 @@ describe('closeShiftWithReport', () => {
       { now: NOW },
     )
 
-    // Expected cash: float + cash − change + in − out (one formula, the close's).
+    // Expected cash: float + cash − change + in − out − cash refunds (one
+    // formula, the close's).
     expect(result.expectedCashMinor).toBe(52_000)
     expect(result.varianceMinor).toBe(-500)
 
@@ -504,6 +514,51 @@ describe('closeShiftWithReport', () => {
     expect(row.counted_cash_minor).toBe(51_500)
     expect(row.variance_minor).toBe(-500)
     expect(row.created_at).toBe(NOW.toISOString())
+  })
+
+  it('nets a settled cash refund out of the close and its stored snapshot', async () => {
+    startCashier()
+    const fake = fakeDb({
+      figures: {
+        cash_tenders: 180_000,
+        change_total: 0,
+        cash_in: 10_000,
+        cash_out: 0,
+        cash_refunds: 50_000,
+        cash_minor: 180_000,
+        change_minor: 0,
+        cash_in_minor: 10_000,
+        cash_out_minor: 0,
+        cash_refunds_minor: 50_000,
+      },
+    })
+
+    const result = await closeShiftWithReport(
+      fake.db,
+      { countedCashMinor: 160_000, holdsDecision: 'KEEP' },
+      { now: NOW },
+    )
+
+    // float 20 000 + cash 180 000 − change 0 + in 10 000 − out 0 − refunds 50 000.
+    // A pending card refund is not cash and never touches this arithmetic.
+    expect(result.expectedCashMinor).toBe(160_000)
+    expect(result.varianceMinor).toBe(0)
+
+    const insert = fake.written.find((write) => write.sql.includes('INTO shift_report'))
+    const columns = /\(([^)]+)\)\s*VALUES/s
+      .exec(insert?.sql ?? '')?.[1]
+      ?.split(',')
+      .map((column) => column.trim())
+    const params = insert?.parameters ?? []
+    const row: Record<string, unknown> = {}
+    for (const [index, column] of (columns ?? []).entries()) row[column] = params[index]
+
+    expect(row.expected_cash_minor).toBe(160_000)
+    expect(row.counted_cash_minor).toBe(160_000)
+    expect(row.variance_minor).toBe(0)
+    // The refund did not change the cash the shift took; it changed what is left.
+    expect(row.cash_minor).toBe(180_000)
+    expect(row.cash_in_minor).toBe(10_000)
   })
 
   it('writes nothing when the close transaction fails, and leaves the shift open', async () => {

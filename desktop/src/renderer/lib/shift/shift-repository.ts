@@ -42,6 +42,8 @@ export interface ShiftCashTotals {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
+  /** Settled cash refunds paid out of this shift's drawer. */
+  cashRefundsMinor: number
 }
 
 interface ShiftRow {
@@ -230,7 +232,13 @@ export interface SqlReader {
 
 /**
  * Cash totals for the expected-cash formula: cash tenders minus change plus
- * cash in minus cash out. Reads the same local sale tables the selling UI writes.
+ * cash in minus cash out minus cash refunds. Reads the same local sale tables
+ * the selling UI writes.
+ *
+ * A refund is counted against the **refund's** shift, not the sale's: the
+ * drawer that gave the money back is the one that is short. Only `CASH` and
+ * `SETTLED` refund tenders reduce the till — a card or MoMo refund never moved a
+ * note, and a pending one has not left the drawer yet.
  */
 export async function selectShiftCashTotals(
   reader: SqlReader,
@@ -242,6 +250,7 @@ export async function selectShiftCashTotals(
     change_total: number
     cash_in: number
     cash_out: number
+    cash_refunds: number
   }>(
     `SELECT
        COALESCE((SELECT SUM(st.amount_minor) FROM sale_tender st
@@ -251,8 +260,12 @@ export async function selectShiftCashTotals(
        COALESCE((SELECT SUM(amount_minor) FROM cash_movement
                   WHERE shift_id = ? AND type = 'CASH_IN'), 0) AS cash_in,
        COALESCE((SELECT SUM(amount_minor) FROM cash_movement
-                  WHERE shift_id = ? AND type = 'CASH_OUT'), 0) AS cash_out`,
-    [shiftId, shiftId, shiftId, shiftId],
+                  WHERE shift_id = ? AND type = 'CASH_OUT'), 0) AS cash_out,
+       COALESCE((SELECT SUM(rt.amount_minor) FROM refund_tender rt
+                   JOIN refund r ON r.id = rt.refund_id
+                  WHERE r.shift_id = ? AND rt.method = 'CASH'
+                    AND rt.status = 'SETTLED'), 0) AS cash_refunds`,
+    [shiftId, shiftId, shiftId, shiftId, shiftId],
   )
 
   return {
@@ -261,6 +274,7 @@ export async function selectShiftCashTotals(
     changeMinor: row?.change_total ?? 0,
     cashInMinor: row?.cash_in ?? 0,
     cashOutMinor: row?.cash_out ?? 0,
+    cashRefundsMinor: row?.cash_refunds ?? 0,
   }
 }
 

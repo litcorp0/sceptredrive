@@ -22,15 +22,15 @@ import {
   type ShiftState,
 } from '@/lib/shift/shift-service'
 import type { ReportDocument } from '../../../../shared/printing'
-import { type CloseShiftWithReportResult, closeShiftWithReport } from '../close-shift'
 import { ReportPreview } from '../components/report-preview'
 import { CashMovementDialog, CloseShiftDialog, OpenShiftDialog } from '../components/shift-dialogs'
+import { type CloseShiftWithReportResult, closeShiftWithReport } from '../utils/close-shift'
 import {
   closedShiftDocument,
   printReportDocument,
   reportPrintLabel,
   reportReprintDocument,
-} from '../print-report'
+} from '../utils/print-report'
 import { varianceWords } from '../utils/variance'
 
 type Dialog = 'open' | 'cash-in' | 'cash-out' | 'close' | null

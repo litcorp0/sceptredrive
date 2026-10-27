@@ -14,7 +14,7 @@ import { type LocalShiftReport, localShiftReport, readShiftFigures } from '@/lib
 import { findShiftById } from '@/lib/shift/shift-repository'
 import { computeExpectedCash } from '@/lib/shift/shift-service'
 import { ReportPreview } from '../components/report-preview'
-import { printReportDocument, reportPrintLabel, shiftReportContext } from '../print-report'
+import { printReportDocument, reportPrintLabel, shiftReportContext } from '../utils/print-report'
 import { varianceWords } from '../utils/variance'
 
 /**
@@ -67,6 +67,7 @@ export function ShiftReportScreen({
           changeMinor: figures.changeMinor,
           cashInMinor: figures.cashInMinor,
           cashOutMinor: figures.cashOutMinor,
+          cashRefundsMinor: figures.cashRefundsMinor,
         })
         setReport(localShiftReport(row, figures, expectedCashMinor, new Date().toISOString()))
         setError(null)

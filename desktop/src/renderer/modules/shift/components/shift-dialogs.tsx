@@ -12,8 +12,8 @@ import {
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from '@/lib/format'
 import type { HeldCartSummary } from '@/lib/hold/hold-service'
 import { computeVariance } from '@/lib/shift/shift-service'
-import type { HoldsDecision } from '../close-shift'
 import { amountProblem } from '../utils/amount'
+import type { HoldsDecision } from '../utils/close-shift'
 import { varianceWords } from '../utils/variance'
 
 /**

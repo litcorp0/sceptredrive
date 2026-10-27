@@ -5,8 +5,8 @@ import { desktopPrinterTransport, type PrinterTransport } from '@/lib/printing/p
 import { loadPrinterSettings, type PrinterSettings, toPrinterTarget } from '@/lib/printing/settings'
 import { buildReportDocument, type ReportDocumentContext } from '@/lib/receipt/report-render'
 import type { LocalShiftReport } from '@/lib/shift/shift-report'
-import type { PrintJob, PrintOutcome, ReportDocument } from '../../../shared/printing'
-import { varianceWords } from './utils/variance'
+import type { PrintJob, PrintOutcome, ReportDocument } from '../../../../shared/printing'
+import { varianceWords } from './variance'
 
 /**
  * Printing a report (P13-D34).

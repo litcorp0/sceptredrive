@@ -40,6 +40,8 @@ export interface ShiftSaleFigures {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
+  /** Settled cash refunds: the drawer figure the expected cash already nets off. */
+  cashRefundsMinor: number
 }
 
 export interface LocalShiftReport extends ShiftReportFigures {
@@ -93,7 +95,11 @@ const FIGURES_SQL = `SELECT
   (SELECT COALESCE(SUM(amount_minor), 0) FROM cash_movement
      WHERE shift_id = ? AND type = 'CASH_IN') AS cash_in_minor,
   (SELECT COALESCE(SUM(amount_minor), 0) FROM cash_movement
-     WHERE shift_id = ? AND type = 'CASH_OUT') AS cash_out_minor`
+     WHERE shift_id = ? AND type = 'CASH_OUT') AS cash_out_minor,
+  (SELECT COALESCE(SUM(rt.amount_minor), 0) FROM refund_tender rt
+     JOIN refund r ON r.id = rt.refund_id
+     WHERE r.shift_id = ? AND rt.method = 'CASH' AND rt.status = 'SETTLED')
+    AS cash_refunds_minor`
 
 /** One read: every aggregate a report prints, all filtered by the shift. */
 export async function readShiftFigures(
@@ -101,6 +107,7 @@ export async function readShiftFigures(
   shiftId: string,
 ): Promise<ShiftSaleFigures> {
   const row = await reader.getOptional<Record<string, number | null>>(FIGURES_SQL, [
+    shiftId,
     shiftId,
     shiftId,
     shiftId,
@@ -157,6 +164,7 @@ export async function readShiftFigures(
     changeMinor: int('change_minor'),
     cashInMinor: int('cash_in_minor'),
     cashOutMinor: int('cash_out_minor'),
+    cashRefundsMinor: int('cash_refunds_minor'),
   }
 }
 
