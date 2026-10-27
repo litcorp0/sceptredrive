@@ -12,6 +12,7 @@ import {
 } from '../../../test/integration.ts'
 import { app } from '../../app.ts'
 import { category, uom } from '../catalog/catalog.schema.ts'
+import { evatSubmission } from '../evat/evat.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { stockLevel, stockMovement } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -314,6 +315,9 @@ describe.skipIf(!available)('POS upload endpoint', () => {
       for (const userId of createdUserIds) await deleteTestUser(userId)
       return
     }
+    // A sale's submission restricts the sale (P14-D34): delete the certificate
+    // before the document it certifies.
+    await db.delete(evatSubmission).where(eq(evatSubmission.branchId, branchId))
     await db.delete(syncConflict).where(eq(syncConflict.branchId, branchId))
     await db.delete(posSyncTransaction).where(eq(posSyncTransaction.terminalId, terminalId))
     const sales = await db.select({ id: sale.id }).from(sale).where(eq(sale.branchId, branchId))

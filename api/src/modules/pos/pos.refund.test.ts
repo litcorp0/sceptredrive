@@ -15,6 +15,7 @@ import { approval } from '../approvals/approvals.schema.ts'
 import { category, uom } from '../catalog/catalog.schema.ts'
 import { creditLedgerEntry, creditProfile } from '../credit/credit.schema.ts'
 import { customer } from '../customers/customers.schema.ts'
+import { evatSubmission } from '../evat/evat.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { stockLevel, stockMovement } from '../inventory/inventory.schema.ts'
 import { loyaltyAccount, loyaltyLedgerEntry, loyaltyLot } from '../loyalty/loyalty.schema.ts'
@@ -532,6 +533,9 @@ describe.skipIf(!available)('POS refunds', () => {
   })
 
   afterAll(async () => {
+    // A submission restricts its document (P14-D34): the certificate is a child
+    // of the refund, so a suite that deletes documents deletes it first.
+    await db.delete(evatSubmission).where(eq(evatSubmission.branchId, branchId))
     if (createdRefundIds.length > 0) {
       // refund_tender, refund_line and refund are append-only; a test suite is
       // the one place they are removed, child first.
