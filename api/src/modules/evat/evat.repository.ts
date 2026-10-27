@@ -171,18 +171,6 @@ export async function findSubmissionByRefundId(
   return rows[0] ?? null
 }
 
-export async function findSubmissionRowById(
-  id: string,
-  executor: DbExecutor = db,
-): Promise<EvatSubmissionRow | null> {
-  const rows = await executor
-    .select()
-    .from(evatSubmission)
-    .where(eq(evatSubmission.id, id))
-    .limit(1)
-  return rows[0] ?? null
-}
-
 /** The row lock the state machine reads under: two workers never submit twice. */
 export async function findSubmissionRowByIdForUpdate(
   id: string,

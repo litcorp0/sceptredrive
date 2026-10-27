@@ -383,8 +383,6 @@ function certificateFailure(
   return null
 }
 
-export type EvatSubmitResult = EvatSubmissionRow | null
-
 /**
  * One attempt, on one row, inside the caller's transaction.
  *
@@ -396,7 +394,7 @@ export type EvatSubmitResult = EvatSubmissionRow | null
 export async function submit(
   submissionId: string,
   executor: DbExecutor = db,
-): Promise<EvatSubmitResult> {
+): Promise<EvatSubmissionRow | null> {
   const row = await findSubmissionRowByIdForUpdate(submissionId, executor)
   if (!row) return null
   if (row.status !== 'QUEUED' && row.status !== 'RETRY' && row.status !== 'WAITING_FOR_INVOICE') {
