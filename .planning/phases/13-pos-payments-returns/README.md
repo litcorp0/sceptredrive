@@ -53,6 +53,10 @@ not repeat it.
 
 ## Execution shape — what may run in parallel
 
+**`PARALLEL.md` is the operational map**: the nine waves, each plan's exact write set, the named file
+collisions that force the serial chains, and the dispatch prompt skeleton. This section is the
+summary; that file is what a controller follows.
+
 This phase is **serial by lane, parallel by wave**. Plans 02–07 all write `api/**`; 08–11 all write
 `desktop/**`; 12 writes `admin/**`.
 
