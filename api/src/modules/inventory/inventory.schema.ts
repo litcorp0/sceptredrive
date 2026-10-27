@@ -25,6 +25,9 @@ export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   'SUPPLIER_RETURN',
   // Phase 12: a posted stock write-off (P12-D15). Same rule: its own migration.
   'WRITE_OFF',
+  // Phase 13: a resalable refund line returned the goods to sellable stock
+  // (P13-D22). Same rule: added by the enum-only migration.
+  'RETURN',
 ])
 
 export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
@@ -35,6 +38,8 @@ export const stockMovementReferenceEnum = pgEnum('stock_movement_reference', [
   'SALE',
   'SUPPLIER_RETURN',
   'WRITE_OFF',
+  // Phase 13: the document a resalable refund's movement points at.
+  'REFUND',
 ])
 
 /** Why a delivery arrived with more than was ordered (Phase 11, PROC-03). */

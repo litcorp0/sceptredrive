@@ -192,6 +192,10 @@ export type SyncConflictType =
   | 'CLOCK_SKEW'
   | 'INVALID_CUSTOMER'
   | 'UNKNOWN_PRODUCT'
+  // Phase 13: a payment that settled after the till gave up, and one whose
+  // provider amount does not match ours. Kept in step with `sync_conflict_type`.
+  | 'PAYMENT_LATE_SETTLEMENT'
+  | 'PAYMENT_AMOUNT_MISMATCH'
 
 export type SyncConflictSeverity = 'LOW' | 'MEDIUM' | 'HIGH'
 
