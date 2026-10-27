@@ -62,6 +62,17 @@ const baseEnvSchema = z.object({
   // Routing label for the provider's mandatory email field, never a contact
   // channel (P13-D7). Phase 15 points this at a domain the business owns.
   PAYSTACK_EMAIL_DOMAIN: z.string().min(3).default('sceptre-drive.example'),
+  // --- GRA E-VAT (P14-D33) ---
+  // `mock` certifies deterministically and needs nothing. `gra` names the
+  // provider GRA onboards us with; it refuses to boot without the URL and the
+  // security key, because a submission that cannot reach GRA is a 24-hour
+  // deadline quietly missed. GRA issues the key to the taxpayer at onboarding,
+  // so there is no placeholder value that could ever be right.
+  EVAT_PROVIDER: z.enum(['mock', 'gra']).default('mock'),
+  EVAT_BASE_URL: optionalNonEmpty(z.string().url()),
+  EVAT_SECURITY_KEY: optionalNonEmpty(z.string().min(8)),
+  /** Applied to a provider call so one hung request cannot hold a worker row. */
+  EVAT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30_000).default(10_000),
 })
 
 /**
@@ -81,6 +92,23 @@ const envSchema = baseEnvSchema.superRefine((value, ctx) => {
       code: 'custom',
       path: ['PAYSTACK_MODE'],
       message: "PAYSTACK_MODE='live' is only allowed when NODE_ENV=production",
+    })
+  }
+  // E-VAT fails closed the same way: naming GRA without the endpoint and the
+  // key is a configuration that would discover itself at the first sale, after
+  // the 24-hour window had already started.
+  if (value.EVAT_PROVIDER === 'gra' && !value.EVAT_BASE_URL) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EVAT_BASE_URL'],
+      message: "EVAT_BASE_URL is required when EVAT_PROVIDER is 'gra'",
+    })
+  }
+  if (value.EVAT_PROVIDER === 'gra' && !value.EVAT_SECURITY_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EVAT_SECURITY_KEY'],
+      message: "EVAT_SECURITY_KEY is required when EVAT_PROVIDER is 'gra'",
     })
   }
 })
