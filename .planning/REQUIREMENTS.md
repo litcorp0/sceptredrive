@@ -285,10 +285,11 @@
   credit limit; change is produced only by cash.
 - **POS-12** — Credit repayment at the POS (cash offline, MoMo/card online) with receipt.
 - **POS-13** — X-report and Z-report, drawer reconciliation, and receipt reprint.
-- **POS-15** — Held carts: a cashier can park several carts per terminal with a required
-  label, serve another customer, and recall any held cart — on any terminal, after a restart,
-  or after a shift change. Recall re-prices against the current catalogue and shows what
-  changed.
+- **POS-15** — Held carts: a cashier can park up to ten carts per terminal with a required
+  label, serve another customer, and recall any cart held on that terminal — after a restart or
+  after a shift change, by any cashier who signs in there. Holds are terminal-local and are not
+  synced (operator decision 2026-10-27, P13-D29). Recall re-prices against the current catalogue
+  and shows what changed.
 - **POS-16** — Cart void: an uncompleted cart can be abandoned with a reason code, recorded
   against the shift, cashier, lines, and value, and uploaded like any other POS fact. Voiding
   never blocks the till and never requires a PIN.

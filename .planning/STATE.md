@@ -4,23 +4,19 @@
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-26
-**Status:** **Phase 12 (Branch Operations & Approval Workflow) is complete and verified (13/13).**
-Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
-verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface phases (7
-Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules &
-Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day added
-Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
-7/8/9 became Phases 13/14/15.
-**Next action:** plan **Phase 13 — POS Payments, Returns & Shifts**. It must pick up two
-carry-forwards: the `REFUND` approval type (registered in the type union with no handler, so boot
-asserts it is absent until Phase 13 wires it), and the shift-review requester identity — the
-`SHIFT_CLOSE` payload carries no staff id, so a manager closing a cashier's drawer can review it
-(Phase 12 verification §6). Phase 12's verification is
-`phases/12-branch-ops-approvals/12-VERIFICATION.md`; its planning set is
-`README.md` (index, lanes, execution shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md`
-(sources + 38 verified repository facts) and `01…13-PLAN.md`. Phase 11's verification is
-`phases/11-procurement-replenishment/11-VERIFICATION.md`.
+**Updated:** 2026-10-27
+**Status:** **Phase 13 (POS Payments, Returns & Shifts) is planned — 13 plans written and ready to
+execute.** Phase 12 is complete and verified (13/13). Phase 11 is complete and verified (11/11
+plans); Phase 10 is complete and verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24:
+four interface phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10
+Desktop Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the
+same day added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals).
+The former 7/8/9 became Phases 13/14/15.
+**Next action:** execute **Phase 13, Plan 01 — Shared vocabulary: tender, refund and hold
+arithmetic**. The planning set is `phases/13-pos-payments-returns/`: `README.md` (index, lanes,
+execution shape), `00-DECISIONS.md` (P13-D1…D40), `01-RESEARCH.md` (official sources + 38 verified
+repository facts) and `01…13-PLAN.md`. Phase 12's verification is
+`phases/12-branch-ops-approvals/12-VERIFICATION.md`.
 
 ---
 
@@ -41,9 +37,66 @@ asserts it is absent until Phase 13 wires it), and the shift-review requester id
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
 | 12 | Branch Operations & Approval Workflow | ✅ Complete (13/13 plans, verified) |
-| 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
+| 13 | POS Payments, Returns & Shifts | 🔷 Plans written (13 plans, ready to execute) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 13 planning notes (2026-10-27)
+
+- Thirteen plans written to `phases/13-pos-payments-returns/`: `README.md` (index, lanes, execution
+  shape), `00-DECISIONS.md` (P13-D1…D41), `01-RESEARCH.md` (12 official sources + 38 verified
+  repository facts), and `01…13-PLAN.md`. The locked context sketched ten; the count grew because the
+  payments module, the Z-report, the admin detail and the desktop's four screens each needed their own
+  prompt.
+- **Five decisions were put to the operator and answered**: held carts stay terminal-local and
+  `REQUIREMENTS.md` POS-15 is corrected (D29); card goes through Paystack Checkout in a locked-down
+  Electron window (D13); refunds are allocated per tender with the cashier choosing (D19); a
+  credit-sale refund reduces the ledger and pays no cash (D20); the refund cap is the gross amount on
+  one document with no accumulation (D21).
+- **Six defects in the locked context were found and resolved rather than implemented**:
+  - D2 wanted `sale_tender.status` *and* "the sale is written once at completion" — the status moved to
+    `payment` (D2);
+  - D5's "card refunds work offline" contradicts D12 — electronic refunds are online-only, and the PIN
+    is what makes an offline **cash** refund possible (D24);
+  - D5's "and the terminal is online" was a condition on something the server always does — the
+    approval always raises on upload (D23);
+  - D6's `DAMAGED` line "posts the stock write-off path" would double-decrement, because the sale
+    already removed the unit — `DAMAGED` posts **no** movement (D22);
+  - D17's recall "recomputes … loyalty" would re-promise a redemption against a moved balance — the
+    redemption is preserved or reduced with an explicit notice (D35);
+  - D19 is written as if holds were shift-scoped while D16 makes them terminal-scoped — the close dialog
+    is where the two meet (D30).
+- **The two Phase 12 carry-forwards are retired.** `REFUND` is registered with a handler, a subject arm
+  and a boot-list entry in Plan 05, so the registry test's "honest unregistered type" case is rewritten
+  around a deliberately wrong registration map. The shift-review requester identity is fixed by adding
+  `closedBy` to the `SHIFT_CLOSE` payload (D41), which closes the self-review hole for any till running
+  this build and falls back to Phase 12's behaviour for one that is not.
+- **The phase starts from zero on payments.** `grep -rni paystack` over `api/ admin/ desktop/
+  packages/` returns nothing; `.env.example` declares three `PAYSTACK_*` keys that no code reads; there
+  is no payment, refund, webhook or provider file anywhere. Plan 03 is therefore a greenfield module,
+  not a refactor.
+- **Schema additions**: `payment`, `payment_event` (a new `payments` module), `refund`, `refund_line`,
+  `refund_tender`, `cart_void`, `shift_report`; extensions to `sale_tender` (`sequence`, `payment_id`,
+  the partial unique on `payment_id`, and `(sale_id, sequence)` replacing `(sale_id, method)`). New
+  enums: `payment_method`, `payment_provider`, `payment_status`, `refund_reason`, `refund_restock`,
+  `refund_tender_status`, `cart_void_reason`. Added values: `sale_tender_method` (`MOMO`, `CARD`,
+  `BANK_TRANSFER`), `pos_transaction_type` (`REFUND`, `CREDIT_REPAYMENT`, `CART_VOID`),
+  `stock_movement_type` (`RETURN`), `stock_movement_reference` (`REFUND`), `sync_conflict_type`
+  (`PAYMENT_LATE_SETTLEMENT`, `PAYMENT_AMOUNT_MISMATCH`) — all in **their own migration file**, because
+  PG 17 cannot use an added enum value in the transaction that added it.
+- **One new permission**, `pos.refund` (ADMIN, MANAGER); `CASHIER` stays empty, because a cashier
+  reaches the till through a device-bound PIN and never through the admin API. **One new setting**,
+  `pos.refundApprovalThresholdMinor` (20 000, branch-overridable, admin-writable). There is deliberately
+  no refund numbering setting: the till numbers refunds offline from its local `document_sequence`.
+- **The till gains five local-only tables** (`cart_tender`, `held_cart`, `held_cart_line`, `cart_void`,
+  `shift_report`) and three mirror tables for offline refund caps (`refund`, `refund_line`,
+  `refund_tender`). `powersync/sync-config.yaml` is unchanged and no table becomes synced, so Plan 13
+  proves an empty diff over `powersync/`.
+- **Known limits recorded at planning time**: refunds are scoped to sales this terminal recorded
+  (D25); a refund approval is retrospective by design; an orphaned payment needs a person, never an
+  automatic refund (D9); `DAMAGED` refunds are recorded on the refund line but not inventoried as
+  shrinkage until Phase 14 reports them; approval expiry is still unimplemented; the console has no
+  refund list until Phase 14.
 
 ### Phase 12 execution notes (2026-10-26)
 
