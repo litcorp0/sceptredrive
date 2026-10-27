@@ -1076,6 +1076,50 @@ describe.skipIf(!available)('POS oversight reads', () => {
     expect(sessionBody.report.expectedCashMinor).toBe(countedCashMinor)
   })
 
+  it('lists the voids a shift contains, with their reasons and their value', async () => {
+    const response = await get(`/api/pos/oversight/shifts/${homeShiftId}`, managerCookie)
+    expect(response.status).toBe(200)
+    const body = await readJson<{
+      voids: {
+        count: number
+        itemCount: number
+        grossMinor: number
+        rows: Array<{
+          reasonCode: string
+          reasonLabel: string
+          label: string | null
+          itemCount: number
+          grossMinor: number
+          occurredAt: string
+        }>
+      }
+      shift: { id: string; status: string }
+    }>(response)
+
+    expect(body.shift.id).toBe(homeShiftId)
+    expect(body.voids.count).toBe(2)
+    expect(body.voids.itemCount).toBe(3)
+    expect(body.voids.grossMinor).toBe(5_000)
+    expect(body.voids.rows.map((row) => row.reasonCode)).toEqual([
+      'CUSTOMER_CHANGED_MIND',
+      'WRONG_ITEM',
+    ])
+    expect(body.voids.rows[0]).toMatchObject({
+      reasonLabel: 'Customer changed their mind',
+      label: 'Walk-in',
+      itemCount: 2,
+      grossMinor: 4_000,
+    })
+    expect(body.voids.rows[1]).toMatchObject({ label: null, itemCount: 1, grossMinor: 1_000 })
+    expect(body.voids.rows[0]?.occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+
+    // The Z's own void count agrees with the list it came from.
+    const report = await readJson<{ report: { voidCount: number } }>(
+      await get(`/api/pos/oversight/shifts/${homeShiftId}/report?kind=Z`, managerCookie),
+    )
+    expect(report.report.voidCount).toBe(body.voids.count)
+  })
+
   it('refuses to rebuild a missing Z and leaves the shift without one', async () => {
     const stored = await get(`/api/pos/oversight/shifts/${missingReportShiftId}`, managerCookie)
     expect(stored.status).toBe(200)

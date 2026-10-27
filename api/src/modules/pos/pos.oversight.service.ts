@@ -305,7 +305,10 @@ export async function getShift(user: SessionUser, shiftId: string): Promise<Over
   if (!shiftRow) throw new NotFoundError('Shift not found')
   assertDocumentScope(user, shiftRow.branchId)
 
-  const snapshot = await findShiftReportByShiftId(shiftId)
+  const [voidRows, snapshot] = await Promise.all([
+    repository.selectShiftVoids(shiftId, db),
+    findShiftReportByShiftId(shiftId),
+  ])
 
   let report: ShiftReportView | null = null
   let reportState: OversightShiftDetail['reportState']
@@ -321,7 +324,17 @@ export async function getShift(user: SessionUser, shiftId: string): Promise<Over
     reportState = 'LIVE'
   }
 
-  return { shift: shiftRow, report, reportState }
+  return {
+    shift: shiftRow,
+    report,
+    reportState,
+    voids: {
+      count: voidRows.length,
+      itemCount: voidRows.reduce((sum, row) => sum + row.itemCount, 0),
+      grossMinor: voidRows.reduce((sum, row) => sum + row.grossMinor, 0),
+      rows: voidRows,
+    },
+  }
 }
 
 /**

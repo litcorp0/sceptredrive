@@ -21,14 +21,14 @@
  * would round a pesewa somewhere a drawer can see.
  */
 import type { DbExecutor } from '@sceptre/db'
-import type { RefundReason, TenderMethod } from '@sceptre/shared'
+import { CART_VOID_REASON_LABELS, type RefundReason, type TenderMethod } from '@sceptre/shared'
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm'
 import { customer } from '../customers/customers.schema.ts'
 import { evatSubmission } from '../evat/evat.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { terminal } from '../org/terminals.schema.ts'
-import { refund, refundLine, sale, saleLine, saleTender, shift } from './pos.schema.ts'
+import { cartVoid, refund, refundLine, sale, saleLine, saleTender, shift } from './pos.schema.ts'
 import type {
   OversightRefundLine,
   OversightRefundRow,
@@ -39,6 +39,7 @@ import type {
   OversightSaleRow,
   OversightSaleTender,
   OversightShiftRow,
+  OversightVoidRow,
   ReceiptEvatBlock,
 } from './pos.types.ts'
 
@@ -727,4 +728,40 @@ export async function findShiftRow(
   const rows = await shiftRowBuilder(executor).where(eq(shift.id, shiftId)).limit(1)
   const row = rows[0]
   return row ? toShiftRow(row) : null
+}
+
+/**
+ * A shift's abandoned carts, oldest first. `cart_void` has been written by the
+ * till since Phase 13 and has had no read path since (research fact 20); this is
+ * it, reached through the shift that contains it rather than a list of its own.
+ */
+export async function selectShiftVoids(
+  shiftId: string,
+  executor: DbExecutor,
+): Promise<OversightVoidRow[]> {
+  const rows = await executor
+    .select({
+      id: cartVoid.id,
+      occurredAt: cartVoid.occurredAt,
+      reasonCode: cartVoid.reasonCode,
+      label: cartVoid.label,
+      itemCount: cartVoid.itemCount,
+      grossMinor: cartVoid.grossMinor,
+      cashierName: sql<string>`COALESCE(${userTable.name}, ${cartVoid.cashierStaffId})`,
+    })
+    .from(cartVoid)
+    .leftJoin(userTable, eq(userTable.id, cartVoid.cashierUserId))
+    .where(eq(cartVoid.shiftId, shiftId))
+    .orderBy(asc(cartVoid.occurredAt))
+
+  return rows.map((row) => ({
+    id: row.id,
+    occurredAt: row.occurredAt.toISOString(),
+    reasonCode: row.reasonCode,
+    reasonLabel: CART_VOID_REASON_LABELS[row.reasonCode],
+    label: row.label,
+    itemCount: row.itemCount,
+    grossMinor: row.grossMinor,
+    cashierName: row.cashierName,
+  }))
 }

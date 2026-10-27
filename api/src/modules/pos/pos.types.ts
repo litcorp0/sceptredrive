@@ -1,4 +1,5 @@
 import type {
+  CartVoidReason,
   ConflictResolutionCode,
   RefundReason,
   RefundRestock,
@@ -544,10 +545,34 @@ export interface OversightShiftRow {
  * `LIVE` (an open shift's X) or `MISSING` (a closed shift that has no snapshot —
  * a fact the detail shows rather than a recomputation it invents, P14-D12).
  */
+/** A cart abandoned before it became a sale (P13-D28). The only read path. */
+export interface OversightVoidRow {
+  id: string
+  occurredAt: string
+  reasonCode: CartVoidReason
+  reasonLabel: string
+  label: string | null
+  itemCount: number
+  grossMinor: number
+  cashierName: string
+}
+
+/**
+ * A shift's voids, with the totals a reviewer would otherwise add up by hand: how
+ * many carts, how many items they held, and what they were worth at the till.
+ */
+export interface OversightVoidSummary {
+  count: number
+  itemCount: number
+  grossMinor: number
+  rows: OversightVoidRow[]
+}
+
 export interface OversightShiftDetail {
   shift: OversightShiftRow
   report: ShiftReportView | null
   reportState: 'STORED' | 'LIVE' | 'MISSING'
+  voids: OversightVoidSummary
 }
 
 export interface OversightSalesList {
