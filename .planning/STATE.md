@@ -17,13 +17,16 @@ phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboa
 Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day
 added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
 7/8/9 became Phases 13/14/15.
-**Next action:** plan and execute **Phase 14 — Admin Operations & E-VAT** (`ADM-07`, `ADM-08`,
-`RPT-04…06`, `PAY-04…06`, `EVAT-01…03`; eight plans sketched in the context). Phase 13's verification
-is `phases/13-pos-payments-returns/13-VERIFICATION.md`; its evidence is
+**Next action:** execute **Phase 14 — Admin Operations & E-VAT**. It is **planned, not
+started**: thirteen plans, `00-DECISIONS.md` (P14-D1…D47), `01-RESEARCH.md` (14 official
+sources, 64 verified repository facts), `README.md` and `PARALLEL.md` live in
+`phases/14-admin-operations-evatu/`. Wave 1 is Plan 01 alone (`packages/shared`); wave 2 is
+Plan 02 alone (schema). Phase 13's verification is
+`phases/13-pos-payments-returns/13-VERIFICATION.md`; its evidence is
 `phases/13-pos-payments-returns/evidence/` (`suites.txt`, `walkthrough-payments.txt`, `mutations.txt`,
-`counter-audit.txt`). Two things Phase 14 inherits are named in that document's §6: the console's
-refund list, and a drawer block on the printed Z that does not itemise cash refunds even though the
-figure now subtracts them.
+`counter-audit.txt`). Two things Phase 14 inherits are named in that document's §6 and are
+**taken** by it: the console's refund list, and a drawer block on the printed Z that does not
+itemise cash refunds even though the figure now subtracts them.
 
 ---
 
@@ -45,8 +48,80 @@ figure now subtracts them.
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
 | 12 | Branch Operations & Approval Workflow | ✅ Complete (13/13 plans, verified) |
 | 13 | POS Payments, Returns & Shifts | ✅ Complete (13/13 plans, verified) |
-| 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
+| 14 | Admin Operations & E-VAT | 🔷 Planned (13 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 14 planning notes (2026-10-27)
+
+- Thirteen plans written to `phases/14-admin-operations-evatu/`: `README.md` (index, lanes,
+  execution shape), `00-DECISIONS.md` (P14-D1…D47), `01-RESEARCH.md` (14 official sources +
+  64 verified repository facts), `PARALLEL.md` (eight waves, write sets, collisions) and
+  `01…13-PLAN.md`. The locked context sketched eight; the count grew because oversight
+  reads, conflict resolution, the report exports, supplier transfers, E-VAT and the console
+  each needed their own prompt.
+- **Thirteen defects in the locked context were found and resolved rather than
+  implemented**, and each one is a money or truth problem rather than a style one:
+  - D2's "receipt reprint" has no server receipt — the receipt is a desktop renderer over
+    the local sale row, and `print_status`/`reprint_count` exist only on the till. Phase 14
+    ships a **server-rendered copy** with browser print, labelled as a copy (D10).
+  - D3's "conflict snapshot before and after" does not exist: `sync_conflict` has one
+    PII-free `details` jsonb and **no** resolution code column (D13/D14).
+  - D5's webhook-only transfer flow omits Paystack's `otp` status, which is where **every**
+    transfer starts when "Confirm transfers before sending" is on (D24).
+  - D5 implies a transfer becomes a supplier payment at initiation. Reusing
+    `createPayment` there would mark a supplier paid on a transfer that later fails; the
+    intent is a new `supplier_transfer` and the ledger fact is posted on `transfer.success`
+    (D22/D23).
+  - D6's "receipts carry the reserved QR" cannot be true at print time — the till prints
+    before any submission exists (D39).
+  - D4's "each reconciled to its ledger" is false for the exports that exist: the four
+    inventory/credit/loyalty/payables CSVs collapse to a `TOTAL` row for a manager
+    (D17).
+  - D2 re-plans the terminal and device inventory, which is already built and gated (D1).
+  - D7's feature flags have no store; a second boolean store would duplicate settings
+    (D41).
+  - D8's "every typed setting is editable" is not what the console does — it renders 19 of
+    46, and an admin with no branch silently writes a global row (D42/D43).
+  - The stock report cannot filter `SALE` movements: the validator omits four movement
+    types the table stores (D18).
+  - The printed Z cannot itemise cash refunds because `shift_report` has no column for the
+    figure its expected-cash sum already subtracts (schema + Plan 12).
+  - D11's "resolution leaves the sale untouched" is half the invariant; E-VAT certification
+    is the other half (D34).
+  - `00-CONTEXT.md`'s frontmatter lists Phase 9 as a dependency while the roadmap lists 5
+    and 13 — harmless, but it is what invites rebuilding the dashboard (D1).
+- **Five decisions were taken on money-adjacent policy without asking, each with a stated
+  reason**: no approval threshold for supplier transfers (parity with manual payments, which
+  managers already hold, D32); a reversal never un-posts a payment (D46); the sweep verifies
+  but never finalises an OTP (D47); no admin TOTP reset (D9); loyalty liability stays
+  as-of-now (D21). **Three of them — D32, D46 and D41 (flags as typed settings) — were put
+  to the operator and confirmed on 2026-10-27.** **Approval expiry is refused again** and
+  carried to Phase 15 with the reason: it needs a policy, not a scheduler.
+- **Schema additions**: `supplier_transfer`, `supplier_transfer_allocation`,
+  `evat_submission`; `sync_conflict.resolution_code`; `shift_report.cash_refund_minor`
+  (nullable — a snapshot cannot be backfilled); `payment_event.supplier_transfer_id`. Four
+  new enums in their own migration (`0016`), the DDL in `0017`: `conflict_resolution_code`,
+  `supplier_transfer_status`, `evat_document_kind`, `evat_submission_status`. Five new
+  settings: `tax.sellerTin`, `tax.sellerVatNumber`, `flag.supplierTransfers`,
+  `flag.evatSubmission`, `flag.posConflictResolution`.
+- **Six new permissions** (60 → 66): `pos.oversight.read`, `conflict.read`,
+  `conflict.resolve`, `payable.transfer`, `evat.read`, `evat.retry` (admin only). Manager
+  goes 49 → 54; `CASHIER` stays empty.
+- **A twentieth and a twenty-first admin module**: `pos-oversight` (deferred by Phase 8 by
+  name) and `evat`. Both need a `REQUIRED_MODULES` edit, which is a root file — the admin
+  lane reports `NEEDS_LANE_CHANGE`.
+- **The sync contract is untouched.** No new synced table, no local schema change, no
+  outbox change; `powersync/` must keep an empty diff and Plan 13 proves it.
+- **External research changed two designs**: Paystack's `otp` status (D24) and test mode's
+  "transfers always return success" (the mock models the delayed path). GRA's 24-hour
+  stamping window turned the submission deadline into a statutory boundary rather than a
+  retry cap (D36), and GRA's integration document being gated and versioned (6.0 → 8.2) is
+  why only a mock ships (D33).
+- **Known limits recorded at planning time**: no live Paystack transfer or GRA response in
+  evidence; no QR on paper until onboarding; the OTP path is test-proven, not
+  browser-driven; conflict resolution is retrospective by design; the console's conflict
+  detail cannot claim an orphaned payment (the terminal does, D15); no audit retention
+  policy; historic audit rows keep the PII they were written with (D45).
 
 ### Phase 13 planning notes (2026-10-27)
 
