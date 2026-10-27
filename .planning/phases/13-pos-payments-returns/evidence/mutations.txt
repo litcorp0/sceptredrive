@@ -1,0 +1,450 @@
+
+### Mutation 1 — the approval threshold is inclusive (>= becomes >)
+file: packages/shared/src/refund.ts
+  -   return refundedMinor >= thresholdMinor
+  +   return refundedMinor > thresholdMinor
+applied
+$ (cd packages/shared && bunx vitest run src/refund.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+
+ ❯ src/refund.test.ts (35 tests | 1 failed) 31ms
+   ❯ refundApprovalRequired (4)
+     × triggers at exactly the threshold 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/refund.test.ts > refundApprovalRequired > triggers at exactly the threshold
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/refund.test.ts:532:52
+    530| describe('refundApprovalRequired', () => {
+    531|   it('triggers at exactly the threshold', () => {
+    532|     expect(refundApprovalRequired(20_000, 20_000)).toBe(true)
+       |                                                    ^
+    533|   })
+    534|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 34 passed (35)
+   Start at  15:42:45
+   Duration  280ms (tests 45%, import 31%, transform 13%, worker 10%)
+
+[exit 1]
+RESULT: CAUGHT by src/refund.test.ts
+
+### Mutation 2 — a sale refuses a tender whose payment has not settled (PAID check dropped)
+file: api/src/modules/pos/pos.service.ts
+  -       if (paymentRow.status !== 'PAID') {
+  +       if (paymentRow.status !== 'PAID' && false) {
+applied
+$ (cd api && bunx vitest run src/modules/pos/pos.tender.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/pos/pos.tender.test.ts (18 tests | 1 failed) 2314ms
+   ❯ POS sale tenders (18)
+     × refuses an electronic tender whose payment has not settled 153ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/pos/pos.tender.test.ts > POS sale tenders > refuses an electronic tender whose payment has not settled
+Error: the sale was applied but should have been refused
+ ❯ applyExpectingRejection src/modules/pos/pos.tender.test.ts:207:11
+    205|       return error as Error
+    206|     }
+    207|     throw new Error('the sale was applied but should have been refused…
+       |           ^
+    208|   }
+    209|
+ ❯ src/modules/pos/pos.tender.test.ts:835:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:42:45
+   Duration  9.39s (import 64%, tests 25%, transform 8%, setup 3%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/pos/pos.tender.test.ts
+
+### Mutation 3 — change may not exceed the cash tender (OVERPAID_BY_ELECTRONIC dropped)
+file: packages/shared/src/tender.ts
+  -   if (changeMinor > totals.cashMinor) {
+  +   if (changeMinor > totals.cashMinor && false) {
+applied
+$ (cd packages/shared && bunx vitest run src/tender.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+
+ ❯ src/tender.test.ts (22 tests | 2 failed) 72ms
+   ❯ tenderBalance (16)
+     × refuses an overpayment the cash tender cannot fund 36ms
+   ❯ changeFromCash (2)
+     × returns zero for an impossible tender set 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/tender.test.ts > tenderBalance > refuses an overpayment the cash tender cannot fund
+AssertionError: expected 3000 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3000
+
+ ❯ src/tender.test.ts:92:33
+     90|
+     91|     expect(balance.appliedMinor).toBe(13_000)
+     92|     expect(balance.changeMinor).toBe(0)
+       |                                 ^
+     93|     expect(balance.problem).toBe('OVERPAID_BY_ELECTRONIC')
+     94|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/tender.test.ts > changeFromCash > returns zero for an impossible tender set
+AssertionError: expected 3000 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3000
+
+ ❯ src/tender.test.ts:235:80
+    233|
+    234|   it('returns zero for an impossible tender set', () => {
+    235|     expect(changeFromCash(10_000, tenders(['CASH', 2_000], ['CARD', 11…
+       |                                                                                ^
+    236|   })
+    237| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 passed (22)
+   Start at  15:42:55
+   Duration  569ms (transform 47%, tests 36%, import 13%, worker 4%)
+
+[exit 1]
+RESULT: CAUGHT by src/tender.test.ts
+
+### Mutation 4 — a refund stops checking each tender's remainder (REFUND_EXCEEDS_TENDER)
+file: api/src/modules/pos/pos.service.ts
+  -   if (problem) throw refundProblemError(problem)
+  +   if (problem && problem !== 'EXCEEDS_TENDER') throw refundProblemError(problem)
+applied
+$ (cd api && bunx vitest run src/modules/pos/pos.refund.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+(node:352481) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/modules/pos/pos.refund.test.ts (19 tests | 1 failed) 4702ms
+   ❯ POS refunds (19)
+     × refuses more than a tender holds 186ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/pos/pos.refund.test.ts > POS refunds > refuses more than a tender holds
+AssertionError: expected AppError: The refunded amount (GHS 40.01)… { …(3) } to match object { code: 'REFUND_EXCEEDS_TENDER' }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "REFUND_EXCEEDS_TENDER",
++ AppError {
++   "code": "REFUND_LINE_TOTAL_MISMATCH",
+  }
+
+ ❯ expectRefusal src/modules/pos/pos.refund.test.ts:318:44
+    316|   async function expectRefusal(payload: RefundPayload, code: string): …
+    317|     const ctx = refundContext()
+    318|     await expect(applyRefund(ctx, payload)).rejects.toMatchObject({ co…
+       |                                            ^
+    319|   }
+    320|
+ ❯ src/modules/pos/pos.refund.test.ts:917:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  15:42:57
+   Duration  11.99s (import 54%, tests 41%, transform 6%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/pos/pos.refund.test.ts
+
+### Mutation 5 — a DAMAGED line posts no stock movement (movesStockBack widened)
+file: packages/shared/src/refund.ts
+  -   return restock === 'RESALABLE'
+  +   return restock === 'RESALABLE' || restock === 'DAMAGED'
+applied
+$ (cd api && bunx vitest run src/modules/pos/pos.refund.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+(node:352824) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/modules/pos/pos.refund.test.ts (19 tests | 2 failed) 4033ms
+   ❯ POS refunds (19)
+     × posts nothing for damaged goods and insists on the reason 161ms
+     × reconciles stock, credit and tenders against the document 161ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/pos/pos.refund.test.ts > POS refunds > posts nothing for damaged goods and insists on the reason
+AssertionError: expected [ { …(13) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/modules/pos/pos.refund.test.ts:1051:54
+    1049|     )
+    1050|
+    1051|     expect(await stockMovementsFor(result.refundId)).toHaveLength(0)
+       |                                                      ^
+    1052|     const lines = await db.select().from(refundLine).where(eq(refundLi…
+    1053|     expect(lines[0]).toMatchObject({ restock: 'DAMAGED', damageReason:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/modules/pos/pos.refund.test.ts > POS refunds > reconciles stock, credit and tenders against the document
+AssertionError: expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ src/modules/pos/pos.refund.test.ts:1390:32
+    1388|     const row = reconciled.rows[0]
+    1389|     // Only the two resalable units came back; the damaged one moved n…
+    1390|     expect(Number(row?.moved)).toBe(2)
+       |                                ^
+    1391|     expect(Number(row?.credit)).toBe(-2_000)
+    1392|     expect(Number(row?.tenders)).toBe(7_000)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 17 passed (19)
+   Start at  15:43:10
+   Duration  8.76s (tests 47%, import 46%, transform 6%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/pos/pos.refund.test.ts
+
+### Mutation 6 — the webhook refuses a body with no signature (guard accepts it)
+file: api/src/modules/payments/payments.service.ts
+  -   if (!secret || !signature) return false
+  +   if (!secret || !signature) return true
+applied
+$ (cd api && bunx vitest run src/modules/payments/payments.webhook.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/payments/payments.webhook.test.ts (9 tests | 2 failed) 645ms
+   ❯ Paystack webhook (9)
+     × rejects a bad or missing signature with 401 and writes no event 37ms
+     × mounts on the real app before the session middleware 24ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/payments/payments.webhook.test.ts > Paystack webhook > rejects a bad or missing signature with 401 and writes no event
+AssertionError: expected 200 to be 401 // Object.is equality
+
+- Expected
++ Received
+
+- 401
++ 200
+
+ ❯ src/modules/payments/payments.webhook.test.ts:291:28
+    289|
+    290|     const missing = await send(body, { signature: null })
+    291|     expect(missing.status).toBe(401)
+       |                            ^
+    292|
+    293|     const events = await db.select().from(paymentEvent).where(eq(payme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/modules/payments/payments.webhook.test.ts > Paystack webhook > mounts on the real app before the session middleware
+AssertionError: expected 200 to be 401 // Object.is equality
+
+- Expected
++ Received
+
+- 401
++ 200
+
+ ❯ src/modules/payments/payments.webhook.test.ts:311:29
+    309|     // 401, not 404 and not a session lookup: the route exists and is …
+    310|     // by `requireSession`.
+    311|     expect(response.status).toBe(401)
+       |                             ^
+    312|   })
+    313|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  15:43:19
+   Duration  10.09s (import 78%, transform 15%, tests 7%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/payments/payments.webhook.test.ts
+
+### Mutation 7 — a settlement after abandonment is marked orphaned (flag dropped)
+file: api/src/modules/payments/payments.service.ts
+  -         orphaned: wasWaiting || row.orphaned,
+  +         orphaned: row.orphaned,
+applied
+$ (cd api && bunx vitest run src/modules/payments/payments.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/payments/payments.test.ts (14 tests | 2 failed) 1626ms
+   ❯ payment intents and provider state (13)
+     × turns a success inside abandon into PAID, orphaned, and one HIGH conflict 83ms
+     × claims an orphaned payment and clears the banner flag 61ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/payments/payments.test.ts > payment intents and provider state > turns a success inside abandon into PAID, orphaned, and one HIGH conflict
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/modules/payments/payments.test.ts:349:28
+    347|     const first = await readPayment(await abandonRequest(created.id, d…
+    348|     expect(first.status).toBe('PAID')
+    349|     expect(first.orphaned).toBe(true)
+       |                            ^
+    350|
+    351|     const conflicts = await db
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/modules/payments/payments.test.ts > payment intents and provider state > claims an orphaned payment and clears the banner flag
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/modules/payments/payments.test.ts:379:27
+    377|
+    378|     const paid = await readPayment(await abandonRequest(created.id))
+    379|     expect(paid.orphaned).toBe(true)
+       |                           ^
+    380|
+    381|     const response = await app.request(`/api/pos/payments/${created.id…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 12 passed (14)
+   Start at  15:43:30
+   Duration  10.33s (import 72%, tests 16%, transform 11%, setup 1%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/payments/payments.test.ts
+
+### Mutation 8 — the REFUND decision handler stamps refunded_minor
+file: api/src/modules/pos/pos.service.ts
+  - import { cartVoid, saleTender } from './pos.schema.ts'
+  + import { cartVoid, refund, saleTender } from './pos.schema.ts'
+  -   const row = await findRefundById(approval.entityId, tx)
+  +   const row = await findRefundById(approval.entityId, tx)
+  +   await tx.update(refund).set({ refundedMinor: row.refundedMinor + 1 }).where(eq(refund.id, row.id))
+applied
+applied
+$ (cd api && bunx vitest run src/modules/pos/pos.refund.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+(node:353530) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/modules/pos/pos.refund.test.ts (19 tests | 1 failed) 7794ms
+   ❯ POS refunds (19)
+     × decides the approval without restating a single refund figure 354ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/pos/pos.refund.test.ts > POS refunds > decides the approval without restating a single refund figure
+AssertionError: expected { …(25) } to deeply equal { …(25) }
+
+- Expected
++ Received
+
+@@ -16,11 +16,11 @@
+    "note": null,
+    "number": "RF-J2QA-26",
+    "occurredAt": 2026-10-27T15:43:52.510Z,
+    "reasonCode": "CUSTOMER_CHANGED_MIND",
+    "receivedAt": 2026-10-27T15:43:52.510Z,
+-   "refundedMinor": 20000,
++   "refundedMinor": 20001,
+    "saleId": "69435a6c-ca68-4161-b2fa-677c340d92f3",
+    "shiftId": "0c692115-257b-4a84-8a52-bc191bbbf2a4",
+    "taxTotalMinor": 3333,
+    "terminalId": "4cbe5649-7711-4a63-b28e-5859be154c71",
+    "vatMinor": 2500,
+
+ ❯ src/modules/pos/pos.refund.test.ts:1234:19
+    1232|
+    1233|     const after = (await db.select().from(refund).where(eq(refund.id, …
+    1234|     expect(after).toEqual(before)
+       |                   ^
+    1235|
+    1236|     const decided = (
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  15:43:41
+   Duration  12.33s (tests 64%, import 31%, transform 5%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/pos/pos.refund.test.ts
+
+### tree after the run
+clean: no modified file under api/, desktop/ or packages/
+
+MUTATIONS CAUGHT: 8/8 — every proof failed the suite it was aimed at

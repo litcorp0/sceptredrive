@@ -1,0 +1,98 @@
+
+## fixtures (created through the API)
+     admin session minted for admin@sceptre.local
+
+## legs 1-4 — enrolment, device session, shift, catalogue
+PASS 1.1  an admin session created a branch and a terminal through the API
+PASS 2.1  an enrolment code redeemed into a device token
+PASS 2.2  the device session minted a JWT for that terminal and branch
+PASS 3.1  the shift opened on the terminal (APPLIED, status OPEN, float stored)
+PASS 4.1  two products were created and stocked at this branch
+     cashier GA-0194 and manager GA-0195 authorized on P13-TTM5-T01
+
+## legs 5-7 — a MoMo payment: PENDING, idempotent, PAID only when the server says so
+PASS 5.1  a MoMo charge is created PENDING with display text and a ~180 s expiry
+PASS 6.1  the same clientPaymentId returns the same payment id
+PASS 6.2  one payment row exists for that clientPaymentId (the provider call count is in-process, see payments.test.ts)
+PASS 7.1  the mock harness settled it and the till’s poll read it back PAID with a paid time
+
+## legs 8-9 — a cash + MoMo sale, its tender identity, and a replay
+PASS 8.1  a cash 40.00 + MoMo 60.00 sale applies with no conflict
+PASS 8.2  SQL: Σ tenders − change = total (the split identity), with two ordered tenders
+PASS 8.3  the tenders are the ones the till sent: 40 000 cash then 60 000 MoMo
+PASS 9.1  re-uploading the same sale is REPLAYED, not applied twice
+PASS 9.2  SQL: one sale row, one stock movement and one tender set for that receipt
+
+## legs 10-11 — the webhook: replay is a no-op, a wrong key is a 401
+PASS 10.1  the same charge.success body delivered twice answers 200 twice
+PASS 10.2  SQL: the replay inserted exactly one payment_event for that body hash
+PASS 10.3  the delivery did not move a MOCK payment (the event is recorded as IGNORED, the guard holds)
+PASS 11.1  a body signed with the wrong key is a 401 with INVALID_SIGNATURE
+PASS 11.2  SQL: the refused delivery inserted no payment_event
+
+## legs 12-13 — card checkout and a bank transfer account
+PASS 12.1  card initialize returns a checkout.paystack.com authorization_url and stays PENDING
+PASS 13.1  bank transfer returns an account number, account name and bank, expiring in ~15 minutes
+
+## leg 14 — a settlement one pesewa too large
+NOT-DRIVEN 14.1  a charge.success one pesewa larger raises PAYMENT_AMOUNT_MISMATCH (HIGH) and leaves the payment PENDING — the webhook only writes a payment whose provider is PAYSTACK, and PAYSTACK_MODE=mock never creates one; the walkthrough may not insert a fixture payment with SQL; covered by payments.webhook.test.ts ("a success whose amount differs is a HIGH conflict and no status change")
+
+## leg 15 — abandoning a payment, and money that arrives afterwards
+PASS 15.1  abandoning an unsettled MoMo payment flips it to EXPIRED
+PASS 15.2  a settlement that beat the abandon becomes PAID and orphaned
+PASS 15.3  SQL: one HIGH PAYMENT_LATE_SETTLEMENT conflict names that payment, and no refund was issued
+
+## leg 16 — cash + credit + card on one sale
+PASS 16.1  a 30.00 cash / 30.00 credit / 40.00 card sale applies with no conflict
+PASS 16.2  SQL: three tenders in the order the cashier took them
+PASS 16.3  SQL: the credit ledger holds exactly the 30 000 credit tender, once
+
+## leg 17 — reusing a settled payment
+PASS 17.1  a second sale citing the same card payment is REJECTED INVALID_TENDER
+PASS 17.2  SQL: the refused sale wrote no sale row and no tender
+
+## legs 18-20 — a cash refund, a damaged line, and a credit refund
+PASS 18.1  a 20.00 cash refund applies
+PASS 18.2  SQL: the sale’s money columns are byte-identical after the refund
+PASS 18.3  SQL: the resalable line posts one RETURN movement of +2 and the shelf grew by 2
+PASS 19.1  a DAMAGED line applies and stores its damage reason
+PASS 19.2  SQL: zero stock_movement rows for the damaged refund, and the shelf did not move
+PASS 20.1  refunding the credit tender applies and pays no cash
+PASS 20.2  SQL: one REFUND ledger entry of −30 000 on reference REFUND, and the balance is back to zero
+
+## legs 21-23 — a per-tender cap and a retrospective approval at exactly 20 000
+PASS 21.1  a 40.00 card + 60.00 cash sale applies
+PASS 21.2  a 60.00 refund allocated to a 40.00 card tender is REJECTED REFUND_EXCEEDS_TENDER
+PASS 22.1  a refund of exactly 20 000 raises one PENDING approval with deciderRole ADMIN
+PASS 23.1  the admin approves it
+PASS 23.2  SQL: the refund’s money columns are identical after the decision
+
+## leg 24 — a cash repayment at the till
+PASS 24.1  a cash repayment of 50 000 applies and the balance drops by exactly 50 000
+PASS 24.2  SQL: the ledger row is −50 000 with the till’s own reference number
+
+## leg 25 — a cart void needs a note when the reason is OTHER
+PASS 25.1  an OTHER void with no note is REJECTED
+PASS 25.2  the same void with a note applies and is stored with its reason
+
+## legs 26-27 — the Z snapshot, the X report, and every figure recomputed
+     drawer: float GHS 500.00 + cash GHS 1300.00 − change GHS 0.00 − cash refunds GHS 500.00 = GHS 1300.00
+PASS 26.1  closing the shift applies, the shift is CLOSED, and a Z snapshot exists
+PASS 26.2  the X report equals the Z snapshot except its kind and generation time
+PASS 27.1  every Z figure equals a recomputation from sale, sale_tender, refund, cart_void and cash_movement
+PASS 27.2  SQL: gross − refunds = net, and the tax components add to the tax total
+PASS 27.3  SQL: Σ tenders over every sale of the shift equals the sale totals (no tender lost)
+PASS 27.4  the expected cash equals what the drawer holds after cash refunds (and the refund term is exercised)
+
+## leg 28 — a Z-report whose snapshot is gone
+PASS 28.1  deleting the snapshot makes the Z-report a 500 SHIFT_REPORT_MISSING, not a recomputation
+
+## leg 29 — a manager closes someone else’s drawer
+PASS 29.1  a manager close with a 5 000 variance over tolerance is recorded against the manager
+PASS 29.2  the manager cannot decide the review they raised (403)
+PASS 29.3  the admin can, and the review is APPROVED with a reviewer
+
+## cleanup (rows this run created, foreign-key order)
+CLEANUP  branch removed 1/1
+
+PASS 55  FAIL 0  NOT-DRIVEN 1  (legs with a driven check 28/29, fully driven 28/29)

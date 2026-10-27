@@ -1,0 +1,202 @@
+Phase 13 — the till's counter audit, run by hand. It is not in the gate matrix: the
+matrix already runs two Electron suites in sequence, and the rule is one at a time.
+
+  $ DISPLAY=:1 bun run --filter desktop test:counter
+
+Result: 149/150 — unchanged since the drawer fix and the module move, and the single failure
+is the same one: `the sync badge reports Offline` receives `action`.
+
+What the badge can be reporting, from its own code (`components/layout/sync-badge.tsx:54`):
+`needsAction = outbox.failed > 0 || highOpen > 0 || upload.deadLetters > 0`, checked before
+`offline`. `highOpen` is not it: the audit's terminal carries ZERO conflicts on the server
+(SQL over `sync_conflict` for the three `Counter Audit …` terminals, all 0), and the device's
+local conflict cache is refreshed from that terminal-scoped endpoint. `outbox.failed` counts
+rows in `dead_letter` (the only non-acked terminal status anything writes), so the badge is
+reporting one of the audit's own uploads recorded as rejected. Which row, and why, is not
+recoverable after the run: the audit deletes its `--user-data-dir` tree at exit and does not
+print the badge's `title`/`detail`.
+
+Not caused by the 2026-10-27 changes: the audit makes no refunds, so the drawer fix cannot
+reach it, and the module move is a file rename. The same single check failed identically on
+the first run of this pass (149/150, 2026-10-27 14:32), before either change landed.
+
+A still earlier run reported 144/150 because Phase 12's console walkthrough had left a
+50 626 price override on ACC-SPX/GIK-00001; that stale row was removed and the five pricing
+failures went with it.
+
+--- transcript ---
+desktop test:counter: 
+desktop test:counter: -- Prerequisites --
+desktop test:counter:   PASS  API, PowerSync, Postgres, and a .vite build are all up
+desktop test:counter:   PASS  fixture: terminal ACC-SPX-T16, customer Audit Customer MVQUABPJ
+desktop test:counter: 
+desktop test:counter: -- 1. Boot, enrolment, and the PIN pad --
+desktop test:counter:   PASS  a fresh install opens the enrolment form, not the diagnostics shell
+desktop test:counter:   PASS  the diagnostics shell is not on the first screen
+desktop test:counter:   PASS  the enrolment code redeems and the terminal asks for a staff authorization
+desktop test:counter:   PASS  the PIN field does not steal focus from the staff code on the activation screen
+desktop test:counter:   PASS  every PIN key is at least 64 × 64 px
+desktop test:counter:   PASS  the PIN pad accepts the number row and announces the count, never the digits
+desktop test:counter:   PASS  a temporary PIN forces a change before the till opens
+desktop test:counter:   PASS  the new PIN signs in and the till asks for a shift
+desktop test:counter: 
+desktop test:counter: -- 2. Open a shift and sell three baskets --
+desktop test:counter:   PASS  the shift screen offers to open a shift
+desktop test:counter:   PASS  opening a shift lands on the shift home (P10-D6)
+desktop test:counter:   PASS  Start selling lands with the search field focused
+desktop test:counter:   PASS  the cart total is the catalogue price, to the pesewa
+desktop test:counter:   PASS  the tender screen carries the same total the cart showed
+desktop test:counter:   PASS  over-tendering shows the change, not a shortfall
+desktop test:counter:   PASS  a cash sale completes and prints
+desktop test:counter:   PASS  an exact-cash sale completes with no change
+desktop test:counter:   PASS  a customer is attached and their credit profile has synced
+desktop test:counter:   PASS  the credit sale fits the limit, so no manager is needed
+desktop test:counter:   PASS  a credit sale completes and prints
+desktop test:counter:   PASS  completing a sale lands on its receipt
+desktop test:counter: 
+desktop test:counter: -- 3. Home figures against the script’s own arithmetic --
+desktop test:counter:   PASS  take is the sum of the three sales
+desktop test:counter:   PASS  credit given is the credit sale’s total
+desktop test:counter:   PASS  the sub-line counts the sales and the units
+desktop test:counter:   PASS  the average basket is the shared helper’s figure
+desktop test:counter:   PASS  tax included is non-zero and less than the take
+desktop test:counter:   PASS  expected cash is float + cash tendered − change
+desktop test:counter:   PASS  the chart summary names the busiest hour without a hover
+desktop test:counter:   PASS  exactly one bar is brand orange — the current hour
+desktop test:counter:   PASS  the top seller is the product sold most, first
+desktop test:counter:   PASS  no receipt is left unprinted, so the attention strip does not claim one
+desktop test:counter: 
+desktop test:counter: -- 4. Width, target, and reduced-motion matrix --
+desktop test:counter:   PASS  home @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  home @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  home @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  home @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  home @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  home @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  home @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  home @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  home @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  home @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sell @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  sell @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  sell @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sell @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  sell @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  sell @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  sell @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sell @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  sell @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  sell @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  tender @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  tender @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  tender @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  tender @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  tender @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  tender @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  tender @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  tender @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  tender @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  tender @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  receipt @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  receipt @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  receipt @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  receipt @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  receipt @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  receipt @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  receipt @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  receipt @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  receipt @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  receipt @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sales @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  sales @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  sales @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sales @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  sales @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  sales @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  sales @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sales @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  sales @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  sales @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  shift @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  shift @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  shift @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  shift @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  shift @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  shift @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  shift @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  shift @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  shift @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  shift @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sync @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  sync @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  sync @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sync @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  sync @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  sync @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  sync @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  sync @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  sync @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  sync @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  settings @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  settings @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  settings @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  settings @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  settings @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  settings @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  settings @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  settings @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  settings @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  settings @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  login @ 1024×768: no horizontal scroll
+desktop test:counter:   PASS  login @ 1024×768: every target is at least 44×44
+desktop test:counter:   PASS  login @ 1024×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  login @ 1024×768: the primary action is on screen without scrolling
+desktop test:counter:   PASS  login @ 1366×768: no horizontal scroll
+desktop test:counter:   PASS  login @ 1366×768: every target is at least 44×44
+desktop test:counter:   PASS  login @ 1366×768: no motion above 1 ms under reduced motion
+desktop test:counter:   PASS  login @ 1920×1080: no horizontal scroll
+desktop test:counter:   PASS  login @ 1920×1080: every target is at least 44×44
+desktop test:counter:   PASS  login @ 1920×1080: no motion above 1 ms under reduced motion
+desktop test:counter: 
+desktop test:counter: -- 5. A sale with no pointer --
+desktop test:counter:   PASS  Tab reaches Start selling
+desktop test:counter:   PASS  the focused action shows a visible ring
+desktop test:counter:   PASS  Enter opens the sell screen with the search field focused
+desktop test:counter:   PASS  typing a SKU and pressing Enter adds the line
+desktop test:counter:   PASS  F9 moves to tender
+desktop test:counter:   PASS  the number row types the amount on the tender keypad
+desktop test:counter:   PASS  the change figure reads as change, not a shortfall
+desktop test:counter:   PASS  F9 completes the sale and the receipt prints, with no pointer used
+desktop test:counter:   PASS  the keyboard sale has a receipt
+desktop test:counter: 
+desktop test:counter: -- 6. Chart accessibility --
+desktop test:counter:   PASS  the chart is one tab stop
+desktop test:counter:   PASS  arrow keys reach a data point
+desktop test:counter:   PASS  the chart carries a summary sentence
+desktop test:counter:   PASS  the data-table alternative has 24 rows
+desktop test:counter: 
+desktop test:counter: -- 7. Offline, and a relaunch --
+desktop test:counter:   FAIL  the sync badge reports Offline — action
+desktop test:counter:   PASS  offline is not styled as an error
+desktop test:counter:   PASS  a sale completes with the network down
+desktop test:counter:   PASS  the home take moves after an offline sale
+desktop test:counter:   PASS  the outbox shows the waiting count
+desktop test:counter:   PASS  the attention strip names the uploads waiting
+desktop test:counter:   PASS  a relaunched offline terminal asks for a PIN, not for enrolment
+desktop test:counter:   PASS  the offline relaunch lands on the shift home
+desktop test:counter:   PASS  the figures survive a relaunch with no network
+desktop test:counter: 
+desktop test:counter: -- 8. Static checks --
+desktop test:counter:   PASS  zero raw Tailwind palette classes outside the diagnostic surfaces
+desktop test:counter:   PASS  the whole renderer is clean, with only the four diagnostics files allowed to differ
+desktop test:counter:   PASS  no module ui/ file imports @powersync/react (0 ui files)
+desktop test:counter:   PASS  no toFixed( in the renderer’s non-test sources
+desktop test:counter:   BUNDLE index-HC2mfKfV.js 1407597 bytes · 25 chunks · 2330942 total
+desktop test:counter:   PASS  the renderer bundle size is recorded for Plan 10
+desktop test:counter: 
+desktop test:counter: 149/150 checks passed
+desktop test:counter: 
+desktop test:counter: Failures:
+desktop test:counter:   - the sync badge reports Offline
+desktop test:counter: Exited with code 1
+EXIT=1
