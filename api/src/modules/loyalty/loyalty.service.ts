@@ -1,9 +1,12 @@
 import { type DbExecutor, db } from '@sceptre/db'
+import { accraIsoDay, toCsv } from '@sceptre/shared'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
+import { type CsvExport, csvFilename, enforceExportCap } from '../../http/csv.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { requireCustomer } from '../customers/customers.service.ts'
+import { listBranches } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
@@ -518,6 +521,108 @@ export async function getLiability(
       rows: activityRows,
     },
     negativeBalances,
+  }
+}
+
+/**
+ * Loyalty liability as a file (RPT-05, P14-D17, P14-D21).
+ *
+ * The balance is **as of now** and says so: outstanding points are a live projection, and
+ * an `asOf` would have to model which lots had expired by then. `from`/`to` filters the
+ * *activity* section only, exactly as the JSON report does.
+ *
+ * Rows are the report's own headline and per-branch activity, never a collapsed `TOTAL`
+ * row, so a manager hands their accountant their branch's movement.
+ */
+export async function exportLiability(
+  user: SessionUser,
+  query: LiabilityQuery,
+): Promise<CsvExport> {
+  const report = await getLiability(user, query)
+  const branches = await listBranches(user, { includeInactive: true })
+  const codeOf = (branchId: string | null): string => {
+    if (!branchId) return 'all-branches'
+    return branches.find((row) => row.id === branchId)?.code ?? ''
+  }
+
+  type Row = {
+    section: string
+    branchCode: string
+    label: string
+    points: number
+    valueMinor: number | ''
+  }
+
+  const scopeCode = codeOf(report.activity.branchId)
+  const rows: Row[] = [
+    {
+      section: 'liability',
+      branchCode: scopeCode,
+      label: 'outstanding_points',
+      points: report.outstandingPoints,
+      valueMinor: report.outstandingValueMinor,
+    },
+    {
+      section: 'liability',
+      branchCode: scopeCode,
+      label: 'expiring_soon_points',
+      points: report.expiringSoonPoints,
+      valueMinor: pointsToValueMinor(report.expiringSoonPoints, report.pointsPerCedi),
+    },
+    {
+      section: 'liability',
+      branchCode: scopeCode,
+      label: 'points_per_cedi',
+      points: report.pointsPerCedi,
+      valueMinor: '',
+    },
+  ]
+
+  for (const activity of report.activity.rows) {
+    const metrics: Array<[string, number]> = [
+      ['earned_points', activity.earnedPoints],
+      ['redeemed_points', activity.redeemedPoints],
+      ['clawed_back_points', activity.clawedBackPoints],
+      ['adjusted_points', activity.adjustedPoints],
+      ['expired_points', activity.expiredPoints],
+      ['net_points', activity.netPoints],
+    ]
+    for (const [label, points] of metrics) {
+      rows.push({
+        section: 'activity',
+        branchCode: codeOf(activity.branchId),
+        label,
+        points,
+        valueMinor: pointsToValueMinor(points, report.pointsPerCedi),
+      })
+    }
+  }
+  enforceExportCap(rows.length)
+
+  rows.push({
+    section: 'total',
+    branchCode: scopeCode,
+    label: 'TOTAL',
+    points: report.outstandingPoints,
+    valueMinor: report.outstandingValueMinor,
+  })
+
+  return {
+    filename: csvFilename(
+      'loyalty-liability',
+      report.activity.branchId ? scopeCode : null,
+      `asof-${accraIsoDay(report.asOf)}`,
+    ),
+    csv: toCsv(
+      [
+        { key: 'section', header: 'section' },
+        { key: 'branchCode', header: 'branch_code' },
+        { key: 'label', header: 'label' },
+        { key: 'points', header: 'points' },
+        { key: 'valueMinor', header: 'value_minor' },
+      ],
+      rows,
+    ),
   }
 }
 

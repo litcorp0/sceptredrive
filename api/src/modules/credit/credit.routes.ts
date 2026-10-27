@@ -86,6 +86,14 @@ creditRoutes.get(
 )
 
 creditRoutes.get(
+  '/api/credit/aging/export',
+  requireSession,
+  requirePermission('credit.read'),
+  validateAgingQuery,
+  (c) => creditController.exportAging(c, c.req.valid('query')),
+)
+
+creditRoutes.get(
   '/api/credit/statements/:customerId',
   requireSession,
   requirePermission('credit.read'),

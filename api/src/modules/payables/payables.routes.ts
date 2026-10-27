@@ -98,3 +98,11 @@ payablesRoutes.get(
   validateAgingQuery,
   (c) => payablesController.getAging(c, c.req.valid('query')),
 )
+
+payablesRoutes.get(
+  '/api/payables/aging/export',
+  requireSession,
+  requirePermission('payable.read'),
+  validateAgingQuery,
+  (c) => payablesController.exportAging(c, c.req.valid('query')),
+)

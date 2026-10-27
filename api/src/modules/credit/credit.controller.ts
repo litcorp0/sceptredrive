@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
+import { sendCsv } from '../../http/csv.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as creditService from './credit.service.ts'
 import type {
@@ -67,6 +68,11 @@ export async function listEntries(c: Context<AppEnv>, query: EntryListQuery) {
 export async function getAging(c: Context<AppEnv>, query: AgingQuery) {
   const user = currentUser(c)
   return c.json(await creditService.getAging(user, query))
+}
+
+export async function exportAging(c: Context<AppEnv>, query: AgingQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await creditService.exportAging(user, query))
 }
 
 export async function getStatement(c: Context<AppEnv>, customerId: string, query: StatementQuery) {

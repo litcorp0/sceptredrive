@@ -1,7 +1,8 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { ratioBp } from '@sceptre/shared'
+import { ratioBp, toCsv } from '@sceptre/shared'
 import { branchScope, hasPermission, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
+import { type CsvExport, csvFilename, enforceExportCap } from '../../http/csv.ts'
 import {
   AppError,
   ConflictError,
@@ -803,6 +804,89 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Ag
   }
 
   return { asOf, branches }
+}
+
+/**
+ * Credit ageing as a file (RPT-05, P14-D17).
+ *
+ * Built from the rows `getAging` returns — not from `byBranch`, which is the Phase 9
+ * defect — so a manager's file lists their branch's customers instead of a single
+ * `TOTAL` row, and the screen and the file cannot say different things.
+ *
+ * Money is emitted as integer pesewas with `_minor` headers. An export that divides by
+ * 100 has introduced a float into a report.
+ */
+export async function exportAging(user: SessionUser, query: AgingQuery): Promise<CsvExport> {
+  const aging = await getAging(user, query)
+  const branchId = resolveBranchFilter(user, query.branchId ?? null)
+  const branchCode = branchId ? (await getBranch(user, branchId)).code : null
+
+  type Row = {
+    branchCode: string
+    customerId: string
+    customerName: string
+    currentMinor: number
+    days1To30Minor: number
+    days31To60Minor: number
+    days61To90Minor: number
+    over90Minor: number
+    totalMinor: number
+    oldestDueDate: string
+  }
+
+  const rows: Row[] = []
+  const totals = { ...emptyBuckets(), total: 0 }
+  for (const scope of aging.branches) {
+    for (const customer of scope.customers) {
+      rows.push({
+        branchCode: scope.branch.code,
+        customerId: customer.customerId,
+        customerName: customer.customerName,
+        currentMinor: customer.buckets.current,
+        days1To30Minor: customer.buckets.days1To30,
+        days31To60Minor: customer.buckets.days31To60,
+        days61To90Minor: customer.buckets.days61To90,
+        over90Minor: customer.buckets.over90,
+        totalMinor: customer.totalMinor,
+        oldestDueDate: customer.oldestDueDate ?? '',
+      })
+      for (const key of AGING_BUCKET_KEYS) totals[key] += customer.buckets[key]
+      totals.total += customer.totalMinor
+    }
+  }
+  enforceExportCap(rows.length)
+
+  rows.push({
+    branchCode: '',
+    customerId: 'TOTAL',
+    customerName: '',
+    currentMinor: totals.current,
+    days1To30Minor: totals.days1To30,
+    days31To60Minor: totals.days31To60,
+    days61To90Minor: totals.days61To90,
+    over90Minor: totals.over90,
+    totalMinor: totals.total,
+    oldestDueDate: '',
+  })
+
+  return {
+    filename: csvFilename('credit-aging', branchCode, `asof-${aging.asOf}`),
+    csv: toCsv(
+      [
+        { key: 'branchCode', header: 'branch_code' },
+        { key: 'customerId', header: 'customer_id' },
+        { key: 'customerName', header: 'customer_name' },
+        { key: 'currentMinor', header: 'current_minor' },
+        { key: 'days1To30Minor', header: 'days_1_30_minor' },
+        { key: 'days31To60Minor', header: 'days_31_60_minor' },
+        { key: 'days61To90Minor', header: 'days_61_90_minor' },
+        { key: 'over90Minor', header: 'over_90_minor' },
+        { key: 'totalMinor', header: 'total_minor' },
+        { key: 'oldestDueDate', header: 'oldest_due_date' },
+      ],
+      rows,
+    ),
+  }
 }
 
 /**

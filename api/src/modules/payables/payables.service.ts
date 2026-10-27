@@ -1,7 +1,8 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { taxBreakdown } from '@sceptre/shared'
+import { taxBreakdown, toCsv } from '@sceptre/shared'
 import { assertBranchAccess, resolveBranchFilter } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
+import { type CsvExport, csvFilename, enforceExportCap } from '../../http/csv.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { attachReceiptSupplier, loadReceiptForPayables } from '../inventory/inventory.service.ts'
@@ -1108,6 +1109,92 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
     ),
     totalOutstandingMinor,
     totalOnAccountMinor,
+  }
+}
+
+/**
+ * Payables ageing as a file (RPT-05, P14-D17).
+ *
+ * Built from the rows `getAging` returns rather than from a second query, so a manager's
+ * file lists their suppliers instead of a single `TOTAL` row and the screen and the file
+ * cannot diverge. On-account credit and credit notes keep their own columns and are never
+ * netted into the buckets (P11-D9).
+ */
+export async function exportAging(user: SessionUser, query: AgingQuery): Promise<CsvExport> {
+  const aging = await getAging(user, query)
+  const branchCode = aging.branchId
+    ? (await branchesService.getBranch(user, aging.branchId)).code
+    : 'all-branches'
+
+  type Row = {
+    branchCode: string
+    supplierId: string
+    supplierCode: string
+    supplierName: string
+    currentMinor: number
+    days1To30Minor: number
+    days31To60Minor: number
+    days61To90Minor: number
+    over90Minor: number
+    totalOutstandingMinor: number
+    onAccountMinor: number
+    creditMinor: number
+  }
+
+  const rows: Row[] = aging.suppliers.map((supplier) => ({
+    branchCode,
+    supplierId: supplier.supplierId,
+    supplierCode: supplier.supplierCode,
+    supplierName: supplier.supplierName,
+    currentMinor: supplier.buckets.current,
+    days1To30Minor: supplier.buckets.days1To30,
+    days31To60Minor: supplier.buckets.days31To60,
+    days61To90Minor: supplier.buckets.days61To90,
+    over90Minor: supplier.buckets.over90,
+    totalOutstandingMinor: supplier.totalOutstandingMinor,
+    onAccountMinor: supplier.onAccountMinor,
+    creditMinor: supplier.creditMinor,
+  }))
+  enforceExportCap(rows.length)
+
+  rows.push({
+    branchCode,
+    supplierId: 'TOTAL',
+    supplierCode: '',
+    supplierName: '',
+    currentMinor: aging.totals.current,
+    days1To30Minor: aging.totals.days1To30,
+    days31To60Minor: aging.totals.days31To60,
+    days61To90Minor: aging.totals.days61To90,
+    over90Minor: aging.totals.over90,
+    totalOutstandingMinor: aging.totalOutstandingMinor,
+    onAccountMinor: aging.totalOnAccountMinor,
+    creditMinor: aging.creditNotesMinor,
+  })
+
+  return {
+    filename: csvFilename(
+      'payables-aging',
+      aging.branchId ? branchCode : null,
+      `asof-${aging.asOf}`,
+    ),
+    csv: toCsv(
+      [
+        { key: 'branchCode', header: 'branch_code' },
+        { key: 'supplierId', header: 'supplier_id' },
+        { key: 'supplierCode', header: 'supplier_code' },
+        { key: 'supplierName', header: 'supplier_name' },
+        { key: 'currentMinor', header: 'current_minor' },
+        { key: 'days1To30Minor', header: 'days_1_30_minor' },
+        { key: 'days31To60Minor', header: 'days_31_60_minor' },
+        { key: 'days61To90Minor', header: 'days_61_90_minor' },
+        { key: 'over90Minor', header: 'over_90_minor' },
+        { key: 'totalOutstandingMinor', header: 'total_outstanding_minor' },
+        { key: 'onAccountMinor', header: 'on_account_minor' },
+        { key: 'creditMinor', header: 'credit_notes_minor' },
+      ],
+      rows,
+    ),
   }
 }
 

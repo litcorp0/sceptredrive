@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
+import { sendCsv } from '../../http/csv.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as loyaltyService from './loyalty.service.ts'
 import type { LiabilityQuery, LoyaltyEntryCreateBody } from './loyalty.types.ts'
@@ -18,6 +19,11 @@ export async function createEntry(c: Context<AppEnv>, input: LoyaltyEntryCreateB
 export async function getLiability(c: Context<AppEnv>, query: LiabilityQuery) {
   const user = currentUser(c)
   return c.json(await loyaltyService.getLiability(user, query))
+}
+
+export async function exportLiability(c: Context<AppEnv>, query: LiabilityQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await loyaltyService.exportLiability(user, query))
 }
 
 /** Manual run of the same expiry seam the scheduled job calls; the run is audited. */

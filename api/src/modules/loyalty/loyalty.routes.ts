@@ -34,6 +34,14 @@ loyaltyRoutes.get(
   (c) => loyaltyController.getLiability(c, c.req.valid('query')),
 )
 
+loyaltyRoutes.get(
+  '/api/loyalty/liability/export',
+  requireSession,
+  requirePermission('loyalty.read'),
+  validateLiabilityQuery,
+  (c) => loyaltyController.exportLiability(c, c.req.valid('query')),
+)
+
 loyaltyRoutes.post(
   '/api/loyalty/expiry-run',
   requireSession,
