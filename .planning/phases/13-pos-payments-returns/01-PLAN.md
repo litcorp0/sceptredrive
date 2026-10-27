@@ -199,9 +199,9 @@ caller apply `maxRedeemablePoints` with the live balance (P13-D35).
 ### 5. Permission and its label
 
 `permissions.ts`: add `'pos.refund'` immediately after `'pos.discount'` in `PERMISSIONS`, and add it
-to `ADMIN_PERMISSIONS` and `MANAGER_PERMISSIONS`. `CASHIER_PERMISSIONS` stays `[]`. Update
-`permissions.test.ts`'s counts (ADMIN 65→66, MANAGER 48→49) and add a case asserting a cashier still
-holds nothing.
+to `ADMIN_PERMISSIONS` and `MANAGER_PERMISSIONS`. `CASHIER_PERMISSIONS` stays `[]`. Update the
+permission list's length assertions (the list is **59 → 60**; MANAGER **48 → 49**) and add a case
+asserting a cashier still holds nothing.
 
 ### 6. `packages/shared/src/index.ts`
 
@@ -220,18 +220,20 @@ executor verifies it and changes nothing else in the file. `AGENTS.md` is untouc
 One `describe` per module, hand-computed fixtures:
 
 - **tender**: 100.00 total, 50.00 cash + 50.00 MoMo → applied 100.00, change 0, no problem;
-  50.00 cash + 60.00 MoMo → `OVERPAID_BY_ELECTRONIC` and change **0**; 40.00 cash + 40.00 credit +
-  20.00 card on 100.00 → `UNPAID_BALANCE` with `remainingMinor = 0`; 30.00 cash + 70.00 credit on
-  100.00 paid with 100.00 cash → change 0 (credit never produces change); 20.00 cash + 80.00 credit
-  with 10.00 cash over → change 10.00; two credit tenders → `MULTIPLE_CREDIT_TENDERS`; six tenders →
+  20.00 cash + 110.00 card → `OVERPAID_BY_ELECTRONIC` and change **0** (change of 90.00 is
+  cash-funded only, and only 20.00 was cash); 40.00 cash + 40.00 credit + 10.00 card on 100.00 →
+  `UNPAID_BALANCE` with `remainingMinor = 10.00`; 30.00 cash + 70.00 credit on 100.00 with the cashier
+  typing 100.00 cash → change 0 (credit never produces change); 20.00 cash + 80.00 credit with 10.00
+  cash over → change 10.00; two credit tenders → `MULTIPLE_CREDIT_TENDERS`; six tenders →
   `TOO_MANY_TENDERS`; zero sale with no tenders → valid.
 - **refund**: `refundableQuantity` at 0 and at the cap; a line one over the cap → `EXCEEDS_LINE`;
   tender over its remainder → `EXCEEDS_TENDER`; allocations that do not sum → `SUM_MISMATCH`;
   100.00 tender total with 10.00 change, refund of 91.00 → `EXCEEDS_SALE`; 90.00 → null;
   `refundApprovalRequired(20_000, 20_000)` → **true**, `(19_999, 20_000)` → false.
 - **hold**: blank, 61 characters, 10 existing; `repriceHeldCart` with a price that rose 10.00, a
-  product archived, a product deleted, and a line discount now larger than the line gross (asserted
-  clamped, and that the clamp came from `priceCart`).
+  product archived, a product deleted, a tax category that moved (`TAX` before `PRICE` on the same
+  line), and a line discount now larger than the line gross (asserted clamped, and that the clamp came
+  from `priceCart`).
 - **cart void**: `OTHER` with no note and with a two-character note both refused; every other reason
   needs none.
 
@@ -243,7 +245,7 @@ bun run check-types
 bun run --filter shared lint
 ```
 
-Expected: shared **239 → ~285**. API, desktop and admin untouched.
+Expected: shared **239 → 301** (measured). API, desktop and admin untouched.
 
 ## Commits
 

@@ -137,7 +137,7 @@ Verified 2026-10-27. These are the contracts the plans must build on, not change
    `REFUND` to the `other` subject and `approvals.registry.test.ts` treats it as the honest
    *unregistered* type — Phase 13 is the commit that registers it, and the boot list in
    `api/src/app.ts` grows with it.
-6. **`PERMISSIONS` has 65 entries and no payment, refund or tender permission.**
+6. **`PERMISSIONS` has 59 entries and no payment, refund or tender permission.**
    `CASHIER` has an **empty** permission array by design ("Cashiers authenticate on the POS ...
    and never call the admin API"). A `pos.refund`-style permission would be granted to nobody who
    uses the till; refund authority on the till is the manager PIN proof, and the server-side
