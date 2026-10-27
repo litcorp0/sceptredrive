@@ -2,7 +2,7 @@ import { requirePermission } from '../../http/authorize.ts'
 import { factory } from '../../http/factory.ts'
 import { requireSession } from '../../http/session.ts'
 import * as auditController from './audit.controller.ts'
-import { validateAuditListQuery } from './audit.validation.ts'
+import { validateAuditExportQuery, validateAuditListQuery } from './audit.validation.ts'
 
 export const auditRoutes = factory.createApp()
 
@@ -12,4 +12,12 @@ auditRoutes.get(
   requirePermission('audit.read'),
   validateAuditListQuery,
   (c) => auditController.listAudit(c, c.req.valid('query')),
+)
+
+auditRoutes.get(
+  '/api/audit/export',
+  requireSession,
+  requirePermission('audit.read'),
+  validateAuditExportQuery,
+  (c) => auditController.exportAudit(c, c.req.valid('query')),
 )

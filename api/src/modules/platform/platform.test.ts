@@ -93,7 +93,10 @@ describe.skipIf(!available)('audit and settings API', () => {
   })
 
   it('keeps the audit service append-only', () => {
-    expect(Object.keys(auditService).sort()).toEqual(['queryAudit', 'writeAudit'])
+    // `exportEntries` reads; it must never grow a write, an update or a delete. The
+    // exact-key assertion is the tripwire: a new export may be added deliberately, in
+    // which case this list is the one line that has to change.
+    expect(Object.keys(auditService).sort()).toEqual(['exportEntries', 'queryAudit', 'writeAudit'])
   })
 
   it('paginates and orders audit entries newest first', async () => {

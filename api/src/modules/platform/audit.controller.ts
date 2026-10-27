@@ -1,6 +1,8 @@
 import type { Context } from 'hono'
 import { currentUser } from '../../http/authorize.ts'
+import { sendCsv } from '../../http/csv.ts'
 import type { AppEnv } from '../../http/factory.ts'
+import type { AuditExportFilters } from './audit.service.ts'
 import * as auditService from './audit.service.ts'
 import type { AuditListQuery } from './audit.types.ts'
 
@@ -19,4 +21,9 @@ export async function listAudit(c: Context<AppEnv>, query: AuditListQuery) {
     offset: query.offset,
   })
   return c.json(result)
+}
+
+export async function exportAudit(c: Context<AppEnv>, query: AuditExportFilters) {
+  const user = currentUser(c)
+  return sendCsv(c, await auditService.exportEntries(user, query))
 }
