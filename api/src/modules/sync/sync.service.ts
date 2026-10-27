@@ -360,8 +360,11 @@ async function dispatchTransaction(
         item.payload as SalePayload,
         tx,
       )
-      // Inside the same transaction as the sale: a committed sale without its
-      // submission row would be a document no sweep could ever find.
+      // Inside the same transaction as the sale, and deliberately not
+      // swallowed: a committed sale without its submission row would be a
+      // document no sweep could ever find. A failure rolls the sale back and
+      // the till retries the batch, which is the only outcome that cannot lose
+      // a document.
       const submissionId = await evatService.queueForSale(result.saleId, tx)
       const enqueueEvat = options.enqueueEvat ?? enqueueEvatSubmission
       return {

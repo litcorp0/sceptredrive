@@ -239,14 +239,17 @@ async function buildDocument(row: EvatSubmissionRow, executor: DbExecutor): Prom
     if (!saleRow) {
       throw new AppError(500, 'EVAT_SALE_MISSING', 'The sale this refund names does not exist')
     }
-    const [lines, tenders] = await Promise.all([
+    const [lines, tenders, invoice] = await Promise.all([
       selectRefundDocumentLines(row.refundId, executor),
       selectRefundDocumentTenders(row.refundId, executor),
+      findSubmissionBySaleId(saleRow.id, executor),
     ])
     return {
       kind: 'REFUND',
       documentNumber: refundRow.number,
-      originalInvoiceNumber: saleRow.receiptNumber,
+      // GRA knows the invoice by the number it issued; our receipt number is
+      // only the fallback for a sale that was never submitted.
+      originalInvoiceNumber: invoice?.providerInvoiceNumber ?? saleRow.receiptNumber,
       occurredAt: refundRow.occurredAt,
       seller,
       currency: 'GHS',
@@ -384,6 +387,37 @@ function certificateFailure(
 }
 
 /**
+ * A provider call cannot be allowed to hold the row lock and a pool connection
+ * forever: `EVAT_TIMEOUT_MS` bounds it, and a timeout is "we do not know" rather
+ * than a refusal, so it takes the retryable path.
+ */
+async function certifyWithinTimeout(
+  provider: EInvoicingProvider,
+  document: EvatDocument,
+): Promise<EvatCertification> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      provider.certify(document),
+      new Promise<EvatCertification>((resolve) => {
+        timer = setTimeout(
+          () =>
+            resolve({
+              ok: false,
+              code: EVAT_SERVICE_CODES.PROVIDER_UNAVAILABLE,
+              message: `The E-VAT provider did not answer within ${env.EVAT_TIMEOUT_MS}ms`,
+              retryable: true,
+            }),
+          env.EVAT_TIMEOUT_MS,
+        )
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
  * One attempt, on one row, inside the caller's transaction.
  *
  * `ATTENTION` and `CERTIFIED` are refused rather than resubmitted: an operator
@@ -401,6 +435,13 @@ export async function submit(
     return row
   }
 
+  // The candidate list is read outside this transaction, so a second poller may
+  // have picked the same row. Under the lock, a ladder that has not elapsed is
+  // not ours to spend — otherwise two workers collapse 1/2/5… into 0/0/0 and
+  // burn the eight attempts without giving GRA a chance to recover.
+  const now = new Date()
+  if (row.nextAttemptAt && row.nextAttemptAt.getTime() > now.getTime()) return row
+
   // A refund may have been promoted by the sweep without its invoice being
   // certified; re-check rather than spend an attempt on a refusal we can see.
   if (
@@ -411,10 +452,23 @@ export async function submit(
   }
 
   const attempts = row.attempts + 1
-  const submittedAt = new Date()
+  const submittedAt = now
   await updateSubmission(row.id, { status: 'SUBMITTING', attempts, submittedAt }, executor)
 
-  const document = await buildDocument(row, executor)
+  let document: EvatDocument
+  try {
+    document = await buildDocument(row, executor)
+  } catch (error) {
+    // A document that cannot be built (a missing row, taxes above the total) is
+    // data, not a provider condition. Rolling the transaction back would leave
+    // the row `QUEUED` and throw again every five minutes, so it becomes a row
+    // a person can see and act on instead of a silent retry.
+    return updateSubmission(
+      row.id,
+      attentionPatch(EVAT_SERVICE_CODES.DOCUMENT_INVALID, messageOf(error)),
+      executor,
+    )
+  }
   const missing = missingSellerIdentity(document.seller)
   if (missing) {
     return updateSubmission(
@@ -440,7 +494,7 @@ export async function submit(
 
   let result: EvatCertification
   try {
-    result = await provider.certify(document)
+    result = await certifyWithinTimeout(provider, document)
   } catch (error) {
     // A thrown provider call is "we do not know", never "refused": the same
     // payload may succeed on the next rung of the ladder.
@@ -647,8 +701,13 @@ export async function retrySubmission(
       throw new ConflictError('This submission is being submitted right now')
     }
 
-    const nextAttemptAt = new Date()
-    await updateSubmission(id, { status: 'QUEUED', nextAttemptAt }, tx)
+    // Retrying a refund whose invoice has not certified must not queue it: the
+    // attempt would be spent on a refusal GRA is right to make (E701), and with
+    // a lenient provider a credit note could exist before its invoice.
+    const waiting = row.kind === 'REFUND' && !(await invoiceCertifiedForRefund(row.refundId, tx))
+    const status = waiting ? 'WAITING_FOR_INVOICE' : 'QUEUED'
+    const nextAttemptAt = waiting ? null : new Date()
+    await updateSubmission(id, { status, nextAttemptAt }, tx)
     await writeAudit(
       {
         ...actor,
@@ -661,7 +720,7 @@ export async function retrySubmission(
           attempts: row.attempts,
           nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
         },
-        after: { status: 'QUEUED', nextAttemptAt: nextAttemptAt.toISOString() },
+        after: { status, nextAttemptAt: nextAttemptAt?.toISOString() ?? null },
       },
       tx,
     )

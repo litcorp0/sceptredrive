@@ -102,8 +102,10 @@ export const EVAT_SERVICE_CODES = {
   SELLER_IDENTITY_MISSING: 'SELLER_IDENTITY_MISSING',
   /** The provider could not be constructed: `EVAT_PROVIDER=gra` has no client. */
   PROVIDER_NOT_READY: 'PROVIDER_NOT_READY',
-  /** A provider call threw: a network failure or a timeout, not a refusal. */
+  /** A provider call threw or outlived `EVAT_TIMEOUT_MS`, not a refusal. */
   PROVIDER_UNAVAILABLE: 'PROVIDER_UNAVAILABLE',
+  /** The document could not be built from the rows behind it: data, not provider. */
+  DOCUMENT_INVALID: 'DOCUMENT_INVALID',
 } as const
 
 let cached: EInvoicingProvider | null = null
