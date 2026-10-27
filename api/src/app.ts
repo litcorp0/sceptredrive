@@ -26,6 +26,8 @@ import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
 import { terminalsRoutes } from './modules/org/terminals.routes.ts'
 import { payablesRoutes } from './modules/payables/payables.routes.ts'
+import { mountPaymentRoutes } from './modules/payments/payments.routes.ts'
+import { paystackWebhookRoutes } from './modules/payments/payments.webhook.routes.ts'
 import { auditRoutes } from './modules/platform/audit.routes.ts'
 import { settingsRoutes } from './modules/platform/settings.routes.ts'
 import { posRoutes } from './modules/pos/pos.routes.ts'
@@ -68,6 +70,10 @@ export const app = factory.createApp()
 
 app.use(requestId)
 app.use(requestLogger)
+// The Paystack webhook is the only sessionless mutating route in the API. Its
+// HMAC over the raw body is the credential, so it is registered before the
+// session middleware; the handler never calls `next()`.
+app.route('/', paystackWebhookRoutes)
 app.use(loadSession)
 app.use(securityHeaders)
 app.use('*', corsMiddleware)
@@ -101,6 +107,7 @@ app.route('/', replenishmentRoutes)
 app.route('/', auditRoutes)
 app.route('/', settingsRoutes)
 app.route('/', syncRoutes)
+mountPaymentRoutes(app)
 
 app.notFound((c) => {
   return c.json(
