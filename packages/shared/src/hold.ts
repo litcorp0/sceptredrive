@@ -56,6 +56,8 @@ export interface HoldDifference {
 export interface RepricedHold {
   lines: HoldLine[]
   differences: HoldDifference[]
+  /** Deleted or archived products; a line here cannot be completed as-is. */
+  blockingProductIds: string[]
   loyaltyPointsRequested: number
   requiresAcknowledgement: boolean
 }
@@ -93,9 +95,11 @@ interface RepriceEntry {
  * can see what it was; an archived product is re-priced and flagged. A tax
  * reclassification is its own difference, ordered before a price change on the
  * same line: the kind tells the panel to say the tax treatment moved, while
- * `fromMinor`/`toMinor` show the line total on either side. The loyalty
- * question is deliberately left to the caller, which applies
- * `maxRedeemablePoints` against the live balance.
+ * `fromMinor`/`toMinor` show the line total on either side. A `GONE` or
+ * `ARCHIVED` product is also listed in `blockingProductIds`, because such a
+ * line cannot be completed and must be removed or replaced (P13-D35). The
+ * loyalty question is deliberately left to the caller, which applies its
+ * loyalty cap against the live balance.
  */
 export function repriceHeldCart(input: {
   lines: readonly HoldLine[]
@@ -200,6 +204,9 @@ export function repriceHeldCart(input: {
       lineDiscountMinor: priced.lines[index]?.lineDiscountMinor ?? entry.line.lineDiscountMinor,
     })),
     differences,
+    blockingProductIds: differences
+      .filter((difference) => difference.kind === 'GONE' || difference.kind === 'ARCHIVED')
+      .map((difference) => difference.productId),
     loyaltyPointsRequested: input.loyaltyPointsRequested,
     requiresAcknowledgement: differences.length > 0,
   }

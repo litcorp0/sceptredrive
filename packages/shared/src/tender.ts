@@ -55,7 +55,7 @@ export const TENDER_PROBLEM_MESSAGES: Record<TenderProblem, string> = {
   MULTIPLE_CREDIT_TENDERS: 'Only one credit payment is allowed per sale',
   CREDIT_EXCEEDS_TOTAL: 'Credit cannot be more than the sale total',
   OVERPAID_BY_ELECTRONIC: 'Electronic payments cannot exceed what is owed; give change from cash',
-  UNPAID_BALANCE: 'There is still an unpaid balance',
+  UNPAID_BALANCE: 'This sale is not settled yet',
 }
 
 export const TENDER_LABELS: Record<TenderMethod, string> = {
@@ -101,12 +101,20 @@ function balance(
  * Change is `max(0, applied - total)` but may only be funded by cash: if it
  * exceeds the cash tender the set is impossible and the change is reported as
  * zero, because a caller must not read a plausible number off an impossible
- * tender set. A problem code is returned for every business condition; only a
- * duplicate sequence throws, because no screen can produce one.
+ * tender set. A problem code is returned for every business condition; a bad
+ * sale total, an unknown method, or a duplicate sequence throws, because no
+ * screen can produce one.
  */
 export function tenderBalance(totalMinor: number, tenders: readonly TenderLine[]): TenderBalance {
+  if (!Number.isSafeInteger(totalMinor) || totalMinor < 0) {
+    throw new RangeError('Sale total must be a non-negative integer')
+  }
+
   const sequences = new Set<number>()
   for (const tender of tenders) {
+    if (typeof tender.method !== 'string' || !isTenderMethod(tender.method)) {
+      throw new RangeError(`Unknown tender method: ${String(tender.method)}`)
+    }
     if (sequences.has(tender.sequence)) {
       throw new RangeError(`Duplicate tender sequence: ${tender.sequence}`)
     }

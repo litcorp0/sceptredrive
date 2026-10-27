@@ -19,7 +19,13 @@ function saleLine(overrides: Partial<RefundableSaleLine> = {}): RefundableSaleLi
 }
 
 function tender(overrides: Partial<RefundableTender> = {}): RefundableTender {
-  return { saleTenderId: 'tender-1', amountMinor: 10_000, refundedMinor: 0, ...overrides }
+  return {
+    saleTenderId: 'tender-1',
+    method: 'CASH',
+    amountMinor: 10_000,
+    refundedMinor: 0,
+    ...overrides,
+  }
 }
 
 const SALE_TENDER_TOTAL = 10_000
@@ -78,6 +84,26 @@ describe('refundableTenderMinor', () => {
   it('returns zero when fully refunded or over-refunded', () => {
     expect(refundableTenderMinor(tender({ amountMinor: 10_000, refundedMinor: 10_000 }))).toBe(0)
     expect(refundableTenderMinor(tender({ amountMinor: 10_000, refundedMinor: 11_000 }))).toBe(0)
+  })
+
+  it('nets the sale change out of the cash tender only', () => {
+    expect(refundableTenderMinor(tender({ method: 'CASH', amountMinor: 10_000 }), 1_000)).toBe(
+      9_000,
+    )
+    expect(refundableTenderMinor(tender({ method: 'CARD', amountMinor: 10_000 }), 1_000)).toBe(
+      10_000,
+    )
+    expect(
+      refundableTenderMinor(
+        tender({ method: 'CASH', amountMinor: 10_000, refundedMinor: 2_000 }),
+        1_000,
+      ),
+    ).toBe(7_000)
+  })
+
+  it('keeps the full remainder when the sale produced no change', () => {
+    expect(refundableTenderMinor(tender({ method: 'CASH', amountMinor: 10_000 }), 0)).toBe(10_000)
+    expect(refundableTenderMinor(tender({ method: 'CASH', amountMinor: 10_000 }))).toBe(10_000)
   })
 })
 
@@ -157,7 +183,7 @@ describe('refundAllocationProblem', () => {
         tenders: [tender({ amountMinor: 10_000, refundedMinor: 2_000 })],
         refundedMinor: 8_001,
         saleTenderTotalMinor: SALE_TENDER_TOTAL,
-        saleChangeMinor: SALE_CHANGE,
+        saleChangeMinor: 0,
       }),
     ).toBe('EXCEEDS_TENDER')
   })
@@ -173,7 +199,7 @@ describe('refundAllocationProblem', () => {
         tenders: [tender({ amountMinor: 10_000, refundedMinor: 2_000 })],
         refundedMinor: 8_000,
         saleTenderTotalMinor: SALE_TENDER_TOTAL,
-        saleChangeMinor: SALE_CHANGE,
+        saleChangeMinor: 0,
       }),
     ).toBeNull()
   })
@@ -194,7 +220,7 @@ describe('refundAllocationProblem', () => {
     ).toBe('SUM_MISMATCH')
   })
 
-  it('makes change unrefundable: 91.00 against a 90.00 cap', () => {
+  it('keeps the sale cap as a belt when a non-cash tender would let change back out', () => {
     expect(
       refundAllocationProblem({
         allocation: {
@@ -202,7 +228,7 @@ describe('refundAllocationProblem', () => {
           tenders: [{ saleTenderId: 'tender-1', amountMinor: 9_100 }],
         },
         lines: [saleLine({ quantity: 2 })],
-        tenders: [tender({ amountMinor: 10_000 })],
+        tenders: [tender({ method: 'CARD', amountMinor: 10_000 })],
         refundedMinor: 9_100,
         saleTenderTotalMinor: 10_000,
         saleChangeMinor: 1_000,
@@ -224,6 +250,97 @@ describe('refundAllocationProblem', () => {
         saleChangeMinor: 1_000,
       }),
     ).toBeNull()
+  })
+
+  it('sums duplicate tender rows before comparing them with the cap', () => {
+    expect(
+      refundAllocationProblem({
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [
+            { saleTenderId: 'tender-1', amountMinor: 6_000 },
+            { saleTenderId: 'tender-1', amountMinor: 6_000 },
+          ],
+        },
+        lines: [saleLine({ quantity: 2 })],
+        tenders: [tender({ amountMinor: 10_000 })],
+        refundedMinor: 12_000,
+        saleTenderTotalMinor: 10_000,
+        saleChangeMinor: 0,
+      }),
+    ).toBe('EXCEEDS_TENDER')
+  })
+
+  it('sums duplicate line rows before comparing them with the cap', () => {
+    expect(
+      refundAllocationProblem({
+        allocation: {
+          lines: [
+            { saleLineId: 'line-1', quantity: 2 },
+            { saleLineId: 'line-1', quantity: 2 },
+          ],
+          tenders: [{ saleTenderId: 'tender-1', amountMinor: 9_000 }],
+        },
+        lines: [saleLine({ quantity: 3 })],
+        tenders: [tender({ amountMinor: 10_000 })],
+        refundedMinor: 9_000,
+        saleTenderTotalMinor: 10_000,
+        saleChangeMinor: 1_000,
+      }),
+    ).toBe('EXCEEDS_LINE')
+  })
+
+  it('refuses to refund change through the cash tender', () => {
+    const base = {
+      lines: [saleLine({ quantity: 2 })],
+      tenders: [
+        tender({ saleTenderId: 'cash', method: 'CASH', amountMinor: 10_000 }),
+        tender({ saleTenderId: 'card', method: 'CARD', amountMinor: 1_000 }),
+      ],
+      saleTenderTotalMinor: 11_000,
+      saleChangeMinor: 1_000,
+    }
+
+    expect(
+      refundAllocationProblem({
+        ...base,
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [{ saleTenderId: 'cash', amountMinor: 10_000 }],
+        },
+        refundedMinor: 10_000,
+      }),
+    ).toBe('EXCEEDS_TENDER')
+
+    expect(
+      refundAllocationProblem({
+        ...base,
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [{ saleTenderId: 'cash', amountMinor: 9_000 }],
+        },
+        refundedMinor: 9_000,
+      }),
+    ).toBeNull()
+  })
+
+  it('counts prior refunds against the sale cap as a second line of defence', () => {
+    const base = {
+      allocation: {
+        lines: [{ saleLineId: 'line-1', quantity: 1 }],
+        tenders: [{ saleTenderId: 'card', amountMinor: 1_000 }],
+      },
+      lines: [saleLine({ quantity: 2 })],
+      tenders: [tender({ saleTenderId: 'card', method: 'CARD', amountMinor: 2_000 })],
+      refundedMinor: 1_000,
+      saleTenderTotalMinor: 2_000,
+      saleChangeMinor: 1_000,
+    }
+
+    expect(refundAllocationProblem(base)).toBeNull()
+    expect(refundAllocationProblem({ ...base, previouslyRefundedMinor: 1_000 })).toBe(
+      'EXCEEDS_SALE',
+    )
   })
 
   it('refuses an empty allocation', () => {
@@ -290,5 +407,11 @@ describe('refundApprovalRequired', () => {
 
   it('triggers above the threshold', () => {
     expect(refundApprovalRequired(20_001, 20_000)).toBe(true)
+  })
+
+  it('treats a non-integer amount as a caller bug', () => {
+    expect(() => refundApprovalRequired(NaN, 20_000)).toThrow(RangeError)
+    expect(() => refundApprovalRequired(1_000, Number.POSITIVE_INFINITY)).toThrow(RangeError)
+    expect(() => refundApprovalRequired(-1, 20_000)).toThrow(RangeError)
   })
 })

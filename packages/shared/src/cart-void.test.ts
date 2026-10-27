@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CART_VOID_NOTE_MIN,
   CART_VOID_REASON_LABELS,
   CART_VOID_REASONS,
   type CartVoidReason,
@@ -7,7 +8,7 @@ import {
   cartVoidNoteProblem,
 } from './cart-void.ts'
 
-const NOTE_REQUIRED = 'Say why in a few words — at least 3 characters'
+const NOTE_REQUIRED = `Say why in a few words — at least ${CART_VOID_NOTE_MIN} characters`
 
 describe('cart void reasons', () => {
   it('lists every reason with a label', () => {
@@ -19,6 +20,7 @@ describe('cart void reasons', () => {
       'CUSTOMER_LEFT',
       'OTHER',
     ])
+    expect(CART_VOID_NOTE_MIN).toBe(3)
 
     for (const reason of CART_VOID_REASONS) {
       expect(CART_VOID_REASON_LABELS[reason].length).toBeGreaterThan(0)
@@ -38,12 +40,12 @@ describe('cart void reasons', () => {
     expect(cartVoidNoteProblem('OTHER', '')).toBe(NOTE_REQUIRED)
   })
 
-  it('refuses OTHER with fewer than three characters after trimming', () => {
+  it(`refuses OTHER with fewer than ${CART_VOID_NOTE_MIN} characters after trimming`, () => {
     expect(cartVoidNoteProblem('OTHER', 'ab')).toBe(NOTE_REQUIRED)
     expect(cartVoidNoteProblem('OTHER', '  ab  ')).toBe(NOTE_REQUIRED)
   })
 
-  it('accepts OTHER with exactly three characters after trimming', () => {
+  it(`accepts OTHER with exactly ${CART_VOID_NOTE_MIN} characters after trimming`, () => {
     expect(cartVoidNoteProblem('OTHER', 'abc')).toBeNull()
     expect(cartVoidNoteProblem('OTHER', '  abc  ')).toBeNull()
   })

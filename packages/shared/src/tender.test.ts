@@ -54,6 +54,7 @@ describe('tender vocabulary', () => {
 
     expect(TENDER_PROBLEM_MESSAGES.MULTIPLE_CREDIT_TENDERS).toContain('one credit')
     expect(TENDER_PROBLEM_MESSAGES.TOO_MANY_TENDERS).toContain('five')
+    expect(TENDER_PROBLEM_MESSAGES.UNPAID_BALANCE).toBe('This sale is not settled yet')
     expect(MAX_TENDERS_PER_SALE).toBe(5)
   })
 })
@@ -201,6 +202,21 @@ describe('tenderBalance', () => {
     expect(() => tenderBalance(10_000, [line('CASH', 5_000, 1), line('MOMO', 5_000, 1)])).toThrow(
       RangeError,
     )
+  })
+
+  it('treats a bad sale total as a caller bug', () => {
+    expect(() => tenderBalance(NaN, [])).toThrow(RangeError)
+    expect(() => tenderBalance(-1, [])).toThrow(RangeError)
+    expect(() => tenderBalance(1.5, [])).toThrow(RangeError)
+    expect(() => tenderBalance(Number.POSITIVE_INFINITY, [])).toThrow(RangeError)
+  })
+
+  it('treats an unknown tender method as a caller bug', () => {
+    expect(() =>
+      tenderBalance(10_000, [
+        { method: 'CHEQUE' as TenderMethod, amountMinor: 10_000, sequence: 1 },
+      ]),
+    ).toThrow(RangeError)
   })
 
   it('does not require sequences to arrive sorted', () => {

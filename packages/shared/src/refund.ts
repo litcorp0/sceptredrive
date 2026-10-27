@@ -4,6 +4,8 @@
  * change a customer already received was never our money and is not refundable.
  */
 
+import type { TenderMethod } from './tender.ts'
+
 export const REFUND_REASONS = [
   'CUSTOMER_CHANGED_MIND',
   'WRONG_ITEM',
@@ -54,12 +56,21 @@ export function refundableQuantity(line: RefundableSaleLine): number {
 
 export interface RefundableTender {
   saleTenderId: string
+  method: TenderMethod
   amountMinor: number
   refundedMinor: number
 }
 
-export function refundableTenderMinor(tender: RefundableTender): number {
-  return Math.max(0, tender.amountMinor - tender.refundedMinor)
+/**
+ * The part of a tender a refund may still return.
+ *
+ * Change only ever comes out of cash (P13-D3), so a cash tender that produced
+ * change kept less than it took in. Pass `saleChangeMinor` and the cash
+ * remainder is netted down; a no-change sale can leave it out.
+ */
+export function refundableTenderMinor(tender: RefundableTender, saleChangeMinor = 0): number {
+  const changeMinor = tender.method === 'CASH' ? saleChangeMinor : 0
+  return Math.max(0, tender.amountMinor - tender.refundedMinor - changeMinor)
 }
 
 export type RefundAllocationProblem =
@@ -77,8 +88,18 @@ export interface RefundAllocation {
 /**
  * Checks a proposed refund allocation, in the order the till should explain it
  * (P13-D19): a line, then a tender, then the document's own sum, then the sale.
- * The last check is why the sale's change is an input: it caps the refund at
- * `tenderTotal - change`, so change can never be handed back twice.
+ *
+ * Rows are totalled per `saleLineId` and per `saleTenderId` before any cap is
+ * compared, so one document cannot refund the same line or tender twice by
+ * splitting it across rows.
+ *
+ * Tender remainders must already reflect every earlier refund; the caller
+ * supplies that in each `RefundableTender`. `refundableTenderMinor` also nets
+ * the sale's change out of the cash tender, which makes the per-tender caps
+ * enforce the sale cap by construction. The sale-level check stays as the
+ * second line of defence: it compares `previouslyRefundedMinor + refundedMinor`
+ * with `saleTenderTotalMinor - saleChangeMinor`, catching tender data that does
+ * not add up.
  */
 export function refundAllocationProblem(input: {
   allocation: RefundAllocation
@@ -87,46 +108,72 @@ export function refundAllocationProblem(input: {
   refundedMinor: number
   saleTenderTotalMinor: number
   saleChangeMinor: number
+  /** Already refunded on earlier documents for this sale; defaults to zero. */
+  previouslyRefundedMinor?: number
 }): RefundAllocationProblem | null {
-  const { allocation, lines, tenders, refundedMinor } = input
+  const {
+    allocation,
+    lines,
+    tenders,
+    refundedMinor,
+    saleTenderTotalMinor,
+    saleChangeMinor,
+    previouslyRefundedMinor = 0,
+  } = input
+
+  if (!Number.isSafeInteger(previouslyRefundedMinor) || previouslyRefundedMinor < 0) {
+    throw new RangeError('Previously refunded amount must be a non-negative integer')
+  }
 
   if (refundedMinor < 1 || allocation.lines.length === 0 || allocation.tenders.length === 0) {
     return 'NO_ALLOCATION'
   }
 
   const linesById = new Map(lines.map((line) => [line.saleLineId, line]))
+  const quantityByLine = new Map<string, number>()
   for (const allocated of allocation.lines) {
-    const line = linesById.get(allocated.saleLineId)
+    if (!Number.isSafeInteger(allocated.quantity) || allocated.quantity < 1) {
+      return 'EXCEEDS_LINE'
+    }
+    quantityByLine.set(
+      allocated.saleLineId,
+      (quantityByLine.get(allocated.saleLineId) ?? 0) + allocated.quantity,
+    )
+  }
+  for (const [saleLineId, quantity] of quantityByLine) {
+    const line = linesById.get(saleLineId)
     const cap = line ? refundableQuantity(line) : 0
-    if (
-      !Number.isSafeInteger(allocated.quantity) ||
-      allocated.quantity < 1 ||
-      allocated.quantity > cap
-    ) {
+    if (!Number.isSafeInteger(quantity) || quantity > cap) {
       return 'EXCEEDS_LINE'
     }
   }
 
   const tendersById = new Map(tenders.map((tender) => [tender.saleTenderId, tender]))
+  const amountByTender = new Map<string, number>()
   let allocatedMinor = 0
   for (const allocated of allocation.tenders) {
-    const tender = tendersById.get(allocated.saleTenderId)
-    const cap = tender ? refundableTenderMinor(tender) : 0
-    if (
-      !Number.isSafeInteger(allocated.amountMinor) ||
-      allocated.amountMinor < 1 ||
-      allocated.amountMinor > cap
-    ) {
+    if (!Number.isSafeInteger(allocated.amountMinor) || allocated.amountMinor < 1) {
       return 'EXCEEDS_TENDER'
     }
+    amountByTender.set(
+      allocated.saleTenderId,
+      (amountByTender.get(allocated.saleTenderId) ?? 0) + allocated.amountMinor,
+    )
     allocatedMinor += allocated.amountMinor
   }
+  for (const [saleTenderId, amountMinor] of amountByTender) {
+    const tender = tendersById.get(saleTenderId)
+    const cap = tender ? refundableTenderMinor(tender, saleChangeMinor) : 0
+    if (!Number.isSafeInteger(amountMinor) || amountMinor > cap) {
+      return 'EXCEEDS_TENDER'
+    }
+  }
 
-  if (allocatedMinor !== refundedMinor) {
+  if (!Number.isSafeInteger(allocatedMinor) || allocatedMinor !== refundedMinor) {
     return 'SUM_MISMATCH'
   }
 
-  if (refundedMinor > input.saleTenderTotalMinor - input.saleChangeMinor) {
+  if (previouslyRefundedMinor + refundedMinor > saleTenderTotalMinor - saleChangeMinor) {
     return 'EXCEEDS_SALE'
   }
 
@@ -135,5 +182,11 @@ export function refundAllocationProblem(input: {
 
 /** `>=` — a refund of exactly the cap needs an approval (P13-D21). */
 export function refundApprovalRequired(refundedMinor: number, thresholdMinor: number): boolean {
+  if (!Number.isSafeInteger(refundedMinor) || refundedMinor < 0) {
+    throw new RangeError('Refund amount must be a non-negative integer')
+  }
+  if (!Number.isSafeInteger(thresholdMinor) || thresholdMinor < 0) {
+    throw new RangeError('Approval threshold must be a non-negative integer')
+  }
   return refundedMinor >= thresholdMinor
 }

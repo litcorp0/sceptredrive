@@ -28,6 +28,9 @@ export function cartVoidNeedsNote(reason: CartVoidReason): boolean {
   return reason === 'OTHER'
 }
 
+/** The shortest note that says anything useful. */
+export const CART_VOID_NOTE_MIN = 3
+
 /**
  * Returns the sentence to show the cashier, or `null` when the reason and note
  * are a valid pairing. A note supplied for a coded reason is accepted: it is
@@ -35,8 +38,8 @@ export function cartVoidNeedsNote(reason: CartVoidReason): boolean {
  */
 export function cartVoidNoteProblem(reason: CartVoidReason, note: string | null): string | null {
   if (!cartVoidNeedsNote(reason)) return null
-  if ((note ?? '').trim().length < 3) {
-    return 'Say why in a few words — at least 3 characters'
+  if ((note ?? '').trim().length < CART_VOID_NOTE_MIN) {
+    return `Say why in a few words — at least ${CART_VOID_NOTE_MIN} characters`
   }
   return null
 }

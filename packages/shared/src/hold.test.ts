@@ -204,6 +204,7 @@ describe('repriceHeldCart', () => {
     })
 
     expect(result.differences).toEqual([])
+    expect(result.blockingProductIds).toEqual([])
     expect(result.requiresAcknowledgement).toBe(false)
     expect(result.loyaltyPointsRequested).toBe(150)
 
@@ -298,6 +299,7 @@ describe('repriceHeldCart', () => {
     })
 
     expect(result.lines).toHaveLength(2)
+    expect(result.blockingProductIds).toEqual(['p1', 'p2'])
     expect(result.differences).toEqual([
       {
         productId: 'p1',
@@ -314,6 +316,26 @@ describe('repriceHeldCart', () => {
         toMinor: 5_000,
       },
     ])
+    expect(result.requiresAcknowledgement).toBe(true)
+  })
+
+  it('lists deleted and archived products as blocking', () => {
+    const result = repriceHeldCart({
+      lines: [
+        holdLine({ productId: 'p1' }),
+        holdLine({ productId: 'p2', sku: 'GIK-00002', name: 'Oil filter' }),
+        holdLine({ productId: 'p3', sku: 'GIK-00003', name: 'Wiper blade' }),
+      ],
+      catalogue: [
+        catalogueLine({ productId: 'p1' }),
+        catalogueLine({ productId: 'p2', sku: 'GIK-00002', name: 'Oil filter', isActive: false }),
+      ],
+      loyaltyPointsRequested: 0,
+      pricing: { taxMode: 'INCLUSIVE' },
+    })
+
+    // p3 is deleted and p2 is archived; both block completion, p1 is untouched.
+    expect(result.blockingProductIds).toEqual(['p2', 'p3'])
     expect(result.requiresAcknowledgement).toBe(true)
   })
 })
