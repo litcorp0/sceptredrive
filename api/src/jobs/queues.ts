@@ -6,7 +6,10 @@ import {
   scanOversellTriggers,
 } from '../modules/counts/counts.service.ts'
 import { expireDueLots } from '../modules/loyalty/loyalty.service.ts'
-import { dispatchPendingRefunds } from '../modules/payments/payments.service.ts'
+import type { PaymentRow } from '../modules/payments/payments.repository.ts'
+import { findStalePending } from '../modules/payments/payments.repository.ts'
+import { dispatchPendingRefunds, getPayment } from '../modules/payments/payments.service.ts'
+import type { DeviceAuthContext } from '../modules/sync/sync.types.ts'
 
 export const LOYALTY_EXPIRY_QUEUE = 'loyalty-expiry'
 
@@ -35,7 +38,7 @@ export const INVENTORY_TRIGGER_SCAN_CRON = '30 3 * * *'
  */
 export const POS_REFUND_DISPATCH_QUEUE = 'pos-refund-dispatch'
 export const POS_PAYMENT_RECONCILE_QUEUE = 'pos-payment-reconcile'
-/** Nightly at 01:20 Africa/Accra, after the inventory jobs, before the sweep is due. */
+/** Nightly at 01:20 Africa/Accra: the shops are shut and the night is quiet. */
 export const POS_PAYMENT_RECONCILE_CRON = '20 1 * * *'
 
 /**
@@ -76,6 +79,68 @@ export async function enqueueRefundDispatch(refundId: string): Promise<void> {
   await jobBoss.send(POS_REFUND_DISPATCH_QUEUE, { refundId })
 }
 
+/** A payment nobody settled within this window is what the sweep exists for. */
+export const PAYMENT_RECONCILE_STALE_MINUTES = 10
+
+/** One night, one bounded batch: the next night takes the rest (P13-D16). */
+export const PAYMENT_RECONCILE_LIMIT = 200
+
+export interface PaymentReconcileSummary {
+  checked: number
+  settled: number
+  failed: number
+}
+
+function deviceForPayment(row: PaymentRow): DeviceAuthContext {
+  return { deviceId: row.deviceId, terminalId: row.terminalId, branchId: row.branchId }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 200) : 'unknown error'
+}
+
+/**
+ * Verifies the payments no webhook ever settled (P13-D12, P13-D16).
+ *
+ * The refresh is `getPayment(..., { refresh: true })` — the exact call
+ * `GET /api/pos/payments/:id?refresh=1` makes — so the five-second throttle, the
+ * row lock and the state machine stay one implementation rather than two. That
+ * throttle is also why stale means ten minutes: a payment the till is still
+ * polling is not the sweep's business.
+ *
+ * A failure is per payment and logged without a body, because one stranded
+ * reference must not hide the other 199.
+ */
+export async function reconcileStalePayments(
+  options: { olderThanMinutes?: number; limit?: number } = {},
+): Promise<PaymentReconcileSummary> {
+  const minutes = options.olderThanMinutes ?? PAYMENT_RECONCILE_STALE_MINUTES
+  const stale = await findStalePending(
+    new Date(Date.now() - minutes * 60_000),
+    options.limit ?? PAYMENT_RECONCILE_LIMIT,
+  )
+
+  let settled = 0
+  let failed = 0
+
+  for (const payment of stale) {
+    try {
+      const view = await getPayment(deviceForPayment(payment), payment.id, { refresh: true })
+      // `getPayment` only acts on PENDING, so anything the webhook already
+      // settled arrives here as PAID without a provider call.
+      if (view.status === 'PAID') settled += 1
+    } catch (error) {
+      failed += 1
+      logger.warn(
+        { paymentId: payment.id, message: errorMessage(error) },
+        'payment reconcile failed',
+      )
+    }
+  }
+
+  return { checked: stale.length, settled, failed }
+}
+
 /** Registers queues, workers, and schedules on a started pg-boss instance. */
 export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   jobBoss = boss
@@ -85,6 +150,7 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
   await ensureQueue(boss, INVENTORY_ABC_RECOMPUTE_QUEUE)
   await ensureQueue(boss, INVENTORY_TRIGGER_SCAN_QUEUE)
   await ensureQueue(boss, POS_REFUND_DISPATCH_QUEUE)
+  await ensureQueue(boss, POS_PAYMENT_RECONCILE_QUEUE)
 
   await boss.work(LOYALTY_EXPIRY_QUEUE, async () => {
     const summary = await expireDueLots()
@@ -122,6 +188,15 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
     return summary
   })
 
+  await boss.work(POS_PAYMENT_RECONCILE_QUEUE, async () => {
+    const summary = await reconcileStalePayments()
+    logger.info(
+      { queue: POS_PAYMENT_RECONCILE_QUEUE, ...summary },
+      'payment reconcile run complete',
+    )
+    return summary
+  })
+
   await boss.schedule(LOYALTY_EXPIRY_QUEUE, LOYALTY_EXPIRY_CRON, null, {
     tz: 'Africa/Accra',
     missed: 'once',
@@ -140,6 +215,12 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
       queue: INVENTORY_TRIGGER_SCAN_QUEUE,
       cron: INVENTORY_TRIGGER_SCAN_CRON,
     },
+    {
+      // 01:20: the last shift has closed and the night is quiet, before the
+      // inventory jobs start (P13-D16).
+      queue: POS_PAYMENT_RECONCILE_QUEUE,
+      cron: POS_PAYMENT_RECONCILE_CRON,
+    },
   ] as const) {
     await boss.schedule(schedule.queue, schedule.cron, null, {
       tz: INVENTORY_JOB_TZ,
@@ -147,7 +228,7 @@ export async function registerJobHandlers(boss: PgBoss): Promise<void> {
     })
     logger.info(
       { queue: schedule.queue, cron: schedule.cron, tz: INVENTORY_JOB_TZ },
-      'inventory job schedule registered',
+      'recurring job schedule registered',
     )
   }
 

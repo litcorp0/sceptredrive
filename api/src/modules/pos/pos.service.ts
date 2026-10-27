@@ -65,7 +65,9 @@ import {
   findSaleById,
   findSaleByIdForUpdate,
   findSaleByReceiptNumber,
+  findShiftById,
   findShiftByIdForUpdate,
+  findShiftReportByShiftId,
   findShiftWithTerminal,
   findStaffById,
   findStaffForAuthorization,
@@ -80,6 +82,7 @@ import {
   insertSaleLines,
   insertSaleTenders,
   insertShift,
+  insertShiftReport,
   lockTerminal,
   refundedLineTotals,
   revokeBinding,
@@ -92,6 +95,7 @@ import {
   selectSaleLinesForRefund,
   selectSaleTendersForRefund,
   selectShiftCashTotals,
+  selectShiftReportFigures,
   selectSoldValueByProduct,
   touchBinding,
   updateRefundApprovalId,
@@ -711,6 +715,52 @@ export async function closeShift(
     executor,
   )
 
+  // The Z-report is written in the same transaction as the close (P13-D32): a
+  // closed shift without its snapshot would be a drawer whose report has to be
+  // guessed at, and a rollback takes both facts away together.
+  const figures = await selectShiftReportFigures(payload.shiftId, executor)
+  await insertShiftReport(
+    {
+      shiftId: row.id,
+      branchId: row.branchId,
+      terminalId: row.terminalId,
+      deviceId: row.deviceId,
+      number: row.number,
+      openedAt: row.openedAt,
+      closedAt,
+      openingFloatMinor: row.openingFloatMinor,
+      saleCount: figures.saleCount,
+      itemCount: figures.itemCount,
+      refundCount: figures.refundCount,
+      voidCount: figures.voidCount,
+      grossMinor: figures.grossMinor,
+      refundMinor: figures.refundedMinor,
+      netMinor: figures.grossMinor - figures.refundedMinor,
+      lineDiscountMinor: figures.lineDiscountMinor,
+      saleDiscountMinor: figures.saleDiscountMinor,
+      loyaltyDiscountMinor: figures.loyaltyDiscountMinor,
+      loyaltyRedeemPoints: figures.loyaltyRedeemPoints,
+      loyaltyEarnedPoints: figures.loyaltyEarnedPoints,
+      baseMinor: figures.baseMinor,
+      vatMinor: figures.vatMinor,
+      nhilMinor: figures.nhilMinor,
+      getfundMinor: figures.getfundMinor,
+      taxTotalMinor: figures.taxTotalMinor,
+      cashMinor: figures.cashMinor,
+      creditMinor: figures.creditMinor,
+      momoMinor: figures.momoMinor,
+      cardMinor: figures.cardMinor,
+      bankTransferMinor: figures.bankTransferMinor,
+      changeMinor: figures.changeMinor,
+      cashInMinor: totals.cashInMinor,
+      cashOutMinor: totals.cashOutMinor,
+      expectedCashMinor: serverExpected,
+      countedCashMinor: payload.countedCashMinor,
+      varianceMinor: variance,
+    },
+    executor,
+  )
+
   // A drawer beyond the branch's tolerance gets a person's name on it (P12-D24).
   // Strictly greater: exactly at tolerance is not "beyond tolerance" (BRN-04).
   // The raise is inside the upload transaction, so a failure rolls the close back
@@ -802,6 +852,203 @@ export async function closeShift(
     serverExpectedCashMinor: serverExpected,
     varianceMinor: variance,
     ...(conflictId ? { conflictId } : {}),
+  }
+}
+
+// --- X and Z reports (Plan 13-07) -------------------------------------------
+
+/**
+ * One shape for both reports (P13-D32, P13-D33), because a manager comparing a
+ * mid-shift X with the night's Z should be comparing the same fields in the same
+ * units. `Z` is the stored snapshot; `X` is the same arithmetic asked live.
+ */
+export interface ShiftReportView {
+  kind: 'X' | 'Z'
+  shiftId: string
+  number: string
+  branchId: string
+  terminalId: string
+  deviceId: string
+  openedAt: string
+  /** Null on an X-report for a shift that is still open. */
+  closedAt: string | null
+  openingFloatMinor: number
+  saleCount: number
+  itemCount: number
+  refundCount: number
+  voidCount: number
+  grossMinor: number
+  refundMinor: number
+  netMinor: number
+  lineDiscountMinor: number
+  saleDiscountMinor: number
+  loyaltyDiscountMinor: number
+  loyaltyRedeemPoints: number
+  loyaltyEarnedPoints: number
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  cashMinor: number
+  creditMinor: number
+  momoMinor: number
+  cardMinor: number
+  bankTransferMinor: number
+  changeMinor: number
+  cashInMinor: number
+  cashOutMinor: number
+  expectedCashMinor: number
+  /** The drawer, once someone has counted it (a Z always has; an X may not). */
+  countedCashMinor: number | null
+  varianceMinor: number | null
+  generatedAt: string
+}
+
+/**
+ * Not theirs is indistinguishable from not there: a terminal may not read another
+ * terminal's shift (P13-D39, A01). The branch is checked too, because a device
+ * JWT carries both.
+ */
+async function findShiftReportSubject(
+  device: DeviceAuthContext,
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<typeof import('./pos.schema.ts').shift.$inferSelect> {
+  const row = await findShiftById(shiftId, executor)
+  if (!row || row.terminalId !== device.terminalId || row.branchId !== device.branchId) {
+    throw new NotFoundError('Shift not found')
+  }
+  return row
+}
+
+/**
+ * The Z-report is read, never rebuilt (P13-D32). A closed shift without its
+ * snapshot is a missing document, not an invitation to recompute one: a report
+ * that can be reconstructed on read is a report that can change after the
+ * customer has gone home.
+ */
+export async function getZReport(
+  device: DeviceAuthContext,
+  shiftId: string,
+): Promise<ShiftReportView> {
+  const row = await findShiftReportSubject(device, shiftId)
+  if (row.status !== 'CLOSED') {
+    throw new AppError(409, 'SHIFT_NOT_CLOSED', 'An X-report is the one for an open shift')
+  }
+
+  const snapshot = await findShiftReportByShiftId(shiftId)
+  if (!snapshot) {
+    throw new AppError(
+      500,
+      'SHIFT_REPORT_MISSING',
+      'This shift closed without its Z-report; the snapshot cannot be rebuilt',
+    )
+  }
+
+  return {
+    kind: 'Z',
+    shiftId: snapshot.shiftId,
+    number: snapshot.number,
+    branchId: snapshot.branchId,
+    terminalId: snapshot.terminalId,
+    deviceId: snapshot.deviceId,
+    openedAt: snapshot.openedAt.toISOString(),
+    closedAt: snapshot.closedAt.toISOString(),
+    openingFloatMinor: snapshot.openingFloatMinor,
+    saleCount: snapshot.saleCount,
+    itemCount: snapshot.itemCount,
+    refundCount: snapshot.refundCount,
+    voidCount: snapshot.voidCount,
+    grossMinor: snapshot.grossMinor,
+    refundMinor: snapshot.refundMinor,
+    netMinor: snapshot.netMinor,
+    lineDiscountMinor: snapshot.lineDiscountMinor,
+    saleDiscountMinor: snapshot.saleDiscountMinor,
+    loyaltyDiscountMinor: snapshot.loyaltyDiscountMinor,
+    loyaltyRedeemPoints: snapshot.loyaltyRedeemPoints,
+    loyaltyEarnedPoints: snapshot.loyaltyEarnedPoints,
+    baseMinor: snapshot.baseMinor,
+    vatMinor: snapshot.vatMinor,
+    nhilMinor: snapshot.nhilMinor,
+    getfundMinor: snapshot.getfundMinor,
+    taxTotalMinor: snapshot.taxTotalMinor,
+    cashMinor: snapshot.cashMinor,
+    creditMinor: snapshot.creditMinor,
+    momoMinor: snapshot.momoMinor,
+    cardMinor: snapshot.cardMinor,
+    bankTransferMinor: snapshot.bankTransferMinor,
+    changeMinor: snapshot.changeMinor,
+    cashInMinor: snapshot.cashInMinor,
+    cashOutMinor: snapshot.cashOutMinor,
+    expectedCashMinor: snapshot.expectedCashMinor,
+    countedCashMinor: snapshot.countedCashMinor,
+    varianceMinor: snapshot.varianceMinor,
+    // The moment the report was taken, which for a snapshot is its own creation.
+    generatedAt: snapshot.createdAt.toISOString(),
+  }
+}
+
+/**
+ * The X-report: the same figures computed live and stored nowhere (P13-D33).
+ *
+ * The cash arithmetic is `selectShiftCashTotals` + `computeExpectedCash`, the
+ * one formula the close uses, so an X taken a minute before the close cannot
+ * disagree with the Z that follows it.
+ */
+export async function getXReport(
+  device: DeviceAuthContext,
+  shiftId: string,
+): Promise<ShiftReportView> {
+  const row = await findShiftReportSubject(device, shiftId)
+  const [totals, figures] = await Promise.all([
+    selectShiftCashTotals(shiftId, row.openingFloatMinor),
+    selectShiftReportFigures(shiftId),
+  ])
+
+  const expectedCashMinor = computeExpectedCash(totals)
+  const closed = row.status === 'CLOSED'
+  const countedCashMinor = closed ? row.countedCashMinor : null
+
+  return {
+    kind: 'X',
+    shiftId: row.id,
+    number: row.number,
+    branchId: row.branchId,
+    terminalId: row.terminalId,
+    deviceId: row.deviceId,
+    openedAt: row.openedAt.toISOString(),
+    closedAt: row.closedAt?.toISOString() ?? null,
+    openingFloatMinor: row.openingFloatMinor,
+    saleCount: figures.saleCount,
+    itemCount: figures.itemCount,
+    refundCount: figures.refundCount,
+    voidCount: figures.voidCount,
+    grossMinor: figures.grossMinor,
+    refundMinor: figures.refundedMinor,
+    netMinor: figures.grossMinor - figures.refundedMinor,
+    lineDiscountMinor: figures.lineDiscountMinor,
+    saleDiscountMinor: figures.saleDiscountMinor,
+    loyaltyDiscountMinor: figures.loyaltyDiscountMinor,
+    loyaltyRedeemPoints: figures.loyaltyRedeemPoints,
+    loyaltyEarnedPoints: figures.loyaltyEarnedPoints,
+    baseMinor: figures.baseMinor,
+    vatMinor: figures.vatMinor,
+    nhilMinor: figures.nhilMinor,
+    getfundMinor: figures.getfundMinor,
+    taxTotalMinor: figures.taxTotalMinor,
+    cashMinor: figures.cashMinor,
+    creditMinor: figures.creditMinor,
+    momoMinor: figures.momoMinor,
+    cardMinor: figures.cardMinor,
+    bankTransferMinor: figures.bankTransferMinor,
+    changeMinor: figures.changeMinor,
+    cashInMinor: totals.cashInMinor,
+    cashOutMinor: totals.cashOutMinor,
+    expectedCashMinor,
+    countedCashMinor,
+    varianceMinor: countedCashMinor === null ? null : countedCashMinor - expectedCashMinor,
+    generatedAt: new Date().toISOString(),
   }
 }
 

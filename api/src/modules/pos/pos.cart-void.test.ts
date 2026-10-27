@@ -28,7 +28,14 @@ import type {
   PosUploadBody,
   PosUploadResponse,
 } from '../sync/sync.types.ts'
-import { cartVoid, posStaffBinding, posSyncTransaction, shift, syncConflict } from './pos.schema.ts'
+import {
+  cartVoid,
+  posStaffBinding,
+  posSyncTransaction,
+  shift,
+  shiftReport,
+  syncConflict,
+} from './pos.schema.ts'
 import { applyCartVoid, closeShift, type ShiftCloseWithCloser } from './pos.service.ts'
 
 const available = await databaseAvailable()
@@ -343,6 +350,9 @@ describe.skipIf(!available)('POS cart void', () => {
       await db.delete(syncConflict).where(inArray(syncConflict.branchId, createdBranchIds))
     }
     if (createdShiftIds.length > 0) {
+      // The Z-report is immutable history and the shift FK is RESTRICT, so the
+      // test removes the snapshots before the shifts they belong to.
+      await db.delete(shiftReport).where(inArray(shiftReport.shiftId, createdShiftIds))
       await db.delete(shift).where(inArray(shift.id, createdShiftIds))
     }
     if (createdDeviceIds.length > 0) {

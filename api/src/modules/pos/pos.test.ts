@@ -36,6 +36,7 @@ import {
   saleLine,
   saleTender,
   shift,
+  shiftReport,
   syncConflict,
 } from './pos.schema.ts'
 import {
@@ -127,6 +128,9 @@ describe.skipIf(!available)('POS shift application', () => {
     if (createdShiftIds.length > 0) {
       await db.delete(syncConflict).where(inArray(syncConflict.shiftId, createdShiftIds))
       await db.delete(cashMovement).where(inArray(cashMovement.shiftId, createdShiftIds))
+      // The Z-report is immutable history and the shift FK is RESTRICT, so the
+      // test removes the snapshot before the shift it belongs to.
+      await db.delete(shiftReport).where(inArray(shiftReport.shiftId, createdShiftIds))
       await db.delete(shift).where(inArray(shift.id, createdShiftIds))
     }
     if (createdDeviceIds.length > 0) {
@@ -692,6 +696,9 @@ describe.skipIf(!available)('POS sale application', () => {
     }
     await db.delete(syncConflict).where(eq(syncConflict.branchId, branchId))
     await db.delete(cashMovement).where(eq(cashMovement.branchId, branchId))
+    // The Z-report is immutable history and the shift FK is RESTRICT, so the
+    // test removes the snapshot before the shift it belongs to.
+    await db.delete(shiftReport).where(eq(shiftReport.branchId, branchId))
     await db.delete(shift).where(eq(shift.branchId, branchId))
     if (deviceId) await db.delete(posStaffBinding).where(eq(posStaffBinding.deviceId, deviceId))
     if (deviceId) await db.delete(device).where(eq(device.id, deviceId))

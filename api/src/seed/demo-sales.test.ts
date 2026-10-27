@@ -31,7 +31,13 @@ import {
 } from '../modules/loyalty/loyalty.schema.ts'
 import { branch } from '../modules/org/branches.schema.ts'
 import { device, terminal } from '../modules/org/terminals.schema.ts'
-import { posStaffBinding, sale, shift, syncConflict } from '../modules/pos/pos.schema.ts'
+import {
+  posStaffBinding,
+  sale,
+  shift,
+  shiftReport,
+  syncConflict,
+} from '../modules/pos/pos.schema.ts'
 import { product } from '../modules/products/products.schema.ts'
 import {
   DEMO_SALES_BRANCHES,
@@ -211,6 +217,9 @@ describe.skipIf(!available)('seed:demo-sales writer', () => {
     // cascading lines) must go before the ledger rows.
     await db.delete(stockReceipt).where(eq(stockReceipt.branchId, branchId))
     await db.delete(stockMovement).where(eq(stockMovement.branchId, branchId))
+    // The Z-report is immutable history and the shift FK is RESTRICT, so the
+    // test removes the snapshots before the shifts they belong to.
+    await db.delete(shiftReport).where(eq(shiftReport.branchId, branchId))
     await db.delete(shift).where(eq(shift.branchId, branchId))
     await db.delete(creditLedgerEntry).where(eq(creditLedgerEntry.branchId, branchId))
     await db.delete(creditProfile).where(eq(creditProfile.branchId, branchId))

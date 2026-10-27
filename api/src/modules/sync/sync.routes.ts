@@ -1,7 +1,9 @@
 import type { Context } from 'hono'
+import { z } from 'zod'
 import { requireDeviceJwt } from '../../http/device-auth.ts'
 import { type AppEnv, factory } from '../../http/factory.ts'
 import { rateLimit } from '../../http/rate-limit.ts'
+import { validateParam, validateQuery } from '../../http/validation.ts'
 import * as syncController from './sync.controller.ts'
 import {
   validateAuthorizeStaff,
@@ -21,6 +23,16 @@ export const syncRoutes = factory.createApp()
 
 /** One bucket per terminal: a shared shop IP must not throttle every till at once. */
 const perDevice = (c: Context<AppEnv>) => c.get('device')?.deviceId ?? null
+
+/**
+ * The report's whole query is one enum and one uuid, so the schema sits beside
+ * the route instead of in `sync.validation.ts`, which owns the upload wire
+ * contract a till and a server must agree on.
+ */
+const shiftReportParamSchema = z.object({ id: z.uuid() })
+const shiftReportQuerySchema = z.object({ kind: z.enum(['X', 'Z']) })
+const validateShiftReportParam = validateParam(shiftReportParamSchema)
+const validateShiftReportQuery = validateQuery(shiftReportQuerySchema)
 
 syncRoutes.post(
   '/api/pos/session',
@@ -107,4 +119,16 @@ syncRoutes.get(
   requireDeviceJwt,
   rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'pos:sync:state', keyForRequest: perDevice }),
   (c) => syncController.syncState(c),
+)
+
+// `kind` selects the two reports (Plan 13-07): `Z` is the close's snapshot, `X`
+// is the same arithmetic computed live. 60 a minute is a manager asking
+// repeatedly, not a till polling.
+syncRoutes.get(
+  '/api/pos/shifts/:id/report',
+  requireDeviceJwt,
+  rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'pos:shift:report', keyForRequest: perDevice }),
+  validateShiftReportParam,
+  validateShiftReportQuery,
+  (c) => syncController.shiftReport(c, c.req.valid('param').id, c.req.valid('query').kind),
 )

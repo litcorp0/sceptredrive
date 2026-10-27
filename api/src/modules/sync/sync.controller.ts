@@ -84,3 +84,15 @@ export async function syncState(c: Context<AppEnv>) {
   const payload = await syncService.getDeviceSyncState(deviceAuth(c))
   return c.json(payload)
 }
+
+/**
+ * The shift report (Plan 13-07). `Z` reads the close's snapshot and refuses to
+ * invent one; `X` computes the same figures live and writes nothing (P13-D32,
+ * P13-D33). Both are the device's own shift, resolved from the token.
+ */
+export async function shiftReport(c: Context<AppEnv>, id: string, kind: 'X' | 'Z') {
+  const device = deviceAuth(c)
+  const report =
+    kind === 'Z' ? await posService.getZReport(device, id) : await posService.getXReport(device, id)
+  return c.json({ report })
+}

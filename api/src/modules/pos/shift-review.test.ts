@@ -22,7 +22,7 @@ import { getSettingValue } from '../platform/settings.service.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { reconcileShifts } from './pos.reconciliation.ts'
 import { type ShiftReviewPatch, updateShiftReview } from './pos.repository.ts'
-import { cashMovement, posSyncTransaction, shift, syncConflict } from './pos.schema.ts'
+import { cashMovement, posSyncTransaction, shift, shiftReport, syncConflict } from './pos.schema.ts'
 import { closeShift, openShift } from './pos.service.ts'
 import type { ShiftClosePayload } from './pos.types.ts'
 
@@ -218,6 +218,9 @@ describe.skipIf(!available)('shift variance review', () => {
       .where(inArray(posSyncTransaction.terminalId, createdTerminalIds))
     await db.delete(syncConflict).where(inArray(syncConflict.branchId, createdBranchIds))
     await db.delete(cashMovement).where(inArray(cashMovement.branchId, createdBranchIds))
+    // The Z-report is immutable history and the shift FK is RESTRICT, so the
+    // test removes the snapshots before the shifts they belong to.
+    await db.delete(shiftReport).where(inArray(shiftReport.branchId, createdBranchIds))
     await db.delete(shift).where(inArray(shift.branchId, createdBranchIds))
     if (createdDeviceIds.length > 0) {
       await db.delete(device).where(inArray(device.id, createdDeviceIds))

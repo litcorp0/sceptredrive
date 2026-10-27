@@ -18,6 +18,7 @@ import {
   saleLine,
   saleTender,
   shift,
+  shiftReport,
   syncConflict,
 } from './pos.schema.ts'
 import type { DeviceStaffRecord, ShiftCashTotals } from './pos.types.ts'
@@ -234,6 +235,15 @@ export async function findShiftByIdForUpdate(
   executor: DbExecutor = db,
 ): Promise<typeof shift.$inferSelect | null> {
   const rows = await executor.select().from(shift).where(eq(shift.id, shiftId)).for('update')
+  return rows[0] ?? null
+}
+
+/** A plain read of the shift row; a report must not take a row lock to be read. */
+export async function findShiftById(
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<typeof shift.$inferSelect | null> {
+  const rows = await executor.select().from(shift).where(eq(shift.id, shiftId)).limit(1)
   return rows[0] ?? null
 }
 
@@ -1000,4 +1010,168 @@ export async function selectSoldValueByProduct(
     .groupBy(saleLine.productId)
 
   return new Map(rows.map((row) => [row.productId, row.soldMinor]))
+}
+
+// --- Shift reports (Plan 13-07) ---------------------------------------------
+
+/**
+ * Every figure a shift's report states, in one round trip.
+ *
+ * A shift's money picture is five independent facts — its sales, its lines, its
+ * tenders, its refunds and its voids — so the CTEs are cross-joined rather than
+ * summed four times: one statement, one snapshot of the same instant, and no
+ * chance of a report whose parts were read a sale apart.
+ *
+ * `base_minor` is summed from `sale_line`, because the sale table does not carry
+ * it and a denormalised column on an immutable table for one report would be the
+ * wrong direction (Plan 07 §1).
+ */
+export interface ShiftReportFigures {
+  saleCount: number
+  grossMinor: number
+  tenderTotalMinor: number
+  changeMinor: number
+  lineDiscountMinor: number
+  saleDiscountMinor: number
+  loyaltyDiscountMinor: number
+  loyaltyRedeemPoints: number
+  loyaltyEarnedPoints: number
+  itemCount: number
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  cashMinor: number
+  creditMinor: number
+  momoMinor: number
+  cardMinor: number
+  bankTransferMinor: number
+  refundCount: number
+  refundedMinor: number
+  voidCount: number
+  voidGrossMinor: number
+}
+
+export async function selectShiftReportFigures(
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<ShiftReportFigures> {
+  const result = await executor.execute<Record<string, string | null>>(sql`
+    WITH sales AS (
+      SELECT
+        COUNT(*)::int AS sale_count,
+        COALESCE(SUM(total_minor), 0)::int AS gross_minor,
+        COALESCE(SUM(tender_total_minor), 0)::int AS tender_total_minor,
+        COALESCE(SUM(change_minor), 0)::int AS change_minor,
+        COALESCE(SUM(line_discount_minor), 0)::int AS line_discount_minor,
+        COALESCE(SUM(sale_discount_minor), 0)::int AS sale_discount_minor,
+        COALESCE(SUM(loyalty_discount_minor), 0)::int AS loyalty_discount_minor,
+        COALESCE(SUM(loyalty_redeem_points), 0)::int AS loyalty_redeem_points,
+        COALESCE(SUM(loyalty_earned_points), 0)::int AS loyalty_earned_points,
+        COALESCE(SUM(vat_minor), 0)::int AS vat_minor,
+        COALESCE(SUM(nhil_minor), 0)::int AS nhil_minor,
+        COALESCE(SUM(getfund_minor), 0)::int AS getfund_minor,
+        COALESCE(SUM(tax_total_minor), 0)::int AS tax_total_minor
+      FROM sale
+      WHERE shift_id = ${shiftId}
+    ),
+    line_totals AS (
+      SELECT
+        COALESCE(SUM(sl.quantity), 0)::int AS item_count,
+        COALESCE(SUM(sl.base_minor), 0)::int AS base_minor
+      FROM sale_line sl
+      JOIN sale s ON s.id = sl.sale_id
+      WHERE s.shift_id = ${shiftId}
+    ),
+    tenders AS (
+      SELECT
+        COALESCE(SUM(st.amount_minor) FILTER (WHERE st.method = 'CASH'), 0)::int AS cash_minor,
+        COALESCE(SUM(st.amount_minor) FILTER (WHERE st.method = 'CREDIT'), 0)::int AS credit_minor,
+        COALESCE(SUM(st.amount_minor) FILTER (WHERE st.method = 'MOMO'), 0)::int AS momo_minor,
+        COALESCE(SUM(st.amount_minor) FILTER (WHERE st.method = 'CARD'), 0)::int AS card_minor,
+        COALESCE(SUM(st.amount_minor) FILTER (WHERE st.method = 'BANK_TRANSFER'), 0)::int
+          AS bank_transfer_minor
+      FROM sale_tender st
+      JOIN sale s ON s.id = st.sale_id
+      WHERE s.shift_id = ${shiftId}
+    ),
+    returns AS (
+      SELECT
+        COUNT(*)::int AS refund_count,
+        COALESCE(SUM(refunded_minor), 0)::int AS refunded_minor
+      FROM refund
+      WHERE shift_id = ${shiftId}
+    ),
+    voids AS (
+      SELECT
+        COUNT(*)::int AS void_count,
+        COALESCE(SUM(gross_minor), 0)::int AS void_gross_minor
+      FROM cart_void
+      WHERE shift_id = ${shiftId}
+    )
+    SELECT * FROM sales, line_totals, tenders, returns, voids
+  `)
+
+  const row = result.rows[0]
+  const int = (key: string): number => Number(row?.[key] ?? 0)
+
+  return {
+    saleCount: int('sale_count'),
+    grossMinor: int('gross_minor'),
+    tenderTotalMinor: int('tender_total_minor'),
+    changeMinor: int('change_minor'),
+    lineDiscountMinor: int('line_discount_minor'),
+    saleDiscountMinor: int('sale_discount_minor'),
+    loyaltyDiscountMinor: int('loyalty_discount_minor'),
+    loyaltyRedeemPoints: int('loyalty_redeem_points'),
+    loyaltyEarnedPoints: int('loyalty_earned_points'),
+    itemCount: int('item_count'),
+    baseMinor: int('base_minor'),
+    vatMinor: int('vat_minor'),
+    nhilMinor: int('nhil_minor'),
+    getfundMinor: int('getfund_minor'),
+    taxTotalMinor: int('tax_total_minor'),
+    cashMinor: int('cash_minor'),
+    creditMinor: int('credit_minor'),
+    momoMinor: int('momo_minor'),
+    cardMinor: int('card_minor'),
+    bankTransferMinor: int('bank_transfer_minor'),
+    refundCount: int('refund_count'),
+    refundedMinor: int('refunded_minor'),
+    voidCount: int('void_count'),
+    voidGrossMinor: int('void_gross_minor'),
+  }
+}
+
+/**
+ * The Z-report snapshot. `onConflictDoNothing` on `shift_id` is the belt to the
+ * close's braces: the close already requires `status = 'OPEN'` under a row lock,
+ * so a retried close is a 409 before it reaches here, and a duplicate insert can
+ * still not overwrite the first report.
+ *
+ * There is deliberately no update function for this table (P13-D32).
+ */
+export async function insertShiftReport(
+  values: typeof shiftReport.$inferInsert,
+  executor: DbExecutor = db,
+): Promise<boolean> {
+  const rows = await executor
+    .insert(shiftReport)
+    .values(values)
+    .onConflictDoNothing({ target: shiftReport.shiftId })
+    .returning({ id: shiftReport.id })
+  return rows.length > 0
+}
+
+export async function findShiftReportByShiftId(
+  shiftId: string,
+  executor: DbExecutor = db,
+): Promise<typeof shiftReport.$inferSelect | null> {
+  const rows = await executor
+    .select()
+    .from(shiftReport)
+    .where(eq(shiftReport.shiftId, shiftId))
+    .limit(1)
+  return rows[0] ?? null
 }
