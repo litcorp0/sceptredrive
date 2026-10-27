@@ -1,263 +1,174 @@
+import { formatCount } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
+import { SlidersHorizontal } from "lucide-react"
 import { toast } from "sonner"
+import { EmptyState } from "#/components/common/empty-state"
 import { PageHeader } from "#/components/common/page-header"
+import { Button } from "#/components/ui/button"
+import { Skeleton } from "#/components/ui/skeleton"
+import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
 import { settingsKeys } from "../api/keys"
 import { settingsListOptions, settingsUpdate } from "../api/settings"
-import type { SettingMeta } from "../types"
 import { SettingRow } from "../ui/setting-row"
+import { controlFor, metaFor } from "../utils/meta"
+import { groupSettings } from "../utils/settings"
 
 const routeApi = getRouteApi("/_authenticated/settings")
 
-const SETTING_META: SettingMeta[] = [
-	{
-		key: "auth.requireTwoFactor",
-		group: "Security",
-		label: "Require two-factor authentication",
-		description:
-			"Administrators must set up an authenticator app before using the console. Enable 2FA on your own account before turning this on.",
-		type: "switch",
-	},
-	{
-		key: "staff.idPrefix",
-		group: "Staff IDs",
-		label: "Staff ID prefix",
-		description: "Prefix for staff IDs, e.g. GA-0001.",
-		type: "text",
-	},
-	{
-		key: "staff.idSequence",
-		group: "Staff IDs",
-		label: "Next staff number",
-		description: "The next number to allocate. Changing this affects new accounts only.",
-		type: "int",
-	},
-	{
-		key: "catalog.skuPrefix",
-		group: "Catalog",
-		label: "SKU prefix",
-		description: "Prefix for auto-generated product SKUs, e.g. GIK-00001.",
-		type: "text",
-	},
-	{
-		key: "catalog.skuSequence",
-		group: "Catalog",
-		label: "Next SKU number",
-		description: "The next number for new products. Saving a suggested SKU advances it.",
-		type: "int",
-	},
-	{
-		key: "pricing.taxMode",
-		group: "Pricing",
-		label: "Tax mode",
-		description:
-			"Inclusive: entered prices already contain VAT, NHIL, and GETFund. Exclusive: tax is added on top.",
-		type: "select",
-		options: [
-			{ value: "INCLUSIVE", label: "Tax-inclusive prices" },
-			{ value: "EXCLUSIVE", label: "Tax-exclusive prices" },
-		],
-	},
-	{
-		key: "receipt.header",
-		group: "Receipts",
-		label: "Receipt header",
-		description: "Printed at the top of every receipt. Can differ per branch.",
-		type: "text",
-	},
-	{
-		key: "loyalty.earnPointsPerCedi",
-		group: "Loyalty",
-		label: "Points earned per GHS 1",
-		description: "Whole points earned per cedi spent (calculated with a floor per sale).",
-		type: "int",
-	},
-	{
-		key: "loyalty.pointsPerCedi",
-		group: "Loyalty",
-		label: "Points per GHS 1 discount",
-		description: "How many points are worth GHS 1 when redeemed.",
-		type: "decimal",
-	},
-	{
-		key: "loyalty.expiryMonths",
-		group: "Loyalty",
-		label: "Points expiry (months)",
-		description: "Points expire after this many months.",
-		type: "int",
-	},
-	{
-		key: "loyalty.minimumRedeemPoints",
-		group: "Loyalty",
-		label: "Minimum redemption (points)",
-		description: "The smallest redemption accepted at the till and in the console.",
-		type: "int",
-	},
-	{
-		key: "credit.repaymentPrefix",
-		group: "Credit",
-		label: "Repayment receipt prefix",
-		description: "Prefix for credit repayment receipts, e.g. REP-00001.",
-		type: "text",
-	},
-	{
-		key: "credit.repaymentSequence",
-		group: "Credit",
-		label: "Next repayment number",
-		description: "The next repayment number to allocate. Changing this affects new receipts only.",
-		type: "int",
-	},
-	{
-		key: "supplier.codePrefix",
-		group: "Suppliers & Payables",
-		label: "Supplier code prefix",
-		description: "Prefix for supplier codes, e.g. SUP-00001. 1–8 letters or digits.",
-		type: "text",
-	},
-	{
-		key: "supplier.codeSequence",
-		group: "Suppliers & Payables",
-		label: "Next supplier number",
-		description:
-			"The next supplier number to allocate. It advances only when a supplier is created; gaps are acceptable.",
-		type: "int",
-	},
-	{
-		key: "payable.invoicePrefix",
-		group: "Suppliers & Payables",
-		label: "Purchase invoice prefix",
-		description: "Prefix for purchase invoice numbers, e.g. SINV-00001. 1–8 letters or digits.",
-		type: "text",
-	},
-	{
-		key: "payable.invoiceSequence",
-		group: "Suppliers & Payables",
-		label: "Next purchase invoice number",
-		description:
-			"The next purchase invoice number to allocate. It advances only when an invoice is recorded; gaps are acceptable.",
-		type: "int",
-	},
-	{
-		key: "payable.paymentPrefix",
-		group: "Suppliers & Payables",
-		label: "Supplier payment prefix",
-		description: "Prefix for supplier payment numbers, e.g. PAY-00001. 1–8 letters or digits.",
-		type: "text",
-	},
-	{
-		key: "payable.paymentSequence",
-		group: "Suppliers & Payables",
-		label: "Next supplier payment number",
-		description:
-			"The next supplier payment number to allocate. It advances only when a payment is recorded; gaps are acceptable.",
-		type: "int",
-	},
-]
-
+/**
+ * Every setting the API defines, rendered from the response.
+ *
+ * There is no hand-maintained key list to fall out of date: `GET /api/settings` is the list, and
+ * a key this module has no hint for still gets a row with the key as its label and a plain text
+ * control (P14-D42). The old page rendered 19 of 51 and silently dropped the rest.
+ */
 export function SettingsPage() {
 	const { session } = routeApi.useRouteContext()
 	const { activeBranchId, activeBranch, canSelectBranch } = useBranch()
+	const canRead = hasPermission(session.user.role, "settings.read")
 	const canUpdate = hasPermission(session.user.role, "settings.update")
 	const isAdmin = session.user.role === "ADMIN"
 
 	const queryClient = useQueryClient()
 
-	const settingsQuery = useQuery(settingsListOptions({ branchId: activeBranchId ?? undefined }))
+	const settingsQuery = useQuery({
+		...settingsListOptions({ branchId: activeBranchId ?? undefined }),
+		enabled: canRead,
+	})
 
 	const updateMutation = useMutation({
 		mutationFn: ({
-			meta,
-			rawValue,
+			key,
+			value,
 			branchId,
 		}: {
-			meta: SettingMeta
-			rawValue: string
+			key: string
+			value: unknown
 			branchId: string | null
-		}) => {
-			const parsed =
-				meta.type === "text" || meta.type === "select"
-					? rawValue
-					: meta.type === "switch"
-						? rawValue === "true"
-						: Number(rawValue)
-			if (
-				meta.type !== "text" &&
-				meta.type !== "select" &&
-				meta.type !== "switch" &&
-				!Number.isFinite(parsed)
-			) {
-				throw new Error("Enter a valid number")
-			}
-			return settingsUpdate({ key: meta.key, value: parsed, branchId })
-		},
+		}) => settingsUpdate({ key, value, branchId }),
 		onSuccess: async () => {
 			toast.success("Setting saved")
 			await queryClient.invalidateQueries({ queryKey: settingsKeys.all })
 		},
 		onError: (error) => {
-			if (error instanceof Error && !("status" in error)) {
-				toast.error(error.message)
-				return
-			}
 			toastApiError(error)
 		},
 	})
 
+	if (!canRead) {
+		return (
+			<div>
+				<PageHeader title="Settings" />
+				<p className="text-sm text-muted-foreground">
+					Your role cannot read the console settings. Ask an administrator if you need a value
+					changed.
+				</p>
+			</div>
+		)
+	}
+
 	const settings = settingsQuery.data?.settings ?? []
-	const groups = [...new Set(SETTING_META.map((meta) => meta.group))]
+	const groups = groupSettings(settings)
+	const forbidden = settingsQuery.error instanceof ApiError && settingsQuery.error.status === 403
+
+	const description = canSelectBranch
+		? activeBranch
+			? `Every setting the server defines, resolved for ${activeBranch.code}. A branch value overrides the global value.`
+			: "Every setting the server defines, resolved with global values and built-in defaults. Select a branch to see its overrides."
+		: "Every setting the server defines, resolved for your branch."
 
 	return (
-		<div className="">
-			<PageHeader
-				title="Settings"
-				description={
-					canSelectBranch
-						? activeBranch
-							? `Values for ${activeBranch.code}. Branch values override global defaults.`
-							: "Global defaults. Select a branch to override branch-scoped values."
-						: "Values for your branch."
-				}
-			/>
+		<div>
+			<PageHeader title="Settings" description={description} />
 
 			{settingsQuery.isLoading ? (
-				<p className="text-sm text-muted-foreground">Loading settings…</p>
+				<div className="grid gap-2" aria-busy="true">
+					<output className="sr-only">Loading settings</output>
+					{Array.from({ length: 6 }, (_, index) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows are positional placeholders
+						<Skeleton key={index} className="h-16 w-full" />
+					))}
+				</div>
 			) : settingsQuery.isError ? (
-				<p className="text-sm text-destructive">Couldn't load settings.</p>
+				<div className="rounded-lg border border-dashed p-4">
+					<p className="text-sm text-destructive">
+						{forbidden
+							? "Your role cannot read the console settings."
+							: "Couldn't load the settings."}
+					</p>
+					{forbidden ? null : (
+						<Button
+							size="sm"
+							variant="outline"
+							className="mt-3"
+							onClick={() => void settingsQuery.refetch()}
+						>
+							Try again
+						</Button>
+					)}
+				</div>
+			) : settings.length === 0 ? (
+				<EmptyState
+					icon={SlidersHorizontal}
+					title="No settings returned"
+					description="The server answered with an empty list. Settings appear here as soon as the API defines them."
+				/>
 			) : (
 				<div className="grid gap-6">
+					<p className="text-xs text-muted-foreground">
+						{formatCount(settings.length)} settings, in {formatCount(groups.length)} groups.
+					</p>
 					{groups.map((group) => (
-						<div key={group}>
-							<h2 className="mb-2 text-sm font-medium text-muted-foreground">{group}</h2>
+						<section key={group.prefix} aria-labelledby={`settings-group-${group.prefix}`}>
+							<h2
+								id={`settings-group-${group.prefix}`}
+								className="mb-2 text-sm font-medium text-muted-foreground"
+							>
+								{group.label}
+							</h2>
 							<div className="divide-y rounded-lg border bg-card">
-								{SETTING_META.filter((meta) => meta.group === group).map((meta) => {
-									const setting = settings.find((item) => item.key === meta.key)
-									if (!setting) return null
-									const branchId = setting.branchScoped ? (activeBranchId ?? null) : null
+								{group.settings.map((setting) => {
+									const meta = metaFor(setting.key)
+									const canWrite =
+										canUpdate &&
+										(setting.writableBy === "admin"
+											? isAdmin
+											: setting.branchScoped
+												? isAdmin || activeBranchId !== null
+												: isAdmin)
+									const reason = !canUpdate
+										? "Your role cannot change settings."
+										: setting.writableBy === "admin" && !isAdmin
+											? "Only administrators can change this value."
+											: null
+
 									return (
 										<SettingRow
-											key={meta.key}
-											meta={meta}
+											key={setting.key}
 											setting={setting}
-											canEdit={
-												canUpdate &&
-												(setting.branchScoped ? isAdmin || activeBranchId !== null : isAdmin)
-											}
+											meta={meta}
+											control={controlFor(setting, meta)}
+											canWrite={canWrite}
+											reason={reason}
 											pending={
-												updateMutation.isPending && updateMutation.variables?.meta.key === meta.key
+												updateMutation.isPending && updateMutation.variables?.key === setting.key
 											}
-											branchScoped={setting.branchScoped}
-											globalOnly={!isAdmin && !setting.branchScoped}
-											onSave={(rawValue) => {
-												updateMutation.mutate({ meta, rawValue, branchId })
+											onSave={(value) => {
+												updateMutation.mutate({
+													key: setting.key,
+													value,
+													branchId: setting.branchScoped ? (activeBranchId ?? null) : null,
+												})
 											}}
 										/>
 									)
 								})}
 							</div>
-						</div>
+						</section>
 					))}
 				</div>
 			)}
