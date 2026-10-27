@@ -1,5 +1,7 @@
+import { desc, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -12,6 +14,12 @@ import {
 } from 'drizzle-orm/pg-core'
 import { branch } from '../org/branches.schema.ts'
 import { device, terminal } from '../org/terminals.schema.ts'
+import {
+  supplierInvoice,
+  supplierPayment,
+  supplierPaymentMethodEnum,
+} from '../payables/payables.schema.ts'
+import { supplier, supplierPaymentDetail } from '../suppliers/suppliers.schema.ts'
 
 export const paymentMethodEnum = pgEnum('payment_method', ['MOMO', 'CARD', 'BANK_TRANSFER'])
 
@@ -128,6 +136,14 @@ export const paymentEvent = pgTable(
     bodySha256: text('body_sha256').notNull(),
     providerReference: text('provider_reference'),
     paymentId: uuid('payment_id').references(() => payment.id, { onDelete: 'set null' }),
+    /**
+     * The supplier transfer this delivery is about (P14-D30). Null for charge and
+     * refund events; `set null` because an event outlives a deleted intent and the
+     * ledger must never lose a delivery that arrived.
+     */
+    supplierTransferId: uuid('supplier_transfer_id').references(() => supplierTransfer.id, {
+      onDelete: 'set null',
+    }),
     status: text('status').notNull(),
     detail: jsonb('detail').notNull().default({}),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
@@ -136,6 +152,133 @@ export const paymentEvent = pgTable(
   (table) => [
     uniqueIndex('payment_event_body_unique').on(table.provider, table.bodySha256),
     index('payment_event_payment_idx').on(table.paymentId),
+    index('payment_event_transfer_idx').on(table.supplierTransferId),
     index('payment_event_type_received_idx').on(table.eventType, table.receivedAt),
+  ],
+)
+
+/**
+ * The supplier-transfer state machine (P14-D24). `AWAITING_OTP` is a real state,
+ * not an error: with "confirm transfers before sending" enabled every transfer
+ * starts there. Only `SUCCESS` moved money; `REVERSED` is money that came back.
+ */
+export const supplierTransferStatusEnum = pgEnum('supplier_transfer_status', [
+  'PENDING',
+  'AWAITING_OTP',
+  'SUCCESS',
+  'FAILED',
+  'REVERSED',
+  'BLOCKED',
+  'REJECTED',
+])
+
+/**
+ * What we asked Paystack to pay, never the payment itself (P14-D22/P14-D23).
+ *
+ * A transfer is an instruction with its own lifecycle; `supplier_payment` stays
+ * the only ledger fact and is written by `transfer.success` through the same
+ * allocation core the manual form uses. Putting a `PENDING` payment in its place
+ * would put un-moved money into the invoice projection and the ageing buckets.
+ *
+ * The table lives beside `payment_event` rather than beside `supplier_payment`
+ * because `payment_event` references it (P14-D30): keeping the FK means the
+ * import must run `payments → payables`, exactly as `pos → payments` does for
+ * `sale_tender.payment_id`. A table that both sides need lives on the side that
+ * does not import back.
+ *
+ * The reference is server-minted (`sdt-<uuid>`): Paystack's alphabet, 16–50
+ * characters. `idempotency_key` is the client's, so a retried initiation returns
+ * the transfer it already created. `provider_transfer_id` is Paystack's u64 id
+ * stored as text — a JavaScript number would round it.
+ */
+export const supplierTransfer = pgTable(
+  'supplier_transfer',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    branchId: uuid('branch_id')
+      .notNull()
+      .references(() => branch.id, { onDelete: 'restrict' }),
+    supplierId: uuid('supplier_id')
+      .notNull()
+      .references(() => supplier.id, { onDelete: 'restrict' }),
+    paymentDetailId: uuid('payment_detail_id')
+      .notNull()
+      .references(() => supplierPaymentDetail.id, { onDelete: 'restrict' }),
+    /** `BANK` or `MOMO`; `CASH` never leaves by transfer and the service refuses it. */
+    method: supplierPaymentMethodEnum('method').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    reference: text('reference').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    status: supplierTransferStatusEnum('status').notNull().default('PENDING'),
+    provider: paymentProviderEnum('provider').notNull(),
+    /** The destination Paystack accepted. Never returned by the read API (P14-D28). */
+    recipientCode: text('recipient_code'),
+    /** `TRF_…` as the provider minted it. */
+    providerTransferCode: text('provider_transfer_code'),
+    providerTransferId: text('provider_transfer_id'),
+    /** The narration sent to the provider. */
+    reason: text('reason').notNull(),
+    note: text('note'),
+    failureCode: text('failure_code'),
+    failureMessage: text('failure_message'),
+    /** Set exactly once, on settlement; one payment per transfer and one transfer per payment. */
+    paymentId: uuid('payment_id').references(() => supplierPayment.id, { onDelete: 'set null' }),
+    /** What the plan could not apply: the remainder stays on account (P14-D26). */
+    unallocatedMinor: integer('unallocated_minor').notNull().default(0),
+    initiatedBy: text('initiated_by'),
+    finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex('supplier_transfer_reference_unique').on(table.reference),
+    uniqueIndex('supplier_transfer_idempotency_unique').on(table.branchId, table.idempotencyKey),
+    uniqueIndex('supplier_transfer_payment_unique')
+      .on(table.paymentId)
+      .where(sql`${table.paymentId} is not null`),
+    index('supplier_transfer_branch_created_idx').on(table.branchId, desc(table.createdAt)),
+    // The catch-up sweep reads the open statuses oldest-first (P14-D31, P14-D47).
+    index('supplier_transfer_status_created_idx').on(table.status, table.createdAt),
+    index('supplier_transfer_supplier_created_idx').on(table.supplierId, desc(table.createdAt)),
+    check('supplier_transfer_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'supplier_transfer_reference_length',
+      sql`char_length(${table.reference}) between 16 and 50`,
+    ),
+  ],
+)
+
+/**
+ * The allocation *plan*: which invoices the transfer is meant to settle.
+ *
+ * The settled rows are still written to `supplier_payment_allocation` on
+ * `transfer.success`, which keeps `supplier_payment` the only ledger fact. The
+ * two can disagree — an invoice paid by hand meanwhile — and the difference is
+ * reported as `unallocated_minor` rather than hidden (P14-D26).
+ */
+export const supplierTransferAllocation = pgTable(
+  'supplier_transfer_allocation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transferId: uuid('transfer_id')
+      .notNull()
+      .references(() => supplierTransfer.id, { onDelete: 'cascade' }),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => supplierInvoice.id, { onDelete: 'restrict' }),
+    amountMinor: integer('amount_minor').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('supplier_transfer_allocation_transfer_invoice_unique').on(
+      table.transferId,
+      table.invoiceId,
+    ),
+    check('supplier_transfer_allocation_amount_positive', sql`${table.amountMinor} > 0`),
   ],
 )
