@@ -137,7 +137,13 @@ export async function findEventByHash(
 
 export async function markEventProcessed(
   id: string,
-  patch: { status: 'PROCESSED' | 'IGNORED'; paymentId: string | null; processedAt: Date },
+  patch: {
+    status: 'PROCESSED' | 'IGNORED'
+    paymentId: string | null
+    /** Set for transfer events, resolved from the reference (P14-D30). */
+    supplierTransferId?: string | null
+    processedAt: Date
+  },
   executor: DbExecutor = db,
 ): Promise<void> {
   await executor.update(paymentEvent).set(patch).where(eq(paymentEvent.id, id))

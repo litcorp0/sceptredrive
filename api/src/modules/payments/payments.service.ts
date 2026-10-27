@@ -3,6 +3,8 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { normalizeGhanaPhone } from '@sceptre/shared'
 import { env } from '../../config/env.ts'
 import { AppError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import { applyTransferEvent } from '../payables/payables.service.ts'
+import type { TransferEvent } from '../payables/payables.types.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { addConflict } from '../pos/pos.conflicts.ts'
@@ -54,7 +56,23 @@ export const PAYMENT_REFRESH_THROTTLE_MS = 5_000
 /** Paystack's own body size is small; anything larger is not a settlement. */
 export const MAX_WEBHOOK_BYTES = 1_000_000
 
-const HANDLED_EVENTS = new Set(['charge.success', 'charge.failed', 'bank.transfer.rejected'])
+const HANDLED_EVENTS = new Set([
+  'charge.success',
+  'charge.failed',
+  'bank.transfer.rejected',
+  // Supplier transfers (P14-D30). Only `success` posts a payment; the other two
+  // mark the intent and, for a reversal, raise it for a person.
+  'transfer.success',
+  'transfer.failed',
+  'transfer.reversed',
+])
+
+/** The three transfer events, and the status each one asserts. */
+const TRANSFER_EVENT_STATUS: Record<string, TransferEvent['status']> = {
+  'transfer.success': 'success',
+  'transfer.failed': 'failed',
+  'transfer.reversed': 'reversed',
+}
 
 function expiryFor(method: PaymentMethod, now: Date): Date {
   switch (method) {
@@ -752,6 +770,30 @@ function verificationFromWebhook(
 }
 
 /**
+ * A `transfer.*` delivery, in the shape the one transfer state writer consumes.
+ * `failures` is where Paystack puts the reason for a failed or reversed transfer.
+ */
+function transferEventFromWebhook(
+  status: TransferEvent['status'],
+  data: Record<string, unknown>,
+  reference: string,
+): TransferEvent {
+  const failures = Array.isArray(data.failures) ? asRecord(data.failures[0]) : {}
+
+  return {
+    reference,
+    status,
+    transferCode: asString(data.transfer_code),
+    transferId: typeof data.id === 'number' || typeof data.id === 'string' ? String(data.id) : null,
+    amountMinor: asInteger(data.amount),
+    failureCode: asString(failures.reason) ?? asString(data.status),
+    failureMessage: asString(failures.message) ?? asString(data.gateway_response),
+    occurredAt: toDate(asString(data.transferred_at) ?? asString(data.updated_at)),
+    feeMinor: asInteger(data.fee_charged),
+  }
+}
+
+/**
  * Insert the delivery, apply its state change and mark it processed in one
  * transaction. The unique body hash makes a retry a no-op that still returns
  * 200; if applying throws, the whole transaction (including the event row)
@@ -761,6 +803,7 @@ export async function processPaystackEvent(rawBody: string, body: unknown): Prom
   const event = asRecord(body)
   const eventName = asString(event.event)
   const refundEvent = eventName !== null && REFUND_EVENT_NAMES.has(eventName)
+  const transferStatus = eventName !== null ? TRANSFER_EVENT_STATUS[eventName] : undefined
   const handled = eventName !== null && (HANDLED_EVENTS.has(eventName) || refundEvent)
   const data = asRecord(event.data)
   const reference = asString(data.reference)
@@ -787,6 +830,36 @@ export async function processPaystackEvent(rawBody: string, body: unknown): Prom
       await repo.markEventProcessed(
         inserted.id,
         { status: 'IGNORED', paymentId: null, processedAt: new Date() },
+        tx,
+      )
+      return
+    }
+
+    // A transfer event names a `supplier_transfer`, not a payment. It is written
+    // through `payables.service` — the one direction that is not a cycle —
+    // because the payment it may create is a payables fact (P14-D30).
+    if (transferStatus) {
+      if (!reference) {
+        await repo.markEventProcessed(
+          inserted.id,
+          { status: 'IGNORED', paymentId: null, processedAt: new Date() },
+          tx,
+        )
+        return
+      }
+
+      const outcome = await applyTransferEvent(
+        tx,
+        transferEventFromWebhook(transferStatus, data, reference),
+      )
+      await repo.markEventProcessed(
+        inserted.id,
+        {
+          status: outcome.matched ? 'PROCESSED' : 'IGNORED',
+          paymentId: null,
+          supplierTransferId: outcome.transferId,
+          processedAt: new Date(),
+        },
         tx,
       )
       return
