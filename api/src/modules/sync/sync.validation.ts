@@ -1,4 +1,10 @@
-import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
+import {
+  isElectronicTender,
+  MAX_TENDERS_PER_SALE,
+  PIN_PROBLEM_MESSAGES,
+  pinProblem,
+  TENDER_METHODS,
+} from '@sceptre/shared'
 import { z } from 'zod'
 import { validateJson, validateQuery } from '../../http/validation.ts'
 
@@ -80,6 +86,25 @@ const saleTotalsSchema = z
   })
   .strict()
 
+const tenderSchema = z
+  .object({
+    method: z.enum(TENDER_METHODS),
+    amountMinor: minorUnits,
+    /** REQUIRED for MOMO | CARD | BANK_TRANSFER, forbidden otherwise (P13-D6). */
+    paymentId: z.uuid().nullish(),
+    override: overrideProofSchema.nullish(),
+  })
+  .strict()
+  .superRefine((tender, ctx) => {
+    const electronic = isElectronicTender(tender.method)
+    if (electronic && !tender.paymentId) {
+      ctx.addIssue({ code: 'custom', message: 'An electronic tender needs its paid payment' })
+    }
+    if (!electronic && tender.paymentId) {
+      ctx.addIssue({ code: 'custom', message: 'Cash and credit tenders carry no payment' })
+    }
+  })
+
 const salePayloadSchema = z
   .object({
     receiptNumber: z
@@ -127,17 +152,9 @@ const salePayloadSchema = z
       })
       .strict()
       .nullish(),
-    tenders: z
-      .array(
-        z
-          .object({
-            method: z.enum(['CASH', 'CREDIT']),
-            amountMinor: minorUnits,
-            override: overrideProofSchema.nullish(),
-          })
-          .strict(),
-      )
-      .max(2),
+    // Array order is the receipt order: the server writes `sequence = index + 1`
+    // and the payload carries no ordinal that could disagree with it (P13-D1).
+    tenders: z.array(tenderSchema).max(MAX_TENDERS_PER_SALE),
     totals: saleTotalsSchema,
     occurredAt: z.iso.datetime(),
     appVersion: z.string().max(40).nullish(),

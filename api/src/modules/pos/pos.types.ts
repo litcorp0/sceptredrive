@@ -1,4 +1,4 @@
-import type { Role } from '@sceptre/shared'
+import type { Role, TenderMethod } from '@sceptre/shared'
 import type { ApprovalSubject } from '../approvals/approvals.types.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 
@@ -144,9 +144,11 @@ export interface SaleLoyaltyPayload {
 }
 
 export interface SaleTenderPayload {
-  method: 'CASH' | 'CREDIT'
-  /** Cash: the amount handed over (change included). Credit: the sale total. */
+  method: TenderMethod
+  /** Cash: the amount handed over (change included). Credit: the credit portion. */
   amountMinor: number
+  /** Required for MOMO | CARD | BANK_TRANSFER; the server settles it before the sale. */
+  paymentId?: string | null
   override?: OverrideProof | null
 }
 

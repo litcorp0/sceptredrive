@@ -1,6 +1,15 @@
 import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
-import { can, priceCart, type TaxMode } from '@sceptre/shared'
+import {
+  can,
+  isElectronicTender,
+  MAX_TENDERS_PER_SALE,
+  priceCart,
+  type TaxMode,
+  TENDER_PROBLEM_MESSAGES,
+  tenderBalance,
+} from '@sceptre/shared'
+import { inArray } from 'drizzle-orm'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
@@ -19,6 +28,7 @@ import {
   quoteRedeem,
 } from '../loyalty/loyalty.service.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
+import { payment } from '../payments/payments.schema.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
@@ -57,6 +67,7 @@ import {
   updateShiftReview,
   updateStaffPinHash,
 } from './pos.repository.ts'
+import { saleTender } from './pos.schema.ts'
 import type {
   AppliedConflict,
   BindingStaff,
@@ -799,6 +810,58 @@ async function validateOverrideProof(
   }
 }
 
+/** The facts a sale tender needs from a payment, and nothing more (P13-D15). */
+interface TenderPayment {
+  id: string
+  branchId: string
+  terminalId: string
+  shiftId: string
+  method: 'MOMO' | 'CARD' | 'BANK_TRANSFER'
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'ABANDONED' | 'EXPIRED'
+  amountMinor: number
+  providerReference: string
+  referenced: boolean
+}
+
+/**
+ * Loads every electronic tender's payment in one statement (P13-D6).
+ *
+ * `FOR SHARE` holds the rows for the rest of the upload transaction, and a
+ * second statement says whether an earlier sale already spent one of them. The
+ * provider reference is read from here, never from the payload: a terminal may
+ * not choose what the receipt prints.
+ */
+async function loadTenderPayments(
+  paymentIds: string[],
+  executor: DbExecutor,
+): Promise<Map<string, TenderPayment>> {
+  if (paymentIds.length === 0) return new Map()
+
+  const [rows, spent] = await Promise.all([
+    executor
+      .select({
+        id: payment.id,
+        branchId: payment.branchId,
+        terminalId: payment.terminalId,
+        shiftId: payment.shiftId,
+        method: payment.method,
+        status: payment.status,
+        amountMinor: payment.amountMinor,
+        providerReference: payment.providerReference,
+      })
+      .from(payment)
+      .where(inArray(payment.id, paymentIds))
+      .for('share'),
+    executor
+      .select({ paymentId: saleTender.paymentId })
+      .from(saleTender)
+      .where(inArray(saleTender.paymentId, paymentIds)),
+  ])
+
+  const referenced = new Set(spent.map((row) => row.paymentId))
+  return new Map(rows.map((row) => [row.id, { ...row, referenced: referenced.has(row.id) }]))
+}
+
 /** Shape rules the route schema also enforces; keeps direct service calls safe. */
 function assertSaleShape(payload: SalePayload): void {
   if (!Array.isArray(payload.lines) || payload.lines.length === 0) {
@@ -1021,36 +1084,118 @@ export async function applySale(
   }
   const header = assessment.matched ? computedTotals : { ...payload.totals, changeMinor: 0 }
 
-  // 6. Tender integrity (Phase 6 is single tender; zero due needs no tender).
-  if (payload.tenders.length > 1) {
-    throw saleRejected('INVALID_TENDER', 'Split tender is not supported in this phase')
-  }
-  const cashTender = payload.tenders.find((tender) => tender.method === 'CASH')
-  const creditTender = payload.tenders.find((tender) => tender.method === 'CREDIT')
-  const cashTendered = cashTender?.amountMinor ?? 0
-  const creditAmount = creditTender?.amountMinor ?? 0
+  // 6. Tender integrity (P13-D1, D3, D5, D6). Every check below runs before a
+  //    single row is written, so a client defect leaves nothing to reconcile.
   const totalMinor = header.totalMinor
+  if (!Number.isSafeInteger(totalMinor) || totalMinor < 0) {
+    // `priceCart` already guarantees this; the guard keeps the shared arithmetic
+    // from throwing a RangeError on a value a future caller might pass.
+    throw saleRejected('INVALID_TOTALS', 'The sale total must be non-negative whole pesewas')
+  }
 
-  if (totalMinor > 0 && payload.tenders.length !== 1) {
-    throw saleRejected('INVALID_TENDER', 'A sale with a balance due needs one tender')
+  // 6a. Shape: the wire schema says the same, and a direct service call is not
+  //     allowed to be less careful than the wire.
+  if (payload.tenders.length > MAX_TENDERS_PER_SALE) {
+    throw saleRejected('INVALID_TENDER', TENDER_PROBLEM_MESSAGES.TOO_MANY_TENDERS)
   }
   for (const tender of payload.tenders) {
     if (!Number.isSafeInteger(tender.amountMinor) || tender.amountMinor < 0) {
       throw saleRejected('INVALID_TENDER', 'Tender amounts must be non-negative whole pesewas')
     }
+    if (!isElectronicTender(tender.method) && tender.paymentId) {
+      throw saleRejected('INVALID_TENDER', 'Cash and credit tenders carry no payment')
+    }
   }
-  if (creditAmount > 0 && creditAmount !== totalMinor) {
-    throw saleRejected('INVALID_TENDER', 'A credit tender must equal the sale total')
+  if (totalMinor > 0 && payload.tenders.length === 0) {
+    throw saleRejected('INVALID_TENDER', 'A sale with a balance due needs at least one payment')
   }
-  if (cashTendered > 0 && cashTendered < totalMinor) {
-    throw saleRejected('INVALID_TENDER', 'The cash tendered is below the sale total')
+  if (totalMinor === 0 && payload.tenders.length > 0) {
+    throw saleRejected('INVALID_TENDER', 'A sale with nothing to pay carries no payment')
   }
+
+  // 6b. Arithmetic through the one shared implementation (P13-D3). A problem is
+  //     an impossible tender set, not a business conflict: the sale is refused.
+  const tenders = payload.tenders.map((tender, index) => ({
+    method: tender.method,
+    amountMinor: tender.amountMinor,
+    sequence: index + 1,
+  }))
+  const balance = tenderBalance(totalMinor, tenders)
+  if (balance.problem) {
+    throw saleRejected('INVALID_TENDER', TENDER_PROBLEM_MESSAGES[balance.problem], {
+      problem: balance.problem,
+    })
+  }
+
+  // 6c. The change is the server's number; a till that declares another is
+  //     claiming money that never left the drawer.
+  const changeMinor = balance.changeMinor
+  if (changeMinor !== payload.totals.changeMinor) {
+    throw saleRejected('INVALID_TENDER', 'The change does not match the tendered amount', {
+      chargedChangeMinor: payload.totals.changeMinor,
+      computedChangeMinor: changeMinor,
+    })
+  }
+
+  // 6d. Credit is one tender (6b guarantees it), needs a customer, and the
+  //     portion — not the sale total — is what reaches the ledger (P13-D4).
+  const creditTender = payload.tenders.find((tender) => tender.method === 'CREDIT')
+  const creditAmount = creditTender?.amountMinor ?? 0
   if (creditAmount > 0 && !resolvedCustomerId) {
     throw saleRejected('CREDIT_REQUIRES_CUSTOMER', 'A credit sale needs a customer')
   }
-  const changeMinor = cashTendered > totalMinor ? cashTendered - totalMinor : 0
-  if (changeMinor !== payload.totals.changeMinor) {
-    throw saleRejected('INVALID_TENDER', 'The change does not match the cash tendered')
+
+  // 6e. Electronic money only counts when the server itself settled a payment
+  //     of exactly this size, on this terminal, in this shift, once (P13-D6).
+  const paymentReferenceById = new Map<string, string>()
+  const electronicTenders = payload.tenders.filter((tender) => isElectronicTender(tender.method))
+  if (electronicTenders.length > 0) {
+    const paymentIds: string[] = []
+    for (const tender of electronicTenders) {
+      if (!tender.paymentId) {
+        throw saleRejected('INVALID_TENDER', 'An electronic payment needs the payment it settled')
+      }
+      paymentIds.push(tender.paymentId)
+    }
+    if (new Set(paymentIds).size !== paymentIds.length) {
+      // The partial unique index would refuse the second row, but as a 500 on
+      // the upload rather than a message the till can act on. One payment, one
+      // tender, always (P13-D6).
+      throw saleRejected('INVALID_TENDER', 'The same payment cannot settle two tenders')
+    }
+
+    const payments = await loadTenderPayments(paymentIds, executor)
+    for (const tender of electronicTenders) {
+      const paymentRow = payments.get(tender.paymentId ?? '')
+      if (!paymentRow) {
+        throw saleRejected('INVALID_TENDER', 'The payment this tender cites no longer exists')
+      }
+      if (paymentRow.terminalId !== device.terminalId || paymentRow.branchId !== device.branchId) {
+        throw saleRejected('INVALID_TENDER', 'This payment belongs to another terminal')
+      }
+      if (paymentRow.shiftId !== payload.shiftId) {
+        throw saleRejected('INVALID_TENDER', 'This payment was taken on another shift')
+      }
+      if (paymentRow.status !== 'PAID') {
+        throw saleRejected('INVALID_TENDER', 'This payment has not settled yet')
+      }
+      if (paymentRow.amountMinor !== tender.amountMinor) {
+        throw saleRejected('INVALID_TENDER', 'The payment amount does not match this tender')
+      }
+      if (paymentRow.method !== tender.method) {
+        // The tender's method is what the receipt prints and what the provider
+        // reconciliation groups by, so it must be the channel that took the
+        // money, not merely a channel.
+        throw saleRejected(
+          'INVALID_TENDER',
+          `The payment was taken by ${paymentRow.method}, not ${tender.method}`,
+        )
+      }
+      if (paymentRow.referenced) {
+        throw saleRejected('INVALID_TENDER', 'This payment has already been used on another sale')
+      }
+      paymentReferenceById.set(paymentRow.id, paymentRow.providerReference)
+    }
   }
 
   // 7. Stock: append SALE movements, allowing oversell (conflict, never block).
@@ -1311,7 +1456,7 @@ export async function applySale(
       getfundMinor: header.getfundMinor,
       taxTotalMinor: header.taxTotalMinor,
       totalMinor: header.totalMinor,
-      tenderTotalMinor: cashTendered + creditAmount,
+      tenderTotalMinor: balance.appliedMinor,
       changeMinor,
       loyaltyEarnedPoints,
       creditAmountMinor: creditAmount,
@@ -1355,11 +1500,15 @@ export async function applySale(
   )
 
   await insertSaleTenders(
-    payload.tenders.map((tender) => ({
+    payload.tenders.map((tender, index) => ({
       saleId,
+      sequence: index + 1,
       method: tender.method,
       amountMinor: tender.amountMinor,
-      reference: null,
+      paymentId: tender.paymentId ?? null,
+      // The display copy of the provider reference comes from the payment row
+      // validated above, never from the payload (P13-D6).
+      reference: tender.paymentId ? (paymentReferenceById.get(tender.paymentId) ?? null) : null,
     })),
     executor,
   )
