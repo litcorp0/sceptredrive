@@ -1,4 +1,11 @@
-import type { Role, TenderMethod } from '@sceptre/shared'
+import type {
+  CartVoidReason,
+  ConflictResolutionCode,
+  RefundReason,
+  RefundRestock,
+  Role,
+  TenderMethod,
+} from '@sceptre/shared'
 import type { ApprovalSubject } from '../approvals/approvals.types.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 
@@ -227,4 +234,367 @@ export interface SaleContext {
   /** Server clock at receipt; written beside the device's `occurredAt`. */
   receivedAt: Date
   clockSkewToleranceMinutes: number
+}
+
+// --- Shift reports (Phase 13-07, extracted for the session gate in 14-03) ----
+
+/**
+ * One shape for both reports (P13-D32, P13-D33), because a manager comparing a
+ * mid-shift X with the night's Z should be comparing the same fields in the same
+ * units. `Z` is the stored snapshot; `X` is the same arithmetic asked live.
+ */
+export interface ShiftReportView {
+  kind: 'X' | 'Z'
+  shiftId: string
+  number: string
+  branchId: string
+  terminalId: string
+  deviceId: string
+  openedAt: string
+  /** Null on an X-report for a shift that is still open. */
+  closedAt: string | null
+  openingFloatMinor: number
+  saleCount: number
+  itemCount: number
+  refundCount: number
+  voidCount: number
+  grossMinor: number
+  refundMinor: number
+  netMinor: number
+  lineDiscountMinor: number
+  saleDiscountMinor: number
+  loyaltyDiscountMinor: number
+  loyaltyRedeemPoints: number
+  loyaltyEarnedPoints: number
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  cashMinor: number
+  creditMinor: number
+  momoMinor: number
+  cardMinor: number
+  bankTransferMinor: number
+  changeMinor: number
+  cashInMinor: number
+  cashOutMinor: number
+  /**
+   * Cash handed back over this shift (P14-D13). A `Z` reads the snapshot and is
+   * **null** for a report written before the column existed; an `X` measures the
+   * drawer live and always has a figure.
+   */
+  cashRefundMinor: number | null
+  expectedCashMinor: number
+  /** The drawer, once someone has counted it (a Z always has; an X may not). */
+  countedCashMinor: number | null
+  varianceMinor: number | null
+  generatedAt: string
+}
+
+/**
+ * Who may read a shift's report. The **caller** proves the subject; this carries
+ * the proof into the one arithmetic function (Plan 03 §5), so a device and a
+ * session cannot read two different drawers.
+ *
+ * - `branchId: null` means an admin reading across branches.
+ * - `terminalId` is set by the device route: a terminal may not read another
+ *   terminal's shift, and that refusal has always been a 404.
+ */
+export interface ShiftReportScope {
+  branchId: string | null
+  terminalId?: string
+}
+
+// --- Oversight read models (Phase 14, Plan 03) ------------------------------
+
+/**
+ * A sale as a reviewer sees it in a list. It carries an **id** — the analytics
+ * row does not, which is why that row cannot link — and `refundedMinor`, which
+ * is summed in the statement rather than in the browser.
+ *
+ * `occurredAt` is the till's clock; `receivedAt` is when the upload landed, and
+ * the difference is what `CLOCK_SKEW` and the upload-lag figures are about.
+ */
+export interface OversightSaleRow {
+  id: string
+  receiptNumber: string
+  occurredAt: string
+  branchId: string
+  branchCode: string
+  branchName: string
+  terminalCode: string
+  shiftId: string
+  cashierName: string
+  customerName: string | null
+  itemsSold: number
+  totalMinor: number
+  taxTotalMinor: number
+  changeMinor: number
+  creditMinor: number
+  conflictCount: number
+  refundedMinor: number
+}
+
+/** One `sale_line`, exactly as the receipt prints it. Never re-derived. */
+export interface OversightSaleLine {
+  lineNumber: number
+  productId: string
+  sku: string
+  name: string
+  barcode: string | null
+  quantity: number
+  unitPriceMinor: number
+  expectedUnitPriceMinor: number
+  lineDiscountMinor: number
+  saleDiscountMinor: number
+  loyaltyDiscountMinor: number
+  netMinor: number
+  taxableMinor: number
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  totalMinor: number
+  taxCategory: string
+}
+
+/** One `sale_tender`, in the order the customer paid. */
+export interface OversightSaleTender {
+  sequence: number
+  method: TenderMethod
+  amountMinor: number
+  reference: string | null
+}
+
+/** A refund that names this sale; the oversight refund detail owns the rest. */
+export interface OversightSaleRefundRef {
+  id: string
+  number: string
+  refundedMinor: number
+  occurredAt: string
+}
+
+/** A conflict that names this sale. Ids only: Plan 04 owns the queue. */
+export interface OversightSaleConflictRef {
+  id: string
+  type: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH'
+  status: 'OPEN' | 'RESOLVED' | 'DISMISSED'
+  resolutionCode: ConflictResolutionCode | null
+}
+
+/**
+ * The header plus the three things a manager opens next: the lines, the money and
+ * the documents that changed the sale afterwards.
+ */
+export interface OversightSaleDetail {
+  sale: OversightSaleRow
+  lines: OversightSaleLine[]
+  tenders: OversightSaleTender[]
+  refunds: OversightSaleRefundRef[]
+  conflicts: OversightSaleConflictRef[]
+}
+
+/** GRA's certificate for a document, read from `evat_submission` (P14-D35). */
+export interface ReceiptEvatBlock {
+  providerInvoiceNumber: string | null
+  sdcId: string | null
+  serial: string | null
+  signature: string | null
+  internalData: string | null
+  machineCode: string | null
+  stampedAt: string | null
+  qrPayload: string | null
+}
+
+/**
+ * A server-rendered **copy** of a receipt (P14-D10). It is shaped like the till's
+ * `ReceiptModel` but built from server columns, and it says it is a copy because
+ * the server does not know the till's print status.
+ *
+ * The customer's phone is masked here, server-side: a client-side mask is a
+ * disclosure with extra steps (P14-D11).
+ */
+export interface ReceiptCopy {
+  header: {
+    seller: string
+    branch: string
+    branchCode: string
+    terminal: string
+    receiptNumber: string
+    occurredAt: string
+    cashier: string
+    customer: { name: string; phoneMasked: string } | null
+    isCopy: true
+    reprint: false
+  }
+  lines: OversightSaleLine[]
+  /**
+   * The sale's own columns, never a sum of the lines. `taxableMinor` is
+   * `total − taxTotal`, exactly as the till derives it, because neither `sale`
+   * nor the receipt contract has a taxable column.
+   */
+  totals: {
+    subtotalMinor: number
+    lineDiscountMinor: number
+    saleDiscountMinor: number
+    loyaltyDiscountMinor: number
+    taxableMinor: number
+    baseMinor: number
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    taxTotalMinor: number
+    totalMinor: number
+  }
+  tenders: OversightSaleTender[]
+  tenderedMinor: number
+  changeMinor: number
+  loyalty: { earnedPoints: number; redeemedPoints: number } | null
+  footer: string
+  evat: ReceiptEvatBlock | null
+}
+
+/** A refund as a reviewer sees it in a list. Any amount, above or below the threshold. */
+export interface OversightRefundRow {
+  id: string
+  number: string
+  occurredAt: string
+  branchId: string
+  branchCode: string
+  branchName: string
+  terminalCode: string
+  saleId: string
+  shiftId: string
+  receiptNumber: string
+  refundedMinor: number
+  reasonCode: RefundReason
+  tenderCount: number
+  /**
+   * A tender that has not settled — `PENDING`, `FAILED` or `NEEDS_ATTENTION`.
+   * The name follows the plan; the predicate is "money that has not moved yet".
+   */
+  hasPendingTender: boolean
+  approvalId: string | null
+  approvedBy: string | null
+  approvedByStaffId: string
+}
+
+/** One refunded unit, with the decision a reviewer has to be able to see. */
+export interface OversightRefundLine {
+  lineNumber: number
+  productId: string
+  productName: string
+  sku: string
+  quantity: number
+  unitPriceMinor: number
+  restock: RefundRestock
+  damageReason: string | null
+  baseMinor: number
+  vatMinor: number
+  nhilMinor: number
+  getfundMinor: number
+  taxTotalMinor: number
+  totalMinor: number
+}
+
+/** Where the money went, including what the provider said when it did not. */
+export interface OversightRefundTender {
+  sequence: number
+  method: TenderMethod
+  amountMinor: number
+  status: 'SETTLED' | 'PENDING' | 'FAILED' | 'NEEDS_ATTENTION'
+  settledAt: string | null
+  providerRefundReference: string | null
+  failedMessage: string | null
+}
+
+export interface OversightRefundDetail {
+  refund: OversightRefundRow & {
+    note: string | null
+    approvedAt: string
+    baseMinor: number
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    taxTotalMinor: number
+  }
+  lines: OversightRefundLine[]
+  tenders: OversightRefundTender[]
+}
+
+/** A shift as a reviewer sees it in a list. */
+export interface OversightShiftRow {
+  id: string
+  number: string
+  status: 'OPEN' | 'CLOSED'
+  reviewStatus: 'NONE' | 'REQUIRED' | 'REVIEWED'
+  branchId: string
+  branchCode: string
+  branchName: string
+  terminalCode: string
+  cashierName: string
+  openedAt: string
+  closedAt: string | null
+  openingFloatMinor: number
+  serverExpectedCashMinor: number | null
+  countedCashMinor: number | null
+  varianceMinor: number | null
+  hasReport: boolean
+}
+
+/** A cart abandoned before it became a sale (P13-D28). The only read path. */
+export interface OversightVoidRow {
+  id: string
+  occurredAt: string
+  reasonCode: CartVoidReason
+  reasonLabel: string
+  label: string | null
+  itemCount: number
+  grossMinor: number
+  cashierName: string
+}
+
+export interface OversightVoidSummary {
+  count: number
+  itemCount: number
+  grossMinor: number
+  rows: OversightVoidRow[]
+}
+
+/**
+ * A shift with the document that belongs to it.
+ *
+ * `reportState` says where the report came from: `STORED` (a closed shift's Z),
+ * `LIVE` (an open shift's X) or `MISSING` (a closed shift that has no snapshot —
+ * a fact the detail shows rather than a recomputation it invents, P14-D12).
+ */
+export interface OversightShiftDetail {
+  shift: OversightShiftRow
+  report: ShiftReportView | null
+  reportState: 'STORED' | 'LIVE' | 'MISSING'
+  voids: OversightVoidSummary
+}
+
+export interface OversightSalesList {
+  sales: OversightSaleRow[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface OversightRefundsList {
+  refunds: OversightRefundRow[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface OversightShiftsList {
+  shifts: OversightShiftRow[]
+  total: number
+  limit: number
+  offset: number
 }
