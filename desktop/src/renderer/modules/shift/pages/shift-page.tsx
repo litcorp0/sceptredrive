@@ -15,7 +15,9 @@ import { formatGhs } from '@/lib/format'
 import { type HeldCartSummary, listHeldCarts } from '@/lib/hold/hold-service'
 import { usePos } from '@/lib/powersync/provider'
 import { navigate } from '@/lib/router'
+import { readCashierName } from '@/lib/sale/sale-repository'
 import {
+  closeAuthority,
   loadShiftState,
   openShift,
   recordCashMovement,
@@ -82,6 +84,8 @@ export function ShiftRoute() {
   const staff = useStaffSession()
   const [state, setState] = useState<ShiftState | null>(null)
   const [holds, setHolds] = useState<HeldCartSummary[]>([])
+  /** The open drawer's cashier, from the device's own binding rows. */
+  const [drawerCashierName, setDrawerCashierName] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [lastClose, setLastClose] = useState<CloseShiftWithReportResult | null>(null)
   const [reportDocument, setReportDocument] = useState<ReportDocument | null>(null)
@@ -94,6 +98,10 @@ export function ShiftRoute() {
     const next = await loadShiftState(db)
     setState(next)
     setHolds(await listHeldCarts(db))
+    // The drawer knows who opened it, and a manager closing it has to name
+    // them: the binding table is the till's only local name for that staff
+    // member, so a missing row falls back to their staff number.
+    setDrawerCashierName(next.shift ? await readCashierName(db, next.shift.cashierStaffId) : null)
   }
 
   useEffect(() => {
@@ -122,6 +130,12 @@ export function ShiftRoute() {
 
   const shift = state?.shift ?? null
   const expected = state?.expectedCashMinor ?? 0
+  // A manager or admin takes a drawer over at shift end; the close dialog says
+  // whose drawer it is and who the review will name (P14-D12).
+  const drawerCashier = drawerCashierName ?? shift?.cashierStaffId ?? null
+  const closingForOther =
+    shift !== null &&
+    closeAuthority(shift, staff, session?.branch.id ?? shift.branchId) === 'MANAGER'
 
   async function handleOpen(openingFloatMinor: number) {
     if (!db) return
@@ -369,7 +383,7 @@ export function ShiftRoute() {
           <>
             <ScreenHeader
               title={`Shift ${shift.number}`}
-              description={`Opened ${formatDateTime(shift.openedAt)} by ${staff.name}`}
+              description={`Opened ${formatDateTime(shift.openedAt)} by ${drawerCashier ?? staff.name}`}
               actions={
                 <>
                   <Button
@@ -494,6 +508,7 @@ export function ShiftRoute() {
         <CloseShiftDialog
           expectedCashMinor={expected}
           holds={holds}
+          otherCashierName={closingForOther ? drawerCashier : null}
           onClose={() => setDialog(null)}
           onConfirm={handleClose}
         />

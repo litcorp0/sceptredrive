@@ -268,12 +268,18 @@ export function CashMovementDialog({
 export function CloseShiftDialog({
   expectedCashMinor,
   holds,
+  otherCashierName = null,
   onClose,
   onConfirm,
 }: {
   expectedCashMinor: number
   /** Held carts are not pruned by the close: the cashier chooses (P13-D30). */
   holds: readonly HeldCartSummary[]
+  /**
+   * The drawer's cashier when the signed-in staff member is not them — the
+   * manager takeover of P14-D12. Null when the closer opened the drawer.
+   */
+  otherCashierName?: string | null
   onClose: () => void
   onConfirm: (input: {
     countedCashMinor: number
@@ -338,6 +344,15 @@ export function CloseShiftDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {otherCashierName ? (
+            <p
+              className="mb-4 rounded-md border border-warn bg-warn/10 px-3 py-2 text-sm"
+              data-testid="close-takeover"
+            >
+              You are closing {otherCashierName}’s drawer. The variance review will name you as the
+              requester.
+            </p>
+          ) : null}
           {step === 'holds' ? (
             <div className="grid gap-4">
               <p className="text-sm text-muted-foreground">

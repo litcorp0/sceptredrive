@@ -1,5 +1,5 @@
 import type { PowerSyncDatabase } from '@powersync/web'
-import { accraDay } from '@sceptre/shared'
+import { accraDay, type Role } from '@sceptre/shared'
 import { getStaffSession, requireStaffSession, type StaffSession } from '../auth/staff-session'
 import { nextDocumentValue } from '../document-sequence'
 import { notifyOutboxChanged } from '../outbox/outbox-events'
@@ -112,6 +112,62 @@ async function openShiftOrThrow(
   if (!open) throw new ShiftError('NO_OPEN_SHIFT', 'Open a shift before recording cash')
   if (open.cashierUserId !== staff.userId) {
     throw new ShiftError('NOT_OWNER', 'Only the cashier who opened this shift can use it')
+  }
+  return open
+}
+
+/** Roles that may take over a drawer somebody else opened (P14-D12). */
+const TAKE_OVER_ROLES: readonly Role[] = ['MANAGER', 'ADMIN']
+
+/** True when the signed-in staff member opened this drawer themselves. */
+function isOwnDrawer(
+  shift: Pick<LocalShift, 'cashierUserId'>,
+  staff: Pick<StaffSession, 'userId'>,
+): boolean {
+  return shift.cashierUserId === staff.userId
+}
+
+/**
+ * Who may close this drawer: `CASHIER` for the person who opened it, `MANAGER`
+ * for a manager or admin taking a drawer over at shift end, `null` for anyone
+ * else.
+ *
+ * The terminal lookup already scopes a shift to this device, so the branch term
+ * is belt and braces: a shift row that reached this till from another branch
+ * (a re-assigned device, a bad sync) is still refused to a manager of ours.
+ * Server-side authorisation is unchanged and authoritative — this is the same
+ * rule the API applies, checked before the counter writes anything.
+ */
+export function closeAuthority(
+  shift: Pick<LocalShift, 'cashierUserId' | 'branchId'>,
+  staff: Pick<StaffSession, 'userId' | 'role'>,
+  terminalBranchId: string,
+): 'CASHIER' | 'MANAGER' | null {
+  if (isOwnDrawer(shift, staff)) return 'CASHIER'
+  const takesOver = TAKE_OVER_ROLES.includes(staff.role)
+  return takesOver && shift.branchId === terminalBranchId ? 'MANAGER' : null
+}
+
+/**
+ * The shift a close may act on, or `NOT_OWNER`.
+ *
+ * Closing is the one shift action a manager may perform on another cashier's
+ * drawer: the count, the variance, the Z and the outbox row are all unchanged,
+ * and the payload still names the signed-in staff member, so the server records
+ * the manager as the closer and the variance review as theirs (P13-D41).
+ */
+async function resolveShiftForClose(
+  db: PowerSyncDatabase,
+  identity: PosIdentity,
+  staff: StaffSession,
+): Promise<LocalShift> {
+  const open = await findOpenShift(db, identity.terminalId)
+  if (!open) throw new ShiftError('NO_OPEN_SHIFT', 'There is no open shift to close')
+  if (closeAuthority(open, staff, identity.branchId) === null) {
+    throw new ShiftError(
+      'NOT_OWNER',
+      'Only the cashier who opened this drawer, or a manager in this branch, can close it',
+    )
   }
   return open
 }
@@ -276,6 +332,10 @@ export interface CloseShiftResult {
 /**
  * Closes the shift, and writes the Z snapshot in the **same** transaction.
  *
+ * The caller is the shift's own cashier or a manager/admin in this branch
+ * (`resolveShiftForClose`); either way the row and the outbox payload name the
+ * signed-in staff member, so a takeover is recorded as one.
+ *
  * Three facts commit or vanish together: the shift row closes, the
  * `SHIFT_CLOSE` outbox row is queued with the closer's proof, and the frozen
  * figures are inserted. A crash rolls all of them back, so the shift stays open
@@ -289,7 +349,7 @@ export async function closeShift(
   assertAmount(input.countedCashMinor)
   const staff = sessionOrThrow()
   const identity = await identityOrThrow(db)
-  const shift = await openShiftOrThrow(db, identity, staff)
+  const shift = await resolveShiftForClose(db, identity, staff)
 
   const now = input.now ?? new Date()
   const closedAt = now.toISOString()
