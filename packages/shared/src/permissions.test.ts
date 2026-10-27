@@ -124,6 +124,23 @@ describe('permissions', () => {
     expect(can('CASHIER', 'pos.discount')).toBe(false)
   })
 
+  it('grants refund authority to managers and admins, never cashiers', () => {
+    // P13-D36: a refund is authorised by a manager PIN at the till and checked
+    // by `validateOverrideProof` on the server. The cashier's array stays empty.
+    expect(can('ADMIN', 'pos.refund')).toBe(true)
+    expect(can('MANAGER', 'pos.refund')).toBe(true)
+    expect(can('CASHIER', 'pos.refund')).toBe(false)
+
+    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(60)
+    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(49)
+    expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
+  })
+
+  it('keeps pos.refund beside pos.discount in the permission list', () => {
+    const discount = PERMISSIONS.indexOf('pos.discount')
+    expect(PERMISSIONS[discount + 1]).toBe('pos.refund')
+  })
+
   it('lets managers and admins read analytics, never cashiers', () => {
     expect(can('ADMIN', 'analytics.read')).toBe(true)
     expect(can('MANAGER', 'analytics.read')).toBe(true)

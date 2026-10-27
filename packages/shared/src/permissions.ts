@@ -17,6 +17,9 @@ export const PERMISSIONS = [
   'staff.reset-password',
   'staff.pin.reset',
   'pos.discount',
+  // P13-D36: refund authority on the till is the manager PIN proof; the
+  // permission is what `validateOverrideProof` checks on the server.
+  'pos.refund',
   'catalog.read',
   'catalog.create',
   'catalog.update',
@@ -84,6 +87,7 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'staff.reset-password',
   'staff.pin.reset',
   'pos.discount',
+  'pos.refund',
   'catalog.read',
   'price.override',
   'inventory.read',
