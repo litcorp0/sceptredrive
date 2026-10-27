@@ -117,12 +117,16 @@ export interface SettingGroup {
 /**
  * Groups in the fixed order above. A group with no keys is never created, so an empty group
  * cannot render as a heading over nothing.
+ *
+ * `flag.*` keys are excluded: they have their own section at the top of the page, generated from
+ * the shared registry, so they are not listed twice.
  */
 export function groupSettings(settings: ResolvedSetting[]): SettingGroup[] {
 	const groups = new Map<string, SettingGroup>()
 
 	for (const setting of settings) {
 		const prefix = prefixOf(setting.key)
+		if (prefix === "flag") continue
 		const existing = groups.get(prefix)
 		if (existing) {
 			existing.settings.push(setting)

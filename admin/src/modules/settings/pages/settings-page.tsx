@@ -1,4 +1,4 @@
-import { formatCount } from "@sceptre/shared"
+import { formatCount, isFlagKey } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Search, SlidersHorizontal } from "lucide-react"
@@ -17,7 +17,9 @@ import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
 import { settingsKeys } from "../api/keys"
 import { settingsListOptions, settingsUpdate } from "../api/settings"
+import { FlagSwitches } from "../components/flag-switches"
 import { SettingRow } from "../ui/setting-row"
+import { filterFlags, flagRows } from "../utils/flags"
 import { controlFor, metaFor } from "../utils/meta"
 import { filterSettings, groupSettings, saveTargetBranchId } from "../utils/settings"
 
@@ -82,8 +84,14 @@ export function SettingsPage() {
 	}
 
 	const settings = settingsQuery.data?.settings ?? []
-	const matching = filterSettings(settings, debouncedSearch)
+	const flags = filterFlags(flagRows(settings), debouncedSearch)
+	const matching = filterSettings(
+		settings.filter((setting) => !isFlagKey(setting.key)),
+		debouncedSearch,
+	)
 	const groups = groupSettings(matching)
+	const shown = matching.length + flags.length
+	const nothingMatches = flags.length === 0 && groups.length === 0
 	const forbidden = settingsQuery.error instanceof ApiError && settingsQuery.error.status === 403
 	const filtering = debouncedSearch.trim() !== ""
 
@@ -153,68 +161,90 @@ export function SettingsPage() {
 						/>
 						<output id="settings-count" className="block text-xs text-muted-foreground">
 							{filtering
-								? `${formatCount(matching.length)} of ${formatCount(settings.length)} settings match “${debouncedSearch.trim()}”.`
-								: `${formatCount(settings.length)} settings in ${formatCount(groups.length)} groups.`}
+								? `${formatCount(shown)} of ${formatCount(settings.length)} settings match “${debouncedSearch.trim()}”.`
+								: `${formatCount(settings.length)} settings in ${formatCount(groups.length + 1)} groups.`}
 						</output>
 					</div>
 
-					{groups.length === 0 ? (
+					{nothingMatches ? (
 						<EmptyState
 							icon={Search}
 							title="No settings match that search"
 							description="Try a key prefix such as pricing, or a word from the label or help text."
 						/>
 					) : (
-						groups.map((group) => (
-							<section key={group.prefix} aria-labelledby={`settings-group-${group.prefix}`}>
-								<h2
-									id={`settings-group-${group.prefix}`}
-									className="text-sm font-medium text-muted-foreground"
-								>
-									{group.label}
-								</h2>
-								{group.description ? (
-									<p className="mb-2 text-xs text-muted-foreground">{group.description}</p>
-								) : null}
-								<div className="divide-y rounded-lg border bg-card">
-									{group.settings.map((setting) => {
-										const meta = metaFor(setting.key)
-										const canWrite =
-											canUpdate &&
-											(setting.writableBy === "admin" ? isAdmin : true) &&
-											(!setting.branchScoped || activeBranchId !== null)
-										const reason = !canUpdate
-											? "Your role cannot change settings."
-											: setting.writableBy === "admin" && !isAdmin
-												? "Only administrators can change this value."
-												: setting.branchScoped && activeBranchId === null
-													? "Choose a branch to change this value. You can then set it for every branch from this row."
-													: null
+						<>
+							<FlagSwitches
+								rows={flags}
+								canWrite={canUpdate && isAdmin}
+								reason={
+									!canUpdate
+										? "Your role cannot change settings."
+										: !isAdmin
+											? "Only administrators can change this value."
+											: null
+								}
+								pendingKey={
+									updateMutation.isPending ? (updateMutation.variables?.key ?? null) : null
+								}
+								onChange={(key, next) => {
+									// One PATCH per change: flags are global settings, so the settings audit row
+									// is the record (P14-D41).
+									updateMutation.mutate({ key, value: next, branchId: null })
+								}}
+							/>
+							{groups.map((group) => (
+								<section key={group.prefix} aria-labelledby={`settings-group-${group.prefix}`}>
+									<h2
+										id={`settings-group-${group.prefix}`}
+										className="text-sm font-medium text-muted-foreground"
+									>
+										{group.label}
+									</h2>
+									{group.description ? (
+										<p className="mb-2 text-xs text-muted-foreground">{group.description}</p>
+									) : null}
+									<div className="divide-y rounded-lg border bg-card">
+										{group.settings.map((setting) => {
+											const meta = metaFor(setting.key)
+											const canWrite =
+												canUpdate &&
+												(setting.writableBy === "admin" ? isAdmin : true) &&
+												(!setting.branchScoped || activeBranchId !== null)
+											const reason = !canUpdate
+												? "Your role cannot change settings."
+												: setting.writableBy === "admin" && !isAdmin
+													? "Only administrators can change this value."
+													: setting.branchScoped && activeBranchId === null
+														? "Choose a branch to change this value. You can then set it for every branch from this row."
+														: null
 
-										return (
-											<SettingRow
-												key={setting.key}
-												setting={setting}
-												meta={meta}
-												control={controlFor(setting, meta)}
-												canWrite={canWrite}
-												reason={reason}
-												pending={
-													updateMutation.isPending && updateMutation.variables?.key === setting.key
-												}
-												onSave={(value, scope) => {
-													updateMutation.mutate({
-														key: setting.key,
-														value,
-														branchId: saveTargetBranchId(setting, scope, activeBranchId),
-													})
-												}}
-											/>
-										)
-									})}
-								</div>
-							</section>
-						))
+											return (
+												<SettingRow
+													key={setting.key}
+													setting={setting}
+													meta={meta}
+													control={controlFor(setting, meta)}
+													canWrite={canWrite}
+													reason={reason}
+													pending={
+														updateMutation.isPending &&
+														updateMutation.variables?.key === setting.key
+													}
+													onSave={(value, scope) => {
+														updateMutation.mutate({
+															key: setting.key,
+															value,
+															branchId: saveTargetBranchId(setting, scope, activeBranchId),
+														})
+													}}
+												/>
+											)
+										})}
+									</div>
+								</section>
+							))}
+						</>
 					)}
 				</div>
 			)}
