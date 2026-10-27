@@ -56,6 +56,17 @@ posRoutes.get(
   (c) => posController.getSale(c, c.req.valid('param').id),
 )
 
+// The copy is a document, not a reprint: the browser prints it and the API says
+// it is a copy because the till's print status never reaches the server (P14-D10).
+posRoutes.get(
+  '/api/pos/oversight/sales/:id/receipt',
+  requireSession,
+  requirePermission('pos.oversight.read'),
+  oversightRateLimit,
+  validateOversightIdParam,
+  (c) => posController.getReceiptCopy(c, c.req.valid('param').id),
+)
+
 posRoutes.get(
   '/api/pos/oversight/refunds',
   requireSession,

@@ -38,6 +38,11 @@ export async function getSale(c: Context<AppEnv>, id: string) {
   return c.json(result)
 }
 
+export async function getReceiptCopy(c: Context<AppEnv>, id: string) {
+  const result = await oversightService.getReceiptCopy(currentUser(c), id)
+  return c.json(result)
+}
+
 export async function listRefunds(c: Context<AppEnv>, query: OversightRefundsQuery) {
   const result = await oversightService.listRefunds(currentUser(c), query)
   return c.json(result)

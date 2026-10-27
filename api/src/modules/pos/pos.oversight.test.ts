@@ -921,6 +921,106 @@ describe.skipIf(!available)('POS oversight reads', () => {
     expect(refunded.refunds.map((item) => item.id)).toEqual([largeRefundId])
   })
 
+  it('renders a receipt copy whose lines and tenders reconcile to the sale', async () => {
+    const response = await get(`/api/pos/oversight/sales/${splitSaleId}/receipt`, managerCookie)
+    expect(response.status).toBe(200)
+    const body = await readJson<{
+      header: {
+        seller: string
+        receiptNumber: string
+        isCopy: boolean
+        reprint: boolean
+        customer: { name: string; phoneMasked: string } | null
+      }
+      lines: Array<{ totalMinor: number; taxTotalMinor: number }>
+      tenders: Array<{ amountMinor: number }>
+      totals: { totalMinor: number; taxTotalMinor: number }
+      tenderedMinor: number
+      changeMinor: number
+    }>(response)
+
+    const stored = (await db.select().from(sale).where(eq(sale.id, splitSaleId)))[0]
+    const lineTotal = body.lines.reduce((sum, line) => sum + line.totalMinor, 0)
+    const tenderTotal = body.tenders.reduce((sum, tender) => sum + tender.amountMinor, 0)
+
+    // The two identities the copy exists to make provable.
+    expect(lineTotal).toBe(stored?.totalMinor)
+    expect(tenderTotal - body.changeMinor).toBe(stored?.totalMinor)
+    expect(body.totals.totalMinor).toBe(stored?.totalMinor)
+    expect(body.totals.taxTotalMinor).toBe(stored?.taxTotalMinor)
+    expect(body.tenderedMinor).toBe(tenderTotal)
+    expect(body.changeMinor).toBe(stored?.changeMinor)
+
+    // A copy, and labelled as one.
+    expect(body.header.isCopy).toBe(true)
+    expect(body.header.reprint).toBe(false)
+    expect(body.header.receiptNumber).toBe(stored?.receiptNumber)
+    expect(body.header.seller.length).toBeGreaterThan(0)
+
+    // The phone is masked server-side and the full number is nowhere in the bytes.
+    const digits = customerPhone.replace(/\D/g, '')
+    expect(body.header.customer?.phoneMasked).toBe(`•••• ${digits.slice(-4)}`)
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain(customerPhone)
+    expect(serialized).not.toContain(digits)
+  })
+
+  it('has no customer and no certificate until one is certified, then carries GRA bytes', async () => {
+    const before = await readJson<{ header: { customer: unknown }; evat: unknown }>(
+      await get(`/api/pos/oversight/sales/${cashSaleId}/receipt`, managerCookie),
+    )
+    expect(before.header.customer).toBeNull()
+    expect(before.evat).toBeNull()
+
+    const certifiedAt = new Date('2026-10-27T10:30:00.000Z')
+    await db.insert(evatSubmission).values({
+      kind: 'INVOICE',
+      branchId: home.branchId,
+      terminalId: home.terminalId,
+      saleId: cashSaleId,
+      status: 'CERTIFIED',
+      dueAt: new Date('2026-10-28T09:00:00.000Z'),
+      provider: 'mock',
+      providerInvoiceNumber: 'INV-OV-1',
+      sdcId: 'SDC-OV-1',
+      serial: 'SER-OV-1',
+      signature: 'SIG-OV-1',
+      internalData: 'INT-OV-1',
+      machineCode: 'MRC-OV-1',
+      stampedAt: certifiedAt,
+      qrPayload: 'qr-payload-fixture',
+      certifiedAt,
+    })
+
+    const after = await readJson<{
+      evat: {
+        providerInvoiceNumber: string
+        sdcId: string
+        serial: string
+        signature: string
+        internalData: string
+        machineCode: string
+        stampedAt: string
+        qrPayload: string
+      } | null
+    }>(await get(`/api/pos/oversight/sales/${cashSaleId}/receipt`, managerCookie))
+
+    // GRA's bytes, returned as stored: the API never composes a QR payload.
+    expect(after.evat).toMatchObject({
+      providerInvoiceNumber: 'INV-OV-1',
+      sdcId: 'SDC-OV-1',
+      serial: 'SER-OV-1',
+      signature: 'SIG-OV-1',
+      internalData: 'INT-OV-1',
+      machineCode: 'MRC-OV-1',
+      stampedAt: certifiedAt.toISOString(),
+      qrPayload: 'qr-payload-fixture',
+    })
+    // Certification never touched the document (P14-D34).
+    const stored = (await db.select().from(sale).where(eq(sale.id, cashSaleId)))[0]
+    expect(stored?.totalMinor).toBe(50_000)
+  })
+
   it('lists refunds of any amount, above and below the approval threshold', async () => {
     const response = await get('/api/pos/oversight/refunds', managerCookie)
     expect(response.status).toBe(200)

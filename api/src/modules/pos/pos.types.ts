@@ -442,7 +442,6 @@ export interface ReceiptCopy {
     saleDiscountMinor: number
     loyaltyDiscountMinor: number
     taxableMinor: number
-    baseMinor: number
     vatMinor: number
     nhilMinor: number
     getfundMinor: number

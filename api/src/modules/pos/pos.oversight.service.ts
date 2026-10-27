@@ -17,6 +17,7 @@ import { accraDayBounds } from '@sceptre/shared'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { getSettingValue } from '../platform/settings.service.ts'
 import * as repository from './pos.oversight.repository.ts'
 import { selectRefundTenders } from './pos.repository.ts'
 import type {
@@ -26,6 +27,7 @@ import type {
   OversightSaleDetail,
   OversightSalesList,
   OversightShiftsList,
+  ReceiptCopy,
 } from './pos.types.ts'
 import type {
   OversightRefundsQuery,
@@ -112,8 +114,92 @@ export async function getSale(user: SessionUser, saleId: string): Promise<Oversi
   return { sale, lines, tenders, refunds, conflicts }
 }
 
-// --- Refunds ----------------------------------------------------------------
+/**
+ * A phone number, masked server-side: `•••• 1234`, the same shape as
+ * `maskAccountNumber` in suppliers (P14-D11). A client-side mask would be a
+ * disclosure with extra steps, so the full number never leaves this function.
+ */
+export function maskPhone(phone: string | null): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 4) return '••••'
+  return `•••• ${digits.slice(-4)}`
+}
 
+/**
+ * The server-rendered **copy** of a sale's receipt (P14-D10).
+ *
+ * Every money field comes from the sale's own columns and every line from the
+ * line's own snapshot, so the copy and the sale cannot disagree:
+ * `Σ sale_line.total_minor === sale.total_minor` and
+ * `Σ sale_tender.amount_minor − change === total_minor` are properties of the
+ * rows, not of this function.
+ *
+ * It is a copy, and says so: the server does not know the till's print status and
+ * must not pretend to (`isCopy`, `reprint`).
+ */
+export async function getReceiptCopy(user: SessionUser, saleId: string): Promise<ReceiptCopy> {
+  const header = await repository.findSaleReceiptHeader(saleId, db)
+  if (!header) throw new NotFoundError('Sale not found')
+  assertDocumentScope(user, header.sale.branchId)
+
+  const [lines, tenders, seller, footer, evat] = await Promise.all([
+    repository.selectSaleLines(saleId, db),
+    repository.selectSaleTenders(saleId, db),
+    getSettingValue('receipt.header', { branchId: header.sale.branchId }),
+    getSettingValue('pos.receiptFooter'),
+    repository.findCertifiedEvatForSale(saleId, db),
+  ])
+
+  const row = header.sale
+  const phoneMasked = maskPhone(header.customerPhone)
+  const customer =
+    header.customerName === null && phoneMasked === null
+      ? null
+      : { name: header.customerName ?? '', phoneMasked: phoneMasked ?? '' }
+
+  return {
+    header: {
+      seller,
+      branch: header.branchName,
+      branchCode: header.branchCode,
+      terminal: header.terminalCode,
+      receiptNumber: row.receiptNumber,
+      occurredAt: row.occurredAt.toISOString(),
+      cashier: header.cashierName,
+      customer,
+      isCopy: true,
+      reprint: false,
+    },
+    lines,
+    totals: {
+      subtotalMinor: row.subtotalMinor,
+      lineDiscountMinor: row.lineDiscountMinor,
+      saleDiscountMinor: row.saleDiscountMinor,
+      loyaltyDiscountMinor: row.loyaltyDiscountMinor,
+      // The till derives the same figure from the same two columns; the sale has
+      // no taxable column and adding one for a receipt would be a second truth.
+      taxableMinor: row.totalMinor - row.taxTotalMinor,
+      vatMinor: row.vatMinor,
+      nhilMinor: row.nhilMinor,
+      getfundMinor: row.getfundMinor,
+      taxTotalMinor: row.taxTotalMinor,
+      totalMinor: row.totalMinor,
+    },
+    tenders,
+    // The sale's stored tender total, not a sum taken here.
+    tenderedMinor: row.tenderTotalMinor,
+    changeMinor: row.changeMinor,
+    loyalty:
+      row.loyaltyEarnedPoints > 0 || row.loyaltyRedeemPoints > 0
+        ? { earnedPoints: row.loyaltyEarnedPoints, redeemedPoints: row.loyaltyRedeemPoints }
+        : null,
+    footer,
+    evat,
+  }
+}
+
+// --- Refunds ----------------------------------------------------------------
 export async function listRefunds(
   user: SessionUser,
   query: OversightRefundsQuery,
