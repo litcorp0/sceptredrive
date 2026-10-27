@@ -279,6 +279,13 @@ export interface ShiftReportView {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
+  /**
+   * Cash handed back over this shift (P14-D13), the figure expected cash already
+   * subtracts. A `Z` reads the snapshot and is **null** for a report written
+   * before the column existed — "not itemised", never an invented zero. An `X`
+   * measures the shift live and always has a figure.
+   */
+  cashRefundMinor: number | null
   expectedCashMinor: number
   /** The drawer, once someone has counted it (a Z always has; an X may not). */
   countedCashMinor: number | null

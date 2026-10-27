@@ -121,6 +121,7 @@ describe.skipIf(!available)('POS oversight reads', () => {
   let foreignShiftId = ''
   let homeShiftId = ''
   let missingReportShiftId = ''
+  let legacyReportShiftId = ''
   let largeRefundId = ''
   let smallRefundId = ''
 
@@ -726,6 +727,25 @@ describe.skipIf(!available)('POS oversight reads', () => {
       occurredAt: new Date().toISOString(),
     })
 
+    // A closed shift whose snapshot predates the cash-refund column: a Phase 13 row,
+    // inserted by hand because nothing in today's code can produce one.
+    legacyReportShiftId = await insertShift({
+      counter: home,
+      number: 'OVS-4',
+      status: 'CLOSED',
+      openingFloatMinor: 0,
+    })
+    await db.insert(shiftReport).values({
+      shiftId: legacyReportShiftId,
+      branchId: home.branchId,
+      terminalId: home.terminalId,
+      deviceId: home.deviceId,
+      number: `OVS-4-${suffix}`,
+      openedAt: new Date('2026-10-26T08:00:00Z'),
+      closedAt: new Date('2026-10-26T18:00:00Z'),
+      cashRefundMinor: null,
+    })
+
     // A sale on the other branch's till, which a home manager must never see.
     const foreignSale = await createSale({
       counter: other,
@@ -1118,6 +1138,67 @@ describe.skipIf(!available)('POS oversight reads', () => {
       await get(`/api/pos/oversight/shifts/${homeShiftId}/report?kind=Z`, managerCookie),
     )
     expect(report.report.voidCount).toBe(body.voids.count)
+  })
+
+  it('stores the cash refund the drawer lost and reads it back from the snapshot', async () => {
+    const stored = (
+      await db.select().from(shiftReport).where(eq(shiftReport.shiftId, homeShiftId))
+    )[0]
+    expect(stored?.cashRefundMinor).toBe(55_000)
+
+    // The drawer identity, from the snapshot's own columns and the sale tenders:
+    // float + cash − change − cashRefund + in − out = expected.
+    const identity = await db.execute<{ expected: string; drawer: string }>(sql`
+      SELECT
+        sr.expected_cash_minor::text AS expected,
+        (sr.opening_float_minor
+          + COALESCE((SELECT SUM(st.amount_minor) FROM sale_tender st
+              JOIN sale s ON s.id = st.sale_id
+              WHERE s.shift_id = sr.shift_id AND st.method = 'CASH'), 0)
+          - sr.change_minor
+          - sr.cash_refund_minor
+          + sr.cash_in_minor
+          - sr.cash_out_minor)::text AS drawer
+      FROM shift_report sr
+      WHERE sr.shift_id = ${homeShiftId}
+    `)
+    const figures = identity.rows[0]
+    expect(Number(figures?.drawer)).toBe(Number(figures?.expected))
+    expect(Number(figures?.expected)).toBe(countedCashMinor)
+
+    const z = await readJson<{ report: { cashRefundMinor: number | null } }>(
+      await get(`/api/pos/oversight/shifts/${homeShiftId}/report?kind=Z`, managerCookie),
+    )
+    expect(z.report.cashRefundMinor).toBe(55_000)
+    const x = await readJson<{ report: { cashRefundMinor: number | null } }>(
+      await get(`/api/pos/oversight/shifts/${homeShiftId}/report?kind=X`, managerCookie),
+    )
+    expect(x.report.cashRefundMinor).toBe(55_000)
+    // The device route tells the same story; one arithmetic, three readers.
+    const device = await readJson<{ report: { cashRefundMinor: number | null } }>(
+      await getDevice(`/api/pos/shifts/${homeShiftId}/report?kind=Z`, home.accessToken),
+    )
+    expect(device.report.cashRefundMinor).toBe(55_000)
+  })
+
+  it('never invents a cash refund for a report written before the column existed', async () => {
+    const z = await readJson<{
+      report: { cashRefundMinor: number | null; expectedCashMinor: number }
+    }>(await get(`/api/pos/oversight/shifts/${legacyReportShiftId}/report?kind=Z`, managerCookie))
+    expect(z.report.cashRefundMinor).toBeNull()
+    expect(z.report.expectedCashMinor).toBe(0)
+
+    // An X measures the drawer live, so it can say zero; the stored row cannot
+    // say anything, and the X must not write one.
+    const x = await readJson<{ report: { cashRefundMinor: number | null } }>(
+      await get(`/api/pos/oversight/shifts/${legacyReportShiftId}/report?kind=X`, managerCookie),
+    )
+    expect(x.report.cashRefundMinor).toBe(0)
+
+    const row = (
+      await db.select().from(shiftReport).where(eq(shiftReport.shiftId, legacyReportShiftId))
+    )[0]
+    expect(row?.cashRefundMinor).toBeNull()
   })
 
   it('refuses to rebuild a missing Z and leaves the shift without one', async () => {

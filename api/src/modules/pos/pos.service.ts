@@ -768,6 +768,10 @@ export async function closeShift(
       changeMinor: figures.changeMinor,
       cashInMinor: totals.cashInMinor,
       cashOutMinor: totals.cashOutMinor,
+      // The cash the drawer lost to refunds, stored with the expected cash it is
+      // already subtracted from: one selector, one figure, no second predicate
+      // that can drift from the drawer arithmetic.
+      cashRefundMinor: totals.cashRefundsMinor,
       expectedCashMinor: serverExpected,
       countedCashMinor: payload.countedCashMinor,
       varianceMinor: variance,
@@ -952,6 +956,9 @@ export async function readShiftReport(
       changeMinor: snapshot.changeMinor,
       cashInMinor: snapshot.cashInMinor,
       cashOutMinor: snapshot.cashOutMinor,
+      // The snapshot's own figure: null for a report written before Phase 14
+      // measured it, so a legacy Z says "not itemised" rather than inventing one.
+      cashRefundMinor: snapshot.cashRefundMinor,
       expectedCashMinor: snapshot.expectedCashMinor,
       countedCashMinor: snapshot.countedCashMinor,
       varianceMinor: snapshot.varianceMinor,
@@ -1004,6 +1011,8 @@ export async function readShiftReport(
     changeMinor: figures.changeMinor,
     cashInMinor: totals.cashInMinor,
     cashOutMinor: totals.cashOutMinor,
+    // The live drawer, measured by the same selector the close uses.
+    cashRefundMinor: totals.cashRefundsMinor,
     expectedCashMinor,
     countedCashMinor,
     varianceMinor: countedCashMinor === null ? null : countedCashMinor - expectedCashMinor,
