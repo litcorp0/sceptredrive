@@ -436,14 +436,25 @@ export async function validateStaffBinding(
 
 // --- Shift application (called by the Plan 05 upload dispatcher) -------------
 
-/** Expected cash = float + cash tenders − change + cash in − cash out. */
+/**
+ * Expected cash = float + cash tenders − change + cash in − cash out − cash
+ * refunds, in the order the money moved: the float and the tenders arrived, the
+ * change and the settled cash refunds left, and the manual in/out movements are
+ * the drawer's corrections.
+ *
+ * The refund term is not optional bookkeeping: a settled cash refund is money
+ * the drawer has already given back, so omitting it expects cash that is gone.
+ * Card and MoMo refunds are absent by construction — they never touched the
+ * notes (`selectShiftCashTotals` filters `CASH`/`SETTLED`).
+ */
 export function computeExpectedCash(totals: ShiftCashTotals): number {
   return (
     totals.openingFloatMinor +
     totals.cashTendersMinor -
     totals.changeMinor +
     totals.cashInMinor -
-    totals.cashOutMinor
+    totals.cashOutMinor -
+    totals.cashRefundsMinor
   )
 }
 

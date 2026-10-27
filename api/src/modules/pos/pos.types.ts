@@ -91,6 +91,13 @@ export interface ShiftCashTotals {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
+  /**
+   * Settled `CASH` refund tenders of **this** shift — money that physically left
+   * this drawer. A refund counts against the shift it was settled in, not the
+   * sale's: a refund outlives the sale's shift, and only a settled cash tender
+   * moved the notes.
+   */
+  cashRefundsMinor: number
 }
 
 // --- Offline sale payload (Plan 06/07 produce this; the uploader ships it) ----

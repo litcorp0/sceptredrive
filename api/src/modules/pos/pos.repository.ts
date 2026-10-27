@@ -268,15 +268,6 @@ export async function insertCashMovement(
 }
 
 /**
- * The drawer facts, with the cash refunds the shared `ShiftCashTotals` shape
- * does not yet name. Declared here rather than widening the shared type so this
- * read carries the fact without touching another lane's file.
- */
-export interface ShiftDrawerTotals extends ShiftCashTotals {
-  cashRefundsMinor: number
-}
-
-/**
  * Recomputes a shift's expected cash from the applied facts: cash tenders,
  * change, cash in/out, and the cash refunds that left the drawer. Sales not yet
  * uploaded simply do not exist here.
@@ -284,12 +275,15 @@ export interface ShiftDrawerTotals extends ShiftCashTotals {
  * A refund counts against the **refund's** shift, not the sale's: the sale may
  * belong to a shift that closed hours ago, while the money left this drawer.
  * Only a `SETTLED` `CASH` tender moved cash; an electronic refund never did.
+ *
+ * The shape is the shared `ShiftCashTotals`, not a local extension: a second
+ * interface carrying the same facts is how the read and the arithmetic drift.
  */
 export async function selectShiftCashTotals(
   shiftId: string,
   openingFloatMinor: number,
   executor: DbExecutor = db,
-): Promise<ShiftDrawerTotals> {
+): Promise<ShiftCashTotals> {
   const rows = await executor.execute<{
     cash_tenders: string
     change_total: string

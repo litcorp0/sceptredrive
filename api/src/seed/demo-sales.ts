@@ -651,6 +651,8 @@ export async function seedDemoSales(
       changeMinor,
       cashInMinor: 0,
       cashOutMinor: 0,
+      // The demo shifts record no refunds, so no cash ever left this drawer.
+      cashRefundsMinor: 0,
     })
     await closeShift(context.device, {
       shiftId,

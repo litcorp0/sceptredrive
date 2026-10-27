@@ -175,6 +175,7 @@ describe.skipIf(!available)('POS shift application', () => {
         changeMinor: 7_500,
         cashInMinor: 5_000,
         cashOutMinor: 2_000,
+        cashRefundsMinor: 0,
       }),
     ).toBe(38_000)
 
@@ -185,6 +186,7 @@ describe.skipIf(!available)('POS shift application', () => {
         changeMinor: 0,
         cashInMinor: 0,
         cashOutMinor: 0,
+        cashRefundsMinor: 0,
       }),
     ).toBe(0)
 
@@ -527,6 +529,12 @@ describe.skipIf(!available)('POS shift application', () => {
     expect(result.serverExpectedCashMinor).toBe(expectedCashMinor)
     expect(result.varianceMinor).toBe(countedCashMinor - expectedCashMinor)
     expect(result.conflictId).toBeUndefined()
+
+    // The stored shift row is the fact oversight reads later: it carries the
+    // same refund-reduced figure, not the pre-refund one.
+    const closedShiftRows = await db.select().from(shift).where(eq(shift.id, drawerShiftId))
+    expect(closedShiftRows[0]?.serverExpectedCashMinor).toBe(expectedCashMinor)
+    expect(closedShiftRows[0]?.varianceMinor).toBe(150)
 
     // The stored Z follows the same formula.
     const reportRows = await db
