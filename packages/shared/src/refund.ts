@@ -62,15 +62,43 @@ export interface RefundableTender {
 }
 
 /**
- * The part of a tender a refund may still return.
+ * The part of each tender a refund may still return, in the given order.
+ *
+ * Change only ever comes out of cash (P13-D3), so a sale's change is consumed
+ * once from its cash tenders in row order: each cash row absorbs up to its own
+ * remainder and the rest passes to the next. Non-cash rows are untouched.
+ * Use this whenever a sale has more than one tender; netting the whole change
+ * off every cash row would understate the caps and refuse a legitimate refund.
+ */
+export function refundableTenderRemainders(
+  tenders: readonly RefundableTender[],
+  saleChangeMinor = 0,
+): Array<{ saleTenderId: string; refundableMinor: number }> {
+  let remainingChange = Math.max(0, saleChangeMinor)
+  return tenders.map((tender) => {
+    const rawCap = Math.max(0, tender.amountMinor - tender.refundedMinor)
+    if (tender.method !== 'CASH' || remainingChange === 0) {
+      return { saleTenderId: tender.saleTenderId, refundableMinor: rawCap }
+    }
+    const absorbed = Math.min(remainingChange, rawCap)
+    remainingChange -= absorbed
+    return { saleTenderId: tender.saleTenderId, refundableMinor: rawCap - absorbed }
+  })
+}
+
+/**
+ * The part of a single tender a refund may still return.
  *
  * Change only ever comes out of cash (P13-D3), so a cash tender that produced
  * change kept less than it took in. Pass `saleChangeMinor` and the cash
  * remainder is netted down; a no-change sale can leave it out.
+ *
+ * This assumes the tender is the sale's only cash tender, because it subtracts
+ * the whole `saleChangeMinor` from it; a caller with several must use
+ * `refundableTenderRemainders`, which consumes the change once across rows.
  */
 export function refundableTenderMinor(tender: RefundableTender, saleChangeMinor = 0): number {
-  const changeMinor = tender.method === 'CASH' ? saleChangeMinor : 0
-  return Math.max(0, tender.amountMinor - tender.refundedMinor - changeMinor)
+  return refundableTenderRemainders([tender], saleChangeMinor)[0]?.refundableMinor ?? 0
 }
 
 export type RefundAllocationProblem =
@@ -94,12 +122,13 @@ export interface RefundAllocation {
  * splitting it across rows.
  *
  * Tender remainders must already reflect every earlier refund; the caller
- * supplies that in each `RefundableTender`. `refundableTenderMinor` also nets
- * the sale's change out of the cash tender, which makes the per-tender caps
- * enforce the sale cap by construction. The sale-level check stays as the
- * second line of defence: it compares `previouslyRefundedMinor + refundedMinor`
- * with `saleTenderTotalMinor - saleChangeMinor`, catching tender data that does
- * not add up.
+ * supplies that in each `RefundableTender`. `refundableTenderRemainders` also
+ * nets the sale's change once across the cash tenders, which makes the
+ * per-tender caps enforce the sale cap by construction. The sale-level check
+ * stays as the second line of defence: it compares
+ * `previouslyRefundedMinor + refundedMinor` with
+ * `saleTenderTotalMinor - saleChangeMinor`, catching tender data that does not
+ * add up.
  */
 export function refundAllocationProblem(input: {
   allocation: RefundAllocation
@@ -148,7 +177,12 @@ export function refundAllocationProblem(input: {
     }
   }
 
-  const tendersById = new Map(tenders.map((tender) => [tender.saleTenderId, tender]))
+  const capsById = new Map(
+    refundableTenderRemainders(tenders, saleChangeMinor).map((row) => [
+      row.saleTenderId,
+      row.refundableMinor,
+    ]),
+  )
   const amountByTender = new Map<string, number>()
   let allocatedMinor = 0
   for (const allocated of allocation.tenders) {
@@ -162,8 +196,7 @@ export function refundAllocationProblem(input: {
     allocatedMinor += allocated.amountMinor
   }
   for (const [saleTenderId, amountMinor] of amountByTender) {
-    const tender = tendersById.get(saleTenderId)
-    const cap = tender ? refundableTenderMinor(tender, saleChangeMinor) : 0
+    const cap = capsById.get(saleTenderId) ?? 0
     if (!Number.isSafeInteger(amountMinor) || amountMinor > cap) {
       return 'EXCEEDS_TENDER'
     }

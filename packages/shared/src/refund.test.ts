@@ -11,6 +11,7 @@ import {
   refundApprovalRequired,
   refundableQuantity,
   refundableTenderMinor,
+  refundableTenderRemainders,
   restockRequiresReason,
 } from './refund.ts'
 
@@ -104,6 +105,74 @@ describe('refundableTenderMinor', () => {
   it('keeps the full remainder when the sale produced no change', () => {
     expect(refundableTenderMinor(tender({ method: 'CASH', amountMinor: 10_000 }), 0)).toBe(10_000)
     expect(refundableTenderMinor(tender({ method: 'CASH', amountMinor: 10_000 }))).toBe(10_000)
+  })
+})
+
+describe('refundableTenderRemainders', () => {
+  it('nets the sale change across cash tenders in order instead of per row', () => {
+    const remainders = refundableTenderRemainders(
+      [
+        tender({ saleTenderId: 'cash-1', method: 'CASH', amountMinor: 5_000 }),
+        tender({ saleTenderId: 'cash-2', method: 'CASH', amountMinor: 5_000 }),
+      ],
+      1_000,
+    )
+
+    expect(remainders).toEqual([
+      { saleTenderId: 'cash-1', refundableMinor: 4_000 },
+      { saleTenderId: 'cash-2', refundableMinor: 5_000 },
+    ])
+    expect(remainders.reduce((sum, row) => sum + row.refundableMinor, 0)).toBe(9_000)
+  })
+
+  it('consumes change larger than the first cash row from the next cash row', () => {
+    expect(
+      refundableTenderRemainders(
+        [
+          tender({ saleTenderId: 'cash-1', method: 'CASH', amountMinor: 6_000 }),
+          tender({ saleTenderId: 'cash-2', method: 'CASH', amountMinor: 5_000 }),
+        ],
+        7_000,
+      ),
+    ).toEqual([
+      { saleTenderId: 'cash-1', refundableMinor: 0 },
+      { saleTenderId: 'cash-2', refundableMinor: 4_000 },
+    ])
+  })
+
+  it('leaves a card-only sale untouched by a sale change', () => {
+    const tenders = [tender({ saleTenderId: 'card', method: 'CARD', amountMinor: 10_000 })]
+
+    expect(refundableTenderRemainders(tenders, 0)).toEqual([
+      { saleTenderId: 'card', refundableMinor: 10_000 },
+    ])
+    expect(refundableTenderRemainders(tenders, 1_000)).toEqual([
+      { saleTenderId: 'card', refundableMinor: 10_000 },
+    ])
+  })
+
+  it('keeps the single-cash behaviour of refundableTenderMinor', () => {
+    const cash = tender({ method: 'CASH', amountMinor: 10_000 })
+
+    expect(refundableTenderRemainders([cash], 1_000)).toEqual([
+      { saleTenderId: 'tender-1', refundableMinor: refundableTenderMinor(cash, 1_000) },
+    ])
+  })
+
+  it('never reports a negative remainder', () => {
+    expect(
+      refundableTenderRemainders(
+        [
+          tender({
+            saleTenderId: 'cash-1',
+            method: 'CASH',
+            amountMinor: 1_000,
+            refundedMinor: 4_000,
+          }),
+        ],
+        2_000,
+      ),
+    ).toEqual([{ saleTenderId: 'cash-1', refundableMinor: 0 }])
   })
 })
 
@@ -322,6 +391,68 @@ describe('refundAllocationProblem', () => {
         refundedMinor: 9_000,
       }),
     ).toBeNull()
+  })
+
+  it('accepts a full refund of a sale split across two cash tenders', () => {
+    const base = {
+      lines: [saleLine({ quantity: 2 })],
+      tenders: [
+        tender({ saleTenderId: 'cash-1', method: 'CASH', amountMinor: 5_000 }),
+        tender({ saleTenderId: 'cash-2', method: 'CASH', amountMinor: 5_000 }),
+      ],
+      saleTenderTotalMinor: 10_000,
+      saleChangeMinor: 1_000,
+    }
+
+    expect(
+      refundAllocationProblem({
+        ...base,
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [
+            { saleTenderId: 'cash-1', amountMinor: 4_000 },
+            { saleTenderId: 'cash-2', amountMinor: 5_000 },
+          ],
+        },
+        refundedMinor: 9_000,
+      }),
+    ).toBeNull()
+
+    expect(
+      refundAllocationProblem({
+        ...base,
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [
+            { saleTenderId: 'cash-1', amountMinor: 4_000 },
+            { saleTenderId: 'cash-2', amountMinor: 5_100 },
+          ],
+        },
+        refundedMinor: 9_100,
+      }),
+    ).toBe('EXCEEDS_TENDER')
+  })
+
+  it('sums duplicate rows against a cash cap netted by the shared change', () => {
+    expect(
+      refundAllocationProblem({
+        allocation: {
+          lines: [{ saleLineId: 'line-1', quantity: 1 }],
+          tenders: [
+            { saleTenderId: 'cash-1', amountMinor: 2_000 },
+            { saleTenderId: 'cash-1', amountMinor: 2_500 },
+          ],
+        },
+        lines: [saleLine({ quantity: 2 })],
+        tenders: [
+          tender({ saleTenderId: 'cash-1', method: 'CASH', amountMinor: 5_000 }),
+          tender({ saleTenderId: 'cash-2', method: 'CASH', amountMinor: 5_000 }),
+        ],
+        refundedMinor: 4_500,
+        saleTenderTotalMinor: 10_000,
+        saleChangeMinor: 1_000,
+      }),
+    ).toBe('EXCEEDS_TENDER')
   })
 
   it('counts prior refunds against the sale cap as a second line of defence', () => {
