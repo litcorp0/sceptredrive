@@ -1871,4 +1871,369 @@ desktop test:e2e: 42/42 checks passed
 desktop test:e2e: Exited with code 0
 [exit 0]
 
-ONE OR MORE SUITES FAILED — read the [exit N] lines above
+ONE OR MORE SUITES FAILED — read the [exit N] lines above.
+
+=== POST-RUN CORRECTION, 2026-10-27 ===
+The only [exit 1] above is `bun run lint`, on a single `assist/source/organizeImports`
+diagnostic in desktop/src/renderer/modules/shift/pages/shift-page.tsx, introduced by the
+module move that rewrote two of its imports. The controller sorted them in the same commit
+series (fix and module move are commits 838ce19/242237b/70eaaf6). Re-run, pasted verbatim:
+
+$ $ biome check .
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:76:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function freePort is unused.
+  
+    74 │ }
+    75 │ 
+  > 76 │ function freePort() {
+       │          ^^^^^^^^
+    77 │   return new Promise((resolve, reject) => {
+    78 │     const server = net.createServer()
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend freePort with an underscore.
+  
+     74  74 │   }
+     75  75 │   
+     76     │ - function·freePort()·{
+         76 │ + function·_freePort()·{
+     77  77 │     return new Promise((resolve, reject) => {
+     78  78 │       const server = net.createServer()
+  
+
+.planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs:89:16 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function waitForCdp is unused.
+  
+    87 │ }
+    88 │ 
+  > 89 │ async function waitForCdp(port, timeoutMs) {
+       │                ^^^^^^^^^^
+    90 │   const deadline = Date.now() + timeoutMs
+    91 │   while (Date.now() < deadline) {
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend waitForCdp with an underscore.
+  
+     87  87 │   }
+     88  88 │   
+     89     │ - async·function·waitForCdp(port,·timeoutMs)·{
+         89 │ + async·function·_waitForCdp(port,·timeoutMs)·{
+     90  90 │     const deadline = Date.now() + timeoutMs
+     91  91 │     while (Date.now() < deadline) {
+  
+
+.planning/phases/06-pos-offline-core/evidence/perf-pos.mjs:133:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function slug is unused.
+  
+    131 │ }
+    132 │ 
+  > 133 │ function slug(value) {
+        │          ^^^^
+    134 │   return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 │ }
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend slug with an underscore.
+  
+    131 131 │   }
+    132 132 │   
+    133     │ - function·slug(value)·{
+        133 │ + function·_slug(value)·{
+    134 134 │     return value.replace(/[^A-Za-z0-9-]/g, '')
+    135 135 │   }
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-outbox.ts:215:10 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This function outboxCounts is unused.
+  
+    213 │ }
+    214 │ 
+  > 215 │ function outboxCounts(db: SqlDb): { status: string; count: number }[] {
+        │          ^^^^^^^^^^^^
+    216 │   return db.sqlite
+    217 │     .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend outboxCounts with an underscore.
+  
+    213 213 │   }
+    214 214 │   
+    215     │ - function·outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+        215 │ + function·_outboxCounts(db:·SqlDb):·{·status:·string;·count:·number·}[]·{
+    216 216 │     return db.sqlite
+    217 217 │       .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:97:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    95 │ check('the barcode resolves to one product', scannedRow?.sku === 'GIK-00001')
+    96 │ 
+  > 97 │ const brakePads = toSellableProduct(scannedRow!, 11_000) // branch override price
+       │                                     ^^^^^^^^^^^
+    98 │ check('the branch override price wins', brakePads?.unitPriceMinor === 11_000)
+    99 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:104:37 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    102 │ const enterTarget = pickEnterTarget('oil', filtered)
+    103 │ check('Enter adds the only search result', enterTarget?.sku === 'GIK-00002')
+  > 104 │ const oilFilter = toSellableProduct(enterTarget!, null)
+        │                                     ^^^^^^^^^^^^
+    105 │ 
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:108:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    106 │ // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+  > 108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+        │                                                         ^^^^^^^^^^
+    109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+    110 │ cart = cartReducer(cart, {
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:109:57 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    107 │ let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
+    108 │ cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
+  > 109 │ cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
+        │                                                         ^^^^^^^^^^
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:12 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:112:30 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    110 │ cart = cartReducer(cart, {
+    111 │   type: 'addProduct',
+  > 112 │   product: toSellableProduct(catalogue[2]!, null)!,
+        │                              ^^^^^^^^^^^^^
+    113 │   quantity: 2,
+    114 │   now: NOW,
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:148:16 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    146 │ //    approves it at the till.
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+  > 148 │ const lineId = cart.lines[1]!.id
+        │                ^^^^^^^^^^^^^^
+    149 │ const lineDiscountMinor = discountAmountFromInput(
+    150 │   '2.00',
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    146 146 │   //    approves it at the till.
+    147 147 │   totals = computeCartTotals(cart, CONTEXT)
+    148     │ - const·lineId·=·cart.lines[1]!.id
+        148 │ + const·lineId·=·cart.lines[1]?.id
+    149 149 │   const lineDiscountMinor = discountAmountFromInput(
+    150 150 │     '2.00',
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:149:27 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    147 │ totals = computeCartTotals(cart, CONTEXT)
+    148 │ const lineId = cart.lines[1]!.id
+  > 149 │ const lineDiscountMinor = discountAmountFromInput(
+        │                           ^^^^^^^^^^^^^^^^^^^^^^^^
+  > 150 │   '2.00',
+  > 151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+  > 153 │ )!
+        │ ^^
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+    155 │ 
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:152:3 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    150 │   '2.00',
+    151 │   'AMOUNT',
+  > 152 │   totals.priced.lines[1]!.grossMinor,
+        │   ^^^^^^^^^^^^^^^^^^^^^^^
+    153 │ )!
+    154 │ check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    150 150 │     '2.00',
+    151 151 │     'AMOUNT',
+    152     │ - ··totals.priced.lines[1]!.grossMinor,
+        152 │ + ··totals.priced.lines[1]?.grossMinor,
+    153 153 │   )!
+    154 154 │   check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:292:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    290 │   'one credit tender for the full total',
+    291 │   draft.payload.tenders.length === 1 &&
+  > 292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 │ )
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    290 290 │     'one credit tender for the full total',
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292     │ - ····draft.payload.tenders[0]!.method·===·'CREDIT'·&&
+        292 │ + ····draft.payload.tenders[0]?.method·===·'CREDIT'·&&
+    293 293 │       draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    294 294 │   )
+  
+
+.planning/phases/06-pos-offline-core/evidence/verify-selling.ts:293:5 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    291 │   draft.payload.tenders.length === 1 &&
+    292 │     draft.payload.tenders[0]!.method === 'CREDIT' &&
+  > 293 │     draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 │ )
+    295 │ check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    291 291 │     draft.payload.tenders.length === 1 &&
+    292 292 │       draft.payload.tenders[0]!.method === 'CREDIT' &&
+    293     │ - ····draft.payload.tenders[0]!.amountMinor·===·draft.payload.totals.totalMinor,
+        293 │ + ····draft.payload.tenders[0]?.amountMinor·===·draft.payload.totals.totalMinor,
+    294 294 │   )
+    295 295 │   check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
+  
+
+.planning/phases/06-pos-offline-core/evidence/walkthrough-pos.mjs:606:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable cashierB is unused.
+  
+    604 │     body: { staffCode: cashierStaff.staff_id, pin: NEW_PIN },
+    605 │   })
+  > 606 │   const cashierB = cashierBResponse.body
+        │         ^^^^^^^^
+    607 │   check('the cashier authorizes on device B', cashierBResponse.status === 201)
+    608 │ 
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend cashierB with an underscore.
+  
+     604  604 │       body: { staffCode: cashierStaff.staff_id, pin: NEW_PIN },
+     605  605 │     })
+     606      │ - ··const·cashierB·=·cashierBResponse.body
+          606 │ + ··const·_cashierB·=·cashierBResponse.body
+     607  607 │     check('the cashier authorizes on device B', cashierBResponse.status === 201)
+     608  608 │   
+  
+
+.planning/phases/06-pos-offline-core/evidence/walkthrough-pos.mjs:753:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable akosuaLimit is unused.
+  
+    751 │   check('the demo credit and loyalty customers are present', Boolean(akosua && kwame))
+    752 │   const akosuaOpeningBalance = Number(akosua.balance_minor)
+  > 753 │   const akosuaLimit = Number(akosua.limit_minor)
+        │         ^^^^^^^^^^^
+    754 │ 
+    755 │   const stockBefore = Number(
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend akosuaLimit with an underscore.
+  
+     751  751 │     check('the demo credit and loyalty customers are present', Boolean(akosua && kwame))
+     752  752 │     const akosuaOpeningBalance = Number(akosua.balance_minor)
+     753      │ - ··const·akosuaLimit·=·Number(akosua.limit_minor)
+          753 │ + ··const·_akosuaLimit·=·Number(akosua.limit_minor)
+     754  754 │   
+     755  755 │     const stockBefore = Number(
+  
+
+.planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs:18:26 lint/correctness/noUnusedImports  FIXABLE  ━━━━━━━━━━
+
+  ! Several of these imports are unused.
+  
+    16 │ import fs from 'node:fs'
+    17 │ import path from 'node:path'
+  > 18 │ import { formatDateTime, formatDay } from '@sceptre/shared'
+       │                          ^^^^^^^^^
+    19 │ import { chromium } from 'playwright'
+    20 │ 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+    18 │ import·{·formatDateTime,·formatDay·}·from·'@sceptre/shared'
+       │                          ----------                        
+
+.planning/phases/07-identity-design-system/evidence/walkthrough-admin.mjs:342:9 lint/correctness/noUnusedVariables  FIXABLE  ━━━━━━━━━━
+
+  ! This variable customerId is unused.
+  
+    340 │     'customer ledger opens by keyboard',
+    341 │   )
+  > 342 │   const customerId = new URL(page.url()).pathname.split('/').pop()
+        │         ^^^^^^^^^^
+    343 │   await shot('plan07-04-admin-customer-ledger')
+    344 │ 
+  
+  i Unused variables are often the result of typos, incomplete refactors, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend customerId with an underscore.
+  
+    340 340 │       'customer ledger opens by keyboard',
+    341 341 │     )
+    342     │ - ··const·customerId·=·new·URL(page.url()).pathname.split('/').pop()
+        342 │ + ··const·_customerId·=·new·URL(page.url()).pathname.split('/').pop()
+    343 343 │     await shot('plan07-04-admin-customer-ledger')
+    344 344 │   
+  
+
+Checked 1117 files in 3s. No fixes applied.
+Found 19 warnings.
+exit:0
+
+ALL SUITES PASSED (after the lint fix above)

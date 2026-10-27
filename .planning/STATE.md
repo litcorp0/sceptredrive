@@ -6,9 +6,11 @@
 **Milestone:** v1
 **Updated:** 2026-10-27
 **Status:** **Phase 13 (POS Payments, Returns & Shifts) is complete and verified — 13/13 plans.**
-One gate is red and named in the execution notes: `bun run lint`, on a single unsorted-import
-diagnostic in a till file the module move touched (a one-command fix the verification lane was not
-permitted to make). `modules:check:strict` is green at **16/16 POS**.
+Every gate is green: `check-types` 6/6, `lint` exit 0 with 19 pre-existing warnings,
+`modules:check:strict` **19/19 admin and 16/16 POS**, brand gate over **1 112** files, shared **318**,
+API **710**, desktop **593**, packaged print **21/21**, packaged shell **42/42**. The counter audit is
+**149/150** on a pre-existing check of the audit's own device, not of this phase. Verification found
+and fixed one real defect: cash refunds were missing from expected cash, on the server and on the till.
 Phase 12 is complete and verified (13/13). Phase 11 is complete and verified (11/11 plans); Phase 10
 is complete and verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface
 phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop
@@ -173,13 +175,11 @@ figure now subtracts them.
   ledger receives exactly the credit tender and exactly `−amount` for a repayment; every Z figure
   equals a recomputation from the shift's own rows; a webhook replay inserts one event and changes
   nothing; and one payment may tender exactly one sale (`REJECTED INVALID_TENDER` on the second).
-- **Gates that could not be run, or are red, with the reason.**
-  (a) **`bun run lint` is the one red line** — one `assist/source/organizeImports` diagnostic in
-  `desktop/src/renderer/modules/shift/pages/shift-page.tsx` (the only file named; biome's summary
-  calls it `Found 2 errors`), introduced by the module move that rewrote two of its imports.
-  `bunx biome check --write` on that file clears it; reordering an import is still application code,
-  which a verification pass may not edit, so it is reported with the command. Every other gate in
-  the matrix is green.
+- **Gates: what ran, what could not, and why.**
+  (a) **No gate is red.** `bun run lint` reported one `assist/source/organizeImports` diagnostic in
+  `desktop/src/renderer/modules/shift/pages/shift-page.tsx` after the module move rewrote two of its
+  imports; the controller sorted them (`bunx biome check --write`) in the same commit series, and the
+  full gate is exit 0 with the 19 pre-existing warnings.
   (b) **`test:counter` is run by hand, not in the matrix** — it runs here but needs a second Electron
   suite and PowerSync, and the matrix already runs two in sequence. Result **149/150**, unchanged
   by both fixes: the sync badge reports `action` instead of `offline`. `action` comes from

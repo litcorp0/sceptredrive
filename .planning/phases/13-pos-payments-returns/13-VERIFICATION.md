@@ -3,11 +3,11 @@
 **Phase:** POS Payments, Returns & Shifts
 **Verified:** 2026-10-27
 **Plans:** 13/13 complete
-**Gates:** `evidence/suites.txt` — **ONE OR MORE SUITES FAILED**, on one line: `bun run lint`
-reports a single unsorted-import diagnostic in `desktop/src/renderer/modules/shift/pages/shift-page.tsx`,
-a file the module move touched (the one command that clears it is in §5). Every other gate is green
-— including **`modules:check:strict` at 16/16 POS** — the walkthrough reports **0 failures**, and
-**8/8** mutations were caught.
+**Gates:** `evidence/suites.txt` — **ALL GATES PASS**. `check-types` 6/6, `lint` exit 0 with the 19
+pre-existing warnings, **`modules:check:strict` 19/19 admin and 16/16 POS**, brand gate over 1 112
+files, packaged print 21/21, packaged shell 42/42. The walkthrough reports **0 failures** over 55
+assertions, and **8/8** mutations were caught. Verification found and fixed one real defect — cash
+refunds were missing from expected cash (§4).
 
 The phase's goal was that electronic money, split tenders, refunds, repayments and the full
 drawer reconcile end to end, offline where the product promises offline and online where only
@@ -20,7 +20,7 @@ committed test, a grep — and names in §6 the two artifacts this pass did not 
 |---|---|
 | migrations from zero (scratch database) | exit 0 — **16** migrations, including `0013_enum_phase13` before the DDL that uses its values |
 | `bun run check-types` | 6/6 workspaces, exit 0 |
-| `bun run lint` | **exit 1** — one `assist/source/organizeImports` diagnostic in `shift-page.tsx` (biome's summary prints `Found 2 errors`), 19 warnings (§5) |
+| `bun run lint` | exit 0 — 19 pre-existing warnings. The one `assist/source/organizeImports` diagnostic the module move introduced was sorted by the controller in the same commit series |
 | `@sceptre/shared` | 20 files, **318** tests |
 | `api` | 54 files, **710** tests |
 | `desktop` | 67 files, **593** tests |
@@ -185,15 +185,10 @@ non-zero in this fixture, so it cannot pass vacuously.
    `scripts/check-desktop-modules.mjs` now lists both modules and the three files moved to
    `modules/shift/utils/`. The matrix now prints **`modules:check:pos OK — 16/16 modules
    migrated`** and exits 0. §4 defect 2.
-3. **`bun run lint` is the transcript's one red line, and this lane may not clear it.**
-   `desktop/src/renderer/modules/shift/pages/shift-page.tsx` is the only file named, with one
-   `assist/source/organizeImports` diagnostic introduced by the module move (the two imports it
-   rewrote are no longer in sorted order); biome's summary line prints `Found 2 errors` for that one
-   diagnostic. One command fixes it —
-   `bunx biome check --write desktop/src/renderer/modules/shift/pages/shift-page.tsx` — and every
-   other gate in the matrix is green. Reordering an import is still a change to application code,
-   which this pass is not permitted to make, so it is reported with the exact command instead of
-   being done quietly.
+3. **`bun run lint` is green, after the controller sorted two imports.** The module move rewrote
+   two imports in `desktop/src/renderer/modules/shift/pages/shift-page.tsx`, leaving them unsorted;
+   `bunx biome check --write` on that file (and `shift-dialogs.tsx`) cleared it in the same commit
+   series. The full gate is exit 0 with the 19 pre-existing warnings.
 4. **`desktop/test/e2e/security-smoke.mjs` was updated, and tightened.** Plan 09 added a
    `payments` bridge (open/close the checkout window), so the gate's hard-coded
    `app,pin,printer,secure` list could no longer pass. The script now expects
@@ -364,7 +359,7 @@ Every one is declared `localOnly: true`, so the PowerSync client never asks the 
 
 | File | What it is |
 |---|---|
-| `evidence/suites.txt` | The whole gate matrix in one transcript — migrations from zero and every gate, with `bun run lint` the only red line and `modules:check:strict` at 16/16 |
+| `evidence/suites.txt` | The whole gate matrix in one transcript — migrations from zero and every gate, with every gate green and `modules:check:strict` at 16/16 |
 | `evidence/run-suites.sh` | The script that produced it |
 | `evidence/walkthrough-payments.mjs` | 29 legs, fixtures through the API, three figures re-derived from SQL, one hand-delete |
 | `evidence/walkthrough-payments.txt` | `PASS 55 / FAIL 0 / NOT-DRIVEN 1` — leg 27.4 now passes |
