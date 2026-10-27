@@ -66,6 +66,15 @@ export const PERMISSIONS = [
   'procurement.create',
   'procurement.receive',
   'procurement.return',
+  // Phase 14 (P14-D5): oversight reads, conflict resolution, supplier
+  // transfers and E-VAT. `evat.retry` is admin-only because a failed GRA
+  // submission is a compliance matter, not a branch one.
+  'pos.oversight.read',
+  'conflict.read',
+  'conflict.resolve',
+  'payable.transfer',
+  'evat.read',
+  'evat.retry',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -122,6 +131,11 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'procurement.create',
   'procurement.receive',
   'procurement.return',
+  'pos.oversight.read',
+  'conflict.read',
+  'conflict.resolve',
+  'payable.transfer',
+  'evat.read',
 ]
 
 // Cashiers authenticate on the POS (device-bound PIN) and never call the admin API.

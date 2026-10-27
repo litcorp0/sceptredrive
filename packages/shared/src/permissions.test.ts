@@ -131,9 +131,23 @@ describe('permissions', () => {
     expect(can('MANAGER', 'pos.refund')).toBe(true)
     expect(can('CASHIER', 'pos.refund')).toBe(false)
 
-    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(60)
-    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(49)
+    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(66)
+    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(54)
     expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
+  })
+
+  it('gives managers oversight, conflict, transfer and E-VAT reading — never E-VAT retry', () => {
+    // P14-D5: a failed GRA submission is a compliance matter, not a branch
+    // one, so retrying it is an admin action.
+    expect(can('MANAGER', 'pos.oversight.read')).toBe(true)
+    expect(can('MANAGER', 'conflict.read')).toBe(true)
+    expect(can('MANAGER', 'conflict.resolve')).toBe(true)
+    expect(can('MANAGER', 'payable.transfer')).toBe(true)
+    expect(can('MANAGER', 'evat.read')).toBe(true)
+    expect(can('MANAGER', 'evat.retry')).toBe(false)
+
+    expect(can('ADMIN', 'evat.retry')).toBe(true)
+    expect(ROLE_PERMISSIONS.CASHIER).not.toContain('pos.oversight.read')
   })
 
   it('keeps pos.refund beside pos.discount in the permission list', () => {
