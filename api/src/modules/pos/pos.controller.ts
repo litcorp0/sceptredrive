@@ -4,7 +4,9 @@ import { currentUser } from '../../http/authorize.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as oversightService from './pos.oversight.service.ts'
 import { reconcilePos } from './pos.reconciliation.ts'
+import * as posService from './pos.service.ts'
 import type {
+  ConflictListQuery,
   OversightRefundsQuery,
   OversightSalesQuery,
   OversightShiftsQuery,
@@ -66,5 +68,21 @@ export async function getShiftReport(c: Context<AppEnv>, id: string, kind: 'X' |
 
 export async function listShifts(c: Context<AppEnv>, query: OversightShiftsQuery) {
   const result = await oversightService.listShifts(currentUser(c), query)
+  return c.json(result)
+}
+
+// --- The conflict queue (Phase 14, Plan 04) ---------------------------------
+//
+// Three handlers, none of them more than three lines: the permission is the
+// route's, the scope and the decision are the service's. `actorFromContext` is
+// what makes the audit row answer "who, from where" a year later (OWASP A09).
+
+export async function listConflicts(c: Context<AppEnv>, query: ConflictListQuery) {
+  const result = await posService.listConflicts(currentUser(c), query)
+  return c.json(result)
+}
+
+export async function getConflict(c: Context<AppEnv>, id: string) {
+  const result = await posService.getConflict(currentUser(c), id)
   return c.json(result)
 }

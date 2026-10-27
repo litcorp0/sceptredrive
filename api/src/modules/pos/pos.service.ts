@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import {
+  accraDayBounds,
   allocateProportionally,
   CART_VOID_REASONS,
   can,
@@ -53,11 +54,13 @@ import type {
 import { addConflict } from './pos.conflicts.ts'
 import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
+  type ConflictFilters,
   countShiftReviewsAwaiting,
   countShiftSales,
   findActiveBinding,
   findBindingById,
   findBindingByTokenHash,
+  findConflictRow,
   findCreditProfileRow,
   findOpenShiftByTerminal,
   findRefundById,
@@ -87,6 +90,7 @@ import {
   refundedLineTotals,
   revokeBinding,
   revokeStaffBindings,
+  selectConflictRows,
   selectRefundedLines,
   selectRefundedTenderAmounts,
   selectRefundedTotalForSale,
@@ -111,6 +115,10 @@ import type {
   BindingStaff,
   BindingValidationResult,
   CashMovementPayload,
+  ConflictDetail,
+  ConflictList,
+  ConflictRow,
+  ConflictSubject,
   DeviceStaffRecord,
   OverrideProof,
   SaleApplyResult,
@@ -127,6 +135,7 @@ import type {
   SyncConflictSeverity,
   SyncConflictType,
 } from './pos.types.ts'
+import type { ConflictListQuery } from './pos.validation.ts'
 
 /** Bindings live for a quarter; a PIN reset or role change invalidates them sooner. */
 export const BINDING_TTL_MS = 90 * 24 * 60 * 60 * 1000
@@ -3112,4 +3121,120 @@ export async function sumSoldValueByProduct(
   executor: DbExecutor = db,
 ): Promise<Map<string, number>> {
   return selectSoldValueByProduct(branchId, from, to, executor)
+}
+
+// --- The conflict queue and the act of resolving one (Phase 14, Plan 04) -----
+//
+// A conflict is a record of something that was applied at the till and flagged.
+// Reading the queue is an oversight read; resolving one is a **record**, not a
+// repair (P14-D13): it writes five columns on `sync_conflict` and one audit row,
+// and it touches no sale, refund, shift, movement or ledger. A correction is a new
+// document in the module that owns it.
+//
+// Authority is `resolveBranchFilter` in both directions — the list's branch and
+// the row's own branch — so a manager is pinned to their branch and a foreign id
+// is a 403 rather than a 404 that hides existence (P14-D7, OWASP A01).
+
+/** `from`/`to` are inclusive Accra days; SQL gets a half-open window. */
+function conflictDayWindow(
+  from?: string,
+  to?: string,
+): { from: Date | null; toExclusive: Date | null } {
+  const fromDate = from ? new Date(accraDayBounds(new Date(`${from}T00:00:00.000Z`)).from) : null
+  const toExclusive = to ? new Date(accraDayBounds(new Date(`${to}T00:00:00.000Z`)).to) : null
+
+  if (fromDate && toExclusive && fromDate.getTime() >= toExclusive.getTime()) {
+    throw new ValidationError('from must be on or before to')
+  }
+  return { from: fromDate, toExclusive }
+}
+
+function conflictFiltersFor(user: SessionUser, query: ConflictListQuery): ConflictFilters {
+  const window = conflictDayWindow(query.from, query.to)
+  return {
+    branchId: resolveBranchFilter(user, query.branchId ?? null),
+    // `ALL` is the absence of a status filter, not a fourth status.
+    status: query.status === 'ALL' ? null : query.status,
+    type: query.type ?? null,
+    severity: query.severity ?? null,
+    saleId: query.saleId ?? null,
+    shiftId: query.shiftId ?? null,
+    terminalId: query.terminalId ?? null,
+    from: window.from,
+    toExclusive: window.toExclusive,
+    limit: query.limit,
+    offset: query.offset,
+  }
+}
+
+/**
+ * The document a conflict points at, as a reference rather than a copy: the
+ * reviewer clicks through to the oversight screen that owns the detail
+ * (`/api/pos/oversight/sales/:id`, `/shifts/:id`).
+ *
+ * A rejected upload has no sale — `details.clientTransactionId` is its only link
+ * — and `none` says so instead of inventing a document (Plan 04 §1).
+ */
+async function loadConflictSubject(
+  row: ConflictRow,
+  executor: DbExecutor = db,
+): Promise<ConflictSubject> {
+  if (row.saleId) {
+    const saleRow = await findSaleById(row.saleId, executor)
+    if (saleRow) {
+      return {
+        kind: 'sale',
+        id: saleRow.id,
+        receiptNumber: saleRow.receiptNumber,
+        occurredAt: saleRow.occurredAt.toISOString(),
+        totalMinor: saleRow.totalMinor,
+        conflictCount: saleRow.conflictCount,
+      }
+    }
+  }
+
+  if (row.shiftId) {
+    const shiftRow = await findShiftById(row.shiftId, executor)
+    if (shiftRow) {
+      return {
+        kind: 'shift',
+        id: shiftRow.id,
+        number: shiftRow.number,
+        openedAt: shiftRow.openedAt.toISOString(),
+        closedAt: shiftRow.closedAt?.toISOString() ?? null,
+        varianceMinor: shiftRow.varianceMinor,
+      }
+    }
+  }
+
+  return { kind: 'none' }
+}
+
+/**
+ * The queue: `OPEN` by default, HIGH before LOW, oldest first inside a severity.
+ * Paged and filtered in SQL, never in memory — a list that reads every conflict in
+ * a branch to render twenty is a list that gets slower with the shop's worst year.
+ */
+export async function listConflicts(
+  user: SessionUser,
+  query: ConflictListQuery,
+): Promise<ConflictList> {
+  const result = await selectConflictRows(conflictFiltersFor(user, query))
+  return {
+    conflicts: result.rows,
+    total: result.total,
+    limit: query.limit,
+    offset: query.offset,
+  }
+}
+
+/** One conflict plus the document it is about. */
+export async function getConflict(user: SessionUser, conflictId: string): Promise<ConflictDetail> {
+  const row = await findConflictRow(conflictId)
+  if (!row) throw new NotFoundError('Conflict not found')
+  // The row's own branch, not the caller's request: a manager may learn that
+  // another branch's conflict exists, never read it.
+  resolveBranchFilter(user, row.branchId)
+
+  return { ...row, subject: await loadConflictSubject(row) }
 }

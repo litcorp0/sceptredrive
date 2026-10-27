@@ -602,3 +602,84 @@ export interface OversightShiftsList {
   limit: number
   offset: number
 }
+
+// --- Conflict queue and resolution (Phase 14, Plan 04) ----------------------
+//
+// A conflict is a record of something that was applied and flagged. Every row is
+// written `OPEN` (pos.conflicts.ts); a resolution writes the status, the code,
+// the note, the actor and the time and nothing else. `details` is the PII-free
+// jsonb the writer produced, returned verbatim because nothing was redacted when
+// it was written and nothing needs redacting at read time.
+
+/** The status a conflict is written with, and the two a resolution can set. */
+export type ConflictStatus = 'OPEN' | 'RESOLVED' | 'DISMISSED'
+
+/** One row of the queue, and the row a detail or a resolution returns. */
+export interface ConflictRow {
+  id: string
+  type: SyncConflictType
+  severity: SyncConflictSeverity
+  status: ConflictStatus
+  createdAt: string
+  branchId: string
+  branchCode: string
+  terminalId: string
+  terminalCode: string
+  /** Null on a rejected upload: `details.clientTransactionId` is then the only link. */
+  saleId: string | null
+  receiptNumber: string | null
+  shiftId: string | null
+  shiftNumber: string | null
+  resolvedBy: string | null
+  resolvedAt: string | null
+  resolutionCode: ConflictResolutionCode | null
+  resolutionNote: string | null
+  details: Record<string, unknown>
+}
+
+/**
+ * A minimal reference to the document a conflict points at — enough for a
+ * reviewer to open it, never a copy of it. `none` is honest about a rejected
+ * upload whose `sale_id` is null: there is no server document to link to.
+ */
+export type ConflictSubject =
+  | {
+      kind: 'sale'
+      id: string
+      receiptNumber: string
+      occurredAt: string
+      totalMinor: number
+      conflictCount: number
+    }
+  | {
+      kind: 'shift'
+      id: string
+      number: string
+      openedAt: string
+      closedAt: string | null
+      varianceMinor: number | null
+    }
+  | { kind: 'none' }
+
+/** The row plus the document it is about. */
+export interface ConflictDetail extends ConflictRow {
+  subject: ConflictSubject
+}
+
+export interface ConflictList {
+  conflicts: ConflictRow[]
+  total: number
+  limit: number
+  offset: number
+}
+
+/**
+ * What a resolution writes. `code` is required by the validator and by the enum
+ * (P14-D14); `note` is required only for a dismissal, and that rule lives in
+ * `resolutionProblem` so the API and the console cannot disagree.
+ */
+export interface ConflictResolutionInput {
+  status: 'RESOLVED' | 'DISMISSED'
+  code: ConflictResolutionCode
+  note?: string | null | undefined
+}

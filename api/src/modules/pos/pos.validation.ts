@@ -1,4 +1,4 @@
-import { REFUND_REASONS, TENDER_METHODS } from '@sceptre/shared'
+import { CONFLICT_TYPE_LABELS, REFUND_REASONS, TENDER_METHODS } from '@sceptre/shared'
 import { z } from 'zod'
 import { validateParam, validateQuery } from '../../http/validation.ts'
 
@@ -75,3 +75,32 @@ export type OversightSalesQuery = z.infer<typeof oversightSalesQuerySchema>
 export type OversightRefundsQuery = z.infer<typeof oversightRefundsQuerySchema>
 export type OversightShiftsQuery = z.infer<typeof oversightShiftsQuerySchema>
 export type ShiftReportQuery = z.infer<typeof shiftReportQuerySchema>
+
+// --- The conflict queue (Phase 14, Plan 04) ---------------------------------
+//
+// The queue's filters, `.strict()`: a filter a route silently ignores is a manager
+// believing they narrowed a list (OWASP A05).
+
+/**
+ * The 16 conflict types, taken from the shared label map so the filter, the
+ * console's dropdown and the `sync_conflict_type` enum cannot drift: a type with
+ * no label is a type nobody can name.
+ */
+const conflictTypeNames = Object.keys(CONFLICT_TYPE_LABELS) as [string, ...string[]]
+
+export const conflictListQuerySchema = z
+  .object({
+    ...scopeFields,
+    /** `OPEN` is the queue's default: everything ever is a log, not a queue. */
+    status: z.enum(['OPEN', 'RESOLVED', 'DISMISSED', 'ALL']).default('OPEN'),
+    type: z.enum(conflictTypeNames).optional(),
+    severity: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+    saleId: z.uuid().optional(),
+    shiftId: z.uuid().optional(),
+    ...pagingFields,
+  })
+  .strict()
+
+export const validateConflictListQuery = validateQuery(conflictListQuerySchema)
+
+export type ConflictListQuery = z.infer<typeof conflictListQuerySchema>

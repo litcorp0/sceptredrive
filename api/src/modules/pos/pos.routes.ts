@@ -4,6 +4,7 @@ import { rateLimit } from '../../http/rate-limit.ts'
 import { requireSession } from '../../http/session.ts'
 import * as posController from './pos.controller.ts'
 import {
+  validateConflictListQuery,
   validateOversightIdParam,
   validateOversightRefundsQuery,
   validateOversightSalesQuery,
@@ -114,4 +115,25 @@ posRoutes.get(
   validateOversightIdParam,
   validateShiftReportQuery,
   (c) => posController.getShiftReport(c, c.req.valid('param').id, c.req.valid('query').kind),
+)
+
+// The queue is an oversight read with its own permission: a manager who may read
+// sales is not automatically allowed to see every flagged conflict, and one who
+// may read conflicts is not automatically allowed to close them (P14-D5, P14-D7).
+posRoutes.get(
+  '/api/pos/oversight/conflicts',
+  requireSession,
+  requirePermission('conflict.read'),
+  oversightRateLimit,
+  validateConflictListQuery,
+  (c) => posController.listConflicts(c, c.req.valid('query')),
+)
+
+posRoutes.get(
+  '/api/pos/oversight/conflicts/:id',
+  requireSession,
+  requirePermission('conflict.read'),
+  oversightRateLimit,
+  validateOversightIdParam,
+  (c) => posController.getConflict(c, c.req.valid('param').id),
 )

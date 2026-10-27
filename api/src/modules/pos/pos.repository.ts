@@ -1,6 +1,6 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { isRole } from '@sceptre/shared'
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, type SQL, sql } from 'drizzle-orm'
 import { creditProfile } from '../credit/credit.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
 import { terminal } from '../org/terminals.schema.ts'
@@ -21,7 +21,13 @@ import {
   shiftReport,
   syncConflict,
 } from './pos.schema.ts'
-import type { DeviceStaffRecord, ShiftCashTotals } from './pos.types.ts'
+import type {
+  ConflictRow,
+  ConflictStatus,
+  DeviceStaffRecord,
+  ShiftCashTotals,
+  SyncConflictSeverity,
+} from './pos.types.ts'
 
 /** Signs in a staff member by staff code, email, or both (whichever was supplied). */
 export async function findStaffForAuthorization(
@@ -446,6 +452,156 @@ export async function insertConflict(
   const row = rows[0]
   if (!row) throw new Error('Failed to insert the sync conflict')
   return row
+}
+
+// --- The conflict queue (Phase 14, Plan 04) ---------------------------------
+//
+// `insertConflict` above is the writer the till's uploads use; everything below
+// serves the manager who reads the queue and closes a row. The only write here is
+// `updateConflictResolution`, and it sets the five resolution columns and nothing
+// else — no sale, no refund, no ledger (P14-D13).
+
+export interface ConflictFilters {
+  /** `null` for an admin reading every branch. */
+  branchId: string | null
+  /** `null` when the caller asked for `ALL`; the list's default is `OPEN`. */
+  status: ConflictStatus | null
+  type: string | null
+  severity: SyncConflictSeverity | null
+  saleId: string | null
+  shiftId: string | null
+  terminalId: string | null
+  from: Date | null
+  toExclusive: Date | null
+  limit: number
+  offset: number
+}
+
+/**
+ * HIGH first, then the oldest first inside a severity: the conflict that has been
+ * wrong longest is the one to read first. Expressed as a CASE rather than an enum
+ * order because `sync_conflict_severity` is alphabetical (`HIGH`, `LOW`, `MEDIUM`)
+ * and sorting by the column would put LOW before MEDIUM.
+ */
+const CONFLICT_SEVERITY_RANK = sql`CASE c.severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`
+
+/**
+ * The queue row, joined to the codes and document numbers a manager recognises.
+ * One statement, so a page of 20 rows is one round trip; every filter has an index
+ * (`sync_conflict_branch_status_idx` for the default branch+status read,
+ * `sync_conflict_sale_idx`, `sync_conflict_terminal_created_idx`,
+ * `sync_conflict_type_created_idx`).
+ */
+const CONFLICT_ROW_SELECT = sql`
+  SELECT
+    c.id,
+    c.type,
+    c.severity,
+    c.status,
+    c.created_at,
+    c.branch_id,
+    b.code AS branch_code,
+    c.terminal_id,
+    t.code AS terminal_code,
+    c.sale_id,
+    s.receipt_number,
+    c.shift_id,
+    sh.number AS shift_number,
+    c.resolved_by,
+    c.resolved_at,
+    c.resolution_code,
+    c.resolution_note,
+    c.details
+  FROM sync_conflict c
+  JOIN branch b ON b.id = c.branch_id
+  JOIN terminal t ON t.id = c.terminal_id
+  LEFT JOIN sale s ON s.id = c.sale_id
+  LEFT JOIN "shift" sh ON sh.id = c.shift_id
+`
+
+function conflictWhere(filters: ConflictFilters): SQL {
+  const conditions: SQL[] = []
+  if (filters.branchId !== null) conditions.push(sql`c.branch_id = ${filters.branchId}`)
+  if (filters.status !== null) conditions.push(sql`c.status = ${filters.status}`)
+  if (filters.type !== null) conditions.push(sql`c.type = ${filters.type}`)
+  if (filters.severity !== null) conditions.push(sql`c.severity = ${filters.severity}`)
+  if (filters.saleId !== null) conditions.push(sql`c.sale_id = ${filters.saleId}`)
+  if (filters.shiftId !== null) conditions.push(sql`c.shift_id = ${filters.shiftId}`)
+  if (filters.terminalId !== null) conditions.push(sql`c.terminal_id = ${filters.terminalId}`)
+  if (filters.from !== null) conditions.push(sql`c.created_at >= ${filters.from}`)
+  if (filters.toExclusive !== null) conditions.push(sql`c.created_at < ${filters.toExclusive}`)
+  if (conditions.length === 0) return sql`true`
+  return and(...conditions) ?? sql`true`
+}
+
+function toConflictRow(row: Record<string, unknown>): ConflictRow {
+  return {
+    id: String(row.id),
+    type: String(row.type) as ConflictRow['type'],
+    severity: String(row.severity) as ConflictRow['severity'],
+    status: String(row.status) as ConflictRow['status'],
+    createdAt: toConflictIso(row.created_at),
+    branchId: String(row.branch_id),
+    branchCode: String(row.branch_code),
+    terminalId: String(row.terminal_id),
+    terminalCode: String(row.terminal_code),
+    saleId: row.sale_id === null ? null : String(row.sale_id),
+    receiptNumber: row.receipt_number === null ? null : String(row.receipt_number),
+    shiftId: row.shift_id === null ? null : String(row.shift_id),
+    shiftNumber: row.shift_number === null ? null : String(row.shift_number),
+    resolvedBy: row.resolved_by === null ? null : String(row.resolved_by),
+    resolvedAt: row.resolved_at === null ? null : toConflictIso(row.resolved_at),
+    resolutionCode: (row.resolution_code ?? null) as ConflictRow['resolutionCode'],
+    resolutionNote: row.resolution_note === null ? null : String(row.resolution_note),
+    details: (row.details ?? {}) as Record<string, unknown>,
+  }
+}
+
+/** The driver already hands back a `Date`; the string branch covers `to_char`-free readers. */
+function toConflictIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'string') {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
+  }
+  throw new Error('A conflict read received a timestamp it cannot format')
+}
+
+export async function selectConflictRows(
+  filters: ConflictFilters,
+  executor: DbExecutor = db,
+): Promise<{ rows: ConflictRow[]; total: number }> {
+  const where = conflictWhere(filters)
+
+  const [countRow] = (
+    await executor.execute<{ total: string }>(
+      sql`SELECT COUNT(*)::bigint AS total FROM sync_conflict c WHERE ${where}`,
+    )
+  ).rows
+  const rows = (
+    await executor.execute<Record<string, unknown>>(sql`
+      ${CONFLICT_ROW_SELECT}
+      WHERE ${where}
+      ORDER BY ${CONFLICT_SEVERITY_RANK} ASC, c.created_at ASC, c.id ASC
+      LIMIT ${filters.limit} OFFSET ${filters.offset}
+    `)
+  ).rows
+
+  return { rows: rows.map(toConflictRow), total: Number(countRow?.total ?? 0) }
+}
+
+/** One queue row, for the detail and for the response a resolution returns. */
+export async function findConflictRow(
+  conflictId: string,
+  executor: DbExecutor = db,
+): Promise<ConflictRow | null> {
+  const row = (
+    await executor.execute<Record<string, unknown>>(sql`
+      ${CONFLICT_ROW_SELECT}
+      WHERE c.id = ${conflictId}
+    `)
+  ).rows[0]
+  return row ? toConflictRow(row) : null
 }
 
 // --- Sales -----------------------------------------------------------------
