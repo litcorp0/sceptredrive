@@ -1,7 +1,9 @@
 import type { Context } from 'hono'
 import { actorFromContext } from '../../http/audit-context.ts'
 import { currentUser } from '../../http/authorize.ts'
+import { sendCsv } from '../../http/csv.ts'
 import type { AppEnv } from '../../http/factory.ts'
+import * as inventoryReport from './inventory.report.ts'
 import * as inventoryService from './inventory.service.ts'
 import type {
   AdjustmentCreateInput,
@@ -9,6 +11,7 @@ import type {
   ReceiptCreateInput,
   ReceiptListQuery,
   StockListQuery,
+  StockReportQuery,
   ThresholdInput,
 } from './inventory.types.ts'
 
@@ -54,6 +57,16 @@ export async function listLowStock(c: Context<AppEnv>, query: StockListQuery) {
   const user = currentUser(c)
   const result = await inventoryService.listLowStock(user, query)
   return c.json(result)
+}
+
+export async function getStockReport(c: Context<AppEnv>, query: StockReportQuery) {
+  const user = currentUser(c)
+  return c.json(await inventoryReport.getStockReport(user, query))
+}
+
+export async function exportStockReport(c: Context<AppEnv>, query: StockReportQuery) {
+  const user = currentUser(c)
+  return sendCsv(c, await inventoryReport.exportStockReport(user, query))
 }
 
 export async function getStockDetail(c: Context<AppEnv>, productId: string, branchId?: string) {

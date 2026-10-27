@@ -187,6 +187,8 @@ export interface LabelledTotal {
 }
 
 export interface SalesRow {
+  /** The sale's own id: a receipt the console can open, not just read. */
+  saleId: string
   receiptNumber: string
   occurredAt: string
   branchCode: string

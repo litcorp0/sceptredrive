@@ -78,6 +78,25 @@ export const stockListQuerySchema = z.object({
 
 export const stockProductParamSchema = z.object({ productId: z.uuid() })
 
+/**
+ * The stock report's period. `from`/`to` are ISO **days** and inclusive: the report
+ * counts `[from 00:00, to+1 00:00)` Accra time, which for UTC+0 is the UTC day. A day is
+ * the granularity an accountant reconciles at, so a timestamp is refused rather than
+ * silently narrowed to the day it happens to fall in.
+ */
+export const stockReportQuerySchema = z
+  .object({
+    branchId: z.uuid().optional(),
+    categoryId: z.uuid().optional(),
+    lowStock: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+  })
+  .strict()
+
 export const stockDetailQuerySchema = z.object({ branchId: z.uuid().optional() })
 
 export const thresholdUpdateSchema = z
@@ -99,6 +118,7 @@ export const validateReceiptIdParam = validateParam(receiptIdParamSchema)
 export const validateAdjustmentCreate = validateJson(adjustmentCreateSchema)
 export const validateMovementListQuery = validateQuery(movementListQuerySchema)
 export const validateStockListQuery = validateQuery(stockListQuerySchema)
+export const validateStockReportQuery = validateQuery(stockReportQuerySchema)
 export const validateStockProductParam = validateParam(stockProductParamSchema)
 export const validateStockDetailQuery = validateQuery(stockDetailQuerySchema)
 export const validateThresholdUpdate = validateJson(thresholdUpdateSchema)

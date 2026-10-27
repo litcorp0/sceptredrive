@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { currentUser } from '../../http/authorize.ts'
+import { sendCsv } from '../../http/csv.ts'
 import type { AppEnv } from '../../http/factory.ts'
 import * as analyticsService from './analytics.service.ts'
 import type { AnalyticsQuery } from './analytics.types.ts'
@@ -53,13 +54,6 @@ export async function getLoyalty(c: Context<AppEnv>, query: AnalyticsQuery) {
 export async function getPayables(c: Context<AppEnv>, query: AnalyticsQuery) {
   const user = currentUser(c)
   return c.json(await analyticsService.getPayables({ user, query }))
-}
-
-function sendCsv(c: Context<AppEnv>, result: { filename: string; csv: string }) {
-  c.header('content-type', 'text/csv; charset=utf-8')
-  c.header('content-disposition', `attachment; filename="${result.filename}"`)
-  c.header('cache-control', 'no-store, private')
-  return c.body(result.csv)
 }
 
 export async function exportSales(c: Context<AppEnv>, query: AnalyticsQuery) {

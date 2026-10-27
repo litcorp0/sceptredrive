@@ -1,4 +1,5 @@
 import type { DbExecutor } from '@sceptre/db'
+import type { z } from 'zod'
 import type {
   stockAdjustmentReasonEnum,
   stockLevel,
@@ -6,6 +7,7 @@ import type {
   stockMovementReferenceEnum,
   stockMovementTypeEnum,
 } from './inventory.schema.ts'
+import type { stockReportQuerySchema } from './inventory.validation.ts'
 
 export type StockMovementType = (typeof stockMovementTypeEnum.enumValues)[number]
 export type StockMovementReference = (typeof stockMovementReferenceEnum.enumValues)[number]
@@ -245,4 +247,64 @@ export interface ThresholdRow {
   minOrderQuantity: number
   updatedBy: string | null
   updatedAt: Date
+}
+
+// --- Stock report (Phase 14, RPT-04) -----------------------------------------
+
+export type StockReportQuery = z.infer<typeof stockReportQuerySchema>
+
+/** One product's level at one branch, valued at the projection's average cost. */
+export interface StockReportRow {
+  productId: string
+  sku: string
+  productName: string
+  categoryName: string
+  branchId: string
+  branchCode: string
+  branchName: string
+  quantityOnHand: number
+  avgCostMinor: number
+  valueMinor: number
+  threshold: number | null
+  belowThreshold: boolean
+}
+
+export interface StockReportBranchRow {
+  branchCode: string
+  branchName: string
+  quantityOnHand: number
+  valueMinor: number
+}
+
+/**
+ * The report is a snapshot plus a period (P14-D16): on-hand and value are the
+ * `stock_level` projection **as read**, because a past-dated valuation would have to
+ * replay the ledger's integer rounding and would disagree with the dashboard by a few
+ * pesewas. Everything else is counted in `[from, to)` Accra days.
+ */
+export interface StockReport {
+  /** The instant the projection was read. A stock figure without one is a rumour. */
+  asOf: string
+  period: { from: string; to: string }
+  /** The resolved branch: the caller's own for a manager, `null` for all branches. */
+  branchId: string | null
+  rows: StockReportRow[]
+  /** Matching rows before the 5 000-row cap, so a client can say what it is missing. */
+  total: number
+  truncated: boolean
+  totals: { quantityOnHand: number; valueMinor: number; products: number }
+  /** Populated for an admin only, following the analytics read model's precedent. */
+  byBranch: StockReportBranchRow[]
+  movements: {
+    inflow: number
+    outflow: number
+    byType: Array<{ type: StockMovementType; quantity: number }>
+  }
+  transfers: { dispatched: number; received: number; shortClosed: number }
+  counts: {
+    completed: number
+    countedLines: number
+    matchedLines: number
+    varianceValueMinor: number
+  }
 }

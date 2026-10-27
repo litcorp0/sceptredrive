@@ -500,6 +500,7 @@ export async function selectSyncHealth(
 // --- Sales report (RPT-01) ---------------------------------------------------
 
 export interface SalesRowResult {
+  saleId: string
   receiptNumber: string
   occurredAt: string
   branchCode: string
@@ -536,7 +537,8 @@ export async function selectSalesRows(
   const result = await rows(
     executor,
     sql`
-      SELECT s.receipt_number,
+      SELECT s.id,
+        s.receipt_number,
         to_char(s.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS occurred_at,
         b.code AS branch_code,
         t.code AS terminal_code,
@@ -560,6 +562,7 @@ export async function selectSalesRows(
   return {
     total: toInt(countRow?.total),
     rows: result.map((row) => ({
+      saleId: toText(row.id),
       receiptNumber: toText(row.receipt_number),
       occurredAt: toText(row.occurred_at),
       branchCode: toText(row.branch_code),

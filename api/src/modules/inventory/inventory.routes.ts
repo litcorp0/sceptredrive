@@ -11,6 +11,7 @@ import {
   validateStockDetailQuery,
   validateStockListQuery,
   validateStockProductParam,
+  validateStockReportQuery,
   validateThresholdDeleteQuery,
   validateThresholdUpdate,
 } from './inventory.validation.ts'
@@ -23,6 +24,26 @@ inventoryRoutes.get(
   requirePermission('inventory.read'),
   validateStockListQuery,
   (c) => inventoryController.listStock(c, c.req.valid('query')),
+)
+
+/**
+ * Both report routes are registered **before** `/stock/:productId`, so the literal
+ * `report` segment can never be read as a product id.
+ */
+inventoryRoutes.get(
+  '/api/inventory/stock/report',
+  requireSession,
+  requirePermission('inventory.read'),
+  validateStockReportQuery,
+  (c) => inventoryController.getStockReport(c, c.req.valid('query')),
+)
+
+inventoryRoutes.get(
+  '/api/inventory/stock/report/export',
+  requireSession,
+  requirePermission('inventory.read'),
+  validateStockReportQuery,
+  (c) => inventoryController.exportStockReport(c, c.req.valid('query')),
 )
 
 inventoryRoutes.get(
