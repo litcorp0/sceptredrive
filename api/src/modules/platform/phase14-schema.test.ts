@@ -32,13 +32,11 @@ import {
   supplierInvoice,
   supplierPayment,
   supplierPaymentMethodEnum,
-} from '../payables/payables.schema.ts'
-import {
-  paymentEvent,
   supplierTransfer,
   supplierTransferAllocation,
   supplierTransferStatusEnum,
-} from '../payments/payments.schema.ts'
+} from '../payables/payables.schema.ts'
+import { paymentEvent } from '../payments/payments.schema.ts'
 import {
   conflictResolutionCodeEnum,
   refund,
