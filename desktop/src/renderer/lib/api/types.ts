@@ -97,7 +97,14 @@ export interface ApiErrorBody {
  */
 export interface PosUploadTransaction {
   clientTransactionId: string
-  type: 'SALE' | 'SHIFT_OPEN' | 'CASH_MOVEMENT' | 'SHIFT_CLOSE'
+  type:
+    | 'SALE'
+    | 'SHIFT_OPEN'
+    | 'CASH_MOVEMENT'
+    | 'SHIFT_CLOSE'
+    | 'REFUND'
+    | 'CREDIT_REPAYMENT'
+    | 'CART_VOID'
   occurredAt: string
   payloadVersion: number
   payload: unknown

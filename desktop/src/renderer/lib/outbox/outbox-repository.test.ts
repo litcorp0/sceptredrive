@@ -124,6 +124,24 @@ describe('nextBatch', () => {
       true,
     )
   })
+
+  it('dead-letters a stored type this build cannot upload instead of calling it a sale', async () => {
+    const { db, statements } = fakeDb({
+      getAll: async () => [{ ...DB_ROW, type: 'REFUND_V2' }],
+    })
+    const store = createOutboxStore(db)
+
+    // A closed wire union cannot dispatch an unknown type: it must not be handed
+    // to the uploader dressed as a SALE (the old behaviour), and it must not be
+    // left pending to retry forever.
+    await expect(store.nextBatch(25, '2026-10-23T10:00:00.000Z')).resolves.toEqual([])
+
+    const sql = statements.map((statement) => statement.sql)
+    expect(sql.some((text) => text.includes("status = 'in_flight'"))).toBe(false)
+    const dead = statements.find((statement) => statement.sql.includes("status = 'dead_letter'"))
+    expect(dead?.parameters?.[0]).toBe('UNKNOWN_OUTBOX_TYPE')
+    expect(String(dead?.parameters?.[1])).toContain('REFUND_V2')
+  })
 })
 
 describe('markAcked', () => {

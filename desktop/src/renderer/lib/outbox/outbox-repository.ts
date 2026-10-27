@@ -85,6 +85,13 @@ function isType(value: string): value is OutboxType {
   return (OUTBOX_TYPES as readonly string[]).includes(value)
 }
 
+/** The code a row carries when its stored `type` is not one this build can send. */
+export const UNKNOWN_OUTBOX_TYPE = 'UNKNOWN_OUTBOX_TYPE'
+
+function unknownTypeMessage(stored: string): string {
+  return `This till cannot upload an outbox row of type "${stored}" — update the POS and retry it`
+}
+
 function parseJson<T>(value: string | null): T | null {
   if (!value) return null
   try {
@@ -94,11 +101,21 @@ function parseJson<T>(value: string | null): T | null {
   }
 }
 
-function toRow(row: OutboxDbRow): OutboxRow {
+/**
+ * A stored row, or `null` when its `type` is not one this build knows.
+ *
+ * The old mapper turned every unknown type into `SALE`, which would have handed a
+ * Phase 14 refund row to the sale endpoint as a sale. The wire union is closed,
+ * so an unknown type cannot be dispatched at all: `nextBatch` dead-letters it
+ * with the stored value in the message (see `unknownTypeMessage`) instead of
+ * inventing a meaning for it.
+ */
+function toRow(row: OutboxDbRow): OutboxRow | null {
+  if (!isType(row.type)) return null
   return {
     id: row.id,
     clientTransactionId: row.client_transaction_id,
-    type: isType(row.type) ? row.type : 'SALE',
+    type: row.type,
     occurredAt: row.occurred_at,
     payloadVersion: row.payload_version,
     payload: parseJson<unknown>(row.payload),
@@ -158,16 +175,40 @@ export function createOutboxStore(db: PowerSyncDatabase): OutboxStore {
             LIMIT ?`,
           [now, limit],
         )
+        const uploadable: OutboxDbRow[] = []
         for (const row of claimed) {
+          if (!isType(row.type)) {
+            // Dead-lettered inside the claim, not on the next drain: the row can
+            // never be sent by this build, so leaving it pending would spin.
+            const message = unknownTypeMessage(row.type)
+            await tx.execute(
+              `UPDATE outbox
+                  SET status = 'dead_letter', last_error_code = ?, last_error_message = ?,
+                      last_error = ?, next_attempt_at = NULL, updated_at = ?
+                WHERE id = ? AND status = 'pending'`,
+              [
+                UNKNOWN_OUTBOX_TYPE,
+                message.slice(0, 200),
+                errorSummary(UNKNOWN_OUTBOX_TYPE, message),
+                now,
+                row.id,
+              ],
+            )
+            continue
+          }
           await tx.execute(
             `UPDATE outbox SET status = 'in_flight', updated_at = ?
               WHERE id = ? AND status = 'pending'`,
             [now, row.id],
           )
+          uploadable.push(row)
         }
-        return claimed
+        return uploadable
       })
-      return rows.map(toRow)
+      return rows.flatMap((row) => {
+        const mapped = toRow(row)
+        return mapped ? [mapped] : []
+      })
     },
 
     async markAcked(row, result, now) {
@@ -320,7 +361,10 @@ export function createOutboxStore(db: PowerSyncDatabase): OutboxStore {
           LIMIT ?`,
         [limit],
       )
-      return rows.map(toRow)
+      return rows.flatMap((row) => {
+        const mapped = toRow(row)
+        return mapped ? [mapped] : []
+      })
     },
 
     async pruneAcked(beforeIso) {

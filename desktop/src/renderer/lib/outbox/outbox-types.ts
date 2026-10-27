@@ -3,16 +3,27 @@ import type { UploadItemResult } from '../api/types'
 /**
  * Durable outbox vocabulary and pure retry math (Plan 08 Task 1).
  *
- * One row is one **client transaction** — a sale, shift open, cash movement, or
- * shift close — and the server applies it atomically. The state machine never
- * deletes a row: `acked` is the terminal success state, `dead_letter` needs a
- * human, and everything else is still owed to the server.
+ * One row is one **client transaction** — a sale, shift open, cash movement,
+ * shift close, and since Phase 13 a refund, a credit repayment or a cart void —
+ * and the server applies it atomically. The state machine never deletes a row:
+ * `acked` is the terminal success state, `dead_letter` needs a human, and
+ * everything else is still owed to the server.
  */
 
 export const OUTBOX_STATUSES = ['pending', 'in_flight', 'acked', 'conflict', 'dead_letter'] as const
 export type OutboxStatus = (typeof OUTBOX_STATUSES)[number]
 
-export const OUTBOX_TYPES = ['SALE', 'SHIFT_OPEN', 'CASH_MOVEMENT', 'SHIFT_CLOSE'] as const
+export const OUTBOX_TYPES = [
+  'SALE',
+  'SHIFT_OPEN',
+  'CASH_MOVEMENT',
+  'SHIFT_CLOSE',
+  // Phase 13: the till can take money back and park a cart with the cable
+  // unplugged, so neither can be a request (P13-D18/D27/D28).
+  'REFUND',
+  'CREDIT_REPAYMENT',
+  'CART_VOID',
+] as const
 export type OutboxType = (typeof OUTBOX_TYPES)[number]
 
 export interface OutboxRow {
