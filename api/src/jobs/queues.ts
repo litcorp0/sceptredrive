@@ -59,6 +59,14 @@ export const INVENTORY_JOB_TZ = 'Africa/Accra'
 export const PAYABLES_TRANSFER_RECONCILE_QUEUE = 'payables-transfer-reconcile'
 export const PAYABLES_TRANSFER_RECONCILE_CRON = '*/15 * * * *'
 
+/**
+ * Phase 14 E-VAT submissions (P14-D40). The database row is the queue; this is
+ * the doorbell that wakes the worker early, and the five-minute schedule is the
+ * sweep that finds anything whose doorbell was lost.
+ */
+export const EVAT_SUBMIT_QUEUE = 'evat-submit'
+export const EVAT_SUBMIT_CRON = '*/5 * * * *'
+
 async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   const existing = await boss.getQueue(name)
   if (!existing) await boss.createQueue(name)
@@ -86,6 +94,23 @@ export async function enqueueRefundDispatch(refundId: string): Promise<void> {
     return
   }
   await jobBoss.send(POS_REFUND_DISPATCH_QUEUE, { refundId })
+}
+
+/**
+ * Rings the doorbell for one submission. Called **after** the document's
+ * transaction commits: the row is already `QUEUED`, so a lost send costs a few
+ * minutes, never a submission. The payload carries an id and nothing else — the
+ * document holds money and a TIN, and a queue payload is storage like any other.
+ */
+export async function enqueueEvatSubmission(submissionId: string): Promise<void> {
+  if (!jobBoss) {
+    logger.warn(
+      { queue: EVAT_SUBMIT_QUEUE, submissionId },
+      'no queue runner; the five-minute sweep will submit it',
+    )
+    return
+  }
+  await jobBoss.send(EVAT_SUBMIT_QUEUE, { submissionId })
 }
 
 /** A payment nobody settled within this window is what the sweep exists for. */

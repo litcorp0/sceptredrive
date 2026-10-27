@@ -2,8 +2,9 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { and, eq } from 'drizzle-orm'
 import { env } from '../../config/env.ts'
 import { AppError } from '../../http/errors.ts'
-import { enqueueRefundDispatch } from '../../jobs/queues.ts'
+import { enqueueEvatSubmission, enqueueRefundDispatch } from '../../jobs/queues.ts'
 import { logger } from '../../logger.ts'
+import * as evatService from '../evat/evat.service.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import * as settingsService from '../platform/settings.service.ts'
 import { addConflict } from '../pos/pos.conflicts.ts'
@@ -204,6 +205,17 @@ export async function issuePowersyncToken(auth: DeviceAuthContext): Promise<Powe
  */
 type PostCommitHook = () => Promise<void>
 
+/**
+ * Runs every hook even when one rejects: a lost refund dispatch must not also
+ * swallow the submission doorbell. Both are backed by a database sweep, so the
+ * throw is logged once by the caller and nothing is lost with it.
+ */
+async function runPostCommitHooks(hooks: readonly PostCommitHook[]): Promise<void> {
+  const results = await Promise.allSettled(hooks.map((hook) => hook()))
+  const failed = results.find((result) => result.status === 'rejected')
+  if (failed) throw failed.reason
+}
+
 interface DispatchOutcome {
   stored: StoredTransactionResult
   postCommit?: PostCommitHook
@@ -215,6 +227,11 @@ export interface UploadOptions {
    * its own collector, which is also how the post-commit ordering is proven.
    */
   enqueueRefund?: (refundId: string) => Promise<void>
+  /**
+   * Where a submission's doorbell goes. The row is already written in the
+   * transaction above; this only wakes the worker early (P14-D40).
+   */
+  enqueueEvat?: (submissionId: string) => Promise<void>
 }
 
 /**
@@ -343,6 +360,10 @@ async function dispatchTransaction(
         item.payload as SalePayload,
         tx,
       )
+      // Inside the same transaction as the sale: a committed sale without its
+      // submission row would be a document no sweep could ever find.
+      const submissionId = await evatService.queueForSale(result.saleId, tx)
+      const enqueueEvat = options.enqueueEvat ?? enqueueEvatSubmission
       return {
         stored: {
           status: 'APPLIED',
@@ -353,6 +374,7 @@ async function dispatchTransaction(
             ...(result.resolvedCustomerId ? { customerId: result.resolvedCustomerId } : {}),
           },
         },
+        ...(submissionId ? { postCommit: () => enqueueEvat(submissionId) } : {}),
       }
     }
     case 'REFUND': {
@@ -367,7 +389,14 @@ async function dispatchTransaction(
         payload,
         tx,
       )
+      const submissionId = await evatService.queueForRefund(result.refundId, tx)
       const enqueue = options.enqueueRefund ?? enqueueRefundDispatch
+      const enqueueEvat = options.enqueueEvat ?? enqueueEvatSubmission
+      const hooks: PostCommitHook[] = []
+      // Only an electronic tender needs the provider; a cash-and-credit refund
+      // is settled by the time this transaction commits.
+      if (result.pendingDispatch.length > 0) hooks.push(() => enqueue(result.refundId))
+      if (submissionId) hooks.push(() => enqueueEvat(submissionId))
       return {
         stored: {
           status: 'APPLIED',
@@ -375,13 +404,7 @@ async function dispatchTransaction(
           conflicts: [],
           resolved: { refundId: result.refundId, saleId: payload.saleId },
         },
-        // Only an electronic tender needs the provider; a cash-and-credit refund
-        // is settled by the time this transaction commits.
-        ...(result.pendingDispatch.length > 0
-          ? {
-              postCommit: () => enqueue(result.refundId),
-            }
-          : {}),
+        ...(hooks.length > 0 ? { postCommit: () => runPostCommitHooks(hooks) } : {}),
       }
     }
     case 'SHIFT_OPEN': {
