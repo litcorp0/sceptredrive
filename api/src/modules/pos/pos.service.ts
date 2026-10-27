@@ -2,7 +2,9 @@ import { randomBytes } from 'node:crypto'
 import { type DbExecutor, db } from '@sceptre/db'
 import {
   allocateProportionally,
+  CART_VOID_REASONS,
   can,
+  cartVoidNoteProblem,
   isElectronicTender,
   MAX_TENDERS_PER_SALE,
   movesStockBack,
@@ -14,7 +16,7 @@ import {
   TENDER_PROBLEM_MESSAGES,
   tenderBalance,
 } from '@sceptre/shared'
-import { inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { resolveBranchFilter } from '../../auth/scope.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
@@ -24,6 +26,7 @@ import {
   registerSubjectLoader,
   requestApproval,
 } from '../approvals/approvals.service.ts'
+import { creditLedgerEntry } from '../credit/credit.schema.ts'
 import { postEntryInTransaction as postCreditEntry } from '../credit/credit.service.ts'
 import type { CreditOverrideReason } from '../credit/credit.types.ts'
 import { resolveDraftCustomer } from '../customers/customers.service.ts'
@@ -37,7 +40,16 @@ import { payment } from '../payments/payments.schema.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
-import type { DeviceAuthContext, RefundApplyResult, RefundPayload } from '../sync/sync.types.ts'
+import type {
+  CartVoidApplyResult,
+  CartVoidPayload,
+  CreditRepaymentPayload,
+  DeviceAuthContext,
+  DeviceStaffProof,
+  RefundApplyResult,
+  RefundPayload,
+  RepaymentApplyResult,
+} from '../sync/sync.types.ts'
 import { addConflict } from './pos.conflicts.ts'
 import { assessSaleTotals, loadSaleCatalog } from './pos.pricing.ts'
 import {
@@ -88,7 +100,7 @@ import {
   updateShiftReview,
   updateStaffPinHash,
 } from './pos.repository.ts'
-import { saleTender } from './pos.schema.ts'
+import { cartVoid, saleTender } from './pos.schema.ts'
 import type {
   AppliedConflict,
   BindingStaff,
@@ -597,13 +609,22 @@ export async function recordCashMovement(
 }
 
 /**
+ * `SHIFT_CLOSE` gained an optional closer (P13-D41). Declared beside the close
+ * path because that is its only reader; the field is additive, so a Phase 6 till
+ * that sends no `closedBy` still closes.
+ */
+export interface ShiftCloseWithCloser extends ShiftClosePayload {
+  closedBy?: DeviceStaffProof | null
+}
+
+/**
  * Closes a shift with the server's own expected cash. The client's expected
  * value is stored beside it; a difference raises a reconciliation conflict but
  * never blocks the close.
  */
 export async function closeShift(
   device: DeviceAuthContext,
-  payload: ShiftClosePayload,
+  payload: ShiftCloseWithCloser,
   executor: DbExecutor = db,
 ): Promise<ShiftApplyResult> {
   const row = await findShiftByIdForUpdate(payload.shiftId, executor)
@@ -611,6 +632,32 @@ export async function closeShift(
   assertShiftMatchesDevice(row, device)
   if (row.status !== 'OPEN') {
     throw new ConflictError('The shift is already closed')
+  }
+
+  // Who closed the drawer, when the till says (P13-D41). A binding from another
+  // device is refused before anything is written, so the shift stays open and
+  // the till can re-authorize rather than close under the wrong name.
+  let closer: DeviceStaffRecord | null = null
+  if (payload.closedBy) {
+    const resolved = await findBindingByTokenHash(
+      hashDeviceToken(payload.closedBy.bindingToken),
+      executor,
+    )
+    const live =
+      resolved !== null &&
+      resolved.binding.id === payload.closedBy.bindingId &&
+      resolved.staff.userId === payload.closedBy.userId &&
+      resolved.staff.staffId === payload.closedBy.staffId &&
+      resolved.staff.pinVersion === payload.closedBy.pinVersion &&
+      bindingIsLive(device, resolved.binding, resolved.staff)
+    if (!resolved || !live) {
+      throw new AppError(
+        403,
+        'STALE_CREDENTIALS',
+        'The staff closing this shift is not authorized on this device',
+      )
+    }
+    closer = resolved.staff
   }
 
   assertNonNegativeInteger(payload.countedCashMinor, 'countedCashMinor')
@@ -658,7 +705,8 @@ export async function closeShift(
       serverExpectedCashMinor: serverExpected,
       varianceMinor: variance,
       closeNote: payload.closeNote ?? null,
-      closedBy: row.cashierStaffId,
+      // The name against the drawer: the person who counted it, whoever that is.
+      closedBy: closer?.staffId ?? row.cashierStaffId,
     },
     executor,
   )
@@ -689,10 +737,16 @@ export async function closeShift(
       countShiftSales(payload.shiftId, executor),
     ])
 
-    // The requester is the cashier who counted the drawer, not the device: that
-    // is what makes the no-self-approval rule mean something (P12-D26).
+    // The requester is whoever closed the drawer (P13-D41). When the till named
+    // them, that is a real staff member and the no-self-approval rule can bite;
+    // when it did not, the fallback is the shift's cashier, exactly as Phase 12
+    // behaved, and the payload says so rather than letting a reviewer guess.
+    const requester = closer
+      ? auditActorFor(closer)
+      : auditActorFor({ userId: row.cashierUserId, staffId: row.cashierStaffId })
+
     await requestApproval(
-      auditActorFor({ userId: row.cashierUserId, staffId: row.cashierStaffId }),
+      requester,
       {
         type: 'SHIFT_VARIANCE_REVIEW',
         entityId: payload.shiftId,
@@ -715,6 +769,7 @@ export async function closeShift(
           clientExpectedMinor: payload.clientExpectedCashMinor,
           countedMinor: payload.countedCashMinor,
           varianceMinor: variance,
+          closed_by: closer?.staffId ?? 'shift owner (unattributed)',
         },
       },
       executor,
@@ -726,8 +781,8 @@ export async function closeShift(
       action: 'pos.shift.closed',
       entity: 'shift',
       entityId: payload.shiftId,
-      actorId: row.cashierUserId,
-      actorStaffId: row.cashierStaffId,
+      actorId: closer?.userId ?? row.cashierUserId,
+      actorStaffId: closer?.staffId ?? row.cashierStaffId,
       after: {
         countedCashMinor: payload.countedCashMinor,
         clientExpectedCashMinor: payload.clientExpectedCashMinor,
@@ -2191,6 +2246,361 @@ export async function applyRefund(
         amountMinor: tender.amountMinor,
       })),
   }
+}
+
+// --- Device repayment and cart void (Plan 06) --------------------------------
+
+function repaymentInvalid(message: string): AppError {
+  return new AppError(400, 'REPAYMENT_INVALID', message)
+}
+
+/**
+ * Shape rules the wire schema also enforces. A direct service call is not
+ * allowed to be less careful than the wire (`assertSaleShape` keeps the same
+ * discipline), and the cash/MoMo distinction is what stops a payment being
+ * counted twice (P13-D27).
+ */
+function assertRepaymentShape(payload: CreditRepaymentPayload): void {
+  if (
+    !Number.isSafeInteger(payload.amountMinor) ||
+    payload.amountMinor < 1 ||
+    payload.amountMinor > 1_000_000_000
+  ) {
+    throw repaymentInvalid('A repayment must be a positive whole amount')
+  }
+  if (!payload.number || !/^[A-Za-z0-9-]+$/.test(payload.number) || payload.number.length > 64) {
+    throw repaymentInvalid('A repayment needs a valid number')
+  }
+  if (payload.note && payload.note.length > 200) {
+    throw repaymentInvalid('A repayment note may be at most 200 characters')
+  }
+  if (payload.method === 'MOMO' && !payload.paymentId) {
+    throw repaymentInvalid('A MoMo repayment needs the payment it settled')
+  }
+  if (payload.method !== 'MOMO' && payload.paymentId) {
+    throw repaymentInvalid('A cash repayment carries no payment')
+  }
+}
+
+interface RepaymentPaymentRow {
+  id: string
+  branchId: string
+  terminalId: string
+  shiftId: string
+  method: 'MOMO' | 'CARD' | 'BANK_TRANSFER'
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'ABANDONED' | 'EXPIRED'
+  amountMinor: number
+}
+
+/**
+ * Loads and locks the payment a MoMo repayment claims, then proves it is the
+ * money this repayment is for and that nothing else has spent it.
+ *
+ * The row is locked rather than read: the reuse checks below and the ledger row
+ * they authorise must not interleave with a second repayment of the same money.
+ */
+async function lockRepaymentPayment(
+  executor: DbExecutor,
+  device: DeviceAuthContext,
+  paymentId: string,
+  shiftId: string,
+  amountMinor: number,
+): Promise<RepaymentPaymentRow> {
+  const rows = await executor
+    .select({
+      id: payment.id,
+      branchId: payment.branchId,
+      terminalId: payment.terminalId,
+      shiftId: payment.shiftId,
+      method: payment.method,
+      status: payment.status,
+      amountMinor: payment.amountMinor,
+    })
+    .from(payment)
+    .where(eq(payment.id, paymentId))
+    .for('update')
+  const row = rows[0]
+  if (!row) {
+    throw saleRejected('INVALID_TENDER', 'The payment this repayment cites no longer exists')
+  }
+  if (row.terminalId !== device.terminalId || row.branchId !== device.branchId) {
+    throw saleRejected('INVALID_TENDER', 'This payment belongs to another terminal')
+  }
+  if (row.shiftId !== shiftId) {
+    throw saleRejected('INVALID_TENDER', 'This payment was taken on another shift')
+  }
+  if (row.status !== 'PAID') {
+    throw saleRejected('INVALID_TENDER', 'This payment has not settled yet')
+  }
+  if (row.amountMinor !== amountMinor) {
+    throw saleRejected('INVALID_TENDER', 'The payment amount does not match this repayment')
+  }
+  if (row.method !== 'MOMO') {
+    throw saleRejected('INVALID_TENDER', `The payment was taken by ${row.method}, not MoMo`)
+  }
+
+  // One payment settles one fact: a repayment of the debt or a tender on a sale,
+  // never both. The first query is the repayment ledger; the second is the sale
+  // this terminal already took with the same money.
+  const [spentOnRepayment, spentOnSale] = await Promise.all([
+    executor
+      .select({ id: creditLedgerEntry.id })
+      .from(creditLedgerEntry)
+      .where(
+        and(
+          eq(creditLedgerEntry.referenceType, 'POS_REPAYMENT'),
+          eq(creditLedgerEntry.referenceId, paymentId),
+        ),
+      )
+      .limit(1),
+    executor
+      .select({ id: saleTender.id })
+      .from(saleTender)
+      .where(eq(saleTender.paymentId, paymentId))
+      .limit(1),
+  ])
+  if (spentOnRepayment.length > 0 || spentOnSale.length > 0) {
+    throw saleRejected('INVALID_TENDER', 'This payment has already been used')
+  }
+
+  return row
+}
+
+/**
+ * Applies one credit repayment in the caller's transaction (P13-D27).
+ *
+ * No PIN for cash: paying a debt down cannot create credit, and a repayment that
+ * needed a manager would be money the shop never records. The one exception is a
+ * profile on hold, where taking money is exactly how a hold gets bypassed.
+ */
+export async function applyRepayment(
+  context: SaleContext,
+  payload: CreditRepaymentPayload,
+  executor: DbExecutor = db,
+): Promise<RepaymentApplyResult> {
+  assertRepaymentShape(payload)
+
+  const device = context.device
+  const occurredAt = parseOccurredAt(payload.occurredAt)
+
+  // 1. The shift the money belongs to.
+  const shiftRow = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!shiftRow) throw new AppError(404, 'SHIFT_NOT_FOUND', 'Shift not found')
+  assertShiftMatchesDevice(shiftRow, device)
+  if (shiftRow.status !== 'OPEN') {
+    throw saleRejected('SHIFT_CLOSED', 'The repayment references a closed shift')
+  }
+
+  const profile = await findCreditProfileRow(payload.customerId, device.branchId, executor)
+
+  // 2. Electronic money: the server must already have settled it.
+  if (payload.method === 'MOMO' && payload.paymentId) {
+    await lockRepaymentPayment(
+      executor,
+      device,
+      payload.paymentId,
+      payload.shiftId,
+      payload.amountMinor,
+    )
+  }
+
+  // 3. A held account needs a manager, and a cashier binding is not one. The
+  //    hold is read here (not inside the posting path) so the refusal can name
+  //    it instead of surfacing as a generic credit error.
+  let overrideActor: AuditActor | null = null
+  if (profile?.hold) {
+    if (!payload.override) {
+      throw new AppError(
+        409,
+        'REPAYMENT_ON_HOLD',
+        'Credit is on hold for this customer; a manager must approve a repayment',
+        { customerId: payload.customerId, branchId: device.branchId },
+      )
+    }
+    const approval = await validateOverrideProof(
+      executor,
+      device,
+      payload.override,
+      'credit.override',
+    )
+    if (!approval.valid || !approval.actor) {
+      throw new AppError(
+        403,
+        'OVERRIDE_INVALID',
+        'A repayment against a held account needs a live manager approval',
+      )
+    }
+    overrideActor = approval.actor
+  }
+
+  const actor = auditActorFor({ userId: payload.cashier.userId, staffId: payload.cashier.staffId })
+
+  // 4. The ledger row. `reference_id` is the fact this may only be posted once:
+  //    the paid payment for MoMo, the upload for cash. The upload's own
+  //    idempotency key carries a replay.
+  const posted = await postCreditEntry(
+    executor,
+    actor,
+    null,
+    {
+      customerId: payload.customerId,
+      branchId: device.branchId,
+      kind: 'REPAYMENT',
+      amountMinor: -payload.amountMinor,
+      method: payload.method,
+      note: payload.note?.trim() || null,
+      referenceType: 'POS_REPAYMENT',
+      referenceId: payload.paymentId ?? context.clientTransactionId,
+      referenceNumber: payload.number,
+      occurredAt,
+      idempotencyKey: `${context.clientTransactionId}:repayment`,
+    },
+    undefined,
+  )
+
+  // 5. Audit: the figures either side of the movement, so the till's number and
+  //    the ledger's can be reconciled without replaying the table.
+  await writeAudit(
+    {
+      ...actor,
+      action: 'pos.repayment.received',
+      entity: 'credit_ledger_entry',
+      entityId: posted.entry.id,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      before: { balanceMinor: profile?.balanceMinor ?? 0 },
+      after: {
+        customerId: payload.customerId,
+        number: payload.number,
+        amountMinor: payload.amountMinor,
+        method: payload.method,
+        paymentId: payload.paymentId ?? null,
+        balanceMinor: posted.profile.balanceMinor,
+      },
+    },
+    executor,
+  )
+
+  if (overrideActor && payload.override) {
+    await writeAudit(
+      {
+        ...overrideActor,
+        action: 'pos.repayment.override',
+        entity: 'credit_ledger_entry',
+        entityId: posted.entry.id,
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+        after: {
+          reasonCode: payload.override.reasonCode,
+          note: payload.override.note ?? null,
+          amountMinor: payload.amountMinor,
+          pinVersion: payload.override.pinVersion,
+        },
+      },
+      executor,
+    )
+  }
+
+  return {
+    repaymentId: context.clientTransactionId,
+    entryId: posted.entry.id,
+    balanceAfterMinor: posted.profile.balanceMinor,
+  }
+}
+
+function cartVoidRejected(code: string, message: string): AppError {
+  return new AppError(400, code, message)
+}
+
+/**
+ * Records an abandoned cart in the caller's transaction (P13-D28).
+ *
+ * A voided cart never became a sale, so nothing else moves: no stock, no credit,
+ * no loyalty. The row exists so the reason reaches the server even when the
+ * customer simply walked out, which is how a shrink report becomes possible.
+ */
+export async function applyCartVoid(
+  context: SaleContext,
+  payload: CartVoidPayload,
+  executor: DbExecutor = db,
+): Promise<CartVoidApplyResult> {
+  const device = context.device
+  const occurredAt = parseOccurredAt(payload.occurredAt)
+
+  const shiftRow = await findShiftByIdForUpdate(payload.shiftId, executor)
+  if (!shiftRow) throw new AppError(404, 'SHIFT_NOT_FOUND', 'Shift not found')
+  assertShiftMatchesDevice(shiftRow, device)
+  if (shiftRow.status !== 'OPEN') {
+    throw cartVoidRejected('SHIFT_CLOSED', 'The cart void references a closed shift')
+  }
+
+  const note = payload.note?.trim() || null
+  if (!CART_VOID_REASONS.includes(payload.reasonCode)) {
+    // The wire's enum stops this; a direct caller would otherwise meet a pg
+    // enum error, which reads as a server fault on a client defect.
+    throw cartVoidRejected('CART_VOID_INVALID', 'Unknown cart void reason')
+  }
+  const problem = cartVoidNoteProblem(payload.reasonCode, note)
+  if (problem) throw cartVoidRejected('CART_VOID_NOTE_REQUIRED', problem)
+
+  if (!Number.isSafeInteger(payload.itemCount) || payload.itemCount < 0) {
+    throw cartVoidRejected('CART_VOID_INVALID', 'A cart void needs a whole item count')
+  }
+  if (!Number.isSafeInteger(payload.grossMinor) || payload.grossMinor < 0) {
+    throw cartVoidRejected('CART_VOID_INVALID', 'A cart void needs a whole gross amount')
+  }
+  if (payload.lines.length > 200) {
+    throw cartVoidRejected('CART_VOID_INVALID', 'A cart void carries at most 200 lines')
+  }
+
+  const actor = auditActorFor({ userId: payload.cashier.userId, staffId: payload.cashier.staffId })
+
+  // The primary key is the idempotency key: a replay keeps the first row, and
+  // the audit row is written only by the delivery that inserted it.
+  const inserted = await executor
+    .insert(cartVoid)
+    .values({
+      id: context.clientTransactionId,
+      branchId: device.branchId,
+      terminalId: device.terminalId,
+      deviceId: device.deviceId,
+      shiftId: payload.shiftId,
+      cashierUserId: payload.cashier.userId,
+      cashierStaffId: payload.cashier.staffId,
+      reasonCode: payload.reasonCode,
+      note,
+      itemCount: payload.itemCount,
+      grossMinor: payload.grossMinor,
+      label: payload.label?.trim() || null,
+      lines: payload.lines,
+      occurredAt,
+      receivedAt: context.receivedAt,
+    })
+    .onConflictDoNothing({ target: cartVoid.id })
+    .returning({ id: cartVoid.id })
+
+  if (inserted.length > 0) {
+    await writeAudit(
+      {
+        ...actor,
+        action: 'pos.cart.voided',
+        entity: 'cart_void',
+        entityId: context.clientTransactionId,
+        branchId: device.branchId,
+        terminalId: device.terminalId,
+        after: {
+          reasonCode: payload.reasonCode,
+          note,
+          itemCount: payload.itemCount,
+          grossMinor: payload.grossMinor,
+          label: payload.label?.trim() || null,
+        },
+      },
+      executor,
+    )
+  }
+
+  return { cartVoidId: context.clientTransactionId }
 }
 
 // --- Variance review (Plan 12-08) -------------------------------------------

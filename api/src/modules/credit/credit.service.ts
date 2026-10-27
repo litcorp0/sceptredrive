@@ -315,8 +315,11 @@ export async function postEntryInTransaction(
       ? (normalized.dueDateOverride ?? isoDate(occurredAt, profile.paymentTermDays))
       : null
 
+  // A repayment may arrive with the number the till already printed offline: the
+  // customer is holding that receipt, so the ledger keeps it rather than minting
+  // a second one (P13-D27). The console passes none and still gets a number.
   let referenceNumber = input.referenceNumber ?? null
-  if (input.kind === 'REPAYMENT') {
+  if (input.kind === 'REPAYMENT' && !referenceNumber) {
     referenceNumber = await allocateFromSequence('credit.repaymentSequence', tx)
   }
 

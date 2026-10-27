@@ -1,4 +1,5 @@
 import {
+  CART_VOID_REASONS,
   isElectronicTender,
   MAX_TENDERS_PER_SALE,
   PIN_PROBLEM_MESSAGES,
@@ -63,6 +64,25 @@ const overrideProofSchema = z
   })
   .strict()
 
+/**
+ * The staff proof a device-originated fact carries: who acted, on which live
+ * binding. Declared once so the sale, the refund, the repayment, the void and
+ * the shift close cannot drift apart (P13-D41).
+ */
+const staffProofSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(64),
+    staffId: z.string().trim().min(1).max(64),
+    bindingId: z.uuid(),
+    bindingToken: z
+      .string()
+      .min(20)
+      .max(128)
+      .regex(/^[A-Za-z0-9_-]+$/),
+    pinVersion: z.number().int().min(0),
+  })
+  .strict()
+
 const saleLineSchema = z
   .object({
     productId: z.uuid(),
@@ -116,19 +136,7 @@ const salePayloadSchema = z
       .max(64)
       .regex(/^[A-Za-z0-9-]+$/),
     shiftId: z.uuid(),
-    cashier: z
-      .object({
-        userId: z.string().trim().min(1).max(64),
-        staffId: z.string().trim().min(1).max(64),
-        bindingId: z.uuid(),
-        bindingToken: z
-          .string()
-          .min(20)
-          .max(128)
-          .regex(/^[A-Za-z0-9_-]+$/),
-        pinVersion: z.number().int().min(0),
-      })
-      .strict(),
+    cashier: staffProofSchema,
     customer: z
       .object({
         id: z.uuid(),
@@ -193,6 +201,9 @@ const shiftClosePayloadSchema = z
     countedCashMinor: minorUnits,
     clientExpectedCashMinor: minorUnits,
     closeNote: z.string().max(200).nullish(),
+    // Additive (P13-D41): a till that predates Phase 13 omits it and the close
+    // falls back to the shift's cashier, which is what Phase 12 did.
+    closedBy: staffProofSchema.nullish(),
     occurredAt: z.iso.datetime(),
   })
   .strict()
@@ -237,19 +248,7 @@ const refundPayloadSchema = z
       .max(64)
       .regex(/^[A-Za-z0-9-]+$/),
     shiftId: z.uuid(),
-    cashier: z
-      .object({
-        userId: z.string().trim().min(1).max(64),
-        staffId: z.string().trim().min(1).max(64),
-        bindingId: z.uuid(),
-        bindingToken: z
-          .string()
-          .min(20)
-          .max(128)
-          .regex(/^[A-Za-z0-9_-]+$/),
-        pinVersion: z.number().int().min(0),
-      })
-      .strict(),
+    cashier: staffProofSchema,
     reasonCode: z.enum(REFUND_REASONS),
     note: z.string().trim().max(300).nullish(),
     approval: overrideProofSchema,
@@ -288,6 +287,78 @@ const refundPayloadSchema = z
     }
   })
 
+/**
+ * A repayment is cash in the drawer or money the provider already settled. The
+ * two are not interchangeable: MoMo must cite its paid payment, cash must not,
+ * because a payment id on a cash repayment would let the same money be counted
+ * twice (P13-D27).
+ */
+const creditRepaymentPayloadSchema = z
+  .object({
+    customerId: z.uuid(),
+    shiftId: z.uuid(),
+    cashier: staffProofSchema,
+    amountMinor: z.number().int().min(1).max(1_000_000_000),
+    method: z.enum(['CASH', 'MOMO']),
+    paymentId: z.uuid().nullish(),
+    // The till's own number, printed offline; the ledger keeps it.
+    number: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9-]+$/),
+    note: z.string().trim().max(200).nullish(),
+    override: overrideProofSchema.nullish(),
+    occurredAt: z.iso.datetime(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.method === 'MOMO' && !value.paymentId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A MoMo repayment needs the payment it settled',
+        path: ['paymentId'],
+      })
+    }
+    if (value.method !== 'MOMO' && value.paymentId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A cash repayment carries no payment',
+        path: ['paymentId'],
+      })
+    }
+  })
+
+const cartVoidLineSchema = z
+  .object({
+    productId: z.uuid(),
+    name: z.string().trim().max(200),
+    quantity: z.number().int().min(1).max(10_000),
+    unitPriceMinor: minorUnits,
+  })
+  .strict()
+
+/**
+ * A cart that never became a sale (P13-D28). No PIN: a void that needed a
+ * manager is a void that never gets recorded. `OTHER` needs a note, which the
+ * service checks through the shared helper so the till's dialog and the server
+ * agree on the sentence.
+ */
+const cartVoidPayloadSchema = z
+  .object({
+    shiftId: z.uuid(),
+    cashier: staffProofSchema,
+    reasonCode: z.enum(CART_VOID_REASONS),
+    note: z.string().trim().max(200).nullish(),
+    itemCount: z.number().int().min(0).max(10_000),
+    grossMinor: minorUnits,
+    label: z.string().trim().max(60).nullish(),
+    lines: z.array(cartVoidLineSchema).max(200),
+    occurredAt: z.iso.datetime(),
+  })
+  .strict()
+
 export const uploadTransactionSchema = z.discriminatedUnion('type', [
   z.object({ ...transactionBase, type: z.literal('SALE'), payload: salePayloadSchema }).strict(),
   z
@@ -309,6 +380,16 @@ export const uploadTransactionSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({ ...transactionBase, type: z.literal('REFUND'), payload: refundPayloadSchema })
+    .strict(),
+  z
+    .object({
+      ...transactionBase,
+      type: z.literal('CREDIT_REPAYMENT'),
+      payload: creditRepaymentPayloadSchema,
+    })
+    .strict(),
+  z
+    .object({ ...transactionBase, type: z.literal('CART_VOID'), payload: cartVoidPayloadSchema })
     .strict(),
 ])
 
@@ -332,4 +413,6 @@ export const validateConflictsQuery = validateQuery(conflictsQuerySchema)
 export type UploadBody = z.infer<typeof uploadSchema>
 export type UploadTransactionBody = z.infer<typeof uploadTransactionSchema>
 export type RefundBody = z.infer<typeof refundPayloadSchema>
+export type CreditRepaymentBody = z.infer<typeof creditRepaymentPayloadSchema>
+export type CartVoidBody = z.infer<typeof cartVoidPayloadSchema>
 export type ConflictsQuery = z.infer<typeof conflictsQuerySchema>

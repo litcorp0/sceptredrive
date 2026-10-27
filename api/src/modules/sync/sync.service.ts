@@ -15,22 +15,22 @@ import {
 } from '../pos/pos.repository.ts'
 import { posSyncTransaction } from '../pos/pos.schema.ts'
 import {
+  applyCartVoid,
   applyRefund,
+  applyRepayment,
   applySale,
   closeShift,
   openShift,
   recordCashMovement,
+  type ShiftCloseWithCloser,
 } from '../pos/pos.service.ts'
-import type {
-  CashMovementPayload,
-  SalePayload,
-  ShiftClosePayload,
-  ShiftOpenPayload,
-} from '../pos/pos.types.ts'
+import type { CashMovementPayload, SalePayload, ShiftOpenPayload } from '../pos/pos.types.ts'
 import { signDeviceJwt, signPowersyncJwt } from './sync.jwt.ts'
 import type { DeviceSessionRow } from './sync.repository.ts'
 import { findSessionByDeviceId, findSessionByTokenHash } from './sync.repository.ts'
 import type {
+  CartVoidPayload,
+  CreditRepaymentPayload,
   DeviceAuthContext,
   DeviceConflictItem,
   DeviceSyncState,
@@ -407,7 +407,7 @@ async function dispatchTransaction(
       }
     }
     case 'SHIFT_CLOSE': {
-      const result = await closeShift(auth, item.payload as ShiftClosePayload, tx)
+      const result = await closeShift(auth, item.payload as ShiftCloseWithCloser, tx)
       return {
         stored: {
           status: 'APPLIED',
@@ -422,6 +422,46 @@ async function dispatchTransaction(
               ]
             : [],
           resolved: { shiftId: result.shiftId },
+        },
+      }
+    }
+    case 'CREDIT_REPAYMENT': {
+      const result = await applyRepayment(
+        {
+          clientTransactionId: item.clientTransactionId,
+          device: auth,
+          receivedAt,
+          clockSkewToleranceMinutes,
+        },
+        item.payload as CreditRepaymentPayload,
+        tx,
+      )
+      return {
+        stored: {
+          status: 'APPLIED',
+          serverId: result.repaymentId,
+          conflicts: [],
+          resolved: { repaymentId: result.repaymentId },
+        },
+      }
+    }
+    case 'CART_VOID': {
+      const result = await applyCartVoid(
+        {
+          clientTransactionId: item.clientTransactionId,
+          device: auth,
+          receivedAt,
+          clockSkewToleranceMinutes,
+        },
+        item.payload as CartVoidPayload,
+        tx,
+      )
+      return {
+        stored: {
+          status: 'APPLIED',
+          serverId: result.cartVoidId,
+          conflicts: [],
+          resolved: { cartVoidId: result.cartVoidId },
         },
       }
     }

@@ -1,4 +1,4 @@
-import type { RefundReason, RefundRestock, TaxMode } from '@sceptre/shared'
+import type { CartVoidReason, RefundReason, RefundRestock, TaxMode } from '@sceptre/shared'
 
 /** The identity attached to a device-authenticated request. */
 export interface DeviceAuthContext {
@@ -62,6 +62,10 @@ export type UploadTransactionType =
   | 'CASH_MOVEMENT'
   | 'SHIFT_CLOSE'
   | 'REFUND'
+  // Phase 13: a debt goes down at the till, and a basket goes away before it
+  // became a sale (P13-D27, P13-D28).
+  | 'CREDIT_REPAYMENT'
+  | 'CART_VOID'
 
 export interface UploadTransaction {
   clientTransactionId: string
@@ -146,6 +150,85 @@ export interface RefundApplyResult {
   pendingDispatch: RefundPendingTender[]
 }
 
+// --- Credit repayment and cart void (Plan 06) --------------------------------
+
+/**
+ * The staff proof a device-originated fact carries: who acted, on which binding.
+ * The shift close's optional `closedBy` is the same shape (P13-D41).
+ */
+export interface DeviceStaffProof {
+  userId: string
+  staffId: string
+  bindingId: string
+  bindingToken: string
+  pinVersion: number
+}
+
+/**
+ * A repayment against a customer's credit (P13-D27).
+ *
+ * `number` is the till's offline receipt number and the ledger keeps it, so the
+ * customer holds one number and the console cannot allocate a second. `paymentId`
+ * is present for MoMo — the server settled that money itself — and absent for
+ * cash, which never needs a provider.
+ */
+export interface CreditRepaymentPayload {
+  customerId: string
+  shiftId: string
+  cashier: DeviceStaffProof
+  amountMinor: number
+  method: 'CASH' | 'MOMO'
+  paymentId?: string | null
+  number: string
+  note?: string | null
+  override?: {
+    staffId: string
+    userId: string
+    bindingId: string
+    pinVersion: number
+    reasonCode: string
+    note?: string | null
+    occurredAt: string
+  } | null
+  occurredAt: string
+}
+
+export interface RepaymentApplyResult {
+  /** The upload's id: the till's repayment document, stable across a replay. */
+  repaymentId: string
+  entryId: string
+  balanceAfterMinor: number
+}
+
+/** One line of the abandoned cart, as it stood at the moment of the void. */
+export interface CartVoidLinePayload {
+  productId: string
+  name: string
+  quantity: number
+  unitPriceMinor: number
+}
+
+/**
+ * A cart that never became a sale (P13-D28). It carries a reason so the console
+ * can report shrink, and no money: the gross is the priced total at the moment
+ * of the void, not a tender.
+ */
+export interface CartVoidPayload {
+  shiftId: string
+  cashier: DeviceStaffProof
+  reasonCode: CartVoidReason
+  note?: string | null
+  itemCount: number
+  grossMinor: number
+  label?: string | null
+  lines: CartVoidLinePayload[]
+  occurredAt: string
+}
+
+export interface CartVoidApplyResult {
+  cartVoidId: string
+}
+
 export type UploadItemStatus = 'APPLIED' | 'REPLAYED' | 'REJECTED'
 
 export interface UploadItemResult {
@@ -153,7 +236,14 @@ export interface UploadItemResult {
   status: UploadItemStatus
   serverId: string | null
   conflicts: Array<{ id: string; type: string; severity: string }>
-  resolved: { customerId?: string; saleId?: string; shiftId?: string; refundId?: string }
+  resolved: {
+    customerId?: string
+    saleId?: string
+    shiftId?: string
+    refundId?: string
+    repaymentId?: string
+    cartVoidId?: string
+  }
   error?: { code: string; message: string }
 }
 
@@ -168,7 +258,14 @@ export interface StoredTransactionResult {
   status: 'APPLIED' | 'REJECTED'
   serverId: string | null
   conflicts: Array<{ id: string; type: string; severity: string }>
-  resolved: { customerId?: string; saleId?: string; shiftId?: string; refundId?: string }
+  resolved: {
+    customerId?: string
+    saleId?: string
+    shiftId?: string
+    refundId?: string
+    repaymentId?: string
+    cartVoidId?: string
+  }
   error?: { code: string; message: string }
 }
 

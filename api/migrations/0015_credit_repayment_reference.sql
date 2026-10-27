@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "credit_ledger_entry_pos_reference_unique" ON "credit_ledger_entry" USING btree ("reference_id") WHERE "credit_ledger_entry"."reference_type" = 'POS_REPAYMENT';

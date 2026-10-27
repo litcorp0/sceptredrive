@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   date,
@@ -113,5 +114,11 @@ export const creditLedgerEntry = pgTable(
     ),
     index('credit_ledger_entry_branch_idx').on(table.branchId, table.occurredAt),
     uniqueIndex('credit_ledger_entry_idempotency_unique').on(table.branchId, table.idempotencyKey),
+    // A device repayment is posted once per fact it names: the paid payment for
+    // MoMo, the upload for cash. The upload ledger already stops a replay; this
+    // is what stops the same money being repaid twice by two uploads (P13-D27).
+    uniqueIndex('credit_ledger_entry_pos_reference_unique')
+      .on(table.referenceId)
+      .where(sql`${table.referenceType} = 'POS_REPAYMENT'`),
   ],
 )
