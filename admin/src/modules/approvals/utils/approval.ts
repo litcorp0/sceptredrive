@@ -7,6 +7,9 @@ import {
 	type ApprovalType,
 	formatCount,
 	formatRelative,
+	REFUND_REASON_LABELS,
+	REFUND_REASONS,
+	type RefundReason,
 } from "@sceptre/shared"
 import { z } from "zod"
 import type { StatusVariant } from "#/components/common/status-badge"
@@ -83,6 +86,30 @@ export function approvalReasonLabel(code: ApprovalReasonCode | null): string {
 	return code ? APPROVAL_REASON_LABELS[code] : "no reason recorded"
 }
 
+/** A refund's reason comes from the shared vocabulary, so the till and the console agree. */
+export function refundReasonLabel(code: string): string {
+	return (REFUND_REASONS as readonly string[]).includes(code)
+		? REFUND_REASON_LABELS[code as RefundReason]
+		: code
+}
+
+/**
+ * Where the money is: a settled tender has arrived, a pending electronic one is on its way
+ * back, and the two failure states are the reviewer's cue to look closer.
+ */
+export const REFUND_TENDER_STATUS_LABELS = {
+	SETTLED: "Settled",
+	PENDING: "Back to the card",
+	FAILED: "Failed",
+	NEEDS_ATTENTION: "Needs attention",
+} as const
+
+export function refundTenderStatusLabel(status: string): string {
+	return status in REFUND_TENDER_STATUS_LABELS
+		? REFUND_TENDER_STATUS_LABELS[status as keyof typeof REFUND_TENDER_STATUS_LABELS]
+		: status
+}
+
 /**
  * The value column's unit. A price and a variance must never look like the same kind of number,
  * so the label travels with the amount on both the list and the detail.
@@ -141,6 +168,11 @@ export function subjectSummary(row: ApprovalListRow): string {
 			return lines === null
 				? typeLabel(row.type)
 				: `Transfer of ${formatCount(lines)} ${lines === 1 ? "line" : "lines"}`
+		case "refund": {
+			const receipt = readText(row.payload, "receiptNumber")
+			if (number && receipt) return `${number} · Receipt ${receipt}`
+			return number ?? receipt ?? typeLabel(row.type)
+		}
 		default:
 			return typeLabel(row.type)
 	}
@@ -190,6 +222,8 @@ export function subjectKindLabel(subject: ApprovalSubject): string {
 			return "Credit limit change"
 		case "shift_variance":
 			return "Shift variance review"
+		case "refund":
+			return "Refund"
 		default:
 			return "Request"
 	}

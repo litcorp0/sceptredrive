@@ -91,6 +91,26 @@ export type ApprovalSubject =
 			saleCount: number
 			clientExpectedMinor: number
 	  }
+	| {
+			kind: "refund"
+			refundId: string
+			number: string
+			saleId: string
+			/** The receipt the customer brought back. */
+			receiptNumber: string
+			refundedMinor: number
+			reasonCode: string
+			lineCount: number
+			itemCount: number
+			/** Restock decisions counted in lines, one decision per line (P13-D22). */
+			restock: { resalable: number; damaged: number; notReturned: number }
+			tenders: Array<{ method: string; amountMinor: number; status: string }>
+			/** The manager whose PIN authorised the return, by staff id. */
+			approvedBy: string
+			occurredAt: string
+			/** What the sale was worth before it was refunded. */
+			originalTotalMinor: number
+	  }
 	| { kind: "other" }
 
 /** A list row adds the subject discriminator; the subject itself is loaded only for a detail. */

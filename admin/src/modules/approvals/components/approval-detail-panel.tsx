@@ -25,6 +25,7 @@ import { CreditSubject } from "./subject/credit-subject"
 import { PriceSubject } from "./subject/price-subject"
 import { ProductSubject } from "./subject/product-subject"
 import { PurchaseOrderSubject } from "./subject/purchase-order-subject"
+import { RefundSubject } from "./subject/refund-subject"
 import { ShiftSubject } from "./subject/shift-subject"
 import { TransferSubject } from "./subject/transfer-subject"
 import { WriteOffSubject } from "./subject/write-off-subject"
@@ -32,9 +33,15 @@ import { WriteOffSubject } from "./subject/write-off-subject"
 function Subject({
 	subject,
 	amountMinor,
+	branchId,
+	requestedBy,
+	requestNote,
 }: {
 	subject: ApprovalSubject
 	amountMinor: number | null
+	branchId: string
+	requestedBy: string
+	requestNote: string | null
 }) {
 	switch (subject.kind) {
 		case "purchase_order":
@@ -51,6 +58,15 @@ function Subject({
 			return <CreditSubject subject={subject} />
 		case "shift_variance":
 			return <ShiftSubject subject={subject} />
+		case "refund":
+			return (
+				<RefundSubject
+					subject={subject}
+					branchId={branchId}
+					cashier={requestedBy}
+					note={requestNote}
+				/>
+			)
 		default:
 			return (
 				<Card>
@@ -130,7 +146,13 @@ export function ApprovalDetailPanel({ detail }: { detail: ApprovalDetail }) {
 				</CardContent>
 			</Card>
 
-			<Subject subject={subject} amountMinor={approval.amountMinor} />
+			<Subject
+				subject={subject}
+				amountMinor={approval.amountMinor}
+				branchId={approval.branchId}
+				requestedBy={approval.requestedBy}
+				requestNote={approval.requestNote}
+			/>
 
 			<Card>
 				<CardHeader>
@@ -179,56 +201,65 @@ export function ApprovalDetailPanel({ detail }: { detail: ApprovalDetail }) {
 			</Card>
 
 			{pending ? (
-				<div className="flex flex-wrap items-center gap-2">
-					{canDecide ? (
-						variance ? (
-							<DecisionDialog
-								approvalId={approval.id}
-								type={approval.type}
-								decision="APPROVED"
-								trigger={<Button type="button">Record outcome</Button>}
-							/>
-						) : (
-							<>
+				<>
+					<div className="flex flex-wrap items-center gap-2">
+						{canDecide ? (
+							variance ? (
 								<DecisionDialog
 									approvalId={approval.id}
 									type={approval.type}
 									decision="APPROVED"
-									trigger={<Button type="button">Approve</Button>}
+									trigger={<Button type="button">Record outcome</Button>}
 								/>
-								<DecisionDialog
-									approvalId={approval.id}
-									type={approval.type}
-									decision="REJECTED"
-									trigger={
-										<Button
-											type="button"
-											variant="outline"
-											className="text-destructive hover:text-destructive"
-										>
-											Reject
-										</Button>
-									}
-								/>
-							</>
-						)
-					) : (
-						<p className="text-sm text-muted-foreground">
-							Only the authorised decider can act on this request.
-						</p>
-					)}
+							) : (
+								<>
+									<DecisionDialog
+										approvalId={approval.id}
+										type={approval.type}
+										decision="APPROVED"
+										trigger={<Button type="button">Approve</Button>}
+									/>
+									<DecisionDialog
+										approvalId={approval.id}
+										type={approval.type}
+										decision="REJECTED"
+										trigger={
+											<Button
+												type="button"
+												variant="outline"
+												className="text-destructive hover:text-destructive"
+											>
+												Reject
+											</Button>
+										}
+									/>
+								</>
+							)
+						) : (
+							<p className="text-sm text-muted-foreground">
+								Only the authorised decider can act on this request.
+							</p>
+						)}
 
-					{canWithdraw ? (
-						<Button
-							type="button"
-							variant="ghost"
-							className="ml-auto"
-							onClick={() => setWithdrawOpen(true)}
-						>
-							Withdraw request
-						</Button>
+						{canWithdraw ? (
+							<Button
+								type="button"
+								variant="ghost"
+								className="ml-auto"
+								onClick={() => setWithdrawOpen(true)}
+							>
+								Withdraw request
+							</Button>
+						) : null}
+					</div>
+
+					{approval.type === "REFUND" ? (
+						<p className="text-sm text-muted-foreground">
+							This refund has already been given. Your decision is recorded against it and changes
+							no money.
+						</p>
 					) : null}
-				</div>
+				</>
 			) : null}
 
 			<ConfirmDialog
