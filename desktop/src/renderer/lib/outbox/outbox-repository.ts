@@ -222,12 +222,26 @@ export function createOutboxStore(db: PowerSyncDatabase): OutboxStore {
           [now, JSON.stringify(result), now, row.id],
         )
 
-        if (row.type === 'SALE') {
-          // The sale is server truth now; pending projections stop affecting the
-          // device display. The rows stay as an audit trail.
-          for (const table of ['local_stock_delta', 'local_credit_delta', 'local_loyalty_delta']) {
-            await tx.execute(`UPDATE ${table} SET acked_at = ? WHERE sale_id = ?`, [now, row.id])
-          }
+        // The deltas a document produced stop counting once it is server truth:
+        // a sale moves stock, credit and loyalty; a refund moves stock back; a
+        // repayment moves credit down. `acked_at IS NULL` makes a second ack of
+        // the same row a no-op, so a replay cannot rewrite the first ack time.
+        // `reconcileLocalDeltas` (lib/refund/local-deltas.ts) is the backstop
+        // for rows that were acked before this arm existed, and for one whose
+        // outbox row has since been pruned.
+        const deltaTables =
+          row.type === 'SALE'
+            ? ['local_stock_delta', 'local_credit_delta', 'local_loyalty_delta']
+            : row.type === 'REFUND'
+              ? ['local_stock_delta']
+              : row.type === 'CREDIT_REPAYMENT'
+                ? ['local_credit_delta']
+                : []
+        for (const table of deltaTables) {
+          await tx.execute(
+            `UPDATE ${table} SET acked_at = ? WHERE sale_id = ? AND acked_at IS NULL`,
+            [now, row.id],
+          )
         }
 
         const draftId = draftCustomerId(row.payload)

@@ -224,6 +224,9 @@ export function SellScreen({
           }
           setShowLoyalty(true)
         },
+        // A refund is not a cart action: it works with an empty basket, and the
+        // draft is restored when the cashier comes back (Plan 10).
+        F7: () => navigate('pos/refund'),
         F8: () => {
           if (state.lines.length === 0) {
             setNotice('Add an item before discounting the sale')
@@ -325,6 +328,17 @@ export function SellScreen({
               </span>
             </h1>
             <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos/refund')}
+                className="h-11 min-w-11 px-3 text-xs"
+                title="Refund a receipt (F7)"
+                data-testid="sell-refund"
+              >
+                Refund{' '}
+                <span className="font-mono text-[11px] font-normal text-muted-foreground">F7</span>
+              </Button>
               <Button
                 type="button"
                 variant="outline"

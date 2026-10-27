@@ -1,5 +1,5 @@
 import type { PowerSyncDatabase } from '@powersync/web'
-import { can, type Permission } from '@sceptre/shared'
+import { can, type Permission, REFUND_REASONS } from '@sceptre/shared'
 import {
   type BindingError,
   getBinding,
@@ -22,7 +22,10 @@ import { CREDIT_REASON_CODES, DISCOUNT_REASON_CODES } from '../cart/types'
  * longer holds (the sale still applies).
  */
 
-export type OverridePermission = Extract<Permission, 'credit.override' | 'pos.discount'>
+export type OverridePermission = Extract<
+  Permission,
+  'credit.override' | 'pos.discount' | 'pos.refund'
+>
 
 export type OverrideErrorCode = 'NOT_FOUND' | 'NOT_AUTHORIZED' | 'INVALID_REASON'
 
@@ -37,7 +40,11 @@ export class OverrideError extends Error {
 }
 
 export function reasonCodesFor(permission: OverridePermission): readonly string[] {
-  return permission === 'credit.override' ? CREDIT_REASON_CODES : DISCOUNT_REASON_CODES
+  if (permission === 'credit.override') return CREDIT_REASON_CODES
+  // A refund's authority is recorded against the same vocabulary the refund
+  // itself uses, so the proof and the document cannot name different reasons.
+  if (permission === 'pos.refund') return REFUND_REASONS
+  return DISCOUNT_REASON_CODES
 }
 
 /** Everyone who could approve something on this terminal. */

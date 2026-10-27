@@ -162,6 +162,28 @@ describe('reasonCodesFor', () => {
     expect(reasonCodesFor('pos.discount')).toEqual(['STAFF', 'DAMAGE', 'PROMO', 'OTHER'])
     expect(reasonCodesFor('credit.override')).toEqual(['CUSTOMER_REQUEST', 'APPROVED', 'OTHER'])
   })
+
+  it('uses the refund vocabulary for a refund approval', () => {
+    expect(reasonCodesFor('pos.refund')).toContain('DEFECTIVE')
+    expect(reasonCodesFor('pos.refund')).toContain('OTHER')
+  })
+
+  it('refuses a cashier binding for a refund, even with a valid PIN', async () => {
+    const cashier = binding({ role: 'CASHIER', staffId: 'GA-0003' })
+    await expect(
+      approveOverride(
+        db,
+        {
+          approverBindingId: cashier.id,
+          pin: '1234',
+          policy: POLICY,
+          permission: 'pos.refund',
+          reasonCode: 'DEFECTIVE',
+        },
+        { getBinding: async () => cashier, verifyPin: async () => cashier },
+      ),
+    ).rejects.toBeInstanceOf(OverrideError)
+  })
 })
 
 describe('listApprovers', () => {

@@ -1,3 +1,4 @@
+import { REFUND_REASON_LABELS } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,9 +38,12 @@ const REASON_LABELS: Record<string, string> = {
   STAFF: 'Staff discount',
   DAMAGE: 'Damaged goods',
   PROMO: 'Promotion',
-  OTHER: 'Other',
   CUSTOMER_REQUEST: 'Customer request',
   APPROVED: 'Approved customer',
+  // A refund's proof is recorded against the refund's own vocabulary (P13-D24);
+  // name those reasons here rather than showing the raw codes. It also carries
+  // `OTHER`, the one label both vocabularies share.
+  ...REFUND_REASON_LABELS,
 }
 
 export function ManagerOverrideDialog({

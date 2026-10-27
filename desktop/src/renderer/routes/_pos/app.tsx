@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { HomePage } from '@/modules/home'
 import { ReceiptScreen } from '@/modules/receipt'
 import { SalesScreen } from '@/modules/sales'
@@ -10,7 +11,10 @@ import { CartProvider } from '../../lib/cart/cart-store'
 import type { PosIdentityRow } from '../../lib/pos-runtime'
 import { usePosRuntime } from '../../lib/pos-runtime'
 import { usePos } from '../../lib/powersync/provider'
+import { reconcileLocalDeltas } from '../../lib/refund/local-deltas'
 import { screenForRoute, useHashRoute, useRedirect } from '../../lib/router'
+import { RefundScreen } from '../refund'
+import { RepaymentScreen } from '../repayment'
 
 /**
  * The POS application shell and its guards (Plan 06 Task 1).
@@ -27,6 +31,9 @@ import { screenForRoute, useHashRoute, useRedirect } from '../../lib/router'
  * `#home` and `#pos` mount this same shell (P10-D6). The guard ladder is identical for both:
  * home is a counter screen, so a cashier with no open shift is still sent to `#shift`, one hop,
  * exactly as before. The only difference is which page the shell renders once the gates pass.
+ *
+ * `#pos/refund` and `#pos/repayment` are sub-screens of the same shell (Plan 10): both pay money
+ * in or out of the open shift's drawer, so they want the shift guard, not an exemption from it.
  *
  * The shell keeps the same chrome for every screen so the sync badge and the
  * cashier identity never disappear mid-sale.
@@ -85,6 +92,14 @@ function PosBoot() {
             ? 'pos'
             : null
 
+  // Deltas for a refund's stock return and a repayment's credit movement stop
+  // counting once their own outbox row acks (the uploader only acks a sale's).
+  // Every shell screen runs this once per database, so a projection cannot stay
+  // inflated just because the cashier did not reopen the screen that wrote it.
+  useEffect(() => {
+    if (db) void reconcileLocalDeltas(db)
+  }, [db])
+
   useRedirect(redirectTo !== null, redirectTo ?? 'pos')
 
   if (redirectTo) {
@@ -121,6 +136,16 @@ function PosBoot() {
 
   if (screen === 'sales') {
     return <SalesScreen identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  if (screen === 'refund') {
+    // A refund pays out of the open shift's drawer, so the shell's shift guard
+    // is exactly the rule it needs (Plan 10).
+    return <RefundScreen identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  if (screen === 'repayment') {
+    return <RepaymentScreen identity={identity} shift={runtime.shift} staff={staff} />
   }
 
   if (screen === 'sync') {

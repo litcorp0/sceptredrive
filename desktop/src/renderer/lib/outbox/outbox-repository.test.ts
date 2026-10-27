@@ -82,6 +82,27 @@ const APPLIED: UploadItemResult = {
   resolved: { saleId: 'sale-1', customerId: 'real-customer' },
 }
 
+const REFUND_ROW: OutboxRow = {
+  ...ROW,
+  id: 'refund-1',
+  clientTransactionId: 'refund-1',
+  type: 'REFUND',
+  payload: { saleId: 'sale-1' },
+}
+
+const REPAYMENT_ROW: OutboxRow = {
+  ...ROW,
+  id: 'repayment-1',
+  clientTransactionId: 'repayment-1',
+  type: 'CREDIT_REPAYMENT',
+  payload: { customerId: 'customer-1' },
+}
+
+/** A result for a row that is not a sale and resolves nothing. */
+function appliedFor(id: string): UploadItemResult {
+  return { clientTransactionId: id, status: 'APPLIED', serverId: id, conflicts: [], resolved: {} }
+}
+
 const DB_ROW = {
   id: 'sale-1',
   client_transaction_id: 'sale-1',
@@ -179,6 +200,64 @@ describe('markAcked', () => {
     expect(statements.some((statement) => statement.sql.includes('UPDATE customer_draft'))).toBe(
       false,
     )
+  })
+
+  it('acks a refund’s stock deltas and touches no other ledger', async () => {
+    const { db, statements } = fakeDb()
+    const store = createOutboxStore(db)
+
+    await store.markAcked(REFUND_ROW, appliedFor('refund-1'), '2026-10-27T10:20:00.000Z')
+
+    const deltas = statements.filter((statement) => statement.sql.includes('SET acked_at = ?'))
+    expect(deltas).toHaveLength(1)
+    expect(deltas[0]?.sql).toContain('UPDATE local_stock_delta')
+    expect(deltas[0]?.parameters).toEqual(['2026-10-27T10:20:00.000Z', 'refund-1'])
+  })
+
+  it('acks a repayment’s credit delta and touches no stock', async () => {
+    const { db, statements } = fakeDb()
+    const store = createOutboxStore(db)
+
+    await store.markAcked(REPAYMENT_ROW, appliedFor('repayment-1'), '2026-10-27T10:25:00.000Z')
+
+    const deltas = statements.filter((statement) => statement.sql.includes('SET acked_at = ?'))
+    expect(deltas).toHaveLength(1)
+    expect(deltas[0]?.sql).toContain('UPDATE local_credit_delta')
+    expect(deltas[0]?.parameters).toEqual(['2026-10-27T10:25:00.000Z', 'repayment-1'])
+  })
+
+  /**
+   * A replay can ack the same row twice (a crash between the write and the
+   * response). The delta arm sets an absolute timestamp under
+   * `acked_at IS NULL`, so the second ack changes nothing and cannot move the
+   * first ack time.
+   */
+  it('changes nothing when the same refund is acked a second time', async () => {
+    const acked = new Map<string, string>()
+    const statements: Statement[] = []
+    const execute = async (sql: string, parameters?: unknown[]) => {
+      statements.push({ sql, parameters })
+      if (!sql.includes('SET acked_at = ?')) return
+      if (!sql.includes('AND acked_at IS NULL')) throw new Error('delta ack is not idempotent')
+      const [at, id] = parameters as [string, string]
+      if (!acked.has(id)) acked.set(id, at)
+    }
+    const db = {
+      execute,
+      getOptional: async () => null,
+      getAll: async () => [],
+      writeTransaction: async <T>(work: (tx: { execute: typeof execute }) => Promise<T>) =>
+        work({ execute }),
+    } as never
+
+    const store = createOutboxStore(db)
+    await store.markAcked(REFUND_ROW, appliedFor('refund-1'), '2026-10-27T10:20:00.000Z')
+    await store.markAcked(REFUND_ROW, appliedFor('refund-1'), '2026-10-27T11:00:00.000Z')
+
+    expect(acked.get('refund-1')).toBe('2026-10-27T10:20:00.000Z')
+    expect(
+      statements.filter((statement) => statement.sql.includes('UPDATE local_stock_delta')),
+    ).toHaveLength(2)
   })
 })
 

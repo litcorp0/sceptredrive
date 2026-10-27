@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repository'
 import {
   buildReceiptModel,
+  buildRefundReceiptModel,
   leftRight,
   type ReceiptModel,
   receiptToText,
+  refundReceiptToText,
   toEscPosLines,
   wrapText,
 } from './render'
@@ -365,5 +367,91 @@ describe('column helpers', () => {
     expect(wrapText('one two three', 7)).toEqual(['one two', 'three'])
     expect(wrapText('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij'])
     expect(wrapText('', 42)).toEqual([''])
+  })
+})
+
+describe('refund receipt', () => {
+  const refund = buildRefundReceiptModel({
+    context: {
+      branchName: 'Accra - Spintex',
+      branchCode: 'ACC-SPX',
+      terminalCode: 'ACC-SPX-T01',
+      receiptHeader: 'Sceptre Drive',
+      receiptFooter: 'Thank you',
+    },
+    refundNumber: 'RF-ACC-SPX-T01-20261027-0001',
+    originalReceiptNumber: 'ACC-SPX-T01-20261027-0007',
+    occurredAt: '2026-10-27T10:15:00.000Z',
+    cashierName: 'Ama Mensah',
+    managerStaffId: 'GA-0002',
+    reasonCode: 'DEFECTIVE',
+    note: 'Cracked on opening',
+    lines: [
+      { name: 'Brake Pad Set', quantity: 1, restock: 'DAMAGED', totalMinor: 6_000 },
+      { name: 'Oil Filter', quantity: 1, restock: 'RESALABLE', totalMinor: 2_500 },
+    ],
+    tenders: [
+      { method: 'CASH', amountMinor: 5_000, status: 'SETTLED' },
+      { method: 'MOMO', amountMinor: 3_500, status: 'PENDING' },
+    ],
+    totals: {
+      baseMinor: 7_083,
+      vatMinor: 917,
+      nhilMinor: 146,
+      getfundMinor: 104,
+      taxTotalMinor: 1_167,
+      totalMinor: 8_500,
+    },
+  })
+
+  const text = refundReceiptToText(refund)
+
+  it('says it is a refund and names the original receipt', () => {
+    expect(text).toContain('*** REFUND ***')
+    expect(text).toContain('ACC-SPX-T01-20261027-0007')
+    expect(text).toContain('RF-ACC-SPX-T01-20261027-0001')
+  })
+
+  it('prints the reason, each line with its restock, and the manager', () => {
+    expect(text).toContain('Defective item')
+    expect(text).toContain('Cracked on opening')
+    expect(text).toContain('1 · Damaged')
+    expect(text).toContain('1 · Resalable')
+    expect(text).toContain('GA-0002')
+  })
+
+  it('prints each tender with the status its money is actually in', () => {
+    expect(text).toContain('Cash · settled')
+    expect(text).toContain('MoMo · pending')
+    expect(text).toContain('TOTAL REFUNDED')
+    expect(text).toContain('GHS 85.00')
+  })
+
+  it('marks a reprint and keeps the E-VAT slot empty', () => {
+    const reprint = buildRefundReceiptModel({
+      context: {
+        branchName: 'Accra - Spintex',
+        branchCode: 'ACC-SPX',
+        terminalCode: 'ACC-SPX-T01',
+      },
+      refundNumber: 'RF-ACC-SPX-T01-20261027-0001',
+      originalReceiptNumber: 'ACC-SPX-T01-20261027-0007',
+      occurredAt: '2026-10-27T10:15:00.000Z',
+      managerStaffId: 'GA-0002',
+      reasonCode: 'DEFECTIVE',
+      lines: [],
+      tenders: [],
+      totals: {
+        baseMinor: 0,
+        vatMinor: 0,
+        nhilMinor: 0,
+        getfundMinor: 0,
+        taxTotalMinor: 0,
+        totalMinor: 0,
+      },
+      reprint: true,
+    })
+    expect(refundReceiptToText(reprint)).toContain('*** REPRINT ***')
+    expect(reprint.evatSerial).toBeNull()
   })
 })

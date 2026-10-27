@@ -1,4 +1,12 @@
-import { formatAccraDateTime, formatTenderLabel, type TenderMethod } from '@sceptre/shared'
+import {
+  formatAccraDateTime,
+  formatTenderLabel,
+  REFUND_REASON_LABELS,
+  REFUND_RESTOCK_LABELS,
+  type RefundReason,
+  type RefundRestock,
+  type TenderMethod,
+} from '@sceptre/shared'
 import type { PrintLine } from '../../../shared/printing'
 import { formatMinorWithSymbol } from '../format'
 import type { SaleLineRow, SaleRow, SaleTenderRow } from '../sale/sale-repository'
@@ -346,6 +354,318 @@ export function toEscPosLines(model: ReceiptModel, options: RenderOptions = {}):
 /** The same model as a single plain-text receipt (fake adapter / clipboard). */
 export function receiptToText(model: ReceiptModel, options?: RenderOptions): string {
   return toEscPosLines(model, options)
+    .map((line) => line.text)
+    .join('\n')
+}
+
+// --- Refund receipt (P13-D17, Plan 10) ---------------------------------------
+
+/**
+ * A refund is its own paper trail, so it gets its own model: `*** REFUND ***`,
+ * the original receipt it reverses, each line with its restock decision, and
+ * each tender with the status the money is actually in. A card or MoMo refund
+ * is `pending` until the provider settles it (P13-D26) — the receipt must not
+ * claim otherwise.
+ *
+ * E-VAT slots stay null, exactly as on a sale, until GRA onboarding.
+ */
+export interface RefundReceiptLine {
+  name: string
+  quantity: number
+  restock: RefundRestock
+  totalMinor: number
+}
+
+export interface RefundReceiptTender {
+  method: TenderMethod
+  amountMinor: number
+  status: 'SETTLED' | 'PENDING'
+}
+
+export interface RefundReceiptModel {
+  header: {
+    seller: string
+    branch: string
+    branchCode: string
+    terminal: string
+    refundNumber: string
+    originalReceiptNumber: string
+    occurredAt: string
+    cashier: string
+    /** The manager whose PIN authorised the refund. */
+    manager: string
+    reprint: boolean
+  }
+  reason: {
+    code: RefundReason
+    label: string
+    note: string | null
+  }
+  lines: RefundReceiptLine[]
+  tenders: RefundReceiptTender[]
+  totals: {
+    baseMinor: number
+    vatMinor: number
+    nhilMinor: number
+    getfundMinor: number
+    taxTotalMinor: number
+    totalMinor: number
+  }
+  footer: string
+  evatSerial: string | null
+  qrPayload: string | null
+  signature: string | null
+}
+
+export interface BuildRefundReceiptInput {
+  context: ReceiptContext
+  refundNumber: string
+  originalReceiptNumber: string
+  occurredAt: string
+  cashierName?: string | null
+  managerStaffId: string
+  reasonCode: RefundReason
+  note?: string | null
+  lines: RefundReceiptLine[]
+  tenders: RefundReceiptTender[]
+  totals: RefundReceiptModel['totals']
+  reprint?: boolean
+}
+
+export function buildRefundReceiptModel(input: BuildRefundReceiptInput): RefundReceiptModel {
+  const { context } = input
+  return {
+    header: {
+      seller: context.receiptHeader?.trim() || 'Sceptre Drive',
+      branch: context.branchName,
+      branchCode: context.branchCode,
+      terminal: context.terminalCode,
+      refundNumber: input.refundNumber,
+      originalReceiptNumber: input.originalReceiptNumber,
+      occurredAt: input.occurredAt,
+      cashier: input.cashierName || 'Cashier',
+      manager: input.managerStaffId,
+      reprint: Boolean(input.reprint),
+    },
+    reason: {
+      code: input.reasonCode,
+      label: REFUND_REASON_LABELS[input.reasonCode],
+      note: input.note?.trim() || null,
+    },
+    lines: [...input.lines],
+    tenders: [...input.tenders],
+    totals: input.totals,
+    footer: context.receiptFooter ?? '',
+    evatSerial: null,
+    qrPayload: null,
+    signature: null,
+  }
+}
+
+/** What the paper says each tender's money is doing right now. */
+export function refundTenderStatusLabel(
+  method: TenderMethod,
+  status: RefundReceiptTender['status'],
+): string {
+  if (status === 'PENDING') return `${formatTenderLabel(method)} · pending`
+  if (method === 'CREDIT') return 'Credit · reduced'
+  return `${formatTenderLabel(method)} · settled`
+}
+
+export function refundToEscPosLines(
+  model: RefundReceiptModel,
+  options: RenderOptions = {},
+): PrintLine[] {
+  const columns = options.columns ?? RECEIPT_COLUMNS
+  const symbol = options.currencySymbol ?? 'GHS'
+  const money = (minor: number) => formatMinorWithSymbol(minor, symbol)
+  const divider = '-'.repeat(columns)
+  const rows: PrintLine[] = []
+
+  const centerRow = (text: string, bold = false) => {
+    for (const line of wrapText(text, columns)) rows.push({ text: center(line, columns), bold })
+  }
+  const pair = (label: string, value: string, bold = false) => {
+    rows.push({ text: leftRight(label, value, columns), bold })
+  }
+
+  if (model.header.reprint) {
+    centerRow('*** REPRINT ***', true)
+    rows.push({ text: divider })
+  }
+
+  centerRow(model.header.seller, true)
+  centerRow(model.header.branch)
+  centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
+  rows.push({ text: divider })
+  centerRow('*** REFUND ***', true)
+  centerRow(`REFUND ${model.header.refundNumber}`, true)
+  pair('Date', formatAccraDateTime(model.header.occurredAt))
+  pair('Original receipt', model.header.originalReceiptNumber)
+  pair('Cashier', model.header.cashier)
+  pair('Approved by', model.header.manager)
+  rows.push({ text: divider })
+
+  pair('Reason', model.reason.label)
+  if (model.reason.note) {
+    for (const noteLine of wrapText(model.reason.note, columns)) {
+      rows.push({ text: `  ${truncate(noteLine, columns - 2)}` })
+    }
+  }
+  rows.push({ text: divider })
+
+  for (const line of model.lines) {
+    for (const nameLine of wrapText(line.name, columns)) {
+      rows.push({ text: truncate(nameLine, columns) })
+    }
+    pair(`  ${line.quantity} · ${REFUND_RESTOCK_LABELS[line.restock]}`, money(line.totalMinor))
+  }
+
+  rows.push({ text: divider })
+  pair('Taxable base', money(model.totals.baseMinor))
+  if (model.totals.vatMinor !== 0) pair('VAT 15%', money(model.totals.vatMinor))
+  if (model.totals.nhilMinor !== 0) pair('NHIL 2.5%', money(model.totals.nhilMinor))
+  if (model.totals.getfundMinor !== 0) pair('GETFund 2.5%', money(model.totals.getfundMinor))
+  pair('TOTAL REFUNDED', money(model.totals.totalMinor), true)
+  rows.push({ text: divider })
+
+  for (const tender of model.tenders) {
+    pair(refundTenderStatusLabel(tender.method, tender.status), money(tender.amountMinor))
+  }
+
+  if (model.footer.trim()) {
+    rows.push({ text: divider })
+    for (const footerLine of wrapText(model.footer, columns)) rows.push({ text: footerLine })
+  }
+
+  return rows
+}
+
+export function refundReceiptToText(model: RefundReceiptModel, options?: RenderOptions): string {
+  return refundToEscPosLines(model, options)
+    .map((line) => line.text)
+    .join('\n')
+}
+
+// --- Repayment receipt (P13-D27, Plan 10) -------------------------------------
+
+/** A credit repayment's own paper trail, from the till's local copy. */
+export interface RepaymentReceiptModel {
+  header: {
+    seller: string
+    branch: string
+    branchCode: string
+    terminal: string
+    number: string
+    occurredAt: string
+    cashier: string
+    customer: string
+    phone: string | null
+  }
+  method: 'CASH' | 'MOMO'
+  amountMinor: number
+  account: {
+    balanceBeforeMinor: number
+    balanceAfterMinor: number
+    limitMinor: number
+    headroomMinor: number
+  }
+  footer: string
+  evatSerial: string | null
+}
+
+export interface BuildRepaymentReceiptInput {
+  context: ReceiptContext
+  number: string
+  occurredAt: string
+  cashierName?: string | null
+  customerName: string
+  customerPhone?: string | null
+  method: 'CASH' | 'MOMO'
+  amountMinor: number
+  balanceBeforeMinor: number
+  balanceAfterMinor: number
+  limitMinor: number
+  headroomMinor: number
+}
+
+export function buildRepaymentReceiptModel(
+  input: BuildRepaymentReceiptInput,
+): RepaymentReceiptModel {
+  return {
+    header: {
+      seller: input.context.receiptHeader?.trim() || 'Sceptre Drive',
+      branch: input.context.branchName,
+      branchCode: input.context.branchCode,
+      terminal: input.context.terminalCode,
+      number: input.number,
+      occurredAt: input.occurredAt,
+      cashier: input.cashierName || 'Cashier',
+      customer: input.customerName,
+      phone: input.customerPhone ?? null,
+    },
+    method: input.method,
+    amountMinor: input.amountMinor,
+    account: {
+      balanceBeforeMinor: input.balanceBeforeMinor,
+      balanceAfterMinor: input.balanceAfterMinor,
+      limitMinor: input.limitMinor,
+      headroomMinor: input.headroomMinor,
+    },
+    footer: input.context.receiptFooter ?? '',
+    evatSerial: null,
+  }
+}
+
+export function repaymentToEscPosLines(
+  model: RepaymentReceiptModel,
+  options: RenderOptions = {},
+): PrintLine[] {
+  const columns = options.columns ?? RECEIPT_COLUMNS
+  const symbol = options.currencySymbol ?? 'GHS'
+  const money = (minor: number) => formatMinorWithSymbol(minor, symbol)
+  const divider = '-'.repeat(columns)
+  const rows: PrintLine[] = []
+
+  const centerRow = (text: string, bold = false) => {
+    for (const line of wrapText(text, columns)) rows.push({ text: center(line, columns), bold })
+  }
+  const pair = (label: string, value: string, bold = false) => {
+    rows.push({ text: leftRight(label, value, columns), bold })
+  }
+
+  centerRow(model.header.seller, true)
+  centerRow(model.header.branch)
+  centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
+  rows.push({ text: divider })
+  centerRow('*** CREDIT REPAYMENT ***', true)
+  centerRow(`RECEIPT ${model.header.number}`, true)
+  pair('Date', formatAccraDateTime(model.header.occurredAt))
+  pair('Cashier', model.header.cashier)
+  pair('Customer', model.header.customer)
+  if (model.header.phone) pair('Phone', model.header.phone)
+  rows.push({ text: divider })
+
+  pair(model.method === 'CASH' ? 'Cash received' : 'MoMo received', money(model.amountMinor), true)
+  rows.push({ text: divider })
+  pair('Balance before', money(model.account.balanceBeforeMinor))
+  pair('Balance after', money(model.account.balanceAfterMinor), true)
+  if (model.account.limitMinor > 0) pair('Credit limit', money(model.account.limitMinor))
+  pair('Available', money(model.account.headroomMinor))
+
+  if (model.footer.trim()) {
+    rows.push({ text: divider })
+    for (const footerLine of wrapText(model.footer, columns)) rows.push({ text: footerLine })
+  }
+
+  return rows
+}
+
+export function repaymentReceiptToText(
+  model: RepaymentReceiptModel,
+  options?: RenderOptions,
+): string {
+  return repaymentToEscPosLines(model, options)
     .map((line) => line.text)
     .join('\n')
 }

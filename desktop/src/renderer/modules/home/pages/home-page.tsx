@@ -31,7 +31,8 @@ import { useDraftForClaim, useOrphanPayments } from '../hooks/use-payment-attent
  * Selling is one action away in both layouts: **Start selling** sits in the heading row, so it
  * is on screen at 1024×768 without scrolling, and F2 means the same thing here as on the sell
  * screen — *find an item* — so it lands on the sell screen with the search field focused
- * (P10-D7).
+ * (P10-D7). Since Plan 10 the same row carries **Refund** and **Take a repayment**, because both
+ * are counter jobs that start from the day's picture rather than from a cart.
  *
  * Layout: the two data panels sit side by side from 1280 px and stack at 1024 px. The tile row
  * is three cards at 1024 and above, one column on a narrow window.
@@ -90,15 +91,35 @@ export function HomePage({
             </>
           }
           actions={
-            <Button
-              type="button"
-              onClick={startSelling}
-              className="h-14 px-6 text-base"
-              data-testid="start-selling"
-            >
-              Start selling
-              <span className="ml-1 font-mono text-xs font-normal opacity-70">F2</span>
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos/refund')}
+                className="h-14 px-5 text-sm"
+                data-testid="home-refund"
+              >
+                Refund
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('pos/repayment')}
+                className="h-14 px-5 text-sm"
+                data-testid="home-repayment"
+              >
+                Take a repayment
+              </Button>
+              <Button
+                type="button"
+                onClick={startSelling}
+                className="h-14 px-6 text-base"
+                data-testid="start-selling"
+              >
+                Start selling
+                <span className="ml-1 font-mono text-xs font-normal opacity-70">F2</span>
+              </Button>
+            </>
           }
         />
 
