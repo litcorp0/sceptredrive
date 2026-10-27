@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm'
+import { desc, sql } from 'drizzle-orm'
 import {
   index,
   integer,
@@ -83,6 +83,20 @@ export const syncConflictStatusEnum = pgEnum('sync_conflict_status', [
   'OPEN',
   'RESOLVED',
   'DISMISSED',
+])
+
+/**
+ * How a conflict was closed (P14-D14). A resolution is a record, not a repair:
+ * the code says what happened, and the sale, refund, shift or ledger it points at
+ * is never touched. `RESOLVED` requires a code and `DISMISSED` requires a note as
+ * well; `resolutionProblem` in `@sceptre/shared` is the only place that rule lives.
+ */
+export const conflictResolutionCodeEnum = pgEnum('conflict_resolution_code', [
+  'CONFIRMED',
+  'CORRECTED_ELSEWHERE',
+  'ACCEPTED_RISK',
+  'TILL_INSTRUCTION',
+  'DUPLICATE',
 ])
 
 /** One cashier's shift on one terminal. At most one OPEN shift per terminal. */
@@ -349,6 +363,11 @@ export const syncConflict = pgTable(
     type: syncConflictTypeEnum('type').notNull(),
     severity: syncConflictSeverityEnum('severity').notNull(),
     status: syncConflictStatusEnum('status').notNull().default('OPEN'),
+    /**
+     * Nullable on purpose: every row written before Phase 14 was resolved by
+     * nobody, and inventing a code for them would invent a decision.
+     */
+    resolutionCode: conflictResolutionCodeEnum('resolution_code'),
     details: jsonb('details').notNull().default({}),
     resolvedBy: text('resolved_by'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
@@ -361,6 +380,8 @@ export const syncConflict = pgTable(
     index('sync_conflict_sale_idx').on(table.saleId),
     // The nightly oversell scan reads one type over a 30-day window (P12-D32).
     index('sync_conflict_type_created_idx').on(table.type, table.createdAt),
+    // The console's default queue: open conflicts, newest first, all branches.
+    index('sync_conflict_status_created_idx').on(table.status, desc(table.createdAt)),
   ],
 )
 
@@ -666,6 +687,13 @@ export const shiftReport = pgTable(
     changeMinor: integer('change_minor').notNull().default(0),
     cashInMinor: integer('cash_in_minor').notNull().default(0),
     cashOutMinor: integer('cash_out_minor').notNull().default(0),
+    /**
+     * Cash handed back over the counter in this shift (P14-D13/Plan 12).
+     * Nullable on purpose: a snapshot taken before Phase 14 did not measure it,
+     * and backfilling from today's `refund_tender` would invent a number for a
+     * day nobody counted. The print says "not itemised" for those rows.
+     */
+    cashRefundMinor: integer('cash_refund_minor'),
     expectedCashMinor: integer('expected_cash_minor').notNull().default(0),
     countedCashMinor: integer('counted_cash_minor').notNull().default(0),
     varianceMinor: integer('variance_minor').notNull().default(0),
