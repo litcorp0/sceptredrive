@@ -1,5 +1,4 @@
 import type {
-  CartVoidReason,
   ConflictResolutionCode,
   RefundReason,
   RefundRestock,
@@ -279,12 +278,6 @@ export interface ShiftReportView {
   changeMinor: number
   cashInMinor: number
   cashOutMinor: number
-  /**
-   * Cash handed back over this shift (P14-D13). A `Z` reads the snapshot and is
-   * **null** for a report written before the column existed; an `X` measures the
-   * drawer live and always has a figure.
-   */
-  cashRefundMinor: number | null
   expectedCashMinor: number
   /** The drawer, once someone has counted it (a Z always has; an X may not). */
   countedCashMinor: number | null
@@ -544,25 +537,6 @@ export interface OversightShiftRow {
   hasReport: boolean
 }
 
-/** A cart abandoned before it became a sale (P13-D28). The only read path. */
-export interface OversightVoidRow {
-  id: string
-  occurredAt: string
-  reasonCode: CartVoidReason
-  reasonLabel: string
-  label: string | null
-  itemCount: number
-  grossMinor: number
-  cashierName: string
-}
-
-export interface OversightVoidSummary {
-  count: number
-  itemCount: number
-  grossMinor: number
-  rows: OversightVoidRow[]
-}
-
 /**
  * A shift with the document that belongs to it.
  *
@@ -574,7 +548,6 @@ export interface OversightShiftDetail {
   shift: OversightShiftRow
   report: ShiftReportView | null
   reportState: 'STORED' | 'LIVE' | 'MISSING'
-  voids: OversightVoidSummary
 }
 
 export interface OversightSalesList {

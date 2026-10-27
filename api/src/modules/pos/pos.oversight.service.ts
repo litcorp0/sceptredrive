@@ -19,20 +19,24 @@ import { NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { getSettingValue } from '../platform/settings.service.ts'
 import * as repository from './pos.oversight.repository.ts'
-import { selectRefundTenders } from './pos.repository.ts'
+import { findShiftReportByShiftId, selectRefundTenders } from './pos.repository.ts'
+import { readShiftReport } from './pos.service.ts'
 import type {
   OversightRefundDetail,
   OversightRefundsList,
   OversightRefundTender,
   OversightSaleDetail,
   OversightSalesList,
+  OversightShiftDetail,
   OversightShiftsList,
   ReceiptCopy,
+  ShiftReportView,
 } from './pos.types.ts'
 import type {
   OversightRefundsQuery,
   OversightSalesQuery,
   OversightShiftsQuery,
+  ShiftReportQuery,
 } from './pos.validation.ts'
 
 interface DayWindow {
@@ -282,4 +286,59 @@ export async function listShifts(
   )
 
   return { shifts: result.rows, total: result.total, limit: query.limit, offset: query.offset }
+}
+
+/**
+ * A shift with the document that belongs to it.
+ *
+ * A closed shift embeds its **stored** Z and never a recomputation (P14-D12). When
+ * the snapshot is missing the detail says so — `reportState: 'MISSING'` — instead
+ * of failing the screen the manager opened to find out: the strict refusal belongs
+ * to the report route, where asking for a Z is an explicit question. An open shift
+ * embeds a live X, which is what a drawer looks like right now.
+ *
+ * The voids are the shift's abandoned carts, the only read path `cart_void` has had
+ * since the till started writing it (research fact 20).
+ */
+export async function getShift(user: SessionUser, shiftId: string): Promise<OversightShiftDetail> {
+  const shiftRow = await repository.findShiftRow(shiftId, db)
+  if (!shiftRow) throw new NotFoundError('Shift not found')
+  assertDocumentScope(user, shiftRow.branchId)
+
+  const snapshot = await findShiftReportByShiftId(shiftId)
+
+  let report: ShiftReportView | null = null
+  let reportState: OversightShiftDetail['reportState']
+  if (shiftRow.status === 'CLOSED') {
+    if (snapshot) {
+      report = await readShiftReport({ branchId: shiftRow.branchId }, shiftId, 'Z')
+      reportState = 'STORED'
+    } else {
+      reportState = 'MISSING'
+    }
+  } else {
+    report = await readShiftReport({ branchId: shiftRow.branchId }, shiftId, 'X')
+    reportState = 'LIVE'
+  }
+
+  return { shift: shiftRow, report, reportState }
+}
+
+/**
+ * The session-gated shift report (P14-D12).
+ *
+ * The gate is `resolveBranchFilter` on the shift's own branch, so a manager
+ * asking for another branch's drawer is a **403** — not the device route's 404,
+ * because a manager is allowed to know that a shift exists elsewhere. Both gates
+ * then call the same `readShiftReport`, so the arithmetic cannot fork.
+ */
+export async function getShiftReport(
+  user: SessionUser,
+  shiftId: string,
+  kind: ShiftReportQuery['kind'],
+): Promise<ShiftReportView> {
+  const shiftRow = await repository.findShiftRow(shiftId, db)
+  if (!shiftRow) throw new NotFoundError('Shift not found')
+  assertDocumentScope(user, shiftRow.branchId)
+  return readShiftReport({ branchId: shiftRow.branchId }, shiftId, kind)
 }

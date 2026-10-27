@@ -53,6 +53,17 @@ export async function getRefund(c: Context<AppEnv>, id: string) {
   return c.json(result)
 }
 
+export async function getShift(c: Context<AppEnv>, id: string) {
+  const result = await oversightService.getShift(currentUser(c), id)
+  return c.json(result)
+}
+
+/** The same `{ report }` envelope the device route returns, from the same function. */
+export async function getShiftReport(c: Context<AppEnv>, id: string, kind: 'X' | 'Z') {
+  const report = await oversightService.getShiftReport(currentUser(c), id, kind)
+  return c.json({ report })
+}
+
 export async function listShifts(c: Context<AppEnv>, query: OversightShiftsQuery) {
   const result = await oversightService.listShifts(currentUser(c), query)
   return c.json(result)

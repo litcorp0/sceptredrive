@@ -1,6 +1,6 @@
 import { db } from '@sceptre/db'
 import { accraIsoDay, priceCart, type TenderMethod, tenderBalance } from '@sceptre/shared'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   authedHeaders,
@@ -120,6 +120,7 @@ describe.skipIf(!available)('POS oversight reads', () => {
   let foreignSaleId = '' // branch B: never in a manager's list
   let foreignShiftId = ''
   let homeShiftId = ''
+  let missingReportShiftId = ''
   let largeRefundId = ''
   let smallRefundId = ''
 
@@ -144,6 +145,15 @@ describe.skipIf(!available)('POS oversight reads', () => {
 
   async function get(path: string, cookie: string): Promise<Response> {
     return app.request(path, { headers: sessionHeaders(cookie) })
+  }
+
+  async function getDevice(path: string, token: string): Promise<Response> {
+    return app.request(path, { headers: { authorization: `Bearer ${token}` } })
+  }
+
+  async function shiftReportCount(): Promise<number> {
+    const rows = await db.select({ value: sql<number>`count(*)::int` }).from(shiftReport)
+    return rows[0]?.value ?? 0
   }
 
   /** A branch, a terminal and an enrolled device, all through the real API. */
@@ -403,6 +413,7 @@ describe.skipIf(!available)('POS oversight reads', () => {
     counter: Counter
     number: string
     status: 'OPEN' | 'CLOSED'
+    openingFloatMinor?: number
   }): Promise<string> {
     const rows = await db
       .insert(shift)
@@ -416,7 +427,7 @@ describe.skipIf(!available)('POS oversight reads', () => {
         status: input.status,
         openedAt: new Date('2026-10-27T08:00:00Z'),
         closedAt: input.status === 'CLOSED' ? new Date('2026-10-27T18:00:00Z') : null,
-        openingFloatMinor,
+        openingFloatMinor: input.openingFloatMinor ?? openingFloatMinor,
         openedBy: cashierStaffId,
       })
       .returning()
@@ -697,6 +708,21 @@ describe.skipIf(!available)('POS oversight reads', () => {
       shiftId: homeShiftId,
       countedCashMinor,
       clientExpectedCashMinor: countedCashMinor,
+      occurredAt: new Date().toISOString(),
+    })
+
+    // A third shift, closed by the real close and then robbed of its snapshot by
+    // the test that proves a Z is never rebuilt. Float zero keeps its variance zero.
+    missingReportShiftId = await insertShift({
+      counter: home,
+      number: 'OVS-3',
+      status: 'OPEN',
+      openingFloatMinor: 0,
+    })
+    await closeShift(deviceContext(home), {
+      shiftId: missingReportShiftId,
+      countedCashMinor: 0,
+      clientExpectedCashMinor: 0,
       occurredAt: new Date().toISOString(),
     })
 
@@ -1019,6 +1045,120 @@ describe.skipIf(!available)('POS oversight reads', () => {
     // Certification never touched the document (P14-D34).
     const stored = (await db.select().from(sale).where(eq(sale.id, cashSaleId)))[0]
     expect(stored?.totalMinor).toBe(50_000)
+  })
+
+  it('serves a closed shift the stored Z, identical to the device route', async () => {
+    const sessionResponse = await get(
+      `/api/pos/oversight/shifts/${homeShiftId}/report?kind=Z`,
+      managerCookie,
+    )
+    expect(sessionResponse.status).toBe(200)
+    const sessionBody = await readJson<{ report: Record<string, unknown> }>(sessionResponse)
+
+    const deviceResponse = await getDevice(
+      `/api/pos/shifts/${homeShiftId}/report?kind=Z`,
+      home.accessToken,
+    )
+    expect(deviceResponse.status).toBe(200)
+    const deviceBody = await readJson<{ report: Record<string, unknown> }>(deviceResponse)
+
+    // One arithmetic, two gates: the same bytes, not two implementations that
+    // happen to agree today.
+    expect(sessionBody.report).toEqual(deviceBody.report)
+
+    // And those figures are the snapshot's own, not a recomputation that matches.
+    const snapshot = (
+      await db.select().from(shiftReport).where(eq(shiftReport.shiftId, homeShiftId))
+    )[0]
+    expect(sessionBody.report.grossMinor).toBe(snapshot?.grossMinor)
+    expect(sessionBody.report.refundMinor).toBe(snapshot?.refundMinor)
+    expect(sessionBody.report.expectedCashMinor).toBe(snapshot?.expectedCashMinor)
+    expect(sessionBody.report.expectedCashMinor).toBe(countedCashMinor)
+  })
+
+  it('refuses to rebuild a missing Z and leaves the shift without one', async () => {
+    const stored = await get(`/api/pos/oversight/shifts/${missingReportShiftId}`, managerCookie)
+    expect(stored.status).toBe(200)
+    const storedBody = await readJson<{ reportState: string; report: { kind: string } | null }>(
+      stored,
+    )
+    expect(storedBody.reportState).toBe('STORED')
+    expect(storedBody.report?.kind).toBe('Z')
+
+    // The only way to have a closed shift without its snapshot is to take it away.
+    await db.delete(shiftReport).where(eq(shiftReport.shiftId, missingReportShiftId))
+
+    await expectError(
+      await get(`/api/pos/oversight/shifts/${missingReportShiftId}/report?kind=Z`, managerCookie),
+      500,
+      'SHIFT_REPORT_MISSING',
+    )
+    const rows = await db
+      .select()
+      .from(shiftReport)
+      .where(eq(shiftReport.shiftId, missingReportShiftId))
+    expect(rows).toHaveLength(0)
+
+    // The detail names the gap rather than inventing a report.
+    const detail = await readJson<{ reportState: string; report: unknown }>(
+      await get(`/api/pos/oversight/shifts/${missingReportShiftId}`, managerCookie),
+    )
+    expect(detail.reportState).toBe('MISSING')
+    expect(detail.report).toBeNull()
+  })
+
+  it('computes an X live and writes no report row', async () => {
+    const before = await shiftReportCount()
+    const response = await get(
+      `/api/pos/oversight/shifts/${homeShiftId}/report?kind=X`,
+      managerCookie,
+    )
+    expect(response.status).toBe(200)
+    const body = await readJson<{
+      report: {
+        kind: string
+        closedAt: string | null
+        expectedCashMinor: number
+        countedCashMinor: number | null
+        varianceMinor: number | null
+      }
+    }>(response)
+
+    expect(body.report.kind).toBe('X')
+    // A closed shift's X is still a live reading, with the close in the document.
+    expect(body.report.closedAt).not.toBeNull()
+    expect(body.report.expectedCashMinor).toBe(countedCashMinor)
+    expect(body.report.countedCashMinor).toBe(countedCashMinor)
+    expect(body.report.varianceMinor).toBe(0)
+    expect(await shiftReportCount()).toBe(before)
+  })
+
+  it('keeps the device gate exactly as Phase 13 shipped it', async () => {
+    // Another terminal's shift is not found at all (P13-D39).
+    await expectError(
+      await getDevice(`/api/pos/shifts/${foreignShiftId}/report?kind=Z`, home.accessToken),
+      404,
+      'NOT_FOUND',
+    )
+    // A Z of an open shift stays a 409.
+    await expectError(
+      await getDevice(`/api/pos/shifts/${foreignShiftId}/report?kind=Z`, other.accessToken),
+      409,
+      'SHIFT_NOT_CLOSED',
+    )
+    // The session gate answers 403 for the same shift: a manager may know that a
+    // drawer exists elsewhere, and the shift id is not evidence of access.
+    await expectError(
+      await get(`/api/pos/oversight/shifts/${foreignShiftId}/report?kind=Z`, managerCookie),
+      403,
+      'FORBIDDEN',
+    )
+    // An admin reads the other branch, and an open shift's X is live.
+    const admin = await readJson<{ report: { kind: string; closedAt: string | null } }>(
+      await get(`/api/pos/oversight/shifts/${foreignShiftId}/report?kind=X`, adminCookie),
+    )
+    expect(admin.report.kind).toBe('X')
+    expect(admin.report.closedAt).toBeNull()
   })
 
   it('lists refunds of any amount, above and below the approval threshold', async () => {

@@ -9,6 +9,7 @@ import {
   validateOversightSalesQuery,
   validateOversightShiftsQuery,
   validateReconciliationQuery,
+  validateShiftReportQuery,
 } from './pos.validation.ts'
 
 export const posRoutes = factory.createApp()
@@ -92,4 +93,25 @@ posRoutes.get(
   oversightRateLimit,
   validateOversightShiftsQuery,
   (c) => posController.listShifts(c, c.req.valid('query')),
+)
+
+posRoutes.get(
+  '/api/pos/oversight/shifts/:id',
+  requireSession,
+  requirePermission('pos.oversight.read'),
+  oversightRateLimit,
+  validateOversightIdParam,
+  (c) => posController.getShift(c, c.req.valid('param').id),
+)
+
+// The session gate on the same arithmetic the device route uses: `Z` reads the
+// stored snapshot and refuses to rebuild it, `X` computes live and writes nothing.
+posRoutes.get(
+  '/api/pos/oversight/shifts/:id/report',
+  requireSession,
+  requirePermission('pos.oversight.read'),
+  oversightRateLimit,
+  validateOversightIdParam,
+  validateShiftReportQuery,
+  (c) => posController.getShiftReport(c, c.req.valid('param').id, c.req.valid('query').kind),
 )

@@ -120,6 +120,8 @@ import type {
   ShiftCashTotals,
   ShiftClosePayload,
   ShiftOpenPayload,
+  ShiftReportScope,
+  ShiftReportView,
   ShiftVarianceSubject,
   StaffBindingResult,
   SyncConflictSeverity,
@@ -870,149 +872,94 @@ export async function closeShift(
 // --- X and Z reports (Plan 13-07) -------------------------------------------
 
 /**
- * One shape for both reports (P13-D32, P13-D33), because a manager comparing a
- * mid-shift X with the night's Z should be comparing the same fields in the same
- * units. `Z` is the stored snapshot; `X` is the same arithmetic asked live.
- */
-export interface ShiftReportView {
-  kind: 'X' | 'Z'
-  shiftId: string
-  number: string
-  branchId: string
-  terminalId: string
-  deviceId: string
-  openedAt: string
-  /** Null on an X-report for a shift that is still open. */
-  closedAt: string | null
-  openingFloatMinor: number
-  saleCount: number
-  itemCount: number
-  refundCount: number
-  voidCount: number
-  grossMinor: number
-  refundMinor: number
-  netMinor: number
-  lineDiscountMinor: number
-  saleDiscountMinor: number
-  loyaltyDiscountMinor: number
-  loyaltyRedeemPoints: number
-  loyaltyEarnedPoints: number
-  baseMinor: number
-  vatMinor: number
-  nhilMinor: number
-  getfundMinor: number
-  taxTotalMinor: number
-  cashMinor: number
-  creditMinor: number
-  momoMinor: number
-  cardMinor: number
-  bankTransferMinor: number
-  changeMinor: number
-  cashInMinor: number
-  cashOutMinor: number
-  expectedCashMinor: number
-  /** The drawer, once someone has counted it (a Z always has; an X may not). */
-  countedCashMinor: number | null
-  varianceMinor: number | null
-  generatedAt: string
-}
-
-/**
- * Not theirs is indistinguishable from not there: a terminal may not read another
- * terminal's shift (P13-D39, A01). The branch is checked too, because a device
- * JWT carries both.
- */
-async function findShiftReportSubject(
-  device: DeviceAuthContext,
-  shiftId: string,
-  executor: DbExecutor = db,
-): Promise<typeof import('./pos.schema.ts').shift.$inferSelect> {
-  const row = await findShiftById(shiftId, executor)
-  if (!row || row.terminalId !== device.terminalId || row.branchId !== device.branchId) {
-    throw new NotFoundError('Shift not found')
-  }
-  return row
-}
-
-/**
- * The Z-report is read, never rebuilt (P13-D32). A closed shift without its
- * snapshot is a missing document, not an invitation to recompute one: a report
- * that can be reconstructed on read is a report that can change after the
- * customer has gone home.
- */
-export async function getZReport(
-  device: DeviceAuthContext,
-  shiftId: string,
-): Promise<ShiftReportView> {
-  const row = await findShiftReportSubject(device, shiftId)
-  if (row.status !== 'CLOSED') {
-    throw new AppError(409, 'SHIFT_NOT_CLOSED', 'An X-report is the one for an open shift')
-  }
-
-  const snapshot = await findShiftReportByShiftId(shiftId)
-  if (!snapshot) {
-    throw new AppError(
-      500,
-      'SHIFT_REPORT_MISSING',
-      'This shift closed without its Z-report; the snapshot cannot be rebuilt',
-    )
-  }
-
-  return {
-    kind: 'Z',
-    shiftId: snapshot.shiftId,
-    number: snapshot.number,
-    branchId: snapshot.branchId,
-    terminalId: snapshot.terminalId,
-    deviceId: snapshot.deviceId,
-    openedAt: snapshot.openedAt.toISOString(),
-    closedAt: snapshot.closedAt.toISOString(),
-    openingFloatMinor: snapshot.openingFloatMinor,
-    saleCount: snapshot.saleCount,
-    itemCount: snapshot.itemCount,
-    refundCount: snapshot.refundCount,
-    voidCount: snapshot.voidCount,
-    grossMinor: snapshot.grossMinor,
-    refundMinor: snapshot.refundMinor,
-    netMinor: snapshot.netMinor,
-    lineDiscountMinor: snapshot.lineDiscountMinor,
-    saleDiscountMinor: snapshot.saleDiscountMinor,
-    loyaltyDiscountMinor: snapshot.loyaltyDiscountMinor,
-    loyaltyRedeemPoints: snapshot.loyaltyRedeemPoints,
-    loyaltyEarnedPoints: snapshot.loyaltyEarnedPoints,
-    baseMinor: snapshot.baseMinor,
-    vatMinor: snapshot.vatMinor,
-    nhilMinor: snapshot.nhilMinor,
-    getfundMinor: snapshot.getfundMinor,
-    taxTotalMinor: snapshot.taxTotalMinor,
-    cashMinor: snapshot.cashMinor,
-    creditMinor: snapshot.creditMinor,
-    momoMinor: snapshot.momoMinor,
-    cardMinor: snapshot.cardMinor,
-    bankTransferMinor: snapshot.bankTransferMinor,
-    changeMinor: snapshot.changeMinor,
-    cashInMinor: snapshot.cashInMinor,
-    cashOutMinor: snapshot.cashOutMinor,
-    expectedCashMinor: snapshot.expectedCashMinor,
-    countedCashMinor: snapshot.countedCashMinor,
-    varianceMinor: snapshot.varianceMinor,
-    // The moment the report was taken, which for a snapshot is its own creation.
-    generatedAt: snapshot.createdAt.toISOString(),
-  }
-}
-
-/**
- * The X-report: the same figures computed live and stored nowhere (P13-D33).
+ * **The one shift-report arithmetic, behind two gates** (P14-D12).
  *
- * The cash arithmetic is `selectShiftCashTotals` + `computeExpectedCash`, the
- * one formula the close uses, so an X taken a minute before the close cannot
- * disagree with the Z that follows it.
+ * A device and a session must not be able to read two different drawers, so there
+ * is exactly one function that assembles an X or a Z: `closeShift` writes the
+ * snapshot with the same `selectShiftReportFigures` + `selectShiftCashTotals`, and
+ * both callers below only decide who may ask.
+ *
+ * - `Z` is the stored snapshot and **refuses to rebuild** when it is missing
+ *   (`SHIFT_REPORT_MISSING`, 500). A report that can be reconstructed on read is a
+ *   report that can change after the customer has gone home (P13-D32).
+ * - `X` computes the same figures live and writes nothing (P13-D33). Asking for an
+ *   X of a closed shift returns the live figures with `closedAt` set, which is a
+ *   legitimate reading of a drawer.
+ *
+ * Not theirs is indistinguishable from not there: a terminal may not read another
+ * terminal's shift (P13-D39, A01). A session's 403 is decided by its own caller
+ * before it gets here, because a 404 for a manager ASKING for another branch would
+ * hide a fact they are entitled to know exists.
  */
-export async function getXReport(
-  device: DeviceAuthContext,
+export async function readShiftReport(
+  scope: ShiftReportScope,
   shiftId: string,
+  kind: 'X' | 'Z',
 ): Promise<ShiftReportView> {
-  const row = await findShiftReportSubject(device, shiftId)
+  const row = await findShiftById(shiftId)
+  const outOfScope =
+    !row ||
+    (scope.terminalId !== undefined && row.terminalId !== scope.terminalId) ||
+    (scope.branchId !== null && row.branchId !== scope.branchId)
+  if (!row || outOfScope) throw new NotFoundError('Shift not found')
+
+  if (kind === 'Z') {
+    if (row.status !== 'CLOSED') {
+      throw new AppError(409, 'SHIFT_NOT_CLOSED', 'An X-report is the one for an open shift')
+    }
+
+    const snapshot = await findShiftReportByShiftId(shiftId)
+    if (!snapshot) {
+      throw new AppError(
+        500,
+        'SHIFT_REPORT_MISSING',
+        'This shift closed without its Z-report; the snapshot cannot be rebuilt',
+      )
+    }
+
+    return {
+      kind: 'Z',
+      shiftId: snapshot.shiftId,
+      number: snapshot.number,
+      branchId: snapshot.branchId,
+      terminalId: snapshot.terminalId,
+      deviceId: snapshot.deviceId,
+      openedAt: snapshot.openedAt.toISOString(),
+      closedAt: snapshot.closedAt.toISOString(),
+      openingFloatMinor: snapshot.openingFloatMinor,
+      saleCount: snapshot.saleCount,
+      itemCount: snapshot.itemCount,
+      refundCount: snapshot.refundCount,
+      voidCount: snapshot.voidCount,
+      grossMinor: snapshot.grossMinor,
+      refundMinor: snapshot.refundMinor,
+      netMinor: snapshot.netMinor,
+      lineDiscountMinor: snapshot.lineDiscountMinor,
+      saleDiscountMinor: snapshot.saleDiscountMinor,
+      loyaltyDiscountMinor: snapshot.loyaltyDiscountMinor,
+      loyaltyRedeemPoints: snapshot.loyaltyRedeemPoints,
+      loyaltyEarnedPoints: snapshot.loyaltyEarnedPoints,
+      baseMinor: snapshot.baseMinor,
+      vatMinor: snapshot.vatMinor,
+      nhilMinor: snapshot.nhilMinor,
+      getfundMinor: snapshot.getfundMinor,
+      taxTotalMinor: snapshot.taxTotalMinor,
+      cashMinor: snapshot.cashMinor,
+      creditMinor: snapshot.creditMinor,
+      momoMinor: snapshot.momoMinor,
+      cardMinor: snapshot.cardMinor,
+      bankTransferMinor: snapshot.bankTransferMinor,
+      changeMinor: snapshot.changeMinor,
+      cashInMinor: snapshot.cashInMinor,
+      cashOutMinor: snapshot.cashOutMinor,
+      expectedCashMinor: snapshot.expectedCashMinor,
+      countedCashMinor: snapshot.countedCashMinor,
+      varianceMinor: snapshot.varianceMinor,
+      // The moment the report was taken, which for a snapshot is its own creation.
+      generatedAt: snapshot.createdAt.toISOString(),
+    }
+  }
+
   const [totals, figures] = await Promise.all([
     selectShiftCashTotals(shiftId, row.openingFloatMinor),
     selectShiftReportFigures(shiftId),
@@ -1062,6 +1009,26 @@ export async function getXReport(
     varianceMinor: countedCashMinor === null ? null : countedCashMinor - expectedCashMinor,
     generatedAt: new Date().toISOString(),
   }
+}
+
+/**
+ * The Z-report for a terminal's own shift (Plan 13-07). The device gate is the
+ * extraction's first caller: the shift must belong to the calling device's
+ * terminal *and* branch, and is otherwise not found.
+ */
+export async function getZReport(
+  device: DeviceAuthContext,
+  shiftId: string,
+): Promise<ShiftReportView> {
+  return readShiftReport({ branchId: device.branchId, terminalId: device.terminalId }, shiftId, 'Z')
+}
+
+/** The X-report for a terminal's own shift; the same arithmetic, asked live. */
+export async function getXReport(
+  device: DeviceAuthContext,
+  shiftId: string,
+): Promise<ShiftReportView> {
+  return readShiftReport({ branchId: device.branchId, terminalId: device.terminalId }, shiftId, 'X')
 }
 
 // --- Offline sale application ------------------------------------------------
