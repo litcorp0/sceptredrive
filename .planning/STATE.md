@@ -5,16 +5,19 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-26
-**Status:** **Phase 12 (Branch Operations & Approval Workflow) is in progress: plans 01–10 complete
-and verified (10/13).** Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
+**Status:** **Phase 12 (Branch Operations & Approval Workflow) is complete and verified (13/13).**
+Phase 11 is complete and verified (11/11 plans); Phase 10 is complete and
 verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface phases (7
 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop Modules &
 Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day added
 Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 12, Plan 11 — Console: unified approval inbox and the manager's
-operations view**, then Plan 12 (request screens) in the admin lane, and Plan 13 for verification.
-Phase 12's planning set is
+**Next action:** plan **Phase 13 — POS Payments, Returns & Shifts**. It must pick up two
+carry-forwards: the `REFUND` approval type (registered in the type union with no handler, so boot
+asserts it is absent until Phase 13 wires it), and the shift-review requester identity — the
+`SHIFT_CLOSE` payload carries no staff id, so a manager closing a cashier's drawer can review it
+(Phase 12 verification §6). Phase 12's verification is
+`phases/12-branch-ops-approvals/12-VERIFICATION.md`; its planning set is
 `README.md` (index, lanes, execution shape), `00-DECISIONS.md` (P12-D1…D38), `01-RESEARCH.md`
 (sources + 38 verified repository facts) and `01…13-PLAN.md`. Phase 11's verification is
 `phases/11-procurement-replenishment/11-VERIFICATION.md`.
@@ -37,7 +40,7 @@ Phase 12's planning set is
 | 9 | Analytics, Dashboard & Reporting Read Models | ✅ Complete (8/8 plans, verified) |
 | 10 | Desktop POS Modules, Chrome & Shift Home | ✅ Complete (10/10 plans, verified) |
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
-| 12 | Branch Operations & Approval Workflow | 🔷 In progress (10/13 plans) |
+| 12 | Branch Operations & Approval Workflow | ✅ Complete (13/13 plans, verified) |
 | 13 | POS Payments, Returns & Shifts | 🔷 Context locked (10 plans) |
 | 14 | Admin Operations & E-VAT | 🔷 Context locked (8 plans) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
@@ -180,6 +183,54 @@ Phase 12's planning set is
   formatter run). With them present, the formatter is the only `bun run lint` error; stashed, lint
   exits 0 with the same 19 warnings. The phase did not author, fix or commit them.
 
+### Phase 12 execution notes — plans 11–13 (2026-10-26)
+
+- **Phase 12 is complete and verified.** `12-VERIFICATION.md` maps all nine roadmap criteria, the
+  sixteen requirements and the OWASP table to a numbered leg, a committed test or a screenshot.
+  Commits for the back half: `393342d` (inbox and operations view), `5c4b6a1` (branch directory),
+  `8d81ac8` (request screens), `0ede794` (console formatting), plus the verification commit.
+- **Numbers.** API **479 → 596** across the phase (+117), shared **239** unchanged, desktop
+  **427** unchanged, admin modules **17 → 19**, brand gate over **1 035** files.
+  `evidence/suites.txt` is the whole matrix in one transcript and ends **ALL SUITES PASSED**.
+- **The external API walkthrough is `evidence/walkthrough-branch-ops.mjs`:** 32 legs, **93
+  assertions**, 0 failures. Fixtures are created through the API, and three figures are
+  re-derived from SQL rather than read back — the approved write-off value (150 000 from
+  `stock_write_off.value_minor` = Σ lines = Σ `WRITE_OFF` movements = `approval.amount_minor`),
+  the transfer source level (20 → 18 after dispatching 2), and accuracy (2 matched of 4 counted
+  → **5000 bp**). Legs 21–26 drive the real `POST /api/pos/sync/upload` with a device JWT and
+  the real pg-boss jobs, so the shift and count paths are proven over HTTP rather than assumed.
+- **Eight mutations, eight caught** (`evidence/mutations.sh`, `mutations.txt`): the inclusive
+  price band, the self-approval check, the `deciderBranchId` comparison, the dispatch guard, the
+  write-off rejection branch, the stale-price guard, the manager shrinkage guard, and the
+  shift tolerance boundary. Nothing was missed, so no test gap needed repair this round.
+- **The console shipped with one scope addition and one correction.** The operations cards had to
+  link somewhere real, so `/inventory/write-offs` and `/customers/over-limit` were created as
+  minimal lists in Plan 11 and completed in Plan 12; and Plan 11 derived `canDispatch` on the
+  client, which Plan 12 replaced with the server's field.
+- **A real API gap was found by the console and fixed, not worked around.** `GET /api/branches` is
+  branch-scoped for managers by design, so the transfer source picker had nothing to offer and
+  BRN-01 was half usable. `GET /api/branches/directory` now returns `{ id, code, name, type }` for
+  active branches behind `branch.read`, with the exact key set asserted so a later widening cannot
+  silently leak address, staff or financials. `/api/branches` is unchanged and re-proven.
+- **The demo seed gained count history** (`d31d2f0`) because Plan 09's rotation figure was a best
+  case with an empty `stock_count_line`, and the accuracy tile would have rendered `null` on the
+  very screens this phase is about. Three posted counts per branch, variances posted through
+  `postMovements`, ledger reconciled: `accuracyBp` **6667**, rotation re-measured at 0.698 ms.
+- **Limits closed after the plans landed** (`4c39604`): subject payloads are now typed in
+  `ApprovalSubject` instead of being cast; an admin's operations summary has its low-stock figure;
+  a concurrent in-band price write is a 409 rather than a 500; and `staff.test.ts` no longer
+  depends on an otherwise empty database.
+- **Two gates were red for reasons the phase inherited and both are now green.** The root
+  `bun run lint` runs `biome check` while the console lanes had run `biome lint`, so 27 files were
+  unformatted (`0ede794`). And the two admin files that had been locally modified with a stray
+  formatter run since Phase 11 are no longer modified.
+- **What is still not proven.** `SHIFT_VARIANCE_REVIEW` has not been decided through the browser —
+  shifts come from the PowerSync upload, so the click-through needs a device fixture. The
+  shift-review requester is still the shift's cashier (Phase 13). The admin has no all-branch
+  low-stock **page** even though the API now answers the count. Approval expiry is unscheduled, the
+  shift list is Phase 14's, `REFUND` waits for Phase 13, and a negative `CORRECTION` adjustment
+  stays a documented hole. All of it is named in `12-VERIFICATION.md` §6.
+
 ### Phase 12 planning notes (2026-10-26)
 
 - Thirteen plans written to `phases/12-branch-ops-approvals/`: `README.md` (index, lanes, execution
@@ -243,9 +294,9 @@ Phase 12's planning set is
 | 08 | Shift variance review | ✅ Complete |
 | 09 | Cycle counts: schedules, ABC, trigger counts, accuracy | ✅ Complete |
 | 10 | The operations summary read model | ✅ Complete |
-| 11 | Console: unified approval inbox and the manager's operations view | ⏳ Planned |
-| 12 | Console: request screens for transfers, write-offs, price and credit | ⏳ Planned |
-| 13 | Verification, evidence, state update | ⏳ Planned |
+| 11 | Console: unified approval inbox and the manager's operations view | ✅ Complete |
+| 12 | Console: request screens for transfers, write-offs, price and credit | ✅ Complete |
+| 13 | Verification, evidence, state update | ✅ Complete |
 
 ### Phase 11 planning notes (2026-10-25)
 

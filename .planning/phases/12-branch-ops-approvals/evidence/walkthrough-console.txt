@@ -1,0 +1,268 @@
+admin test:walkthrough: 
+admin test:walkthrough: -- admin sign-in --
+admin test:walkthrough:   ok   admin lands on the dashboard
+admin test:walkthrough: 
+admin test:walkthrough: -- every section --
+admin test:walkthrough:   ok   / renders "Today at"
+admin test:walkthrough:   ok   /analytics renders "Analytics"
+admin test:walkthrough:   ok   /approvals renders "Approvals"
+admin test:walkthrough:   ok   /approvals renders its inbox columns
+admin test:walkthrough:   ok   /approvals shows its rows or its own empty state
+admin test:walkthrough:   ok   /operations renders "Branch operations"
+admin test:walkthrough:   ok   /operations renders its queue cards
+admin test:walkthrough:   ok   /operations says what the page is for
+admin test:walkthrough:   ok   /branches renders "Branches"
+admin test:walkthrough:   ok   /terminals renders "Terminals"
+admin test:walkthrough:   ok   /staff renders "Staff"
+admin test:walkthrough:   ok   /catalog/products renders "Products"
+admin test:walkthrough:   ok   /catalog/products/new renders "New product"
+admin test:walkthrough:   ok   /catalog/categories renders "Categories"
+admin test:walkthrough:   ok   /catalog/brands renders "Brands"
+admin test:walkthrough:   ok   /catalog/units renders "Units"
+admin test:walkthrough:   ok   /inventory/stock renders "Stock"
+admin test:walkthrough:   ok   /inventory/receipts renders "Receipts"
+admin test:walkthrough:   ok   /inventory/transfers renders "Transfers"
+admin test:walkthrough:   ok   /inventory/transfers/new renders "New transfer"
+admin test:walkthrough:   ok   /inventory/counts renders "Counts"
+admin test:walkthrough:   ok   /inventory/counts/new renders "New stock count"
+admin test:walkthrough:   ok   /inventory/write-offs renders "Write-offs"
+admin test:walkthrough:   ok   /inventory/write-offs renders its document columns
+admin test:walkthrough:   ok   /inventory/write-offs shows its rows or its own empty state
+admin test:walkthrough:   ok   /customers renders "Customers"
+admin test:walkthrough:   ok   /customers/aging renders "Aging"
+admin test:walkthrough:   ok   /customers/over-limit renders "Over the credit limit"
+admin test:walkthrough:   ok   /customers/over-limit renders its exposure columns
+admin test:walkthrough:   ok   /customers/over-limit shows its rows or its own empty state
+admin test:walkthrough:   ok   /customers/over-limit formats every figure
+admin test:walkthrough:   ok   /loyalty renders "Loyalty"
+admin test:walkthrough:   ok   /suppliers renders "Suppliers"
+admin test:walkthrough:   ok   /suppliers/invoices renders "Invoices"
+admin test:walkthrough:   ok   /suppliers/invoices/new renders "New supplier invoice"
+admin test:walkthrough:   ok   /suppliers/payments renders "Payments"
+admin test:walkthrough:   ok   /suppliers/aging renders "Aging"
+admin test:walkthrough:   ok   /procurement/orders renders "Purchase orders"
+admin test:walkthrough:   ok   /procurement/replenishment renders "What to order"
+admin test:walkthrough:   ok   /procurement/suppliers renders "Which suppliers deliver"
+admin test:walkthrough:   ok   /audit renders "Audit"
+admin test:walkthrough:   ok   /settings renders "Settings"
+admin test:walkthrough: 
+admin test:walkthrough: -- detail screens --
+admin test:walkthrough:   ok   /branches/cb019c64-aded-4541-ac03-611780d3ebc2 renders "Updated"
+admin test:walkthrough:   ok   /catalog/products/874adae9-61d4-4c1a-bc51-a71a1066cccb renders
+admin test:walkthrough:   ok   /inventory/stock/874adae9-61d4-4c1a-bc51-a71a1066cccb renders
+admin test:walkthrough:   ok   /inventory/receipts/14e8d36c-2b79-46ec-903b-8b418fd92f0c renders
+admin test:walkthrough:   ok   /suppliers/dd72a892-2163-4131-ae1d-9390c30b6e26 renders
+admin test:walkthrough:   ok   /suppliers/invoices/new renders
+admin test:walkthrough:   ok   /suppliers/payments/0180fef1-c389-4b87-a9b1-4818a70d25af renders
+admin test:walkthrough:   ok   /customers/120b2355-8993-4eff-a340-5b6f272829ac renders
+admin test:walkthrough:   ok   /customers/120b2355-8993-4eff-a340-5b6f272829ac/statement renders
+admin test:walkthrough: 
+admin test:walkthrough: -- analytics charts and export --
+admin test:walkthrough:   ok   /analytics?tab=sales renders
+admin test:walkthrough:   ok   /analytics?tab=sales renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=sales: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=products renders
+admin test:walkthrough:   ok   /analytics?tab=products renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=products: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=inventory renders
+admin test:walkthrough:   ok   /analytics?tab=inventory renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=inventory: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=credit renders
+admin test:walkthrough:   ok   /analytics?tab=credit renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=credit: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=loyalty renders
+admin test:walkthrough:   ok   /analytics?tab=loyalty renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=loyalty: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=payables renders
+admin test:walkthrough:   ok   /analytics?tab=payables renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=payables: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month renders
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month renders at least one chart
+admin test:walkthrough:   ok   /analytics?tab=tax&granularity=month: every chart has a caption, an aria-label, axes, and a data table
+admin test:walkthrough:   ok   sales CSV starts with a UTF-8 BOM
+admin test:walkthrough:   ok   sales CSV carries the expected header row
+admin test:walkthrough:   ok   sales CSV uses CRLF line endings
+admin test:walkthrough:   ok   sales CSV carries at least one data row
+admin test:walkthrough: 
+admin test:walkthrough: -- manager role boundary --
+admin test:walkthrough:   ok   manager password already changed (re-run)
+admin test:walkthrough:   ok   manager lands on the dashboard
+admin test:walkthrough:   ok   manager has no "All branches" option
+admin test:walkthrough:   ok   manager branch control is a locked badge, not a select
+admin test:walkthrough:   ok   manager can open /
+admin test:walkthrough:   ok   manager can open /analytics
+admin test:walkthrough:   ok   manager can open /analytics?tab=payables
+admin test:walkthrough:   ok   manager can open /inventory/stock
+admin test:walkthrough:   ok   manager can open /customers
+admin test:walkthrough:   ok   manager can open /customers/aging
+admin test:walkthrough:   ok   manager can open /suppliers
+admin test:walkthrough:   ok   manager can open /audit
+admin test:walkthrough:   ok   a foreign branchId does not change a manager's analytics view
+admin test:walkthrough:   ok   manager analytics navigated
+admin test:walkthrough:   ok   a foreign branchId in the URL does not break the manager view
+admin test:walkthrough:   ok   manager staff list hides global admin accounts
+admin test:walkthrough: 
+admin test:walkthrough: -- procurement (manager) --
+admin test:walkthrough:   ok   procurement fixtures exist in the demo branch
+admin test:walkthrough:   ok   manager raises an approved and a pending order
+admin test:walkthrough:   ok   the manager's order list is exactly their branch's orders
+admin test:walkthrough:   ok   a manager sees no branch column, so no other branch's orders
+admin test:walkthrough:   ok   a manager sees no approve action on the list
+admin test:walkthrough:   ok   the pending order says it is waiting
+admin test:walkthrough:   ok   a manager cannot approve an order from its detail
+admin test:walkthrough: 
+admin test:walkthrough: -- branch operations (manager) --
+admin test:walkthrough:   ok   the manager session names its branch and its staff id
+admin test:walkthrough:   ok   the manager has a product to price and one to write off
+admin test:walkthrough:   ok   the manager raises a transfer request through the form
+admin test:walkthrough:   ok   the new request waits for the source branch and stays withdrawable by its requester
+admin test:walkthrough:   ok   the manager's own transfer request is in their inbox
+admin test:walkthrough:   ok   the inbox names the manager as the requester
+admin test:walkthrough:   ok   the request detail names the manager as its requester
+admin test:walkthrough:   ok   the requester is offered no decision controls
+admin test:walkthrough:   ok   the detail says why the requester cannot decide it
+admin test:walkthrough:   ok   the manager's branch has a price override row
+admin test:walkthrough:   ok   the override row prints the effective price the band is judged from
+admin test:walkthrough:   ok   a value outside the band prints the band sentence
+admin test:walkthrough:   ok   the submit button becomes Request price change
+admin test:walkthrough:   ok   the price row locks once its change is waiting for a decision
+admin test:walkthrough:   ok   the price change exists as a pending approval
+admin test:walkthrough:   ok   the demo customer for the credit request exists
+admin test:walkthrough:   ok   a higher limit reveals the reason field
+admin test:walkthrough:   ok   the dialog offers Request increase instead of Save settings
+admin test:walkthrough:   ok   the manager's direct limit increase is refused
+admin test:walkthrough:   ok   the credit increase exists as a pending approval
+admin test:walkthrough:   ok   a theft write-off marks its line note as required
+admin test:walkthrough:   ok   the form says the note is required for this reason
+admin test:walkthrough:   ok   submitting without the note is refused with an explanation
+admin test:walkthrough:   ok   the manager raises the write-off through the form
+admin test:walkthrough:   ok   the write-off is waiting as an approval
+admin test:walkthrough: 
+admin test:walkthrough: -- 1024x768 layout --
+admin test:walkthrough:   ok   1024 inbox: no page-level horizontal scroll
+admin test:walkthrough:   ok   1024 inbox: the wide table scrolls inside its container
+admin test:walkthrough:   ok   1024 inbox: the last column is reachable, not clipped
+admin test:walkthrough:   ok   transfer request form: no horizontal scroll at 1024
+admin test:walkthrough:   ok   transfer request form: the source branch select is fully visible at 1024
+admin test:walkthrough:   ok   transfer request form: the product search is fully visible at 1024
+admin test:walkthrough:   ok   transfer request form: the request button is fully visible at 1024
+admin test:walkthrough:   ok   write-off form: no horizontal scroll at 1024
+admin test:walkthrough:   ok   write-off form: the product search is fully visible at 1024
+admin test:walkthrough:   ok   write-off form: the quantity input is fully visible at 1024
+admin test:walkthrough:   ok   write-off form: the reason select is fully visible at 1024
+admin test:walkthrough:   ok   write-off form: the submit button is fully visible at 1024
+admin test:walkthrough: 
+admin test:walkthrough: -- procurement (admin) --
+admin test:walkthrough:   ok   the admin selects the demo branch for the procurement screens
+admin test:walkthrough:   ok   the admin approves the pending order in the console
+admin test:walkthrough:   ok   the approved order records who decided it
+admin test:walkthrough:   ok   the admin marks the order as sent
+admin test:walkthrough:   ok   an over-delivery reason unlocks the receive button
+admin test:walkthrough:   ok   receiving against the order posts a receipt
+admin test:walkthrough:   ok   the return dialog states what is still returnable
+admin test:walkthrough:   ok   the replenishment screen lists rows with a basis disclosure
+admin test:walkthrough:   ok   the basis breakdown prints the inputs the API used
+admin test:walkthrough:   ok   the performance screen states its definition in words
+admin test:walkthrough:   ok   the order renders a printable sheet
+admin test:walkthrough: 
+admin test:walkthrough: -- branch operations (admin) --
+admin test:walkthrough:   ok   the sidebar badge counts the pending approvals in the selected branch
+admin test:walkthrough:   ok   the admin sees the manager as the transfer requester
+admin test:walkthrough:   ok   the transfer request renders its goods value and a link to the document
+admin test:walkthrough:   ok   closing the decision dialog returns focus to the control that opened it
+admin test:walkthrough:   ok   the admin approves the transfer request
+admin test:walkthrough:   ok   the sidebar badge falls after a decision
+admin test:walkthrough:   ok   the price request shows the proposed price and the band it broke
+admin test:walkthrough:   ok   the admin approves the price change
+admin test:walkthrough:   ok   the credit request shows the current and proposed limits
+admin test:walkthrough:   ok   the credit request links to the customer it changes
+admin test:walkthrough:   ok   the admin approves the credit limit increase
+admin test:walkthrough:   ok   the write-off request renders its frozen value
+admin test:walkthrough:   ok   the write-off request names the product written off
+admin test:walkthrough:   ok   the admin approves the write-off
+admin test:walkthrough:   ok   the variance review shows the drawer's arithmetic
+admin test:walkthrough:   ok   a variance review offers exactly one action
+admin test:walkthrough:   ok   a variance review offers neither approve nor reject
+admin test:walkthrough:   ok   the outcome dialog says a variance review cannot be rejected
+admin test:walkthrough:   ok   the admin records the variance outcome
+admin test:walkthrough:   ok   the sidebar badge keeps falling as more decisions are recorded
+admin test:walkthrough: 
+admin test:walkthrough: -- analytics accuracy --
+admin test:walkthrough:   ok   /analytics?tab=inventory renders
+admin test:walkthrough:   ok   the inventory tab renders the Count accuracy card
+admin test:walkthrough:   ok   the accuracy card renders a percentage or an em dash, never NaN
+admin test:walkthrough:   ok   a period with posted counts renders a percentage
+admin test:walkthrough:   ok   the accuracy card contains no NaN or Infinity
+admin test:walkthrough:   ok   the warehouse branch exists for the no-counts case
+admin test:walkthrough:   ok   /analytics?tab=inventory&branchId=56922b2c-68ce-4ba8-ae12-3e4626b06bf7 renders
+admin test:walkthrough:   ok   the warehouse branch reports no posted counts
+admin test:walkthrough:   ok   a period with no counts renders an em dash, not 0.00%
+admin test:walkthrough:   ok   the no-counts card contains neither NaN nor 0.00%
+admin test:walkthrough: 
+admin test:walkthrough: -- analytics responsive matrix --
+admin test:walkthrough:   ok   320px light no-preference: charts rendered
+admin test:walkthrough:   ok   320px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   320px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   320px light reduce: charts rendered
+admin test:walkthrough:   ok   320px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   320px light reduce: no zero-height chart
+admin test:walkthrough:   ok   320px light reduce: no entrance animation
+admin test:walkthrough:   ok   320px dark no-preference: charts rendered
+admin test:walkthrough:   ok   320px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   320px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   320px dark reduce: charts rendered
+admin test:walkthrough:   ok   320px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   320px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   320px dark reduce: no entrance animation
+admin test:walkthrough:   ok   768px light no-preference: charts rendered
+admin test:walkthrough:   ok   768px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   768px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   768px light reduce: charts rendered
+admin test:walkthrough:   ok   768px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   768px light reduce: no zero-height chart
+admin test:walkthrough:   ok   768px light reduce: no entrance animation
+admin test:walkthrough:   ok   768px dark no-preference: charts rendered
+admin test:walkthrough:   ok   768px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   768px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   768px dark reduce: charts rendered
+admin test:walkthrough:   ok   768px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   768px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   768px dark reduce: no entrance animation
+admin test:walkthrough:   ok   1024px light no-preference: charts rendered
+admin test:walkthrough:   ok   1024px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1024px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   1024px light reduce: charts rendered
+admin test:walkthrough:   ok   1024px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   1024px light reduce: no zero-height chart
+admin test:walkthrough:   ok   1024px light reduce: no entrance animation
+admin test:walkthrough:   ok   1024px dark no-preference: charts rendered
+admin test:walkthrough:   ok   1024px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1024px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   1024px dark reduce: charts rendered
+admin test:walkthrough:   ok   1024px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   1024px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   1024px dark reduce: no entrance animation
+admin test:walkthrough:   ok   1440px light no-preference: charts rendered
+admin test:walkthrough:   ok   1440px light no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1440px light no-preference: no zero-height chart
+admin test:walkthrough:   ok   1440px light reduce: charts rendered
+admin test:walkthrough:   ok   1440px light reduce: no horizontal scroll
+admin test:walkthrough:   ok   1440px light reduce: no zero-height chart
+admin test:walkthrough:   ok   1440px light reduce: no entrance animation
+admin test:walkthrough:   ok   1440px dark no-preference: charts rendered
+admin test:walkthrough:   ok   1440px dark no-preference: no horizontal scroll
+admin test:walkthrough:   ok   1440px dark no-preference: no zero-height chart
+admin test:walkthrough:   ok   1440px dark reduce: charts rendered
+admin test:walkthrough:   ok   1440px dark reduce: no horizontal scroll
+admin test:walkthrough:   ok   1440px dark reduce: no zero-height chart
+admin test:walkthrough:   ok   1440px dark reduce: no entrance animation
+admin test:walkthrough:   ok   first analytics series takes the brand orange
+admin test:walkthrough:   ok   first series clears 3:1 against its panel (SC 1.4.11)
+admin test:walkthrough:   ok   chart is readable by keyboard arrow keys
+admin test:walkthrough: 
+admin test:walkthrough: -- console hygiene --
+admin test:walkthrough:   ok   no console errors across the whole walkthrough
+admin test:walkthrough:   ok   no failed requests across the whole walkthrough
+admin test:walkthrough: 
+admin test:walkthrough: 239/239 checks passed
+admin test:walkthrough: Exited with code 0
