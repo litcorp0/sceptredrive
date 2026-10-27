@@ -1,0 +1,565 @@
+
+### Mutation 1 — withinPriceBand is inclusive at the edge (<= becomes <)
+file: packages/shared/src/pricing.ts
+  -   return scaledDelta <= allowance
+  +   return scaledDelta < allowance
+applied
+$ (cd packages/shared && bunx vitest run src/pricing.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+
+ ❯ src/pricing.test.ts (18 tests | 4 failed) 27ms
+   ❯ withinPriceBand (7)
+     × admits a change exactly at the band edge 10ms
+     × admits only an unchanged price when the percent is zero 2ms
+     × admits only a zero proposal when the current price is zero 1ms
+     × handles a 100 percent band 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/pricing.test.ts > withinPriceBand > admits a change exactly at the band edge
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/pricing.test.ts:58:49
+     56| describe('withinPriceBand', () => {
+     57|   it('admits a change exactly at the band edge', () => {
+     58|     expect(withinPriceBand(10_000, 11_000, 10)).toBe(true)
+       |                                                 ^
+     59|     expect(withinPriceBand(10_000, 9_000, 10)).toBe(true)
+     60|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/pricing.test.ts > withinPriceBand > admits only an unchanged price when the percent is zero
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/pricing.test.ts:76:48
+     74|
+     75|   it('admits only an unchanged price when the percent is zero', () => {
+     76|     expect(withinPriceBand(10_000, 10_000, 0)).toBe(true)
+       |                                                ^
+     77|     expect(withinPriceBand(10_000, 10_001, 0)).toBe(false)
+     78|     expect(withinPriceBand(10_000, 9_999, 0)).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/pricing.test.ts > withinPriceBand > admits only a zero proposal when the current price is zero
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/pricing.test.ts:82:39
+     80|
+     81|   it('admits only a zero proposal when the current price is zero', () …
+     82|     expect(withinPriceBand(0, 0, 10)).toBe(true)
+       |                                       ^
+     83|     expect(withinPriceBand(0, 1, 10)).toBe(false)
+     84|     expect(withinPriceBand(0, 10_000, 100)).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/pricing.test.ts > withinPriceBand > handles a 100 percent band
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/pricing.test.ts:88:50
+     86|
+     87|   it('handles a 100 percent band', () => {
+     88|     expect(withinPriceBand(10_000, 20_000, 100)).toBe(true)
+       |                                                  ^
+     89|     expect(withinPriceBand(10_000, 20_001, 100)).toBe(false)
+     90|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 14 passed (18)
+   Start at  23:17:48
+   Duration  324ms (transform 40%, tests 27%, import 26%, worker 7%)
+
+[exit 1]
+RESULT: CAUGHT by src/pricing.test.ts
+
+### Mutation 2 — nobody approves their own request (self-approval check removed)
+file: packages/shared/src/approvals.ts
+  -   if (user.label === approval.requestedBy) return false
+  +   // removed: self-approval check
+applied
+$ (cd packages/shared && bunx vitest run src/approvals.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+
+ ❯ src/approvals.test.ts (19 tests | 1 failed) 25ms
+   ❯ canDecideApproval (11)
+     × refuses anyone deciding their own request, admin included 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/approvals.test.ts > canDecideApproval > refuses anyone deciding their own request, admin included
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/approvals.test.ts:151:7
+    149|         user: actor({ role: 'ADMIN', label: 'Adwoa (admin)' }),
+    150|       }),
+    151|     ).toBe(false)
+       |       ^
+    152|   })
+    153|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  23:17:48
+   Duration  323ms (transform 47%, import 25%, tests 21%, worker 6%)
+
+[exit 1]
+RESULT: CAUGHT by src/approvals.test.ts
+
+### Mutation 3 — a manager decides only their own branch's row (deciderBranchId comparison dropped)
+file: packages/shared/src/approvals.ts
+  -     approval.deciderRole === 'MANAGER' &&
+    approval.deciderBranchId !== null &&
+    user.branchId === approval.deciderBranchId
+  +     approval.deciderRole === 'MANAGER'
+applied
+$ (cd packages/shared && bunx vitest run src/approvals.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/packages/shared
+
+ ❯ src/approvals.test.ts (19 tests | 2 failed) 44ms
+   ❯ canDecideApproval (11)
+     × refuses a manager deciding a manager row in another branch 11ms
+     × refuses a manager authority with no branch — it is undecidable, not open 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/approvals.test.ts > canDecideApproval > refuses a manager deciding a manager row in another branch
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/approvals.test.ts:169:7
+    167|         user: actor({ branchId: BRANCH_B }),
+    168|       }),
+    169|     ).toBe(false)
+       |       ^
+    170|   })
+    171|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/approvals.test.ts > canDecideApproval > refuses a manager authority with no branch — it is undecidable, not open
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/approvals.test.ts:187:7
+    185|         user: actor(),
+    186|       }),
+    187|     ).toBe(false)
+       |       ^
+    188|   })
+    189|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 17 passed (19)
+   Start at  23:17:49
+   Duration  313ms (tests 40%, transform 33%, import 21%, worker 6%)
+
+[exit 1]
+RESULT: CAUGHT by src/approvals.test.ts
+
+### Mutation 4 — dispatch refuses a REQUESTED transfer (guard accepts it)
+file: api/src/modules/transfers/transfers.service.ts
+  -   if (row.status === 'DRAFT' || row.status === 'APPROVED') return
+  +   if (row.status === 'DRAFT' || row.status === 'APPROVED' || row.status === 'REQUESTED') return
+applied
+$ (cd api && bunx vitest run src/modules/transfers)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/transfers/transfers.test.ts (12 tests | 6 failed) 2744ms
+   ❯ transfers API (12)
+     × refuses dispatch before the decision and moves no stock 61ms
+     × lets only the source branch decide, and only once 26ms
+     × dispatches an approved request from the source and reconciles the ledger 16ms
+     × keeps the admin draft path direct, with no approval row 151ms
+     × sends a warehouse-sourced request to an admin, not a manager 117ms
+     × short-closes a partially received approved transfer 182ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > refuses dispatch before the decision and moves no stock
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ src/modules/transfers/transfers.test.ts:481:28
+    479|       { productId: productBId, quantityDispatched: 4 },
+    480|     ])
+    481|     expect(refused.status).toBe(409)
+       |                            ^
+    482|     const body = await readJson<{ error: { message: string } }>(refuse…
+    483|     expect(body.error.message).toContain('REQUESTED')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > lets only the source branch decide, and only once
+AssertionError: expected 409 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 409
+
+ ❯ src/modules/transfers/transfers.test.ts:501:29
+    499|
+    500|     const approved = await decide(managerACookie, approvalId, { decisi…
+    501|     expect(approved.status).toBe(200)
+       |                             ^
+    502|     const approvedBody = await readJson<ApprovalDetailResponse>(approv…
+    503|     expect(approvedBody.approval.status).toBe('APPROVED')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > dispatches an approved request from the source and reconciles the ledger
+AssertionError: expected 409 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 409
+
+ ❯ src/modules/transfers/transfers.test.ts:537:31
+    535|       { productId: productBId, quantityDispatched: 4 },
+    536|     ])
+    537|     expect(dispatched.status).toBe(200)
+       |                               ^
+    538|     const body = await readJson<{ transfer: TransferResponse }>(dispat…
+    539|     expect(body.transfer.status).toBe('DISPATCHED')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > keeps the admin draft path direct, with no approval row
+AssertionError: expected 3 to be 11 // Object.is equality
+
+- Expected
++ Received
+
+- 11
++ 3
+
+ ❯ src/modules/transfers/transfers.test.ts:678:49
+    676|     ])
+    677|     expect(received.status).toBe(200)
+    678|     expect(await onHand(productAId, branchBId)).toBe(11)
+       |                                                 ^
+    679|     expect(await onHand(productBId, branchBId)).toBe(5)
+    680|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > sends a warehouse-sourced request to an admin, not a manager
+AssertionError: expected 9 to be 17 // Object.is equality
+
+- Expected
++ Received
+
+- 17
++ 9
+
+ ❯ src/modules/transfers/transfers.test.ts:759:49
+    757|     ])
+    758|     expect(received.status).toBe(200)
+    759|     expect(await onHand(productAId, branchBId)).toBe(17)
+       |                                                 ^
+    760|     expect(await inventoryService.reconcileBranch(warehouseId)).toEqua…
+    761|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  src/modules/transfers/transfers.test.ts > transfers API > short-closes a partially received approved transfer
+AssertionError: expected 11 to be 19 // Object.is equality
+
+- Expected
++ Received
+
+- 19
++ 11
+
+ ❯ src/modules/transfers/transfers.test.ts:797:49
+    795|     // partial receipt.
+    796|     expect(await movementCount(created.id)).toBe(2)
+    797|     expect(await onHand(productAId, branchBId)).toBe(19)
+       |                                                 ^
+    798|
+    799|     const lateReceive = await receive(managerBCookie, created.id, [
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 6 passed (12)
+   Start at  23:17:50
+   Duration  7.17s (import 53%, tests 39%, transform 8%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/transfers
+
+### Mutation 5 — a rejected write-off posts nothing (rejection branch skipped)
+file: api/src/modules/writeoffs/writeoffs.service.ts
+  -   if (decision === 'REJECTED') {
+  +   if (decision === 'REJECTED' && false) {
+applied
+$ (cd api && bunx vitest run src/modules/writeoffs)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/writeoffs/writeoffs.test.ts (11 tests | 1 failed) 2085ms
+   ❯ stock write-offs API (11)
+     × leaves the ledger byte-identical when the write-off is rejected 81ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/writeoffs/writeoffs.test.ts > stock write-offs API > leaves the ledger byte-identical when the write-off is rejected
+AssertionError: expected 'APPROVED' to be 'REJECTED' // Object.is equality
+
+Expected: "REJECTED"
+Received: "APPROVED"
+
+ ❯ src/modules/writeoffs/writeoffs.test.ts:643:35
+    641|
+    642|     const after = await readWriteOff(managerACookie, detail.writeOff.i…
+    643|     expect(after.writeOff.status).toBe('REJECTED')
+       |                                   ^
+    644|     expect(after.writeOff.postedAt).toBeNull()
+    645|     expect(after.approval?.status).toBe('REJECTED')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 passed (11)
+   Start at  23:17:58
+   Duration  7.10s (import 60%, tests 30%, transform 10%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/writeoffs
+
+### Mutation 6 — an approved price change refuses a stale request (guard removed)
+file: api/src/modules/products/products.service.ts
+  -   if (currentMinor !== payload.currentPriceMinor) {
+  +   if (currentMinor !== payload.currentPriceMinor && false) {
+applied
+$ (cd api && bunx vitest run src/modules/products/pricing-band.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/products/pricing-band.test.ts (17 tests | 1 failed) 2331ms
+   ❯ price band and price-change requests (13)
+     × refuses an approval whose price moved underneath it and leaves it pending 137ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/products/pricing-band.test.ts > price band and price-change requests > refuses an approval whose price moved underneath it and leaves it pending
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ src/modules/products/pricing-band.test.ts:414:26
+    412|
+    413|     const stale = await decidePriceChange(adminCookie, pending.id, 'AP…
+    414|     expect(stale.status).toBe(409)
+       |                          ^
+    415|     expect(await readJson<{ error: { message: string } }>(stale)).toMa…
+    416|       error: {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  23:18:06
+   Duration  7.24s (import 59%, tests 33%, transform 8%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/products/pricing-band.test.ts
+
+### Mutation 7 — a manager cannot post shrinkage directly (guard removed)
+file: api/src/modules/inventory/inventory.service.ts
+  -     roleOf(user) !== 'ADMIN' &&
+    input.quantityDelta < 0 &&
+    SHRINKAGE_REASONS.has(input.reasonCode)
+  +     input.quantityDelta < 0 &&
+    SHRINKAGE_REASONS.has(input.reasonCode)
+applied
+$ (cd api && bunx vitest run src/modules/inventory)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/inventory/inventory.api.test.ts (11 tests | 3 failed) 1774ms
+   ❯ inventory API (11)
+     × posts reason-coded adjustments and blocks negative results 41ms
+     × lists movement history with filters 9ms
+     × lists stock, filters search, and requires a branch for admin 17ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/inventory/inventory.api.test.ts > inventory API > posts reason-coded adjustments and blocks negative results
+AssertionError: expected 400 to be 201 // Object.is equality
+
+- Expected
++ Received
+
+- 201
++ 400
+
+ ❯ src/modules/inventory/inventory.api.test.ts:385:29
+    383|       }),
+    384|     })
+    385|     expect(response.status).toBe(201)
+       |                             ^
+    386|     const body = await readJson<{
+    387|       movement: MovementResponse
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/modules/inventory/inventory.api.test.ts > inventory API > lists movement history with filters
+AssertionError: expected 2 to be greater than or equal to 3
+ ❯ src/modules/inventory/inventory.api.test.ts:420:27
+    418|     expect(all.status).toBe(200)
+    419|     const allBody = await readJson<{ movements: MovementResponse[]; to…
+    420|     expect(allBody.total).toBeGreaterThanOrEqual(3)
+       |                           ^
+    421|     expect(allBody.movements.every((row) => row.productId === productA…
+    422|     expect(allBody.movements.some((row) => row.referenceNumber?.starts…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/modules/inventory/inventory.api.test.ts > inventory API > lists stock, filters search, and requires a branch for admin
+AssertionError: expected 12 to be 10 // Object.is equality
+
+- Expected
++ Received
+
+- 10
++ 12
+
+ ❯ src/modules/inventory/inventory.api.test.ts:450:33
+    448|     expect(body.total).toBeGreaterThanOrEqual(2)
+    449|     const row = body.stock.find((item) => item.productId === productAI…
+    450|     expect(row?.quantityOnHand).toBe(10)
+       |                                 ^
+    451|     expect(row?.valueMinor).toBe((row?.quantityOnHand ?? 0) * (row?.av…
+    452|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 17 passed (20)
+   Start at  23:18:13
+   Duration  10.04s (import 69%, tests 23%, transform 8%)
+
+     Import  223 modules were evaluated 424 times · 6.67s total, 69% of tracked time
+             ~3.16s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+[exit 1]
+RESULT: CAUGHT by src/modules/inventory
+
+### Mutation 8 — a variance exactly at tolerance raises no review (> becomes >=)
+file: api/src/modules/pos/pos.service.ts
+  -   if (Math.abs(variance) > tolerance) {
+  +   if (Math.abs(variance) >= tolerance) {
+applied
+$ (cd api && bunx vitest run src/modules/pos/shift-review.test.ts)
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+ ❯ src/modules/pos/shift-review.test.ts (12 tests | 1 failed) 2616ms
+   ❯ shift variance review (12)
+     × raises nothing when the variance is exactly the tolerance 117ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modules/pos/shift-review.test.ts > shift variance review > raises nothing when the variance is exactly the tolerance
+AssertionError: expected [ { …(18) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/modules/pos/shift-review.test.ts:243:47
+    241|       varianceMinor: tolerance,
+    242|     })
+    243|     expect(await reviewsFor(created.shiftId)).toHaveLength(0)
+       |                                               ^
+    244|     expect((await shiftRow(created.shiftId)).reviewStatus).toBe('NONE')
+    245|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 passed (12)
+   Start at  23:18:24
+   Duration  7.56s (import 54%, tests 36%, transform 10%)
+
+[exit 1]
+RESULT: CAUGHT by src/modules/pos/shift-review.test.ts
+
+MUTATIONS CAUGHT: 8/8 — every proof failed the suite it was aimed at
