@@ -439,7 +439,11 @@ interface FakeOptions {
   failOn?: (sql: string) => boolean
   saleExists?: boolean
   lastReceiptValue?: number
+  /** The catalogue the completion's inside-transaction check reads. */
+  products?: Array<{ id: string; name: string | null; is_active: number }>
 }
+
+const PRODUCT_ROW = { id: PRODUCT_A, name: 'Brake Pad Set', is_active: 1 }
 
 function fakeDb(options: FakeOptions = {}) {
   const committed: Array<{ sql: string; parameters: unknown[] | undefined }> = []
@@ -456,18 +460,28 @@ function fakeDb(options: FakeOptions = {}) {
     return null
   }
 
+  async function readAll(sql: string, parameters?: unknown[]): Promise<unknown[]> {
+    if (/FROM product\b/.test(sql)) {
+      const ids = (parameters ?? []) as string[]
+      return (options.products ?? [PRODUCT_ROW]).filter((row) => ids.includes(row.id))
+    }
+    return []
+  }
+
   const db = {
     getOptional: async (sql: string) => read(sql),
-    getAll: async () => [],
+    getAll: async (sql: string, parameters?: unknown[]) => readAll(sql, parameters),
     async writeTransaction<T>(
       work: (tx: {
         getOptional: (sql: string) => Promise<unknown>
+        getAll: (sql: string, parameters?: unknown[]) => Promise<unknown[]>
         execute: (sql: string, parameters?: unknown[]) => Promise<unknown>
       }) => Promise<T>,
     ): Promise<T> {
       const pending: Array<{ sql: string; parameters: unknown[] | undefined }> = []
       const tx = {
         getOptional: async (sql: string) => read(sql),
+        getAll: async (sql: string, parameters?: unknown[]) => readAll(sql, parameters),
         execute: async (sql: string, parameters?: unknown[]) => {
           if (options.failOn?.(sql)) throw new Error('injected write failure')
           pending.push({ sql, parameters })
@@ -491,6 +505,31 @@ afterEach(() => {
 })
 
 describe('completeSale transaction', () => {
+  it('refuses a line whose product is no longer in the catalogue', async () => {
+    startCashier()
+    const { db, committed } = fakeDb({ products: [] })
+
+    await expect(completeSale(db, { ...input(), now: new Date(NOW) })).rejects.toMatchObject({
+      code: 'INVALID_CART',
+      message: expect.stringContaining('Brake Pad Set'),
+    })
+    // Nothing was written and no receipt number was burned.
+    expect(committed).toHaveLength(0)
+  })
+
+  it('refuses a line whose product was archived', async () => {
+    startCashier()
+    const { db, committed } = fakeDb({
+      products: [{ ...PRODUCT_ROW, is_active: 0 }],
+    })
+
+    await expect(completeSale(db, { ...input(), now: new Date(NOW) })).rejects.toMatchObject({
+      code: 'INVALID_CART',
+      message: expect.stringContaining('archived'),
+    })
+    expect(committed).toHaveLength(0)
+  })
+
   it('writes every row family in one transaction and allocates the receipt number', async () => {
     startCashier()
     const { db, committed } = fakeDb({ lastReceiptValue: 4 })

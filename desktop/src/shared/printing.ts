@@ -33,9 +33,39 @@ export interface PrintLine {
   bold?: boolean
 }
 
+/**
+ * A report row, described by its job rather than by its text (P13-D34).
+ *
+ * A shift report is the same paper as a receipt but not the same shape: it has
+ * sections, figures that line up on the right, and rules between blocks. Naming
+ * those four roles keeps the main process out of the business vocabulary — it
+ * never learns what "loyalty redeemed" means, only that a row is a row.
+ */
+export const REPORT_LINE_KINDS = ['title', 'row', 'rule', 'total'] as const
+export type ReportLineKind = (typeof REPORT_LINE_KINDS)[number]
+
+export interface ReportLine {
+  kind: ReportLineKind
+  /** Left text for `row`/`total`, the centred text for `title`. */
+  label?: string | undefined
+  /** Right text for `row`/`total`; ignored by `title` and `rule`. */
+  value?: string | undefined
+  emphasis?: boolean | undefined
+}
+
+/** The whole document the renderer hands the printer. Widths are 42 columns. */
+export interface ReportDocument {
+  /** `Z-REPORT` or `X-REPORT`, printed centred above the figures. */
+  title: string
+  /** Shift number; also the fake adapter's file name. */
+  reference: string
+  lines: ReportLine[]
+}
+
 export interface PrintJob {
   /** Validated receipt number; also the fake adapter's file name. */
   receiptNumber: string
+  /** Empty for a report: the main process owns that layout (`report` below). */
   lines: PrintLine[]
   encoding: PrintEncoding
   /** 1–3. Each copy is a separate receipt block. */
@@ -43,6 +73,13 @@ export interface PrintJob {
   /** Append the drawer kick to the receipt. */
   openDrawer: boolean
   drawerPin: DrawerPin
+  /**
+   * A shift report. Present means the main process lays the rows out itself
+   * (one 42-column implementation in `escpos.ts`), so the renderer cannot print
+   * a report that looks different from the one it previews. The same channel
+   * carries it: the preload bridge stays the fixed, typed surface it already is.
+   */
+  report?: ReportDocument | undefined
 }
 
 export interface PrintRequest {

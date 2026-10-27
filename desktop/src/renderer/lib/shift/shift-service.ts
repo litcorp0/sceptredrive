@@ -5,6 +5,12 @@ import { nextDocumentValue } from '../document-sequence'
 import { notifyOutboxChanged } from '../outbox/outbox-events'
 import { type PosIdentity, readPosIdentity } from '../pos-config'
 import {
+  type LocalShiftReport,
+  localShiftReport,
+  readShiftFigures,
+  writeShiftReport,
+} from './shift-report'
+import {
   findOpenShift,
   findShiftById,
   insertCashMovement,
@@ -15,6 +21,7 @@ import {
   listCashMovements,
   type ShiftCashTotals,
   selectShiftCashTotals,
+  updateShiftClose,
 } from './shift-repository'
 
 /** Re-exported for the shift screen and the existing formatting tests. */
@@ -229,14 +236,43 @@ export async function recordCashMovement(
 export interface CloseShiftInput {
   countedCashMinor: number
   note?: string | undefined
+  /**
+   * The signed-in binding, sent with the close so the server's variance review
+   * names the person who actually closed the drawer (P13-D41). Optional: an old
+   * till that omits it falls back to the shift's cashier, which is Phase 12's
+   * behaviour.
+   */
+  closedBy?: CloseStaffProof | null | undefined
+  /** Injectable clock; the Z snapshot's times and the close must agree. */
+  now?: Date | undefined
+}
+
+/** The five fields the server resolves against the device's own binding (P13-D41). */
+export interface CloseStaffProof {
+  userId: string
+  staffId: string
+  bindingId: string
+  bindingToken: string
+  pinVersion: number
 }
 
 export interface CloseShiftResult {
   shift: LocalShift
   expectedCashMinor: number
   varianceMinor: number
+  /** The frozen Z snapshot, written in the close's own transaction (P13-D32). */
+  report: LocalShiftReport
 }
 
+/**
+ * Closes the shift, and writes the Z snapshot in the **same** transaction.
+ *
+ * Three facts commit or vanish together: the shift row closes, the
+ * `SHIFT_CLOSE` outbox row is queued with the closer's proof, and the frozen
+ * figures are inserted. A crash rolls all of them back, so the shift stays open
+ * and can be closed again — a snapshot written in a second transaction could be
+ * lost to exactly the crash the snapshot exists to survive.
+ */
 export async function closeShift(
   db: PowerSyncDatabase,
   input: CloseShiftInput,
@@ -246,30 +282,27 @@ export async function closeShift(
   const identity = await identityOrThrow(db)
   const shift = await openShiftOrThrow(db, identity, staff)
 
-  const closedAt = new Date().toISOString()
+  const now = input.now ?? new Date()
+  const closedAt = now.toISOString()
   const closeTransactionId = crypto.randomUUID()
+  const closeNote = input.note?.trim() || null
   let expectedCashMinor = 0
   let varianceMinor = 0
+  let report: LocalShiftReport | null = null
 
   await db.writeTransaction(async (tx) => {
     const totals = await selectShiftCashTotals(tx, shift.id, shift.openingFloatMinor)
     expectedCashMinor = computeExpectedCash(totals)
     varianceMinor = computeVariance(input.countedCashMinor, expectedCashMinor)
 
-    await tx.execute(
-      `UPDATE shift
-          SET status = 'CLOSED', closed_at = ?, counted_cash_minor = ?,
-              client_expected_cash_minor = ?, close_note = ?, closed_by = ?
-        WHERE id = ?`,
-      [
-        closedAt,
-        input.countedCashMinor,
-        expectedCashMinor,
-        input.note?.trim() || null,
-        staff.staffId,
-        shift.id,
-      ],
-    )
+    await updateShiftClose(tx, shift.id, {
+      status: 'CLOSED',
+      closedAt,
+      countedCashMinor: input.countedCashMinor,
+      clientExpectedCashMinor: expectedCashMinor,
+      closeNote,
+      closedBy: staff.staffId,
+    })
 
     await insertOutbox(tx, {
       id: closeTransactionId,
@@ -280,17 +313,34 @@ export async function closeShift(
         shiftId: shift.id,
         countedCashMinor: input.countedCashMinor,
         clientExpectedCashMinor: expectedCashMinor,
-        closeNote: input.note?.trim() || null,
+        closeNote,
         occurredAt: closedAt,
+        ...(input.closedBy ? { closedBy: input.closedBy } : {}),
       },
     })
+
+    // Read inside the transaction: the figures are the rows this close sees, so
+    // a report and a stored close cannot be one sale apart.
+    const figures = await readShiftFigures(tx, shift.id)
+    const closedShift: LocalShift = {
+      ...shift,
+      status: 'CLOSED',
+      closedAt,
+      countedCashMinor: input.countedCashMinor,
+      clientExpectedCashMinor: expectedCashMinor,
+      closeNote,
+      closedBy: staff.staffId,
+    }
+    report = localShiftReport(closedShift, figures, expectedCashMinor, closedAt)
+    await writeShiftReport(tx, report)
   })
   notifyOutboxChanged()
 
   const closed = await findShiftById(db, shift.id)
   if (!closed) throw new ShiftError('NO_OPEN_SHIFT', 'Shift could not be read back')
+  if (!report) throw new ShiftError('NO_OPEN_SHIFT', 'The close wrote no report')
 
-  return { shift: closed, expectedCashMinor, varianceMinor }
+  return { shift: closed, expectedCashMinor, varianceMinor, report }
 }
 
 export interface ShiftState {

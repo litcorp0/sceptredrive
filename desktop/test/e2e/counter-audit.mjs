@@ -689,15 +689,18 @@ section('5. A sale with no pointer')
 await goto('#home')
 await page.getByTestId('start-selling').waitFor({ timeout: 30_000 })
 
-// Clear any cart left by the matrix so the keyboard sale starts clean.
+// Void any cart left by the matrix so the keyboard sale starts clean. Clearing
+// is reason-coded since Phase 13 Plan 11 (P13-D28): the header control opens the
+// void dialog, which needs a reason before it will record the abandonment.
 await goto('#pos')
 await page.locator('#product-search').waitFor({ timeout: 30_000 })
-const clear = page.getByRole('button', { name: 'Clear', exact: true }).first()
-if (await clear.count()) {
-  await clear.click()
+const voidCart = page.getByRole('button', { name: 'Void cart', exact: true }).first()
+if (await voidCart.count()) {
+  await voidCart.click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor()
-  await dialog.getByRole('button', { name: 'Clear sale' }).click()
+  await dialog.getByLabel('Why is the cart being abandoned?').selectOption('CUSTOMER_CHANGED_MIND')
+  await dialog.getByRole('button', { name: 'Continue' }).click()
   await dialog.waitFor({ state: 'detached' })
 }
 await goto('#home')

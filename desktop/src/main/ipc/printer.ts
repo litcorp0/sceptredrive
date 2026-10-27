@@ -7,6 +7,7 @@ import {
   type PrinterTarget,
   type PrintJob,
 } from '../../shared/printing'
+import { reportToPrintLines } from '../printing/escpos'
 import {
   listPrinters,
   openDrawer,
@@ -75,7 +76,56 @@ export const printJobSchema = z
   })
   .strict()
 
-const printRequestSchema = z.object({ target: targetSchema, job: printJobSchema }).strict()
+/**
+ * A shift report (P13-D34), validated field by field in the main process.
+ *
+ * The renderer is not trusted: the row count is bounded, every string is
+ * length-capped, and `openDrawer` is pinned to `false` so a report can never
+ * kick the drawer. The document carries styling roles only — the main process
+ * has no idea what the figures mean, which is the point.
+ */
+const reportLineSchema = z
+  .object({
+    kind: z.enum(['title', 'row', 'rule', 'total']),
+    label: z.string().max(PRINT_LIMITS.maxLineLength).optional(),
+    value: z.string().max(PRINT_LIMITS.maxLineLength).optional(),
+    emphasis: z.boolean().optional(),
+  })
+  .strict()
+
+const reportDocumentSchema = z
+  .object({
+    title: z.string().min(1).max(64),
+    reference: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9-]+$/, 'Invalid report number'),
+    lines: z.array(reportLineSchema).min(1).max(PRINT_LIMITS.maxLines),
+  })
+  .strict()
+
+const reportJobSchema = z
+  .object({
+    receiptNumber: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9-]+$/, 'Invalid report number'),
+    // A report's layout is the main process's; the renderer sends none.
+    lines: z.array(lineSchema).max(0),
+    encoding: z.enum(PRINT_ENCODINGS),
+    copies: z.number().int().min(1).max(PRINT_LIMITS.maxCopies),
+    openDrawer: z.literal(false),
+    drawerPin: z.union([z.literal(2), z.literal(5)]),
+    report: reportDocumentSchema,
+  })
+  .strict()
+
+/** Either a receipt or a report; the shapes are disjoint on `report`. */
+export const printerJobSchema = z.union([reportJobSchema, printJobSchema])
+
+const printRequestSchema = z.object({ target: targetSchema, job: printerJobSchema }).strict()
 const drawerRequestSchema = z
   .object({ target: targetSchema, drawerPin: z.union([z.literal(2), z.literal(5)]) })
   .strict()
@@ -83,14 +133,39 @@ const testRequestSchema = z
   .object({ target: targetSchema, encoding: z.enum(PRINT_ENCODINGS) })
   .strict()
 
+/**
+ * A report goes through the same printer capability as a receipt, with the rows
+ * the real adapter would print filled in for the fake one. Splitting the channel
+ * would mean a second preload method for one document; the schema above is what
+ * keeps the two jobs apart.
+ */
+export async function printReport(
+  runtime: PrinterRuntime,
+  target: PrinterTarget,
+  job: PrintJob,
+): Promise<ReturnType<typeof printJob>> {
+  const report = job.report
+  if (!report) {
+    // The schema above refuses a report job without a document, so this is the
+    // internal invariant rather than a user-facing outcome.
+    throw new Error('A report print needs a report document')
+  }
+  return printJob(runtime, {
+    target,
+    job: { ...job, lines: reportToPrintLines(report) },
+  })
+}
+
 export function registerPrinterHandlers(handle: IpcHandle, runtime: PrinterRuntime): void {
   handle(IPC_CHANNELS.printerList, () => listPrinters(runtime))
 
   handle(IPC_CHANNELS.printerPrint, async (rawRequest: unknown) => {
     const request = printRequestSchema.parse(rawRequest)
+    const job = request.job as PrintJob
+    if (job.report) return printReport(runtime, request.target as PrinterTarget, job)
     return printJob(runtime, {
       target: request.target as PrinterTarget,
-      job: request.job as PrintJob,
+      job,
     })
   })
 

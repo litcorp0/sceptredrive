@@ -4,6 +4,7 @@ import { ReceiptScreen } from '@/modules/receipt'
 import { SalesScreen } from '@/modules/sales'
 import { SellScreen } from '@/modules/sell'
 import { SettingsScreen } from '@/modules/settings'
+import { ShiftReportScreen } from '@/modules/shift'
 import { SyncScreen } from '@/modules/sync'
 import { TenderScreen } from '@/modules/tender'
 import { useStaffSession } from '../../lib/auth/staff-session'
@@ -146,6 +147,20 @@ function PosBoot() {
 
   if (screen === 'repayment') {
     return <RepaymentScreen identity={identity} shift={runtime.shift} staff={staff} />
+  }
+
+  // `#pos/shift/report` is the X-report (P13-D33): the same shell, the same shift
+  // guard, because an X reads the shift that is open. Bare `#pos/shift` has no
+  // meaning and the report screen sends it back to `#pos`.
+  if (screen === 'shift') {
+    return (
+      <ShiftReportScreen
+        identity={identity}
+        shift={runtime.shift}
+        staff={staff}
+        config={runtime.config}
+      />
+    )
   }
 
   if (screen === 'sync') {

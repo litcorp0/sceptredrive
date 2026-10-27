@@ -1,3 +1,4 @@
+import { MAX_HELD_CARTS } from '@sceptre/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ManagerOverrideDialog, StatusNote } from '@/components/common'
 import { AppHeader } from '@/components/layout'
@@ -10,12 +11,21 @@ import { useCart } from '@/lib/cart/cart-store'
 import { cartReducer } from '@/lib/cart/reducer'
 import { computeCartTotals } from '@/lib/cart/totals'
 import type { CartDiscount } from '@/lib/cart/types'
+import { cartVoidLines, recordCartVoid } from '@/lib/cart/void-service'
 import { lookupScannedProduct } from '@/lib/catalog/resolve'
 import { overLimitMinor } from '@/lib/credit/headroom'
 import { useCustomerContext } from '@/lib/customers/context'
 import type { CustomerHit } from '@/lib/customers/search'
 import { discountAuthority } from '@/lib/discounts/discount-service'
 import { formatGhs } from '@/lib/format'
+import {
+  type HeldCartSummary,
+  holdCart,
+  listHeldCarts,
+  type RecallResult,
+  recallHeldCart,
+  voidHeldCart,
+} from '@/lib/hold/hold-service'
 import { lockoutPolicyFor } from '@/lib/pos-config'
 import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
 import { usePosDatabase } from '@/lib/powersync/provider'
@@ -27,19 +37,26 @@ import { CatalogBrowser } from '@/modules/catalog'
 import { CreditPanel } from '@/modules/credit'
 import { CustomerPanel } from '@/modules/customers'
 import { LoyaltyPanel } from '@/modules/loyalty'
-import { ClearCartDialog } from '../components/clear-cart-dialog'
 import { DiscountDialog } from '../components/discount-dialog'
+import { HoldCartDialog } from '../components/hold-cart-dialog'
+import { HoldsTray } from '../components/holds-tray'
+import { RecallDifferences } from '../components/recall-differences'
+import { VoidCartDialog, type VoidCartInput } from '../components/void-cart-dialog'
 
 /**
- * The selling screen (Plan 06).
+ * The selling screen (Plan 06; holds and voids in Phase 13 Plan 11).
  *
  * Three columns, left to right: what you are adding, what you have added, and
  * who it is for. A counter screen is glanceable and touchable: large targets,
  * no hover-only controls, and the total always visible.
  *
- * Tasks 2–6 fill the catalogue, customer, loyalty, credit, and discount
- * panels; this file owns the layout, the cart, the keyboard map, and the
- * hand-off to the tender screen.
+ * Two Phase 13 rules shape the interactions here:
+ *
+ * - **Nothing silently discards a basket.** Clearing, voiding a hold, and
+ *   recalling over a non-empty cart all go through a recorded path.
+ * - **A recalled cart cannot complete until its changes are seen.** The Pay
+ *   control stays disabled while a recall needs acknowledgement or a line's
+ *   product is gone, and the reason is always on screen.
  */
 export function SellScreen({
   identity,
@@ -52,13 +69,28 @@ export function SellScreen({
   staff: StaffSession
   config: PosConfigSnapshot
 }) {
-  const { state, totals, pricing, dispatch, clear, status, error, addProduct, setCustomer } =
-    useCart()
+  const {
+    state,
+    totals,
+    pricing,
+    dispatch,
+    clear,
+    status,
+    error,
+    addProduct,
+    setCustomer,
+    cartTenders,
+    setCartTenders,
+  } = useCart()
   const db = usePosDatabase()
   const customerContext = useCustomerContext(state.customer, identity.branchId)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [confirmClear, setConfirmClear] = useState(false)
+  const [holds, setHolds] = useState<HeldCartSummary[]>([])
+  const [holdsBusy, setHoldsBusy] = useState(false)
+  const [holdDialog, setHoldDialog] = useState(false)
+  const [voidTarget, setVoidTarget] = useState<VoidTarget | null>(null)
+  const [recall, setRecall] = useState<RecallState | null>(null)
   const [showCustomer, setShowCustomer] = useState(false)
   const [showLoyalty, setShowLoyalty] = useState(false)
   const [showCreditOverride, setShowCreditOverride] = useState(false)
@@ -66,6 +98,9 @@ export function SellScreen({
   const [pendingDiscount, setPendingDiscount] = useState<PendingDiscount | null>(null)
   const [showDiscountOverride, setShowDiscountOverride] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  // `F3` walks the queue instead of always taking the oldest basket, so a
+  // cashier serving out of order does not have to use the mouse.
+  const recallCursor = useRef(0)
 
   // F2 means "find an item" on both screens (P10-D7). Home records the intent before it
   // navigates; this is the one place that acts on it, and it acts exactly once.
@@ -73,8 +108,17 @@ export function SellScreen({
     if (consumeFocus('search')) searchRef.current?.focus()
   }, [])
 
+  const refreshHolds = useCallback(async () => {
+    setHolds(await listHeldCarts(db))
+  }, [db])
+
+  useEffect(() => {
+    void refreshHolds()
+  }, [refreshHolds])
+
   const dialogOpen =
-    confirmClear ||
+    holdDialog ||
+    Boolean(voidTarget) ||
     showCustomer ||
     showLoyalty ||
     showCreditOverride ||
@@ -109,6 +153,32 @@ export function SellScreen({
     }
   }, [state.lines, selectedLineId])
 
+  /**
+   * The recall gate. A blocking product still in the cart stops completion
+   * outright; a price or tax change needs one acknowledgement, which survives
+   * until the next recall. A difference whose product the cashier has already
+   * removed no longer asks for anything — a new basket must never be blocked by
+   * an old cart's changes.
+   */
+  const blockingInCart = recall
+    ? recall.blockingProductIds.filter((productId) =>
+        state.lines.some((line) => line.productId === productId),
+      )
+    : []
+  const differencesInCart = recall
+    ? recall.differences.filter((difference) =>
+        state.lines.some((line) => line.productId === difference.productId),
+      )
+    : []
+  const needsAcknowledgement = Boolean(
+    recall?.requiresAcknowledgement && !recall.acknowledged && differencesInCart.length > 0,
+  )
+  const completionBlocked = blockingInCart.length > 0 || needsAcknowledgement
+  const blockReason =
+    blockingInCart.length > 0
+      ? 'Remove or replace the line whose product is archived or gone before taking payment.'
+      : 'Acknowledge what changed while this cart was held before taking payment.'
+
   const setQuantity = useCallback(
     (lineId: string, quantity: number) => {
       setSelectedLineId(lineId)
@@ -140,14 +210,23 @@ export function SellScreen({
       setNotice('Add a product before taking payment')
       return
     }
+    if (completionBlocked) {
+      setNotice(blockReason)
+      return
+    }
     if (!shift) {
       setNotice('Open a shift before completing a sale')
       return
     }
     navigate('pos/tender')
-  }, [state.lines.length, shift])
+  }, [blockReason, completionBlocked, state.lines.length, shift])
 
   type DiscountTarget = { kind: 'sale' } | { kind: 'line'; lineId: string }
+  type VoidTarget = { kind: 'cart' } | { kind: 'hold'; hold: HeldCartSummary }
+  interface RecallState extends RecallResult {
+    acknowledged: boolean
+    collapsed: boolean
+  }
   interface PendingDiscount {
     target: DiscountTarget
     discount: CartDiscount
@@ -212,11 +291,125 @@ export function SellScreen({
     setShowDiscountOverride(true)
   }
 
+  /** Parks the basket, then clears the sell screen. A failed hold changes nothing. */
+  async function handleHold(label: string) {
+    await holdCart(db, {
+      label,
+      cart: {
+        lines: state.lines,
+        saleDiscount: state.saleDiscount,
+        loyaltyRedeemPoints: state.loyaltyRedeemPoints,
+        customer: state.customer,
+        totals,
+        shiftId: state.shiftId,
+      },
+    })
+    setHoldDialog(false)
+    clear()
+    setCartTenders([])
+    setSelectedLineId(null)
+    setRecall(null)
+    await refreshHolds()
+    setNotice(`Held “${label}”. Recall it from the tray above the products.`)
+  }
+
+  /** Recalls a hold; a non-empty basket is parked first under `Cart #N`. */
+  async function handleRecall(hold: HeldCartSummary) {
+    if (cartTenders.length > 0) {
+      setNotice('Finish or cancel the pending payment before recalling another cart')
+      return
+    }
+    setHoldsBusy(true)
+    try {
+      const result = await recallHeldCart(db, hold.id, {
+        shiftId: state.shiftId,
+        activeCart: {
+          lines: state.lines,
+          saleDiscount: state.saleDiscount,
+          loyaltyRedeemPoints: state.loyaltyRedeemPoints,
+          customer: state.customer,
+          totals,
+          shiftId: state.shiftId,
+        },
+      })
+
+      dispatch({ type: 'hydrate', state: result.cart })
+      setCartTenders([])
+      setSelectedLineId(null)
+      setRecall({
+        ...result,
+        acknowledged: !result.requiresAcknowledgement,
+        collapsed: false,
+      })
+      await refreshHolds()
+      setNotice(
+        result.autoHeld
+          ? `“${result.autoHeld.label}” was held to make room for “${hold.label}”.`
+          : `Recalled “${hold.label}”.`,
+      )
+    } catch (recallError) {
+      setNotice(
+        recallError instanceof Error ? recallError.message : 'That cart could not be recalled',
+      )
+    } finally {
+      setHoldsBusy(false)
+    }
+  }
+
+  function recallNext() {
+    if (holds.length === 0) {
+      setNotice('No carts are held')
+      return
+    }
+    const hold = holds[recallCursor.current % holds.length]
+    recallCursor.current += 1
+    if (hold) void handleRecall(hold)
+  }
+
+  /** One reason-coded void: the live basket or a held one. */
+  async function handleVoid(input: VoidCartInput) {
+    if (!voidTarget) return
+    if (voidTarget.kind === 'hold') {
+      await voidHeldCart(db, voidTarget.hold.id, input.reasonCode, input.note)
+      await refreshHolds()
+    } else {
+      await recordCartVoid(db, {
+        lines: cartVoidLines(state),
+        itemCount: totals.itemCount,
+        grossMinor: totals.priced.totalMinor,
+        reasonCode: input.reasonCode,
+        note: input.note,
+      })
+      clear()
+      setCartTenders([])
+      setSelectedLineId(null)
+      setRecall(null)
+    }
+    setVoidTarget(null)
+  }
+
+  function removeBlockingLines() {
+    for (const line of state.lines) {
+      if (blockingInCart.includes(line.productId)) {
+        dispatch({ type: 'removeLine', lineId: line.id })
+      }
+    }
+  }
+
   usePosShortcuts(
     useMemo(
       () => ({
         F2: () => searchRef.current?.focus(),
+        // F3 walks the held carts, oldest first; F5 parks the current one.
+        F3: recallNext,
         F4: () => setShowCustomer(true),
+        F5: () => {
+          if (state.lines.length === 0) {
+            setNotice('Add an item before holding the cart')
+            return
+          }
+          setHoldDialog(true)
+        },
         F6: () => {
           if (!state.customer) {
             setNotice('Choose a customer before redeeming points')
@@ -253,7 +446,7 @@ export function SellScreen({
         },
         Escape: () => setSelectedLineId(null),
       }),
-      [goTender, selectedLine, selectedLineId, setQuantity, state.customer, state.lines],
+      [goTender, holds, selectedLine, selectedLineId, setQuantity, state.customer, state.lines],
     ),
     !dialogOpen,
   )
@@ -310,14 +503,22 @@ export function SellScreen({
       ) : null}
 
       <main className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)_280px] lg:overflow-hidden">
-        <CatalogBrowser
-          branchId={identity.branchId}
-          focusRef={searchRef}
-          scanEnabled={!dialogOpen}
-          onAdd={addProduct}
-          onUnknown={(code) => setNotice(`No product for “${code}”.`)}
-          onScan={handleScan}
-        />
+        <div className="flex min-h-0 flex-col">
+          <HoldsTray
+            holds={holds}
+            busy={holdsBusy}
+            onRecall={(hold) => void handleRecall(hold)}
+            onVoid={(hold) => setVoidTarget({ kind: 'hold', hold })}
+          />
+          <CatalogBrowser
+            branchId={identity.branchId}
+            focusRef={searchRef}
+            scanEnabled={!dialogOpen}
+            onAdd={addProduct}
+            onUnknown={(code) => setNotice(`No product for “${code}”.`)}
+            onScan={handleScan}
+          />
+        </div>
 
         <section aria-label="Cart" className="flex min-h-0 flex-col border-border lg:border-r">
           <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5">
@@ -353,11 +554,25 @@ export function SellScreen({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setConfirmClear(true)}
+                onClick={() => setHoldDialog(true)}
+                disabled={state.lines.length === 0 || holds.length >= MAX_HELD_CARTS}
+                className="h-11 min-w-11 px-3 text-xs"
+                title="Park this cart (F5)"
+                data-testid="sell-hold"
+              >
+                Hold{' '}
+                <span className="font-mono text-[11px] font-normal text-muted-foreground">F5</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setVoidTarget({ kind: 'cart' })}
                 disabled={state.lines.length === 0}
                 className="h-11 min-w-11 px-3 text-xs"
+                title="Discard this cart with a reason"
+                data-testid="sell-void-cart"
               >
-                Clear
+                Void cart
               </Button>
             </div>
           </div>
@@ -371,6 +586,34 @@ export function SellScreen({
               <kbd className="font-mono">+ −</kbd> quantity · <kbd className="font-mono">Esc</kbd>{' '}
               deselect
             </p>
+          ) : null}
+
+          {recall && !recall.collapsed ? (
+            <RecallDifferences
+              differences={recall.differences}
+              blockingProductIds={blockingInCart}
+              loyalty={recall.loyalty}
+              acknowledged={recall.acknowledged}
+              onAcknowledge={() => setRecall({ ...recall, acknowledged: true })}
+              onRemoveBlocking={removeBlockingLines}
+              onDismiss={() => setRecall({ ...recall, collapsed: true })}
+            />
+          ) : null}
+
+          {completionBlocked ? (
+            <StatusNote tone="notice" role="status" className="m-2 text-xs">
+              <span>{blockReason}</span>{' '}
+              {recall?.collapsed ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setRecall({ ...recall, collapsed: false })}
+                  className="h-7 px-2 text-[11px] underline-offset-2 hover:underline"
+                >
+                  Show changes
+                </Button>
+              ) : null}
+            </StatusNote>
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -424,7 +667,7 @@ export function SellScreen({
             <Button
               type="button"
               onClick={goTender}
-              disabled={state.lines.length === 0}
+              disabled={state.lines.length === 0 || completionBlocked}
               className="mt-3 h-14 w-full text-base"
               data-testid="pay-button"
             >
@@ -540,16 +783,23 @@ export function SellScreen({
         />
       ) : null}
 
-      {confirmClear ? (
-        <ClearCartDialog
-          itemCount={totals.itemCount}
-          totalMinor={totals.priced.totalMinor}
-          onClose={() => setConfirmClear(false)}
-          onConfirm={() => {
-            clear()
-            setSelectedLineId(null)
-            setConfirmClear(false)
-          }}
+      {holdDialog ? (
+        <HoldCartDialog
+          existingCount={holds.length}
+          onClose={() => setHoldDialog(false)}
+          onConfirm={handleHold}
+        />
+      ) : null}
+
+      {voidTarget ? (
+        <VoidCartDialog
+          itemCount={voidTarget.kind === 'hold' ? voidTarget.hold.itemCount : totals.itemCount}
+          totalMinor={
+            voidTarget.kind === 'hold' ? voidTarget.hold.totalMinor : totals.priced.totalMinor
+          }
+          label={voidTarget.kind === 'hold' ? voidTarget.hold.label : null}
+          onClose={() => setVoidTarget(null)}
+          onConfirm={handleVoid}
         />
       ) : null}
     </div>

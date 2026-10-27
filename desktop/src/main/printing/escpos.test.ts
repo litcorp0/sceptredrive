@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildDrawerBytes, buildReceiptBytes, drawerKickBytes, RECEIPT_COLUMNS } from './escpos'
+import type { ReportDocument } from '../../shared/printing'
+import {
+  buildDrawerBytes,
+  buildReceiptBytes,
+  buildReportBytes,
+  drawerKickBytes,
+  RECEIPT_COLUMNS,
+  reportToPrintLines,
+} from './escpos'
 
 const JOB = {
   lines: [
@@ -57,5 +65,55 @@ describe('drawer-only bytes', () => {
     expect([bytes[0], bytes[1]]).toEqual([0x1b, 0x40])
     expect(bytes.includes(Buffer.from(drawerKickBytes(2)))).toBe(true)
     expect(bytes.length).toBe(7)
+  })
+})
+
+describe('ESC/POS report bytes', () => {
+  const REPORT: ReportDocument = {
+    title: 'Z-REPORT',
+    reference: 'ACC-SPX-T01-20261027-01',
+    lines: [
+      { kind: 'title', label: 'Sceptre Drive' },
+      { kind: 'rule' },
+      { kind: 'row', label: 'Cash', value: 'GHS 300.00' },
+      { kind: 'total', label: 'NET', value: 'GHS 400.00' },
+    ],
+  }
+
+  it('lays the four roles out as paper rows', () => {
+    const lines = reportToPrintLines(REPORT)
+
+    expect(lines[0]?.bold).toBe(true)
+    expect(lines[0]?.text.trim()).toBe('Sceptre Drive')
+    expect(lines[1]?.text).toBe('-'.repeat(RECEIPT_COLUMNS))
+    expect(lines[2]?.text).toHaveLength(RECEIPT_COLUMNS)
+    expect(lines[2]?.text.startsWith('Cash')).toBe(true)
+    expect(lines[2]?.text.endsWith('GHS 300.00')).toBe(true)
+    expect(lines[3]?.bold).toBe(true)
+  })
+
+  it('prints the report text, feeds, and cuts — and never kicks the drawer', () => {
+    const bytes = Buffer.from(buildReportBytes(REPORT, { encoding: 'windows-1252' }))
+
+    expect([bytes[0], bytes[1]]).toEqual([0x1b, 0x40])
+    expect(bytes.includes(Buffer.from('GHS 300.00'))).toBe(true)
+    expect(bytes.includes(Buffer.from('NET'))).toBe(true)
+    expect(bytes.includes(Buffer.from(drawerKickBytes(2)))).toBe(false)
+    expect(Array.from(bytes.subarray(-3))).toEqual([0x1d, 0x56, 0x00])
+  })
+
+  it('repeats the block for copies', () => {
+    const one = buildReportBytes(REPORT, { encoding: 'windows-1252' })
+    const two = buildReportBytes(REPORT, { encoding: 'windows-1252', copies: 2 })
+    expect(two.length).toBe(one.length * 2)
+  })
+
+  it('dispatches a job carrying a report through the report builder', () => {
+    const reportBytes = buildReportBytes(REPORT, { encoding: 'windows-1252' })
+    const jobBytes = buildReceiptBytes(
+      { lines: [], encoding: 'windows-1252', openDrawer: false, drawerPin: 2, report: REPORT },
+      1,
+    )
+    expect(Buffer.from(jobBytes).equals(Buffer.from(reportBytes))).toBe(true)
   })
 })

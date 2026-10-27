@@ -392,6 +392,51 @@ async function requireOpenShift(
   return shift
 }
 
+interface ProductRow {
+  id: string
+  name: string | null
+  is_active: number
+}
+
+/**
+ * The catalogue check, inside the completion transaction.
+ *
+ * A recalled cart can hold a line whose product has been deleted or archived
+ * since it was parked (P13-D35). The panel blocks that in the UI, but a
+ * completion path that bypasses the screen must not be able to sell a product
+ * the branch no longer offers: the server would apply the sale and raise a
+ * conflict, which is a worse answer than a sentence the cashier can act on.
+ *
+ * One query for the whole cart, parameterised by product id.
+ */
+async function assertProductsSellable(tx: Transaction, cart: CartState): Promise<void> {
+  const productIds = [...new Set(cart.lines.map((line) => line.productId))]
+  if (productIds.length === 0) return
+
+  const placeholders = productIds.map(() => '?').join(', ')
+  const rows = await tx.getAll<ProductRow>(
+    `SELECT id, name, is_active FROM product WHERE id IN (${placeholders})`,
+    productIds,
+  )
+  const byId = new Map(rows.map((row) => [row.id, row]))
+
+  for (const line of cart.lines) {
+    const product = byId.get(line.productId)
+    if (!product) {
+      completionError(
+        'INVALID_CART',
+        `“${line.name}” is no longer in the catalogue — remove it before completing the sale`,
+      )
+    }
+    if (product.is_active !== 1) {
+      completionError(
+        'INVALID_CART',
+        `“${line.name}” has been archived — remove or replace it before completing the sale`,
+      )
+    }
+  }
+}
+
 async function requireBinding(
   db: PowerSyncDatabase,
   input: CompleteSaleInput,
@@ -420,6 +465,10 @@ async function requireBinding(
  * Throws `SaleCompletionError` **before** the transaction for a bad cart and
  * inside it for an integrity failure; in both cases the cart draft is intact
  * and the cashier can retry or keep editing.
+ *
+ * Inside the transaction it also re-checks the catalogue (a product deleted or
+ * archived since the line was scanned cannot be sold), so a recalled cart with a
+ * `GONE` line fails here even if the selling screen was bypassed.
  */
 export async function completeSale(
   db: PowerSyncDatabase,
@@ -439,6 +488,9 @@ export async function completeSale(
   if (existing) completionError('DUPLICATE_SALE', 'This sale was already completed')
 
   const prepared = await db.writeTransaction(async (tx) => {
+    // Before the number is spent: the catalogue is the fact the cart cannot
+    // argue with, and a failure here rolls the whole sale back.
+    await assertProductsSellable(tx, input.cart)
     const receiptNumber = await allocateReceiptNumber(
       tx,
       input.identity.terminalId,

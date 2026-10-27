@@ -12,16 +12,25 @@ import {
 } from '@/components/ui/empty'
 import { endStaffSession, useStaffSession } from '@/lib/auth/staff-session'
 import { formatGhs } from '@/lib/format'
+import { type HeldCartSummary, listHeldCarts } from '@/lib/hold/hold-service'
 import { usePos } from '@/lib/powersync/provider'
+import { navigate } from '@/lib/router'
 import {
-  type CloseShiftResult,
-  closeShift,
   loadShiftState,
   openShift,
   recordCashMovement,
   type ShiftState,
 } from '@/lib/shift/shift-service'
+import type { ReportDocument } from '../../../../shared/printing'
+import { type CloseShiftWithReportResult, closeShiftWithReport } from '../close-shift'
+import { ReportPreview } from '../components/report-preview'
 import { CashMovementDialog, CloseShiftDialog, OpenShiftDialog } from '../components/shift-dialogs'
+import {
+  closedShiftDocument,
+  printReportDocument,
+  reportPrintLabel,
+  reportReprintDocument,
+} from '../print-report'
 import { varianceWords } from '../utils/variance'
 
 type Dialog = 'open' | 'cash-in' | 'cash-out' | 'close' | null
@@ -45,6 +54,15 @@ function Stat({
   )
 }
 
+function TenderRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-mono tabular-nums">{value}</dd>
+    </div>
+  )
+}
+
 /**
  * Shift screen: open with a float, record cash in/out, close with counted cash.
  * Everything works offline; the outbox row ships with the uploader.
@@ -53,19 +71,29 @@ function Stat({
  * with, what should be in the drawer now, and how far off am I. The variance
  * cannot exist until the drawer is counted, so while the shift is open it says
  * so rather than showing a zero — a zero would read as a balanced drawer.
+ *
+ * Phase 13 Plan 11 adds the two halves of a close that a drawer needs: the holds
+ * question before the count, and a Z document written from the till's own rows
+ * and printed from the local snapshot (so it prints with the cable out). A
+ * printer failure never un-closes a shift; **Print again** is the retry.
  */
 export function ShiftRoute() {
   const { db, session } = usePos()
   const staff = useStaffSession()
   const [state, setState] = useState<ShiftState | null>(null)
+  const [holds, setHolds] = useState<HeldCartSummary[]>([])
   const [dialog, setDialog] = useState<Dialog>(null)
-  const [lastClose, setLastClose] = useState<CloseShiftResult | null>(null)
+  const [lastClose, setLastClose] = useState<CloseShiftWithReportResult | null>(null)
+  const [reportDocument, setReportDocument] = useState<ReportDocument | null>(null)
+  const [printNote, setPrintNote] = useState<string | null>(null)
+  const [printing, setPrinting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function refresh() {
     if (!db) return
     const next = await loadShiftState(db)
     setState(next)
+    setHolds(await listHeldCarts(db))
   }
 
   useEffect(() => {
@@ -100,6 +128,7 @@ export function ShiftRoute() {
     await openShift(db, { openingFloatMinor })
     setDialog(null)
     setLastClose(null)
+    setReportDocument(null)
     await refresh()
     // A shift is open, so the till owes the cashier the day's picture rather than a second
     // confirmation screen: the roadmap's promise is that the terminal opens on the shift home.
@@ -118,12 +147,46 @@ export function ShiftRoute() {
     await refresh()
   }
 
-  async function handleClose(input: { countedCashMinor: number; note?: string }) {
+  async function runPrint(document: ReportDocument, reprint: boolean) {
     if (!db) return
-    const result = await closeShift(db, input)
+    setPrinting(true)
+    try {
+      const outcome = await printReportDocument(
+        db,
+        reprint ? reportReprintDocument(document) : document,
+      )
+      setPrintNote(reportPrintLabel(outcome))
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  async function handleClose(input: {
+    countedCashMinor: number
+    note?: string
+    holdsDecision: 'KEEP' | 'VOID_ALL'
+  }) {
+    if (!db) return
+    const result = await closeShiftWithReport(db, input)
     setDialog(null)
     setLastClose(result)
+    setError(null)
     await refresh()
+
+    if (session) {
+      const document = closedShiftDocument({
+        report: result.report,
+        identity: {
+          branchCode: session.branch.code,
+          branchName: session.branch.name,
+          terminalCode: session.terminal.code,
+        },
+        cashierName: staff?.name ?? '',
+        seller: session.config.receiptHeader,
+      })
+      setReportDocument(document)
+      await runPrint(document, false)
+    }
   }
 
   return (
@@ -206,7 +269,64 @@ export function ShiftRoute() {
                   </dd>
                 </div>
               </dl>
-              <div className="mt-4">
+
+              <dl className="mt-4 grid gap-1 border-t border-border pt-3 sm:grid-cols-2 sm:gap-x-8">
+                <TenderRow label="Cash" value={formatGhs(lastClose.report.cashMinor)} />
+                <TenderRow label="Credit" value={formatGhs(lastClose.report.creditMinor)} />
+                <TenderRow label="MoMo" value={formatGhs(lastClose.report.momoMinor)} />
+                <TenderRow label="Card" value={formatGhs(lastClose.report.cardMinor)} />
+                <TenderRow
+                  label="Bank transfer"
+                  value={formatGhs(lastClose.report.bankTransferMinor)}
+                />
+                <TenderRow label="Change given" value={formatGhs(lastClose.report.changeMinor)} />
+                <TenderRow
+                  label={`Refunds (${lastClose.report.refundCount})`}
+                  value={formatGhs(lastClose.report.refundMinor)}
+                />
+                <TenderRow
+                  label={`Voided carts (${lastClose.report.voidCount})`}
+                  value={String(lastClose.report.voidCount)}
+                />
+              </dl>
+
+              {lastClose.voidedHolds > 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {lastClose.voidedHolds} held cart
+                  {lastClose.voidedHolds === 1 ? '' : 's'} voided as customer-left.
+                </p>
+              ) : null}
+
+              {printNote ? (
+                <p className="mt-3 text-xs text-muted-foreground" data-testid="report-print-note">
+                  {printNote}
+                </p>
+              ) : null}
+
+              {reportDocument ? (
+                <details className="mt-3 rounded-md border border-border">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium">
+                    Printed report
+                  </summary>
+                  <div className="border-t border-border p-3">
+                    <ReportPreview document={reportDocument} />
+                  </div>
+                </details>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={printing || !reportDocument}
+                  onClick={() => {
+                    if (reportDocument) void runPrint(reportDocument, true)
+                  }}
+                  className="h-11 px-6"
+                  data-testid="print-report-again"
+                >
+                  {printing ? 'Printing…' : 'Print again'}
+                </Button>
                 <Button type="button" onClick={() => setLastClose(null)} className="h-11 px-6">
                   Done
                 </Button>
@@ -266,6 +386,15 @@ export function ShiftRoute() {
                   <Button
                     type="button"
                     variant="outline"
+                    onClick={() => navigate('pos/shift/report')}
+                    className="h-11"
+                    data-testid="shift-x-report"
+                  >
+                    X report
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => setDialog('cash-in')}
                     className="h-11"
                   >
@@ -295,6 +424,14 @@ export function ShiftRoute() {
               <Stat label="Expected cash" value={formatGhs(expected)} />
               <Stat label="Variance" value="—" caption="Known when you count the drawer" />
             </div>
+
+            {holds.length > 0 ? (
+              <StatusNote tone="notice" role="status" className="mt-4">
+                {holds.length} cart{holds.length === 1 ? '' : 's'} held on this till, worth{' '}
+                {formatGhs(holds.reduce((total, hold) => total + hold.totalMinor, 0))}. Closing asks
+                what to do with them; they are not deleted by the shift.
+              </StatusNote>
+            ) : null}
 
             <section className="mt-6 overflow-hidden rounded-lg border border-border">
               <h2 className="border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -356,6 +493,7 @@ export function ShiftRoute() {
       {dialog === 'close' ? (
         <CloseShiftDialog
           expectedCashMinor={expected}
+          holds={holds}
           onClose={() => setDialog(null)}
           onConfirm={handleClose}
         />
