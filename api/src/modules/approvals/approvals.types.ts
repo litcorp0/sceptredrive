@@ -144,6 +144,19 @@ export type ApprovalSubject =
       itemCount: number
       /** Restock decisions counted in lines, one decision per line (P13-D22). */
       restock: { resalable: number; damaged: number; notReturned: number }
+      /**
+       * The per-line evidence behind those counts, in `refund_line.line_number`
+       * order. `productName` and `sku` are the sale line's snapshot, because the
+       * receipt the customer holds shows what was sold, not today's catalogue.
+       */
+      lines: Array<{
+        productName: string
+        sku: string
+        quantity: number
+        restock: 'RESALABLE' | 'DAMAGED' | 'NOT_RETURNED'
+        damageReason: string | null
+        totalMinor: number
+      }>
       tenders: Array<{ method: string; amountMinor: number; status: string }>
       /** The manager whose PIN authorised the return, by staff id. */
       approvedBy: string

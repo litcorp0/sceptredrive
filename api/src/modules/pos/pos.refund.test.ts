@@ -1164,6 +1164,113 @@ describe.skipIf(!available)('POS refunds', () => {
     expect(Number(audited.rows[0]?.value ?? 0)).toBe(1)
   })
 
+  it('shows the reviewer each refunded line, in line order, with its damage reason', async () => {
+    // The sale's order is E then B; the refund's order is B then E. Ordering by
+    // the refund's own `line_number` is therefore the only answer that matches
+    // the document the customer was handed.
+    const saleId = await createSale({
+      lines: [
+        { productId: productE, quantity: 1, unitPriceMinor: 20_000 },
+        { productId: productB, quantity: 1, unitPriceMinor: 1_000 },
+      ],
+      tenders: [{ method: 'CASH', amountMinor: 21_000 }],
+    })
+    const saleLines = await db.select().from(saleLine).where(eq(saleLine.saleId, saleId))
+    const saleTenders = await db.select().from(saleTender).where(eq(saleTender.saleId, saleId))
+
+    await applyRefundNow(
+      refundPayload({
+        saleId,
+        lines: [
+          {
+            saleLineId: saleLines.find((line) => line.productId === productB)?.id ?? '',
+            quantity: 1,
+          },
+          {
+            saleLineId: saleLines.find((line) => line.productId === productE)?.id ?? '',
+            quantity: 1,
+            restock: 'DAMAGED',
+            damageReason: 'Screen cracked',
+          },
+        ],
+        tenders: [{ saleTenderId: saleTenders[0]?.id ?? '', amountMinor: 21_000 }],
+        refundedMinor: 21_000,
+      }),
+    )
+
+    const raised = await approvalsFor(saleId)
+    expect(raised).toHaveLength(1)
+
+    const response = await app.request(`/api/approvals/${raised[0]?.id}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      subject: {
+        kind: string
+        lines: Array<Record<string, unknown>>
+      }
+    }
+
+    // The name and sku are the sale line's snapshot, not the live product row.
+    expect(body.subject.kind).toBe('refund')
+    expect(body.subject.lines).toEqual([
+      {
+        productName: `Refund B ${suffix}`,
+        sku: `RB-${suffix}`,
+        quantity: 1,
+        restock: 'RESALABLE',
+        damageReason: null,
+        totalMinor: 1_000,
+      },
+      {
+        productName: `Refund E ${suffix}`,
+        sku: `RE-${suffix}`,
+        quantity: 1,
+        restock: 'DAMAGED',
+        damageReason: 'Screen cracked',
+        totalMinor: 20_000,
+      },
+    ])
+
+    // A return with nothing damaged still carries the key, as null: an absent
+    // field would read as "not recorded" rather than "nothing was damaged".
+    const cleanSaleId = await createSale({
+      lines: [{ productId: productC, quantity: 2, unitPriceMinor: 10_000 }],
+      tenders: [{ method: 'CASH', amountMinor: 20_000 }],
+    })
+    const cleanLines = await db.select().from(saleLine).where(eq(saleLine.saleId, cleanSaleId))
+    const cleanTenders = await db
+      .select()
+      .from(saleTender)
+      .where(eq(saleTender.saleId, cleanSaleId))
+
+    await applyRefundNow(
+      refundPayload({
+        saleId: cleanSaleId,
+        lines: [{ saleLineId: cleanLines[0]?.id ?? '', quantity: 2 }],
+        tenders: [{ saleTenderId: cleanTenders[0]?.id ?? '', amountMinor: 20_000 }],
+        refundedMinor: 20_000,
+      }),
+    )
+
+    const cleanRaised = await approvalsFor(cleanSaleId)
+    expect(cleanRaised).toHaveLength(1)
+    const cleanResponse = await app.request(`/api/approvals/${cleanRaised[0]?.id}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(cleanResponse.status).toBe(200)
+    const cleanBody = (await cleanResponse.json()) as {
+      subject: { lines: Array<Record<string, unknown>> }
+    }
+
+    expect(cleanBody.subject.lines).toHaveLength(1)
+    const [only] = cleanBody.subject.lines
+    expect(only).toMatchObject({ restock: 'RESALABLE' })
+    expect(Object.hasOwn(only ?? {}, 'damageReason')).toBe(true)
+    expect(only?.damageReason).toBeNull()
+  })
+
   it('reconciles stock, credit and tenders against the document', async () => {
     const sale = await threeTenderSale()
     const result = await applyRefundNow(

@@ -90,6 +90,7 @@ import {
   selectRefundedLines,
   selectRefundedTenderAmounts,
   selectRefundedTotalForSale,
+  selectRefundLineEvidence,
   selectRefundLines,
   selectRefundTenders,
   selectSaleLinesForRefund,
@@ -3071,10 +3072,11 @@ registerSubjectLoader('REFUND', async (approval) => {
   const row = await findRefundById(approval.entityId)
   if (!row) throw new NotFoundError('Refund not found')
 
-  const [lines, tenders, saleRow] = await Promise.all([
+  const [lines, tenders, saleRow, lineEvidence] = await Promise.all([
     selectRefundLines(row.id),
     selectRefundTenders(row.id),
     findSaleById(row.saleId),
+    selectRefundLineEvidence(row.id),
   ])
 
   return {
@@ -3093,6 +3095,9 @@ registerSubjectLoader('REFUND', async (approval) => {
       damaged: lines.filter((line) => line.restock === 'DAMAGED').length,
       notReturned: lines.filter((line) => line.restock === 'NOT_RETURNED').length,
     },
+    // The evidence behind the counts: one row per refunded line, in line order,
+    // carrying the sale line's snapshot name and the damage reason (P13-D22).
+    lines: lineEvidence,
     tenders: tenders.map((tender) => ({
       method: tender.method,
       amountMinor: tender.amountMinor,

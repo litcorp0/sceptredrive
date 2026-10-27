@@ -816,6 +816,46 @@ export async function selectRefundLines(
     .orderBy(asc(refundLine.lineNumber))
 }
 
+/** One reviewed line of a refund, as the customer's receipt describes it. */
+export interface RefundLineEvidence {
+  productName: string
+  sku: string
+  quantity: number
+  restock: 'RESALABLE' | 'DAMAGED' | 'NOT_RETURNED'
+  damageReason: string | null
+  totalMinor: number
+}
+
+/**
+ * The per-line evidence a reviewer needs to accept or reject a return (P13-D22):
+ * what came back, how many, whether it can be resold, and why a damaged unit
+ * cannot.
+ *
+ * `name` and `sku` are read from the **sale line's snapshot**, joined through
+ * `refund_line.sale_line_id`, never from the live product: a rename or a re-SKU
+ * must not rewrite a document the customer already holds. One statement for
+ * every line, ordered by the refund's own numbering — a read per line would be
+ * an N+1 on the reviewer's first click.
+ */
+export async function selectRefundLineEvidence(
+  refundId: string,
+  executor: DbExecutor = db,
+): Promise<RefundLineEvidence[]> {
+  return executor
+    .select({
+      productName: saleLine.name,
+      sku: saleLine.sku,
+      quantity: refundLine.quantity,
+      restock: refundLine.restock,
+      damageReason: refundLine.damageReason,
+      totalMinor: refundLine.totalMinor,
+    })
+    .from(refundLine)
+    .innerJoin(saleLine, eq(saleLine.id, refundLine.saleLineId))
+    .where(eq(refundLine.refundId, refundId))
+    .orderBy(asc(refundLine.lineNumber))
+}
+
 export async function selectRefundTenders(
   refundId: string,
   executor: DbExecutor = db,
