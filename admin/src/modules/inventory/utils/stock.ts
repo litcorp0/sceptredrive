@@ -14,6 +14,10 @@ export const MOVEMENT_META: Record<
 	// Added with the POS: a sale is a ledger movement like any other, and the history table
 	// must render it instead of throwing on a missing label.
 	SALE: { label: "Sale", tone: "blue" },
+	// Phase 11: goods sent back to a supplier are an outbound movement, not a loss.
+	SUPPLIER_RETURN: { label: "Supplier return", tone: "blue" },
+	// Phase 12: a posted write-off is stock the branch no longer has, so it reads as a loss.
+	WRITE_OFF: { label: "Write-off", tone: "red" },
 }
 
 /**
