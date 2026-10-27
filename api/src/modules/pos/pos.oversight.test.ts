@@ -29,12 +29,14 @@ import { device, terminal } from '../org/terminals.schema.ts'
 import { settleMockPayment } from '../payments/payments.mock.provider.ts'
 import { payment } from '../payments/payments.schema.ts'
 import { createPayment, getPayment } from '../payments/payments.service.ts'
+import { auditLog } from '../platform/audit.schema.ts'
 import { product } from '../products/products.schema.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import {
   cartVoid,
   cashMovement,
   posStaffBinding,
+  posSyncTransaction,
   refund,
   refundLine,
   refundTender,
@@ -819,6 +821,10 @@ describe.skipIf(!available)('POS oversight reads', () => {
     await db.delete(stockMovement).where(inArray(stockMovement.branchId, createdBranchIds))
     await db.delete(stockLevel).where(inArray(stockLevel.branchId, createdBranchIds))
     if (createdDeviceIds.length > 0) {
+      // The upload ledger row the refused refund left behind.
+      await db
+        .delete(posSyncTransaction)
+        .where(inArray(posSyncTransaction.deviceId, createdDeviceIds))
       await db.delete(posStaffBinding).where(inArray(posStaffBinding.deviceId, createdDeviceIds))
       await db.delete(device).where(inArray(device.id, createdDeviceIds))
     }
@@ -832,6 +838,9 @@ describe.skipIf(!available)('POS oversight reads', () => {
       await db.delete(category).where(inArray(category.id, createdCategoryIds))
     }
     if (createdUomIds.length > 0) await db.delete(uom).where(inArray(uom.id, createdUomIds))
+    // The audit rows these fixtures wrote: they have no foreign key to the branch,
+    // so nothing else would ever remove them and every later read inherits them.
+    await db.delete(auditLog).where(inArray(auditLog.branchId, createdBranchIds))
     for (const userId of createdUserIds) await deleteTestUser(userId)
     if (createdBranchIds.length > 0) {
       await db.delete(branch).where(inArray(branch.id, createdBranchIds))
@@ -863,6 +872,11 @@ describe.skipIf(!available)('POS oversight reads', () => {
     expect(row?.itemsSold).toBe(5)
     expect(row?.branchCode).toBe(`OH${suffix.slice(0, 2)}`)
     expect(row?.cashierName).toBe('Test User')
+
+    const untouched = await readJson<{ sales: Array<{ refundedMinor: number }> }>(
+      await get(`/api/pos/oversight/sales?receiptNumber=OV${suffix}-3`, managerCookie),
+    )
+    expect(untouched.sales[0]?.refundedMinor).toBe(0)
 
     const small = await get(`/api/pos/oversight/sales?receiptNumber=OV${suffix}-2`, managerCookie)
     const smallBody = await readJson<{ sales: Array<{ refundedMinor: number }> }>(small)
@@ -1389,6 +1403,102 @@ describe.skipIf(!available)('POS oversight reads', () => {
     await expectError(await get('/api/pos/oversight/sales', cashierCookie), 403, 'FORBIDDEN')
     const anonymous = await app.request('/api/pos/oversight/sales')
     expect(anonymous.status).toBe(401)
+  })
+
+  /**
+   * Phase 13 owed this API test: a device uploading a refund for a sale another
+   * terminal recorded is refused with `REFUND_SALE_FOREIGN` and writes no refund.
+   *
+   * `pos.refund.test.ts` already proves the service refusal (838ce19); this leg
+   * drives the real `POST /api/pos/sync/upload` with a device JWT, because the
+   * code has to reach a till through that route and not only through a caller.
+   */
+  it('refuses a refund uploaded for another terminal sale, over the real upload route', async () => {
+    const foreignLines = await db.select().from(saleLine).where(eq(saleLine.saleId, foreignSaleId))
+    const foreignTenders = await db
+      .select()
+      .from(saleTender)
+      .where(eq(saleTender.saleId, foreignSaleId))
+    const line = foreignLines[0]
+    const tender = foreignTenders[0]
+    if (!line || !tender) throw new Error('the foreign sale fixture is incomplete')
+
+    const refundNumber = `OVR-${suffix}-99`
+    const clientTransactionId = crypto.randomUUID()
+    const occurredAt = new Date().toISOString()
+
+    const response = await app.request('/api/pos/sync/upload', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${home.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        batchId: crypto.randomUUID(),
+        deviceId: home.deviceId,
+        terminalId: home.terminalId,
+        transactions: [
+          {
+            clientTransactionId,
+            type: 'REFUND',
+            occurredAt,
+            payloadVersion: 1,
+            payload: {
+              saleId: foreignSaleId,
+              number: refundNumber,
+              shiftId: homeShiftId,
+              cashier: {
+                userId: cashierUserId,
+                staffId: cashierStaffId,
+                bindingId: cashierBindingId,
+                bindingToken: cashierToken,
+                pinVersion: 1,
+              },
+              reasonCode: 'CUSTOMER_CHANGED_MIND',
+              note: null,
+              approval: managerProof(),
+              lines: [
+                {
+                  saleLineId: line.id,
+                  quantity: 1,
+                  restock: 'RESALABLE',
+                  damageReason: null,
+                },
+              ],
+              tenders: [{ saleTenderId: tender.id, amountMinor: line.totalMinor }],
+              refundedMinor: line.totalMinor,
+              occurredAt,
+            },
+          },
+        ],
+      }),
+    })
+
+    // The uploader never stalls a till: a refused document is a REJECTED item
+    // with the server's code, not an HTTP failure the outbox would retry forever.
+    expect(response.status).toBe(200)
+    const body = await readJson<{
+      results: Array<{ status: string; error?: { code: string } }>
+    }>(response)
+    expect(body.results).toHaveLength(1)
+    expect(body.results[0]?.status).toBe('REJECTED')
+    expect(body.results[0]?.error?.code).toBe('REFUND_SALE_FOREIGN')
+
+    // No document, under any name: not by the upload's id, not by the number.
+    const bySale = await db.select().from(refund).where(eq(refund.saleId, foreignSaleId))
+    const byNumber = await db.select().from(refund).where(eq(refund.number, refundNumber))
+    const byId = await db.select().from(refund).where(eq(refund.id, clientTransactionId))
+    expect(bySale).toHaveLength(0)
+    expect(byNumber).toHaveLength(0)
+    expect(byId).toHaveLength(0)
+
+    // And the foreign sale is byte-identical to what the other till recorded.
+    const stored = (await db.select().from(sale).where(eq(sale.id, foreignSaleId)))[0]
+    expect(stored?.totalMinor).toBe(3_000)
+    expect(stored?.tenderTotalMinor).toBe(3_000)
+    expect(
+      await db.select().from(saleTender).where(eq(saleTender.saleId, foreignSaleId)),
+    ).toHaveLength(1)
   })
 
   it('rate limits one user to 120 oversight reads a minute', async () => {
