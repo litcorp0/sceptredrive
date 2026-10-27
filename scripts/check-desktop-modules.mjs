@@ -37,6 +37,8 @@ const REQUIRED_MODULES = [
   'home',
   'loyalty',
   'receipt',
+  'refund',
+  'repayment',
   'sales',
   'sell',
   'settings',

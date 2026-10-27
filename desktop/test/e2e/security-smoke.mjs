@@ -242,14 +242,18 @@ async function checkDesktopBridge(page) {
     app: Object.keys(globalThis.sceptreDrive?.app ?? {}).sort(),
     secure: Object.keys(globalThis.sceptreDrive?.secure ?? {}).sort(),
     printer: Object.keys(globalThis.sceptreDrive?.printer ?? {}).sort(),
+    payments: Object.keys(globalThis.sceptreDrive?.payments ?? {}).sort(),
+    checkout: Object.keys(globalThis.sceptreDrive?.payments?.checkout ?? {}).sort(),
     hasInvoke: 'invoke' in (globalThis.sceptreDrive ?? {}),
   }))
-  // `pin` was added in Plan 04 (main-process Argon2 hash/verify) and `printer`
-  // in Plan 07 (bounded ESC/POS jobs). Everything the renderer can reach must
-  // be an explicit typed method — never a generic invoke.
+  // `pin` was added in Plan 04 (main-process Argon2 hash/verify), `printer`
+  // in Plan 07 (bounded ESC/POS jobs) and `payments` in Phase 13 Plan 09 (a
+  // locked-down checkout window the renderer may open and close, nothing more).
+  // Everything the renderer can reach must be an explicit typed method — never a
+  // generic invoke.
   check(
-    shape.root.join(',') === 'app,pin,printer,secure',
-    'bridge exposes only app, pin, printer, and secure',
+    shape.root.join(',') === 'app,payments,pin,printer,secure',
+    'bridge exposes only app, payments, pin, printer, and secure',
     shape.root.join(','),
   )
   check(shape.hasInvoke === false, 'bridge exposes no generic invoke')
@@ -257,6 +261,16 @@ async function checkDesktopBridge(page) {
     shape.app.join(',') === 'getInfo',
     'bridge app surface is app.getInfo only',
     shape.app.join(','),
+  )
+  check(
+    shape.payments.join(',') === 'checkout',
+    'bridge payments surface is payments.checkout only',
+    shape.payments.join(','),
+  )
+  check(
+    shape.checkout.join(',') === 'close,open',
+    'the checkout surface opens and closes a window, nothing else',
+    shape.checkout.join(','),
   )
   check(
     shape.printer.join(',') === 'list,openDrawer,print,test',
