@@ -2,10 +2,15 @@ import { logger } from '../../logger.ts'
 import {
   type ChargeInput,
   type PaymentProvider,
+  type ProviderBalance,
   type ProviderChargeResult,
   type ProviderRefund,
+  type ProviderTransferInput,
+  type ProviderTransferResult,
+  type ProviderTransferStatus,
   ProviderUnavailableError,
   type ProviderVerification,
+  type TransferRecipientInput,
 } from './payments.provider.ts'
 
 /**
@@ -54,6 +59,37 @@ interface PaystackRefundData {
   expected_at?: string
 }
 
+/** `POST /transferrecipient` returns `{ recipient_code, … }`. */
+interface PaystackRecipientData {
+  recipient_code?: string
+  type?: string
+  currency?: string
+}
+
+/**
+ * A transfer as `POST /transfer`, `finalize_transfer` and `verify/:reference`
+ * return it. `failures` is where the reason for a failed or reversed transfer
+ * lives; `gateway_response` carries the OTP refusal.
+ */
+interface PaystackTransferData {
+  id?: number | string
+  reference?: string
+  status?: string
+  transfer_code?: string
+  amount?: number
+  currency?: string
+  fee_charged?: number | string
+  transferred_at?: string
+  gateway_response?: string
+  failures?: { reason?: string; message?: string }[] | null
+}
+
+/** `GET /balance` returns one entry per currency, amounts in subunits. */
+interface PaystackBalanceData {
+  currency?: string
+  balance?: number
+}
+
 interface RequestOutcome<T> {
   ok: boolean
   status: number
@@ -88,6 +124,25 @@ const REFUND_STATUSES = new Set<ProviderRefund['status']>([
   'failed',
   'needs-attention',
 ])
+
+const TRANSFER_STATUSES: Record<string, ProviderTransferStatus> = {
+  pending: 'pending',
+  otp: 'otp',
+  success: 'success',
+  failed: 'failed',
+  reversed: 'reversed',
+  blocked: 'blocked',
+  rejected: 'rejected',
+}
+
+function integer(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    const parsed = Number(value)
+    return Number.isSafeInteger(parsed) ? parsed : null
+  }
+  return null
+}
 
 function failureResult(
   input: ChargeInput,
@@ -264,6 +319,128 @@ export class PaystackPaymentProvider implements PaymentProvider {
         text(data.refund_reference) ??
         (data.id === undefined || data.id === null ? null : String(data.id)),
       expectedAt: text(data.expected_at),
+    }
+  }
+
+  /**
+   * The five transfer calls (P14-D22–D30). The bodies are Paystack's documented
+   * shapes: `source: 'balance'` and `amount` in pesewas for the transfer,
+   * `type`/`bank_code` for the recipient. Nothing above this class composes them.
+   */
+  async createTransferRecipient(input: TransferRecipientInput): Promise<{ recipientCode: string }> {
+    const response = await this.request<PaystackRecipientData>('POST', '/transferrecipient', {
+      type: input.type,
+      name: input.name,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: input.currency,
+    })
+
+    const recipientCode = text(response.data?.recipient_code)
+    if (!response.ok || !recipientCode) {
+      throw new ProviderUnavailableError('The payment provider did not create a recipient')
+    }
+    return { recipientCode }
+  }
+
+  async initiateTransfer(input: ProviderTransferInput): Promise<ProviderTransferResult> {
+    const response = await this.request<PaystackTransferData>('POST', '/transfer', {
+      source: 'balance',
+      amount: input.amountMinor,
+      currency: input.currency,
+      recipient: input.recipientCode,
+      reason: input.reason,
+      reference: input.reference,
+    })
+
+    return this.toTransferResult(input.reference, input.amountMinor, response)
+  }
+
+  async finalizeTransfer(input: {
+    transferCode: string
+    otp: string
+  }): Promise<ProviderTransferResult> {
+    const response = await this.request<PaystackTransferData>(
+      'POST',
+      '/transfer/finalize_transfer',
+      {
+        transfer_code: input.transferCode,
+        otp: input.otp,
+      },
+    )
+
+    // A wrong OTP comes back as a rejected request; the row must not move, so
+    // the result is `otp` carrying Paystack's own words rather than a throw.
+    if (!response.ok || !response.data) {
+      return {
+        reference: '',
+        status: 'otp',
+        transferCode: input.transferCode,
+        transferId: null,
+        amountMinor: 0,
+        currency: 'GHS',
+        failureCode: 'otp_invalid',
+        failureMessage: response.message,
+        transferredAt: null,
+        feeMinor: null,
+      }
+    }
+
+    return this.toTransferResult(
+      text(response.data.reference) ?? '',
+      integer(response.data.amount) ?? 0,
+      response,
+    )
+  }
+
+  async verifyTransfer(reference: string): Promise<ProviderTransferResult> {
+    const response = await this.request<PaystackTransferData>(
+      'GET',
+      `/transfer/verify/${encodeURIComponent(reference)}`,
+    )
+
+    // The HTTP status is not the transfer's status: verify answers 200 for a
+    // failed transfer, so only `data.status` is authoritative (P14 research 6).
+    return this.toTransferResult(reference, 0, response)
+  }
+
+  async getBalance(): Promise<ProviderBalance | null> {
+    const response = await this.request<PaystackBalanceData[]>('GET', '/balance')
+    if (!response.ok || !Array.isArray(response.data)) return null
+
+    const ghs = response.data.find((row) => text(row.currency)?.toUpperCase() === 'GHS')
+    const balanceMinor = integer(ghs?.balance)
+    if (!ghs || balanceMinor === null) return null
+    return { currency: 'GHS', balanceMinor }
+  }
+
+  /** One mapping for initiate, finalize and verify: `data.status` decides. */
+  private toTransferResult(
+    reference: string,
+    fallbackAmountMinor: number,
+    response: RequestOutcome<PaystackTransferData>,
+  ): ProviderTransferResult {
+    const data = response.data
+    const providerStatus = text(data?.status)
+    const status = (providerStatus ? TRANSFER_STATUSES[providerStatus] : undefined) ?? 'pending'
+    const failure = Array.isArray(data?.failures) ? data?.failures[0] : undefined
+    const failed = status === 'failed' || status === 'reversed' || status === 'blocked'
+    const rejected = status === 'rejected'
+
+    return {
+      reference: text(data?.reference) ?? reference,
+      status,
+      transferCode: text(data?.transfer_code),
+      transferId: data?.id === undefined || data?.id === null ? null : String(data.id),
+      amountMinor: integer(data?.amount) ?? fallbackAmountMinor,
+      currency: text(data?.currency) ?? 'GHS',
+      failureCode: failed || rejected ? (text(failure?.reason) ?? providerStatus) : null,
+      failureMessage:
+        failed || rejected
+          ? (text(failure?.message) ?? text(data?.gateway_response) ?? response.message)
+          : null,
+      transferredAt: text(data?.transferred_at),
+      feeMinor: integer(data?.fee_charged),
     }
   }
 

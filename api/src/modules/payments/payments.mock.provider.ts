@@ -1,9 +1,15 @@
+import { createHash } from 'node:crypto'
 import type {
   ChargeInput,
   PaymentProvider,
+  ProviderBalance,
   ProviderChargeResult,
   ProviderRefund,
+  ProviderTransferInput,
+  ProviderTransferResult,
+  ProviderTransferStatus,
   ProviderVerification,
+  TransferRecipientInput,
 } from './payments.provider.ts'
 import type { MockSettlementOutcome, PaymentMethod } from './payments.types.ts'
 
@@ -40,13 +46,56 @@ interface MockRefundRecord {
 const charges = new Map<string, MockChargeRecord>()
 const refunds = new Map<string, MockRefundRecord>()
 
+/** The one OTP the mock accepts; a test signs in with anything else to fail. */
+export const MOCK_TRANSFER_OTP = '123456'
+
+/** Enough for any fixture; a test lowers it to prove the precheck (P14-D29). */
+const DEFAULT_MOCK_BALANCE_MINOR = 100_000_000
+
+interface MockRecipientRecord {
+  recipientCode: string
+  type: 'ghipss' | 'mobile_money'
+  accountNumber: string
+  bankCode: string
+  name: string
+}
+
+interface MockTransferRecord {
+  reference: string
+  recipientCode: string
+  amountMinor: number
+  reason: string
+  status: ProviderTransferStatus
+  transferCode: string
+  transferId: string
+  failureCode: string | null
+  failureMessage: string | null
+  transferredAt: Date | null
+}
+
+const recipients = new Map<string, MockRecipientRecord>()
+const transfers = new Map<string, MockTransferRecord>()
+const awaitingOtp = new Set<string>()
+let otpForNextTransfer = false
+let balanceMinor = DEFAULT_MOCK_BALANCE_MINOR
+
 interface MockCallCounts {
   charge: number
   verify: number
   refund: number
+  recipient: number
+  transfer: number
+  balance: number
 }
 
-let calls: MockCallCounts = { charge: 0, verify: 0, refund: 0 }
+let calls: MockCallCounts = {
+  charge: 0,
+  verify: 0,
+  refund: 0,
+  recipient: 0,
+  transfer: 0,
+  balance: 0,
+}
 
 const MOMO_EXPIRY_MS = 180_000
 const BANK_TRANSFER_EXPIRY_MS = 15 * 60_000
@@ -218,6 +267,180 @@ export class MockPaymentProvider implements PaymentProvider {
       expectedAt: null,
     }
   }
+
+  /**
+   * Recipients are deterministic from the destination, so a test can prove the
+   * service reuses the stored code instead of minting a second one.
+   */
+  async createTransferRecipient(input: TransferRecipientInput): Promise<{ recipientCode: string }> {
+    calls.recipient += 1
+    const key = `${input.type}|${input.accountNumber}|${input.bankCode}`
+    const existing = recipients.get(key)
+    if (existing) return { recipientCode: existing.recipientCode }
+
+    const digest = createHash('sha256').update(key).digest('hex').slice(0, 16)
+    const record: MockRecipientRecord = {
+      recipientCode: `RCP_mock_${digest}`,
+      type: input.type,
+      accountNumber: input.accountNumber,
+      bankCode: input.bankCode,
+      name: input.name,
+    }
+    recipients.set(key, record)
+    return { recipientCode: record.recipientCode }
+  }
+
+  /**
+   * The delayed path is the mock's whole point: test keys at Paystack return
+   * `success` immediately, so a mock that did the same would never exercise the
+   * webhook (P14 research 4).
+   */
+  async initiateTransfer(input: ProviderTransferInput): Promise<ProviderTransferResult> {
+    calls.transfer += 1
+    const transferCode = `TRF_mock_${input.reference.slice(-10)}`
+    const wantsOtp = otpForNextTransfer || awaitingOtp.has(input.reference)
+    otpForNextTransfer = false
+
+    const insufficient = input.amountMinor > balanceMinor
+    if (insufficient) awaitingOtp.delete(input.reference)
+
+    const record: MockTransferRecord = {
+      reference: input.reference,
+      recipientCode: input.recipientCode,
+      amountMinor: input.amountMinor,
+      reason: input.reason,
+      status: insufficient ? 'failed' : wantsOtp ? 'otp' : 'pending',
+      transferCode,
+      transferId: String(1_000_000 + transfers.size),
+      failureCode: insufficient ? 'insufficient_balance' : null,
+      failureMessage: insufficient ? 'Your balance is not enough to fulfill this request' : null,
+      transferredAt: null,
+    }
+    transfers.set(input.reference, record)
+    return transferResult(record)
+  }
+
+  async finalizeTransfer(input: {
+    transferCode: string
+    otp: string
+  }): Promise<ProviderTransferResult> {
+    const record = [...transfers.values()].find(
+      (candidate) => candidate.transferCode === input.transferCode,
+    )
+    if (!record) {
+      return {
+        reference: '',
+        status: 'otp',
+        transferCode: input.transferCode,
+        transferId: null,
+        amountMinor: 0,
+        currency: 'GHS',
+        failureCode: 'transfer_not_found',
+        failureMessage: 'Transfer not found',
+        transferredAt: null,
+        feeMinor: null,
+      }
+    }
+
+    if (input.otp !== MOCK_TRANSFER_OTP) {
+      return {
+        ...transferResult(record),
+        status: 'otp',
+        failureCode: 'otp_invalid',
+        failureMessage: 'Transfer OTP is invalid',
+      }
+    }
+
+    record.status = 'pending'
+    record.failureCode = null
+    record.failureMessage = null
+    awaitingOtp.delete(record.reference)
+    return transferResult(record)
+  }
+
+  async verifyTransfer(reference: string): Promise<ProviderTransferResult> {
+    const record = transfers.get(reference)
+    if (!record) {
+      return {
+        reference,
+        status: 'pending',
+        transferCode: null,
+        transferId: null,
+        amountMinor: 0,
+        currency: 'GHS',
+        failureCode: null,
+        failureMessage: null,
+        transferredAt: null,
+        feeMinor: null,
+      }
+    }
+    return transferResult(record)
+  }
+
+  async getBalance(): Promise<ProviderBalance | null> {
+    calls.balance += 1
+    return { currency: 'GHS', balanceMinor }
+  }
+}
+
+function transferResult(record: MockTransferRecord, feeMinor: number | null = 0) {
+  return {
+    reference: record.reference,
+    status: record.status,
+    transferCode: record.transferCode,
+    transferId: record.transferId,
+    amountMinor: record.amountMinor,
+    currency: 'GHS' as const,
+    failureCode: record.failureCode,
+    failureMessage: record.failureMessage,
+    transferredAt: record.transferredAt?.toISOString() ?? null,
+    feeMinor,
+  }
+}
+
+/**
+ * Harness hooks for the transfer lifecycle. The mock never settles by itself:
+ * a test (or the webhook test) moves a transfer the way Paystack's webhook does.
+ */
+export function settleMockTransfer(
+  reference: string,
+  status: 'success' | 'failed' | 'reversed',
+): boolean {
+  const record = transfers.get(reference)
+  if (!record) return false
+  record.status = status
+  record.transferredAt = status === 'success' ? new Date() : record.transferredAt
+  record.failureCode = status === 'failed' ? 'failed' : status === 'reversed' ? 'reversed' : null
+  record.failureMessage =
+    status === 'failed'
+      ? 'Mock transfer failed'
+      : status === 'reversed'
+        ? 'Mock transfer reversed'
+        : null
+  return true
+}
+
+/**
+ * Makes the next initiation demand an OTP. With a reference it targets that
+ * transfer — which a server-minted reference makes impossible to know in
+ * advance, hence the one-shot form a test normally uses.
+ */
+export function requestMockOtp(reference?: string): void {
+  if (reference) awaitingOtp.add(reference)
+  else otpForNextTransfer = true
+}
+
+/** Lowers the mock's GHS balance so the precheck can be proven to refuse. */
+export function setMockTransferBalance(minor: number): void {
+  balanceMinor = minor
+}
+
+export function getMockTransferByReference(reference: string): {
+  recipientCode: string
+  status: ProviderTransferStatus
+} | null {
+  const record = transfers.get(reference)
+  return record ? { recipientCode: record.recipientCode, status: record.status } : null
 }
 
 /** Harness hook: the till polls `verify`, which reports what this sets. */
@@ -245,5 +468,10 @@ export function getMockCallCounts(): MockCallCounts {
 export function resetMockProvider(): void {
   charges.clear()
   refunds.clear()
-  calls = { charge: 0, verify: 0, refund: 0 }
+  recipients.clear()
+  transfers.clear()
+  awaitingOtp.clear()
+  otpForNextTransfer = false
+  balanceMinor = DEFAULT_MOCK_BALANCE_MINOR
+  calls = { charge: 0, verify: 0, refund: 0, recipient: 0, transfer: 0, balance: 0 }
 }

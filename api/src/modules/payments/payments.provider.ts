@@ -66,6 +66,57 @@ export interface ProviderRefund {
   expectedAt: string | null
 }
 
+/**
+ * A Paystack transfer recipient (P14-D27). Ghana has exactly two kinds: a bank
+ * account (`ghipss`, with a GHIPSS bank code) and a mobile-money wallet
+ * (`mobile_money`, with the telco code as `bank_code`).
+ */
+export interface TransferRecipientInput {
+  type: 'ghipss' | 'mobile_money'
+  name: string
+  accountNumber: string
+  bankCode: string
+  currency: 'GHS'
+}
+
+export interface ProviderTransferInput {
+  reference: string
+  amountMinor: number
+  recipientCode: string
+  reason: string
+  currency: 'GHS'
+}
+
+/** `otp` is a state, not an error (P14-D24). Only `success` moved money. */
+export type ProviderTransferStatus =
+  | 'pending'
+  | 'otp'
+  | 'success'
+  | 'failed'
+  | 'reversed'
+  | 'blocked'
+  | 'rejected'
+
+export interface ProviderTransferResult {
+  reference: string
+  status: ProviderTransferStatus
+  transferCode: string | null
+  /** A u64 at the provider; text here, because a JS number would round it. */
+  transferId: string | null
+  amountMinor: number
+  currency: string
+  failureCode: string | null
+  failureMessage: string | null
+  transferredAt: string | null
+  /** The provider's fee, ours and never netted into the supplier's amount (P14-D29). */
+  feeMinor: number | null
+}
+
+export interface ProviderBalance {
+  currency: 'GHS'
+  balanceMinor: number
+}
+
 export interface PaymentProvider {
   readonly name: 'PAYSTACK' | 'MOCK'
   createMobileMoneyCharge(input: ChargeInput): Promise<ProviderChargeResult>
@@ -73,6 +124,15 @@ export interface PaymentProvider {
   createBankTransferCharge(input: ChargeInput): Promise<ProviderChargeResult>
   verify(reference: string): Promise<ProviderVerification>
   refund(input: { reference: string; amountMinor: number; note: string }): Promise<ProviderRefund>
+  createTransferRecipient(input: TransferRecipientInput): Promise<{ recipientCode: string }>
+  initiateTransfer(input: ProviderTransferInput): Promise<ProviderTransferResult>
+  /**
+   * A wrong OTP is not an exception: the result comes back `otp` with the
+   * provider's message, so the service can answer 400 without moving the row.
+   */
+  finalizeTransfer(input: { transferCode: string; otp: string }): Promise<ProviderTransferResult>
+  verifyTransfer(reference: string): Promise<ProviderTransferResult>
+  getBalance(): Promise<ProviderBalance | null>
 }
 
 /** A retryable provider condition: the payment is uncertain, not declined. */
