@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { validateJson, validateParam, validateQuery } from '../../http/validation.ts'
+import { stockMovementTypeEnum } from './inventory.schema.ts'
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50)
 const offsetSchema = z.coerce.number().int().min(0).default(0)
@@ -53,12 +54,18 @@ export const adjustmentCreateSchema = z
   })
   .strict()
 
+/**
+ * The movement filter accepts **every** value the pg enum stores (P14-D18).
+ *
+ * It used to be a hand-copied list of five, so the largest outflow in a retail ledger —
+ * `SALE` — could not be filtered, and neither could `WRITE_OFF`, `SUPPLIER_RETURN` or
+ * `RETURN`. Deriving from the enum means a future movement type is filterable the day it
+ * is added instead of the day someone notices it missing.
+ */
 export const movementListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   productId: z.uuid().optional(),
-  type: z
-    .enum(['RECEIPT', 'ADJUSTMENT', 'TRANSFER_OUT', 'TRANSFER_IN', 'COUNT_VARIANCE'])
-    .optional(),
+  type: z.enum(stockMovementTypeEnum.enumValues).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   limit: limitSchema,
