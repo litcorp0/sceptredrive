@@ -102,6 +102,15 @@ export type ApprovalSubject =
 			reasonCode: string
 			lineCount: number
 			itemCount: number
+			/** The returned goods, one row per refund line (P13-D22). */
+			lines: Array<{
+				productName: string
+				sku: string
+				quantity: number
+				restock: "RESALABLE" | "DAMAGED" | "NOT_RETURNED"
+				damageReason: string | null
+				totalMinor: number
+			}>
 			/** Restock decisions counted in lines, one decision per line (P13-D22). */
 			restock: { resalable: number; damaged: number; notReturned: number }
 			tenders: Array<{ method: string; amountMinor: number; status: string }>

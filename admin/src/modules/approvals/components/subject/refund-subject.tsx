@@ -6,6 +6,7 @@ import {
 	TENDER_METHODS,
 	type TenderMethod,
 } from "@sceptre/shared"
+
 import { StatusBadge, type StatusVariant } from "#/components/common/status-badge"
 import { TableMessage } from "#/components/common/table-message"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
@@ -44,13 +45,31 @@ function tenderStatusTone(status: string): StatusVariant {
 	}
 }
 
+function restockTone(restock: RefundSubjectArm["lines"][number]["restock"]): StatusVariant {
+	switch (restock) {
+		case "RESALABLE":
+			return "ok"
+		case "DAMAGED":
+			return "warn"
+		default:
+			return "muted"
+	}
+}
+
+/** The shared restock word, with the damage reason appended where the line carries one. */
+function restockText(line: RefundSubjectArm["lines"][number]): string {
+	const word = REFUND_RESTOCK_LABELS[line.restock]
+	const reason = line.damageReason?.trim()
+	return reason ? `${word} — ${reason}` : word
+}
+
 /**
  * A refund waiting for head office's acceptance (P13-D23).
  *
  * Nothing here can move money: the refund already happened at the till, and the decision only
  * records whether head office accepts it. The reviewer's question is therefore "what came back,
- * and has the customer actually been paid" — the restock counts answer the first, the tenders
- * answer the second.
+ * and has the customer actually been paid" — the lines answer the first, the tenders answer the
+ * second.
  */
 export function RefundSubject({
 	subject,
@@ -143,12 +162,60 @@ export function RefundSubject({
 					</div>
 				</dl>
 
+				<section className="grid gap-2" aria-labelledby="refund-lines-heading">
+					<h3 id="refund-lines-heading" className="font-medium">
+						Lines
+					</h3>
+					<div className="min-w-0 overflow-x-auto rounded-md border">
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Product</TableHead>
+									<TableHead>SKU</TableHead>
+									<TableHead className="text-right">Quantity</TableHead>
+									<TableHead className="text-right">Line total</TableHead>
+									<TableHead>Restock</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{subject.lines.length === 0 ? (
+									<TableMessage colSpan={5} state="empty">
+										No lines were recorded on this refund.
+									</TableMessage>
+								) : (
+									// The arm carries no line id, so the row's position is the only key available.
+									subject.lines.map((line, index) => (
+										// biome-ignore lint/suspicious/noArrayIndexKey: the arm has no line id
+										<TableRow key={`${line.sku}-${index}`}>
+											<TableCell className="font-medium">{line.productName}</TableCell>
+											<TableCell className="font-mono text-xs">{line.sku}</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{formatCount(line.quantity)}
+											</TableCell>
+											<TableCell className="text-right tabular-nums">
+												{formatGhs(line.totalMinor)}
+											</TableCell>
+											<TableCell>
+												<StatusBadge variant={restockTone(line.restock)}>
+													{restockText(line)}
+												</StatusBadge>
+											</TableCell>
+										</TableRow>
+									))
+								)}
+							</TableBody>
+						</Table>
+					</div>
+				</section>
+
 				<section className="grid gap-2" aria-labelledby="refund-restock-heading">
 					<h3 id="refund-restock-heading" className="font-medium">
 						What came back
 					</h3>
 					{subject.lineCount === 0 ? (
-						<p className="text-muted-foreground">No lines were recorded on this refund.</p>
+						<p className="text-muted-foreground">
+							No restock decisions were recorded on this refund.
+						</p>
 					) : (
 						<ul className="flex flex-wrap gap-2">
 							{restock.map((item) => (
