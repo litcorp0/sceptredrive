@@ -295,6 +295,12 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('pos.syncBatchSize', 25),
     ensureSetting('pos.receiptFooter', 'Thank you for your business'),
     ensureSetting('pos.salesRequireOpenShift', true),
+    // Phase 14 seller identity: the demo receipt copy and the E-VAT payload look
+    // like a real business. The flags are not seeded — their defaults are the
+    // product's intended state, and a seeded row would make `source: 'global'`
+    // look like a decision somebody made.
+    ensureSetting('tax.sellerTin', 'C0012345678'),
+    ensureSetting('tax.sellerVatNumber', 'C0012345678'),
   ])
   if (settingsSeeded.some(Boolean)) created.push('settings defaults')
 

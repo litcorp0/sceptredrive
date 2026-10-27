@@ -1,6 +1,53 @@
+import type { FlagKey } from '@sceptre/shared'
 import { z } from 'zod'
 import { env } from '../../config/env.ts'
 import { validateJson, validateQuery } from '../../http/validation.ts'
+
+/**
+ * The three feature flags (P14-D41). A flag is a typed boolean setting, not a
+ * second store: it is read, written and audited by the settings path that
+ * already exists, and it is on by default because this phase ships the features.
+ */
+const FLAG_SETTING_DEFINITIONS = {
+  'flag.supplierTransfers': {
+    schema: z.boolean(),
+    defaultValue: true,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'flag.evatSubmission': {
+    schema: z.boolean(),
+    defaultValue: true,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'flag.posConflictResolution': {
+    schema: z.boolean(),
+    defaultValue: true,
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+} as const satisfies Record<
+  FlagKey,
+  { schema: z.ZodBoolean; defaultValue: boolean; branchScoped: boolean; writableBy: 'admin' }
+>
+
+type FlagSettingKey = keyof typeof FLAG_SETTING_DEFINITIONS
+
+/**
+ * `satisfies Record<FlagKey, …>` above proves every registry flag has a setting;
+ * this proves the settings add no flag the registry does not name. Remove either
+ * direction and `check-types` fails, which is the point: the console renders the
+ * registry and the API enforces the settings, so a drift between them is a screen
+ * that lies about what it can turn off.
+ */
+type FlagSettingsMatchRegistry = [FlagSettingKey] extends [FlagKey]
+  ? [FlagKey] extends [FlagSettingKey]
+    ? true
+    : false
+  : false
+
+export const FLAG_SETTING_KEYS_ARE_EXACT: FlagSettingsMatchRegistry = true
 
 export const SETTING_DEFINITIONS = {
   'auth.requireTwoFactor': {
@@ -345,6 +392,29 @@ export const SETTING_DEFINITIONS = {
     branchScoped: true,
     writableBy: 'admin',
   },
+  // --- Phase 14: seller identity and the typed feature flags ------------------
+  /**
+   * The company's TIN and VAT number (P14-D38). There is no TIN column on
+   * `branch`: the company holds one of each, and a per-branch copy is a number
+   * that goes stale in one place.
+   *
+   * The empty string is the honest default for a number we do not have yet: the
+   * receipt copy prints nothing rather than printing `undefined`, and the E-VAT
+   * payload is refused in the service rather than submitted blank.
+   */
+  'tax.sellerTin': {
+    schema: z.string().trim().max(30),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'tax.sellerVatNumber': {
+    schema: z.string().trim().max(30),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  ...FLAG_SETTING_DEFINITIONS,
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS
