@@ -326,6 +326,25 @@ export const SETTING_DEFINITIONS = {
     branchScoped: false,
     writableBy: 'admin',
   },
+  // --- Phase 13: POS payments, refunds and returns ---------------------------
+  /**
+   * The gross refund on one document at or above which an admin must decide it
+   * (P13-D21). It does not accumulate across refunds of the same sale, and `>=`
+   * triggers, so a refund of exactly GH₵200 raises one. Branch-overridable but
+   * admin-writable for the same reason the shift variance tolerance is: a
+   * branch that can set its own refund cap has none.
+   *
+   * There is deliberately no refund prefix or sequence here. The till allocates
+   * `RF-<terminalCode>-<day>-NNNN` from its local `document_sequence` so a
+   * refund can be numbered offline; the server stores the number and enforces
+   * uniqueness (P13-D37).
+   */
+  'pos.refundApprovalThresholdMinor': {
+    schema: z.number().int().min(0).max(1_000_000),
+    defaultValue: 20_000,
+    branchScoped: true,
+    writableBy: 'admin',
+  },
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS

@@ -25,6 +25,18 @@ export const INVENTORY_ABC_RECOMPUTE_CRON = '0 3 * * *'
 export const INVENTORY_TRIGGER_SCAN_QUEUE = 'inventory-trigger-scan'
 export const INVENTORY_TRIGGER_SCAN_CRON = '30 3 * * *'
 
+/**
+ * Phase 13 payment jobs (P13-D16). Both are idempotent: the refund job re-reads
+ * `refund_tender.status` and does nothing unless it is `PENDING`, and the
+ * reconcile sweep only touches payments that have been `PENDING` for more than
+ * ten minutes. Their workers and schedules are registered in Plans 05 and 07
+ * with the code they run.
+ */
+export const POS_REFUND_DISPATCH_QUEUE = 'pos-refund-dispatch'
+export const POS_PAYMENT_RECONCILE_QUEUE = 'pos-payment-reconcile'
+/** Nightly at 01:20 Africa/Accra, after the inventory jobs, before the sweep is due. */
+export const POS_PAYMENT_RECONCILE_CRON = '20 1 * * *'
+
 /** Accra is UTC+0 all year, but the zone is named rather than assumed. */
 export const INVENTORY_JOB_TZ = 'Africa/Accra'
 

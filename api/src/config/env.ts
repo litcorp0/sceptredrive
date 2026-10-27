@@ -23,7 +23,7 @@ function optionalNonEmpty(schema: z.ZodString) {
   )
 }
 
-const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().max(65535).default(4000),
   DATABASE_URL: z.string().min(1),
@@ -51,19 +51,68 @@ const envSchema = z.object({
   POS_JWT_PRIVATE_KEY: optionalNonEmpty(z.string().min(1)),
   POS_JWT_KEY_ID: z.string().min(1).max(64).default('pos-v1'),
   POS_JWT_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
+  // --- Paystack (Ghana) ---
+  // `mock` needs no credentials; `test` and `live` select the real provider
+  // (P13-D10). The refinements below refuse to boot when a non-mock mode is
+  // missing the credential it needs.
+  PAYSTACK_MODE: z.enum(['mock', 'test', 'live']).default('mock'),
+  PAYSTACK_SECRET_KEY: optionalNonEmpty(z.string().min(8)),
+  PAYSTACK_WEBHOOK_SECRET: optionalNonEmpty(z.string().min(8)),
+  PAYSTACK_BASE_URL: z.string().url().default('https://api.paystack.co'),
+  // Routing label for the provider's mandatory email field, never a contact
+  // channel (P13-D7). Phase 15 points this at a domain the business owns.
+  PAYSTACK_EMAIL_DOMAIN: z.string().min(3).default('sceptre-drive.example'),
 })
 
-const parsed = envSchema.safeParse(process.env)
+/**
+ * The payment credentials fail closed at boot, and the message names the
+ * variable: a missing key must not surface later as a 500 from the first charge.
+ */
+const envSchema = baseEnvSchema.superRefine((value, ctx) => {
+  if (value.PAYSTACK_MODE !== 'mock' && !value.PAYSTACK_SECRET_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['PAYSTACK_SECRET_KEY'],
+      message: `PAYSTACK_SECRET_KEY is required when PAYSTACK_MODE is '${value.PAYSTACK_MODE}'`,
+    })
+  }
+  if (value.PAYSTACK_MODE === 'live' && value.NODE_ENV !== 'production') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['PAYSTACK_MODE'],
+      message: "PAYSTACK_MODE='live' is only allowed when NODE_ENV=production",
+    })
+  }
+})
 
-if (!parsed.success) {
-  const issues = parsed.error.issues
-    .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
-    .join('\n')
-  console.error(`Invalid environment configuration:\n${issues}`)
-  process.exit(1)
+export type ParsedEnv = z.infer<typeof envSchema>
+
+/**
+ * Parses and validates the environment without touching the process, so the
+ * fail-closed rules can be asserted in a test. The module-level load below is
+ * the only caller that turns a failure into an exit.
+ */
+export function parseEnv(source: NodeJS.ProcessEnv): ParsedEnv {
+  const parsed = envSchema.safeParse(source)
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('\n')
+    throw new Error(`Invalid environment configuration:\n${issues}`)
+  }
+  return parsed.data
 }
 
-const data = parsed.data
+function loadEnv(source: NodeJS.ProcessEnv): ParsedEnv {
+  try {
+    return parseEnv(source)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  }
+}
+
+const data = loadEnv(process.env)
 
 if (data.NODE_ENV === 'production') {
   const secret = data.BETTER_AUTH_SECRET
@@ -109,6 +158,13 @@ export const env = {
   ...data,
   corsOrigins,
   trustedOrigins: csv(data.BETTER_AUTH_TRUSTED_ORIGINS),
+  /**
+   * Paystack signs webhooks with the secret key; the dedicated variable exists
+   * so a rotation can be staged without changing the charge key. Absent in both
+   * places the webhook cannot be verified, so Plan 03 refuses the request
+   * rather than trusting an unsigned body.
+   */
+  paystackWebhookSecret: data.PAYSTACK_WEBHOOK_SECRET ?? data.PAYSTACK_SECRET_KEY ?? null,
 } as const
 
 export type Env = typeof env
