@@ -65,9 +65,7 @@ export function SalesTab() {
 
 	const data = report.data
 	if (!data) return null
-	// Plan 05 added `saleId` to the API's sales row; the module's `SalesRow` type
-	// predates it. The link needs the id, so state the shape the API now returns.
-	const rows = data.rows as Array<(typeof data.rows)[number] & { saleId: string }>
+	const rows = data.rows
 	const exportQuery = toAnalyticsQuery(search, branchId)
 
 	if (data.totals.salesCount === 0) {
@@ -269,17 +267,13 @@ export function SalesTab() {
 							{rows.map((row) => (
 								<TableRow key={row.receiptNumber}>
 									<TableCell className="font-mono text-xs">
-										{row.saleId ? (
-											<Link
-												to="/pos/sales/$saleId"
-												params={{ saleId: row.saleId }}
-												className="hover:underline"
-											>
-												{row.receiptNumber}
-											</Link>
-										) : (
-											row.receiptNumber
-										)}
+										<Link
+											to="/pos/sales/$saleId"
+											params={{ saleId: row.saleId }}
+											className="hover:underline"
+										>
+											{row.receiptNumber}
+										</Link>
 									</TableCell>
 									<TableCell>{formatDateTime(row.occurredAt)}</TableCell>
 									<TableCell>{row.branchCode}</TableCell>

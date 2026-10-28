@@ -142,6 +142,8 @@ export interface LabelledTotal {
 }
 
 export interface SalesRow {
+	/** The sale's id, so the row can link to the document it names (Plan 05 added it). */
+	saleId: string
 	receiptNumber: string
 	occurredAt: string
 	branchCode: string
