@@ -52,7 +52,11 @@ export function LoginRoute() {
     currentPin: string
   } | null>(null)
   const [lockedTarget, setLockedTarget] = useState<LocalStaffBinding | null>(null)
-  const [identity, setIdentity] = useState<{ branch: string; terminal: string } | null>(null)
+  const [identity, setIdentity] = useState<{
+    branch: string
+    branchName: string
+    terminal: string
+  } | null>(null)
 
   const refresh = useCallback(async (database: PowerSyncDatabase) => {
     const rows = await listBindings(database)
@@ -68,11 +72,18 @@ export function LoginRoute() {
       const config = await readCachedConfig(db)
       if (cancelled) return
       setPolicy(lockoutPolicyFor(config))
-      const row = await db.getOptional<{ branch_code: string; terminal_code: string }>(
-        'SELECT branch_code, terminal_code FROM pos_config WHERE id = ?',
-        ['current'],
-      )
-      if (!cancelled && row) setIdentity({ branch: row.branch_code, terminal: row.terminal_code })
+      const row = await db.getOptional<{
+        branch_code: string
+        branch_name: string
+        terminal_code: string
+      }>('SELECT branch_code, branch_name, terminal_code FROM pos_config WHERE id = ?', ['current'])
+      if (!cancelled && row) {
+        setIdentity({
+          branch: row.branch_code,
+          branchName: row.branch_name,
+          terminal: row.terminal_code,
+        })
+      }
       await refresh(db)
     })()
     return () => {
@@ -190,7 +201,11 @@ export function LoginRoute() {
           <div className="flex justify-between gap-4 border-b border-white/15 pb-2">
             <dt className="text-topbar-muted">Branch</dt>
             <dd className="font-mono">
-              {session ? formatBranchLabel(session.branch) : (identity?.branch ?? '—')}
+              {session
+                ? formatBranchLabel(session.branch)
+                : identity
+                  ? formatBranchLabel({ name: identity.branchName, code: identity.branch })
+                  : '—'}
             </dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-white/15 pb-2">

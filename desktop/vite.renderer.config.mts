@@ -49,6 +49,9 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         '@': rendererRoot,
+        // Resolve the workspace source directly instead of its node_modules
+        // symlink, so Vite watches new exports (and never serves a stale copy).
+        '@sceptre/shared': path.resolve(import.meta.dirname, '../packages/shared/src/index.ts'),
       },
       // Bun's store can surface a second React copy through symlinked deps.
       dedupe: ['react', 'react-dom'],
