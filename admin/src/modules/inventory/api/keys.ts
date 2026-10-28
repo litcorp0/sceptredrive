@@ -2,6 +2,7 @@ import type {
 	CountListQuery,
 	ReceiptListQuery,
 	StockListQuery,
+	StockReportQuery,
 	TransferListQuery,
 	WriteOffListQuery,
 } from "../types"
@@ -27,6 +28,7 @@ export const inventoryKeys = {
 	thresholds: ["inventory-thresholds"] as const,
 
 	stockList: (query: StockListQuery) => [...inventoryKeys.stock, "list", query] as const,
+	stockReport: (query: StockReportQuery) => [...inventoryKeys.stock, "report", query] as const,
 	stockDetail: (productId: string, branchId: string | null) =>
 		[...inventoryKeys.stock, "detail", productId, branchId] as const,
 	movementList: (query: { productId: string; branchId: string | null; offset: number }) =>

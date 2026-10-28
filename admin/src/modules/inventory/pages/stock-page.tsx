@@ -23,6 +23,7 @@ import { hasPermission } from "#/lib/role"
 import { stockListOptions } from "../api/inventory"
 import { AdjustDialog } from "../components/adjust-dialog"
 import { ReceiveDialog } from "../components/receive-dialog"
+import { StockReport } from "../components/stock-report"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 const listRoute = getRouteApi("/_authenticated/inventory/stock/")
@@ -39,6 +40,7 @@ export function StockPage() {
 
 	const [search, setSearch] = useState("")
 	const lowOnly = listSearch.lowStock === "true"
+	const reportMode = listSearch.report === "true"
 	const [offset, setOffset] = useState(0)
 	const [receiveOpen, setReceiveOpen] = useState(false)
 	const [adjustOpen, setAdjustOpen] = useState(false)
@@ -56,7 +58,7 @@ export function StockPage() {
 
 	const stockQuery = useQuery({
 		...stockListOptions(filters),
-		enabled: branchId !== null,
+		enabled: !reportMode && branchId !== null,
 	})
 
 	const rows = stockQuery.data?.stock ?? []
@@ -64,58 +66,80 @@ export function StockPage() {
 
 	return (
 		<section>
-			<div className="mb-3 flex flex-wrap items-end gap-3">
-				<div className="relative min-w-56 flex-1">
-					<SearchIcon
-						className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-						aria-hidden="true"
-					/>
-					<Input
-						className="pl-8"
-						placeholder="Search by name or SKU…"
-						value={search}
-						onChange={(event) => {
-							setSearch(event.target.value)
-							setOffset(0)
-						}}
-						aria-label="Search stock"
-					/>
-				</div>
+			<div className="mb-3 flex flex-wrap items-end gap-3 print:hidden">
+				{reportMode ? null : (
+					<>
+						<div className="relative min-w-56 flex-1">
+							<SearchIcon
+								className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+								aria-hidden="true"
+							/>
+							<Input
+								className="pl-8"
+								placeholder="Search by name or SKU…"
+								value={search}
+								onChange={(event) => {
+									setSearch(event.target.value)
+									setOffset(0)
+								}}
+								aria-label="Search stock"
+							/>
+						</div>
+
+						<div className="flex items-center gap-2 pb-2">
+							<Switch
+								id="low-stock-only"
+								checked={lowOnly}
+								onCheckedChange={(checked) => {
+									void navigateSearch({
+										search: (prev) => ({ ...prev, lowStock: checked ? "true" : undefined }),
+									})
+									setOffset(0)
+								}}
+							/>
+							<Label htmlFor="low-stock-only">Low stock only</Label>
+						</div>
+					</>
+				)}
 
 				<div className="flex items-center gap-2 pb-2">
 					<Switch
-						id="low-stock-only"
-						checked={lowOnly}
+						id="stock-report-mode"
+						checked={reportMode}
 						onCheckedChange={(checked) => {
 							void navigateSearch({
-								search: (prev) => ({ ...prev, lowStock: checked ? "true" : undefined }),
+								search: (prev) => ({ ...prev, report: checked ? "true" : undefined }),
 							})
 							setOffset(0)
 						}}
 					/>
-					<Label htmlFor="low-stock-only">Low stock only</Label>
+					<Label htmlFor="stock-report-mode">Report mode</Label>
 				</div>
 
-				<div className="ml-auto flex gap-2 pb-1">
-					{canReceive ? (
-						<Button size="sm" disabled={!activeBranchId} onClick={() => setReceiveOpen(true)}>
-							Receive stock
-						</Button>
-					) : null}
-					{canAdjust ? (
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={!activeBranchId}
-							onClick={() => setAdjustOpen(true)}
-						>
-							Adjust
-						</Button>
-					) : null}
-				</div>
+				{reportMode ? null : (
+					<div className="ml-auto flex gap-2 pb-1">
+						{canReceive ? (
+							<Button size="sm" disabled={!activeBranchId} onClick={() => setReceiveOpen(true)}>
+								Receive stock
+							</Button>
+						) : null}
+						{canAdjust ? (
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={!activeBranchId}
+								onClick={() => setAdjustOpen(true)}
+							>
+								Adjust
+							</Button>
+						) : null}
+					</div>
+				)}
 			</div>
 
-			{activeBranchId === null ? (
+			{reportMode ? (
+				<StockReport />
+			) : activeBranchId === null ? (
 				<div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
 					Choose a branch from the header to view its stock.
 				</div>

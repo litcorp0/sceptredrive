@@ -8,6 +8,8 @@ import type {
 	ReceiptListQuery,
 	StockDetail,
 	StockListQuery,
+	StockReport,
+	StockReportQuery,
 	StockRow,
 	StockThreshold,
 	ThresholdInput,
@@ -30,6 +32,22 @@ export function stockListOptions(query: StockListQuery = {}) {
 					),
 	})
 }
+
+/**
+ * `GET /api/inventory/stock/report` — the report's rows, totals, movement flow, transfers and
+ * counts in one snapshot. The console renders the totals it is given and never sums the rows
+ * itself (P14-D16): a browser total and a ledger total that disagree by a pesewa is a report
+ * nobody trusts.
+ */
+export function stockReportOptions(query: StockReportQuery) {
+	return queryOptions({
+		queryKey: inventoryKeys.stockReport(query),
+		queryFn: () => apiRequest<StockReport>("/api/inventory/stock/report", { query }),
+	})
+}
+
+/** The CSV route for the same filters. Exported so the walkthrough can assert the path. */
+export const STOCK_REPORT_EXPORT_PATH = "/api/inventory/stock/report/export"
 
 export function stockDetailOptions(productId: string, branchId: string | null) {
 	return queryOptions({

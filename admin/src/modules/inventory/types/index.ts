@@ -4,9 +4,9 @@ export type AdjustmentReason = "DAMAGE" | "LOSS" | "FOUND" | "CORRECTION" | "EXP
 
 /**
  * Mirrors `stock_movement_type` in the API. `SALE` arrived with the POS in Phase 6;
- * `SUPPLIER_RETURN` with Phase 11 and `WRITE_OFF` with Phase 12. Keep this in step with the
- * enum: `MOVEMENT_META` is a `Record` over this union, so a missing arm is a type error rather
- * than a `TypeError` in the stock history table.
+ * `SUPPLIER_RETURN` with Phase 11, `WRITE_OFF` with Phase 12 and `RETURN` with Phase 13 (a
+ * resalable refund line). Keep this in step with the enum: `MOVEMENT_META` is a `Record` over
+ * this union, so a missing arm is a type error rather than a `TypeError` in the history table.
  */
 export type StockMovementType =
 	| "RECEIPT"
@@ -17,6 +17,7 @@ export type StockMovementType =
 	| "SALE"
 	| "SUPPLIER_RETURN"
 	| "WRITE_OFF"
+	| "RETURN"
 
 export interface StockRow {
 	productId: string
@@ -82,6 +83,69 @@ export type MovementListQuery = {
 	to?: string
 	limit?: number
 	offset?: number
+}
+
+/**
+ * The stock report (RPT-04). `branchId` is absent for an admin's all-branch read: the API
+ * resolves a manager to their own branch and refuses a foreign id.
+ *
+ * `from`/`to` are ISO days and filter the *movement* section only; on-hand and value are the
+ * projection as read, which is why the response carries `asOf` (P14-D16).
+ */
+export type StockReportQuery = {
+	branchId?: string
+	categoryId?: string
+	lowStock?: boolean
+	from?: string
+	to?: string
+}
+
+export interface StockReportRow {
+	productId: string
+	sku: string
+	productName: string
+	categoryName: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	quantityOnHand: number
+	avgCostMinor: number
+	valueMinor: number
+	threshold: number | null
+	belowThreshold: boolean
+}
+
+export interface StockReportBranchRow {
+	branchCode: string
+	branchName: string
+	quantityOnHand: number
+	valueMinor: number
+}
+
+/** The API's stock report. Nothing on this screen is summed in the browser. */
+export interface StockReport {
+	asOf: string
+	period: { from: string; to: string }
+	branchId: string | null
+	rows: StockReportRow[]
+	/** Matching rows before the API's 5 000-row cap. */
+	total: number
+	truncated: boolean
+	totals: { quantityOnHand: number; valueMinor: number; products: number }
+	/** Populated for an admin only. */
+	byBranch: StockReportBranchRow[]
+	movements: {
+		inflow: number
+		outflow: number
+		byType: Array<{ type: StockMovementType; quantity: number }>
+	}
+	transfers: { dispatched: number; received: number; shortClosed: number }
+	counts: {
+		completed: number
+		countedLines: number
+		matchedLines: number
+		varianceValueMinor: number
+	}
 }
 
 export interface InventoryReceiptLine {
