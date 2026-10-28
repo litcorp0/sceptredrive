@@ -164,11 +164,14 @@ const SECTIONS = [
 	["/suppliers/invoices/new", "New supplier invoice"],
 	["/suppliers/payments", "Payments"],
 	["/suppliers/aging", "Aging"],
+	["/suppliers/transfers", "Supplier transfers"],
+	["/suppliers/reconciliation", "Transfer reconciliation"],
 	["/procurement/orders", "Purchase orders"],
 	["/procurement/replenishment", "What to order"],
 	["/procurement/suppliers", "Which suppliers deliver"],
 	["/audit", "Audit"],
 	["/settings", "Settings"],
+	["/evat", "E-VAT submissions"],
 ]
 
 /** Screenshots land in the run's evidence directory, never a hard-coded phase folder. */
@@ -484,6 +487,153 @@ const SECTION_ASSERTIONS = new Map([
 				text.slice(0, 120),
 			)
 			await shot(page, "plan12-over-limit-1440.png")
+		},
+	],
+	[
+		"/suppliers/transfers",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = [
+				"Reference",
+				"Supplier",
+				"Amount",
+				"Status",
+				"Created",
+				"Settled",
+				"Failure",
+			].filter((header) => !headers.includes(header))
+			check(
+				missing.length === 0,
+				"/suppliers/transfers renders the intent columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No transfers match these filters."),
+				"/suppliers/transfers shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(
+				!/NaN|undefined/.test(text),
+				"/suppliers/transfers formats every figure",
+				text.slice(0, 120),
+			)
+
+			const transferButton = page.getByRole("button", { name: "Transfer", exact: true })
+			if ((await transferButton.count()) === 0) {
+				check(
+					text.includes("switched off in settings"),
+					"/suppliers/transfers explains a disabled transfer flag",
+				)
+				await shot(page, "plan14-transfers-1440.png")
+				return
+			}
+
+			await transferButton.first().click()
+			const dialog = page.getByRole("dialog")
+			await dialog.waitFor()
+			check(
+				(await dialog.getByText("Send a supplier transfer").count()) === 1,
+				"/suppliers/transfers opens the transfer dialog",
+			)
+			const balance = dialog.locator('[data-slot="provider-balance"]')
+			const balanceText = ((await balance.innerText()) ?? "").trim()
+			check(
+				(await balance.count()) === 1 && balanceText.length > 0,
+				"the transfer dialog opens with the provider balance line",
+				balanceText || "no balance line",
+			)
+
+			// No amount typed: the dialog must refuse rather than send a zero-pesewa instruction.
+			await dialog.getByRole("button", { name: "Send transfer" }).click()
+			check(
+				(await dialog.getByText("Enter a transfer amount like 250.00.").count()) === 1,
+				"the transfer dialog refuses a zero amount",
+			)
+			// The OTP path is intentionally not driven here: the mock's OTP lever is test-only, and
+			// the state machine is proven by `payables.transfer.test.ts`.
+			await dialog.getByRole("button", { name: "Cancel" }).click()
+			await dialog.waitFor({ state: "hidden" })
+			await shot(page, "plan14-transfers-1440.png")
+		},
+	],
+	[
+		"/suppliers/reconciliation",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = [
+				"State",
+				"Supplier",
+				"Reference",
+				"Money out",
+				"Posted",
+				"Not allocated",
+				"When",
+				"Outcome",
+			].filter((header) => !headers.includes(header))
+			check(
+				missing.length === 0,
+				"/suppliers/reconciliation renders the three-state columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			const text = await page.locator("main").innerText()
+			const tiles = ["Settled", "Manual", "Unposted", "Failed", "Reversed"].filter((label) =>
+				text.includes(label),
+			)
+			check(
+				tiles.length === 5,
+				"/suppliers/reconciliation renders its five headline tiles",
+				tiles.join(", ") || "none",
+			)
+			const rows = await bodyRows(page).count()
+			check(
+				rows > 0 || text.includes("Nothing in this period matches these filters."),
+				"/suppliers/reconciliation shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(
+				!/NaN|undefined/.test(text),
+				"/suppliers/reconciliation formats every figure",
+				text.slice(0, 120),
+			)
+			await shot(page, "plan14-reconciliation-1440.png")
+		},
+	],
+	[
+		"/evat",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Document", "Due", "Status", "Attempts", "Next attempt", "GRA code"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/evat renders the submission columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			const text = await page.locator("main").innerText()
+			const tiles = ["Queued", "Certified", "Retrying", "Needs attention", "Overdue"].filter(
+				(label) => text.includes(label),
+			)
+			check(tiles.length === 5, "/evat renders its five summary tiles", tiles.join(", ") || "none")
+			check(
+				text.includes("Provider reachable") || text.includes("provider is unavailable"),
+				"/evat renders the provider health line",
+			)
+			const rows = await bodyRows(page).count()
+			check(
+				rows > 0 ||
+					text.includes("No E-VAT submissions match these filters.") ||
+					text.includes("No documents have been queued yet."),
+				"/evat shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(!/NaN|undefined/.test(text), "/evat formats every figure", text.slice(0, 120))
+			await shot(page, "plan14-evatu-1440.png")
 		},
 	],
 	[
