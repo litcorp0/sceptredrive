@@ -1,4 +1,4 @@
-import { formatCount, formatDay } from "@sceptre/shared"
+import { formatCount, formatDateTime, formatDay } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -64,6 +64,9 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 						</CardTitle>
 						<p className="text-xs text-muted-foreground">
 							at {formatCount(report.pointsPerCedi)} points = GHS 1.00
+						</p>
+						<p className="text-xs text-muted-foreground">
+							as at {formatDateTime(report.asOf)}: a live projection, not a historic valuation.
 						</p>
 					</CardHeader>
 				</Card>
