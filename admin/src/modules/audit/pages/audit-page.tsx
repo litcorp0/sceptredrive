@@ -1,5 +1,6 @@
 import { formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
+import { getRouteApi } from "@tanstack/react-router"
 import { cn } from "cn"
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 import { useState } from "react"
@@ -19,14 +20,20 @@ import {
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
 import { useDebouncedValue } from "#/lib/hooks"
+import { hasPermission } from "#/lib/role"
 import { auditListOptions } from "../api/audit"
 import type { AuditEntry } from "../types"
 import { diffRows, isRecord } from "../utils/diff"
 
 const PAGE_SIZE = 25
 
+// The page lives outside `routes/`, so it reads the shell's context through the router API.
+const authenticatedRoute = getRouteApi("/_authenticated")
+
 export function AuditPage() {
+	const { session } = authenticatedRoute.useRouteContext()
 	const { activeBranchId, branches } = useBranch()
+	const canRead = hasPermission(session.user.role, "audit.read")
 
 	const [action, setAction] = useState("")
 	const [entity, setEntity] = useState("")
@@ -55,8 +62,8 @@ export function AuditPage() {
 		setOffset(0)
 	}
 
-	const auditQuery = useQuery(
-		auditListOptions({
+	const auditQuery = useQuery({
+		...auditListOptions({
 			action: debouncedAction || undefined,
 			entity: debouncedEntity || undefined,
 			actorStaffId: debouncedActor || undefined,
@@ -66,7 +73,19 @@ export function AuditPage() {
 			limit: PAGE_SIZE,
 			offset,
 		}),
-	)
+		enabled: canRead,
+	})
+
+	if (!canRead) {
+		return (
+			<div>
+				<PageHeader title="Audit log" />
+				<p className="text-sm text-muted-foreground">
+					Your role cannot read the audit log. Ask an administrator if you need to trace a change.
+				</p>
+			</div>
+		)
+	}
 
 	const entries = auditQuery.data?.entries ?? []
 	const total = auditQuery.data?.total ?? 0
