@@ -64,8 +64,11 @@ export default defineConfig(({ command }) => {
       },
     },
     // PowerSync v2 ships ESM workers; pre-bundling breaks the worker URLs.
+    // Workspace packages are source, not node_modules deps: pre-bundling them
+    // leaves a cache that misses exports added since the last optimize (for
+    // example REFUND_REASONS), which blanks the renderer with a SyntaxError.
     optimizeDeps: {
-      exclude: ['@powersync/web'],
+      exclude: ['@powersync/web', '@sceptre/shared'],
     },
     worker: {
       format: 'es',
