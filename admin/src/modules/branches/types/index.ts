@@ -31,7 +31,8 @@ export interface SuggestCode {
 export type BranchDirectoryEntry = Pick<Branch, "id" | "code" | "name" | "type">
 
 export interface BranchCreateInput {
-	code: string
+	/** Omit to let the API generate it from type, city and area. */
+	code?: string
 	name: string
 	type: BranchType
 	city: string

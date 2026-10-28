@@ -15,12 +15,20 @@ describe('suggestBranchCode', () => {
     )
   })
 
-  it('uses the city alone when no area is provided', () => {
-    expect(suggestBranchCode({ city: 'Tamale', type: 'RETAIL' }).code).toBe('TAM')
+  it('uses a numbered retail fallback when no area is provided', () => {
+    expect(suggestBranchCode({ city: 'Tamale', type: 'RETAIL' }).code).toBe('TAM-R1')
+    expect(
+      suggestBranchCode({
+        city: 'Tamale',
+        type: 'RETAIL',
+        existingCodes: ['TAM-R1'],
+      }),
+    ).toEqual({ code: 'TAM-R2', adjusted: true })
   })
 
   it('falls back when the city has no usable characters', () => {
-    expect(suggestBranchCode({ city: '---', type: 'RETAIL' }).code).toBe('BRN')
+    expect(suggestBranchCode({ city: '---', type: 'RETAIL' }).code).toBe('BRN-R1')
+    expect(suggestBranchCode({ city: '---', type: 'WAREHOUSE' }).code).toBe('BRN-WH1')
   })
 
   it('numbers warehouses per city', () => {
@@ -55,7 +63,8 @@ describe('branch code validation', () => {
     expect(isValidBranchCode('ACC-SPX')).toBe(true)
     expect(isValidBranchCode('acc-wh1')).toBe(true)
     expect(isValidBranchCode('ACC-SPX-2')).toBe(true)
-    expect(isValidBranchCode('TAM')).toBe(true)
+    expect(isValidBranchCode('ACC-R1')).toBe(true)
+    expect(isValidBranchCode('TAM-R2')).toBe(true)
   })
 
   it('rejects malformed codes', () => {

@@ -32,7 +32,8 @@ export interface BranchDirectoryResult {
 }
 
 export interface BranchCreateInput {
-  code: string
+  /** Omit to let the server generate it from type, city and area. */
+  code?: string | undefined
   name: string
   type: BranchType
   city: string

@@ -25,6 +25,7 @@ import type {
 } from './branches.types.ts'
 
 const MANAGER_UPDATE_FIELDS = new Set(['name', 'address', 'phone'])
+const MAX_CODE_ATTEMPTS = 5
 
 export async function listBranches(
   user: SessionUser,
@@ -59,43 +60,64 @@ export async function createBranch(
   actor: AuditActor,
   input: BranchCreateInput,
 ): Promise<BranchRow> {
-  const code = normalizeBranchCode(input.code)
-  try {
-    return await db.transaction(async (tx) => {
-      const created = await insertBranch(
-        {
-          code,
-          name: input.name,
-          type: input.type,
-          city: input.city,
-          area: input.area ?? null,
-          address: input.address ?? null,
-          phone: input.phone ?? null,
-          createdBy: actor.actorId,
-        },
-        tx,
-      )
-      if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create branch')
+  const explicitCode = input.code ? normalizeBranchCode(input.code) : null
+  // An explicit code is a caller decision, so a duplicate is a 409. A generated
+  // code can lose a race with another create, so it reads the codes again.
+  const attempts = explicitCode ? 1 : MAX_CODE_ATTEMPTS
 
-      await writeAudit(
-        {
-          ...actor,
-          action: 'branch.created',
-          entity: 'branch',
-          entityId: created.id,
-          after: created,
-          branchId: created.id,
-        },
-        tx,
-      )
-      return created
-    })
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw new ConflictError('A branch with this code already exists')
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await db.transaction(async (tx) => {
+        const code =
+          explicitCode ??
+          suggestBranchCode({
+            city: input.city,
+            area: input.area,
+            type: input.type,
+            existingCodes: await selectBranchCodes(tx),
+          }).code
+
+        const created = await insertBranch(
+          {
+            code,
+            name: input.name,
+            type: input.type,
+            city: input.city,
+            area: input.area ?? null,
+            address: input.address ?? null,
+            phone: input.phone ?? null,
+            createdBy: actor.actorId,
+          },
+          tx,
+        )
+        if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create branch')
+
+        await writeAudit(
+          {
+            ...actor,
+            action: 'branch.created',
+            entity: 'branch',
+            entityId: created.id,
+            after: created,
+            branchId: created.id,
+          },
+          tx,
+        )
+        return created
+      })
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error
+      if (explicitCode || attempt === attempts - 1) {
+        throw new ConflictError(
+          explicitCode
+            ? 'A branch with this code already exists'
+            : 'Could not allocate a branch code, please retry',
+        )
+      }
     }
-    throw error
   }
+
+  throw new ConflictError('Could not allocate a branch code, please retry')
 }
 
 export async function updateBranch(

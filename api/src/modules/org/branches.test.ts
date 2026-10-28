@@ -1,4 +1,5 @@
 import { db } from '@sceptre/db'
+import { suggestBranchCode } from '@sceptre/shared'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -145,6 +146,104 @@ describe.skipIf(!available)('branch API', () => {
     expect(
       auditRows.some((row) => row.action === 'branch.created' && row.actorId === adminId),
     ).toBe(true)
+  })
+
+  it('generates a retail code from city and area when none is supplied', async () => {
+    const city = `Q${suffix}`
+    const area = `A${suffix}`
+    const existing = await db.select({ code: branch.code }).from(branch)
+    const expected = suggestBranchCode({
+      city,
+      area,
+      type: 'RETAIL',
+      existingCodes: existing.map((row) => row.code),
+    })
+
+    const response = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ name: 'Auto Retail', type: 'RETAIL', city, area }),
+    })
+
+    expect(response.status).toBe(201)
+    const body = await readJson<BranchResponse>(response)
+    expect(body.branch.code).toBe(expected.code)
+    createdBranchIds.push(body.branch.id)
+
+    const auditRows = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, 'branch'), eq(auditLog.entityId, body.branch.id)))
+    expect(JSON.stringify(auditRows[0]?.after)).toContain(expected.code)
+  })
+
+  it('numbers auto-generated warehouse codes per city', async () => {
+    const city = `W${suffix}`
+
+    const before = await db.select({ code: branch.code }).from(branch)
+    const expectedFirst = suggestBranchCode({
+      city,
+      type: 'WAREHOUSE',
+      existingCodes: before.map((row) => row.code),
+    }).code
+
+    const first = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ name: 'Auto Warehouse One', type: 'WAREHOUSE', city }),
+    })
+    expect(first.status).toBe(201)
+    const firstBody = await readJson<BranchResponse>(first)
+    expect(firstBody.branch.code).toBe(expectedFirst)
+    createdBranchIds.push(firstBody.branch.id)
+
+    const afterFirst = await db.select({ code: branch.code }).from(branch)
+    const expectedSecond = suggestBranchCode({
+      city,
+      type: 'WAREHOUSE',
+      existingCodes: afterFirst.map((row) => row.code),
+    }).code
+
+    const second = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ name: 'Auto Warehouse Two', type: 'WAREHOUSE', city }),
+    })
+    expect(second.status).toBe(201)
+    const secondBody = await readJson<BranchResponse>(second)
+    expect(secondBody.branch.code).toBe(expectedSecond)
+    expect(secondBody.branch.code).not.toBe(firstBody.branch.code)
+    createdBranchIds.push(secondBody.branch.id)
+  })
+
+  it('adds a suffix when an auto-generated retail code is taken', async () => {
+    const city = `V${suffix}`
+    const area = `B${suffix}`
+    const base = suggestBranchCode({ city, area, type: 'RETAIL' }).code
+
+    const explicit = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        code: base,
+        name: 'Explicit Base',
+        type: 'RETAIL',
+        city,
+        area,
+      }),
+    })
+    expect(explicit.status).toBe(201)
+    createdBranchIds.push((await readJson<BranchResponse>(explicit)).branch.id)
+
+    const auto = await app.request('/api/branches', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ name: 'Auto Collision', type: 'RETAIL', city, area }),
+    })
+    expect(auto.status).toBe(201)
+    const autoBody = await readJson<BranchResponse>(auto)
+    createdBranchIds.push(autoBody.branch.id)
+    expect(autoBody.branch.code).toBe(`${base}-2`)
   })
 
   it('rejects a duplicate branch code with 409', async () => {

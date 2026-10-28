@@ -41,30 +41,33 @@ export function CreateBranchDialog({
 	const [area, setArea] = useState("")
 	const [address, setAddress] = useState("")
 	const [phone, setPhone] = useState("")
-	const [code, setCode] = useState("")
-	const [codeTouched, setCodeTouched] = useState(false)
+	const [preview, setPreview] = useState<{ code: string; adjusted: boolean } | null>(null)
 	const [formError, setFormError] = useState<string | null>(null)
 
 	const debouncedCity = useDebouncedValue(city, 400)
 	const debouncedArea = useDebouncedValue(area, 400)
 
 	useEffect(() => {
-		if (codeTouched || debouncedCity.trim().length === 0) return
+		if (debouncedCity.trim().length === 0) {
+			setPreview(null)
+			return
+		}
 		let cancelled = false
 		void suggestBranchCode({ city: debouncedCity, area: debouncedArea || undefined, type })
 			.then((suggestion) => {
-				if (!cancelled) setCode(suggestion.code)
+				if (!cancelled) setPreview(suggestion)
 			})
-			.catch(() => undefined)
+			.catch(() => {
+				if (!cancelled) setPreview(null)
+			})
 		return () => {
 			cancelled = true
 		}
-	}, [debouncedCity, debouncedArea, type, codeTouched])
+	}, [debouncedCity, debouncedArea, type])
 
 	const createMutation = useMutation({
 		mutationFn: () =>
 			createBranch({
-				code,
 				name,
 				type,
 				city,
@@ -94,8 +97,7 @@ export function CreateBranchDialog({
 		setArea("")
 		setAddress("")
 		setPhone("")
-		setCode("")
-		setCodeTouched(false)
+		setPreview(null)
 		setFormError(null)
 	}
 
@@ -117,7 +119,8 @@ export function CreateBranchDialog({
 				<DialogHeader>
 					<DialogTitle>New branch</DialogTitle>
 					<DialogDescription>
-						The code is suggested from the city and area; adjust it before saving.
+						The branch code is generated from the type, city and area. A suffix is added if it is
+						already taken.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -147,23 +150,6 @@ export function CreateBranchDialog({
 							</Select>
 						</div>
 						<div className="grid gap-1.5">
-							<Label htmlFor="branch-code">Code</Label>
-							<Input
-								id="branch-code"
-								required
-								className="font-mono"
-								placeholder="ACC-SPX"
-								value={code}
-								onChange={(event) => {
-									setCode(event.target.value.toUpperCase())
-									setCodeTouched(true)
-								}}
-							/>
-						</div>
-					</div>
-
-					<div className="grid grid-cols-2 gap-3">
-						<div className="grid gap-1.5">
 							<Label htmlFor="branch-city">City</Label>
 							<Input
 								id="branch-city"
@@ -172,12 +158,23 @@ export function CreateBranchDialog({
 								onChange={(event) => setCity(event.target.value)}
 							/>
 						</div>
+					</div>
+
+					<div className="grid grid-cols-2 gap-3">
 						<div className="grid gap-1.5">
 							<Label htmlFor="branch-area">Area</Label>
 							<Input
 								id="branch-area"
 								value={area}
 								onChange={(event) => setArea(event.target.value)}
+							/>
+						</div>
+						<div className="grid gap-1.5">
+							<Label htmlFor="branch-phone">Phone</Label>
+							<Input
+								id="branch-phone"
+								value={phone}
+								onChange={(event) => setPhone(event.target.value)}
 							/>
 						</div>
 					</div>
@@ -192,12 +189,17 @@ export function CreateBranchDialog({
 					</div>
 
 					<div className="grid gap-1.5">
-						<Label htmlFor="branch-phone">Phone</Label>
-						<Input
-							id="branch-phone"
-							value={phone}
-							onChange={(event) => setPhone(event.target.value)}
-						/>
+						<span className="text-sm font-medium">Branch code</span>
+						<p
+							aria-live="polite"
+							className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm"
+						>
+							{preview?.code ??
+								(city.trim() ? "Will be assigned on save" : "Enter a city to preview")}
+						</p>
+						<p className="text-xs text-muted-foreground">
+							Assigned when you save. A suffix is added if the code is already taken.
+						</p>
 					</div>
 
 					{formError ? (

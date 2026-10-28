@@ -56,25 +56,41 @@ function nextFree(base: string, existing: ReadonlySet<string>): BranchCodeSugges
   return { code: `${base}-${suffix}`, adjusted: true }
 }
 
+/** `ACC-WH1`, `ACC-WH2`, or `ACC-R1`, `ACC-R2` when the area is absent. */
+function nextSequence(
+  city: string,
+  marker: string,
+  existing: ReadonlySet<string>,
+): BranchCodeSuggestion {
+  let sequence = 1
+  while (existing.has(`${city}-${marker}${sequence}`)) sequence += 1
+  return { code: `${city}-${marker}${sequence}`, adjusted: sequence > 1 }
+}
+
 /**
  * Suggests a short, location-based branch code:
- * - Retail: city (3 letters) + area (3 letters), e.g. Accra/Spintex -> ACC-SPX
+ * - Retail with an area: city (3 letters) + area (3 letters), e.g. Accra/Spintex -> ACC-SPX
+ * - Retail without an area: city (3 letters) + R + sequence, e.g. Tamale -> TAM-R1
  * - Warehouse: city (3 letters) + WH + sequence, e.g. Accra -> ACC-WH1
  *
- * The suggestion is editable before save; uniqueness is enforced by the database.
+ * The suggestion is only a preview in the console: the server generates the
+ * authoritative code on create, and uniqueness is enforced by the database.
  */
 export function suggestBranchCode(input: SuggestBranchCodeInput): BranchCodeSuggestion {
   const city = tokenize(input.city).slice(0, 3) || 'BRN'
   const existing = new Set((input.existingCodes ?? []).map(normalizeBranchCode))
 
   if (input.type === 'WAREHOUSE') {
-    let sequence = 1
-    while (existing.has(`${city}-WH${sequence}`)) sequence += 1
-    return { code: `${city}-WH${sequence}`, adjusted: sequence > 1 }
+    return nextSequence(city, 'WH', existing)
   }
 
-  const area = input.area ? abbreviate(tokenize(input.area)) : ''
-  return nextFree(area ? `${city}-${area}` : city, existing)
+  if (!input.area) {
+    return nextSequence(city, 'R', existing)
+  }
+
+  const area = abbreviate(tokenize(input.area))
+  if (!area) return nextSequence(city, 'R', existing)
+  return nextFree(`${city}-${area}`, existing)
 }
 
 /** 'ACC-SPX', 'ACC-WH1', 'ACC-SPX-2', or a bare 'ACC' fallback. */

@@ -13,7 +13,8 @@ export const branchCodeSchema = z
 
 export const branchCreateSchema = z
   .object({
-    code: branchCodeSchema,
+    /** Optional: the server generates it from type, city and area when absent. */
+    code: branchCodeSchema.optional(),
     name: z.string().trim().min(2).max(120),
     type: z.enum(BRANCH_TYPES),
     city: z.string().trim().min(1).max(80),
