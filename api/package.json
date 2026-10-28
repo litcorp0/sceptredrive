@@ -10,6 +10,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun run src/seed/run.ts",
+    "db:truncate": "bun run scripts/truncate-data.ts",
+    "seed:admin": "bun run scripts/seed-admin.ts",
     "seed:demo-sales": "bun run src/seed/demo-sales.run.ts",
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
