@@ -18,6 +18,12 @@ interface ExportButtonProps {
 	 * report with no money passes its own sentence.
 	 */
 	title?: string
+	/**
+	 * The id of the element that says why the button is disabled. A disabled button is
+	 * still focusable-adjacent and its `title` is not always announced, so the reason a
+	 * report cannot be exported belongs in an `aria-describedby` target.
+	 */
+	describedBy?: string
 }
 
 /**
@@ -37,6 +43,7 @@ export function ExportButton({
 	label = "Report",
 	disabled,
 	title = "Amounts are in pesewas",
+	describedBy,
 }: ExportButtonProps) {
 	const [pending, setPending] = useState(false)
 
@@ -70,6 +77,7 @@ export function ExportButton({
 			disabled={pending || disabled}
 			title={title}
 			aria-label={`Export ${label} CSV`}
+			aria-describedby={describedBy}
 			data-slot="export-button"
 			data-export-path={path}
 		>

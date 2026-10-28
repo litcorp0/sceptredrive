@@ -787,6 +787,25 @@ const SECTION_ASSERTIONS = new Map([
 			)
 
 			const { metaText } = await expectExportAndPrint(page, "/api/inventory/stock/report/export")
+			// A capped report keeps its totals on screen but refuses the file: a CSV whose rows
+			// stop at the cap and whose TOTAL covers every match does not add up.
+			const exportButton = page.locator(
+				'main [data-slot="export-button"][data-export-path="/api/inventory/stock/report/export"]',
+			)
+			const exportDisabled = await exportButton.isDisabled()
+			check(
+				exportDisabled === truncated,
+				"/inventory/stock refuses the export exactly when the report is capped",
+				`truncated=${truncated}, disabled=${exportDisabled}`,
+			)
+			if (truncated) {
+				const describedBy = await exportButton.getAttribute("aria-describedby")
+				check(
+					describedBy === "stock-report-cap",
+					"/inventory/stock's disabled export names the banner that explains it",
+					String(describedBy),
+				)
+			}
 			check(
 				/Branch/.test(metaText) && /Period/.test(metaText) && /As at/.test(metaText),
 				"/inventory/stock print sheet names its branch, period and instant",

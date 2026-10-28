@@ -44,8 +44,11 @@ const listRoute = getRouteApi("/_authenticated/inventory/stock/")
  *   and printed by the next person.
  * - **Value is as at read.** `asOf` is printed because the projection has no history; the
  *   period filters the movement, transfer and count sections only.
- * - **A capped report says so.** When the API reports `truncated`, the banner states that the
- *   export carries the same capped rows and the filter has to be narrowed.
+ * - **A capped report says so, and refuses to export.** When the API reports `truncated`, the
+ *   screen keeps showing the capped table and the whole-filter totals, but the API refuses
+ *   the CSV with `REPORT_TOO_LARGE`: a file whose rows stop at the cap while its TOTAL covers
+ *   every match is a file that does not add up. The banner states the refusal, and the export
+ *   control is disabled and describes why.
  */
 export function StockReport() {
 	const search = listRoute.useSearch()
@@ -206,7 +209,13 @@ export function StockReport() {
 						path={STOCK_REPORT_EXPORT_PATH}
 						query={query}
 						label="Stock report"
-						disabled={!report}
+						disabled={!report || report.truncated}
+						title={
+							report?.truncated
+								? "The export is refused while the report is capped; narrow the filter."
+								: undefined
+						}
+						describedBy={report?.truncated ? "stock-report-cap" : undefined}
 					/>
 					<PrintButton label="stock report" disabled={!report} />
 				</div>
@@ -221,12 +230,13 @@ export function StockReport() {
 			) : report ? (
 				<>
 					{report.truncated ? (
-						<StatusNote tone="warn" title="This report is capped">
-							{formatCount(report.total)} rows match and the report shows the first{" "}
-							{formatCount(report.rows.length)}. The export carries the same{" "}
-							{formatCount(report.rows.length)} rows, so narrow the branch, category or low-stock
-							filter before filing it.
-						</StatusNote>
+						<div id="stock-report-cap">
+							<StatusNote tone="warn" title="This report is capped">
+								{formatCount(report.total)} stock rows match and the table shows the first{" "}
+								{formatCount(report.rows.length)}. The totals on this page still cover every match,
+								but the export is refused until the filter is narrowed by branch or category.
+							</StatusNote>
+						</div>
 					) : null}
 
 					<div className="grid gap-3 sm:grid-cols-3">
