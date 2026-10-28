@@ -1,5 +1,5 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query"
-import { apiDownload, apiRequest } from "#/lib/api"
+import { apiRequest } from "#/lib/api"
 import type {
 	AnalyticsQuery,
 	ExportName,
@@ -54,14 +54,6 @@ export function analyticsReportOptions<T>(name: ExportName, query: ReportQuery) 
 		queryFn: () => apiRequest<T>(`/api/analytics/${name}`, { query }),
 		staleTime: 60_000,
 	})
-}
-
-/** Downloads a CSV produced by the API; the browser never assembles a report. */
-export async function downloadReport(
-	name: ExportName,
-	query: AnalyticsQuery,
-): Promise<{ blob: Blob; filename: string }> {
-	return apiDownload(`/api/analytics/${name}/export`, query)
 }
 
 /** Nothing mutates analytics, so the only invalidation is a manual refresh. */

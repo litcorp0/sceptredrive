@@ -19,6 +19,18 @@
 		size: A4;
 		margin: 16mm;
 	}
+
+	/* A report longer than a page keeps its column headings on every page and never
+	   splits a row across two, and the provenance block always stays whole. Report
+	   tables are the only tables the console prints. */
+	thead {
+		display: table-header-group;
+	}
+
+	tr,
+	[data-slot="print-sheet"] {
+		break-inside: avoid;
+	}
 }
 
 /* A receipt copy is a till-roll document: 80 mm wide, its own named page so the

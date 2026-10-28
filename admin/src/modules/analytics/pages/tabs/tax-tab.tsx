@@ -2,6 +2,7 @@ import { formatBasisPoints, formatBucket, formatCount } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ExportButton } from "#/components/common/export-button"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
 import {
 	type ChartConfig,
@@ -23,7 +24,6 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { analyticsTaxOptions } from "../../api/analytics"
 import { ChartCard } from "../../components/chart-card"
-import { ExportButton } from "../../components/export-button"
 import { KpiRow, KpiTile } from "../../components/kpi-tile"
 import { PanelState } from "../../components/panel-state"
 import { useAnalyticsBranch } from "../../hooks/use-analytics-filters"
@@ -70,7 +70,7 @@ export function TaxTab() {
 		return (
 			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
-					<ExportButton report="tax" query={query} label="Tax" />
+					<ExportButton path="/api/analytics/tax/export" query={query} label="Tax" />
 				</div>
 				<PanelState
 					state="empty"
@@ -97,7 +97,7 @@ export function TaxTab() {
 					{formatBasisPoints(data.rates.nhilBp)} · GETFund {formatBasisPoints(data.rates.getfundBp)}{" "}
 					on one base
 				</p>
-				<ExportButton report="tax" query={query} label="Tax" />
+				<ExportButton path="/api/analytics/tax/export" query={query} label="Tax" />
 			</div>
 
 			<KpiRow>

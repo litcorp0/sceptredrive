@@ -2,6 +2,7 @@ import { formatBucket, formatCount, formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ExportButton } from "#/components/common/export-button"
 import { Pagination } from "#/components/common/pagination"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -24,7 +25,6 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { analyticsSalesOptions } from "../../api/analytics"
 import { ChartCard } from "../../components/chart-card"
-import { ExportButton } from "../../components/export-button"
 import { KpiRow, KpiTile } from "../../components/kpi-tile"
 import { PanelState } from "../../components/panel-state"
 import { SortableHead } from "../../components/sortable-head"
@@ -72,7 +72,7 @@ export function SalesTab() {
 		return (
 			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
-					<ExportButton report="sales" query={exportQuery} label="Sales" />
+					<ExportButton path="/api/analytics/sales/export" query={exportQuery} label="Sales" />
 				</div>
 				<PanelState
 					state="empty"
@@ -102,7 +102,7 @@ export function SalesTab() {
 					{formatCount(data.totals.salesCount)} sales · {formatCount(data.totals.itemsSold)} items ·{" "}
 					{formatGhs(data.totals.changeMinor)} change given
 				</p>
-				<ExportButton report="sales" query={exportQuery} label="Sales" />
+				<ExportButton path="/api/analytics/sales/export" query={exportQuery} label="Sales" />
 			</div>
 
 			<KpiRow>

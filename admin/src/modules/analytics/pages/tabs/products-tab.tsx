@@ -2,6 +2,7 @@ import { formatBasisPoints, formatCount } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ExportButton } from "#/components/common/export-button"
 import { Pagination } from "#/components/common/pagination"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
 import {
@@ -22,7 +23,6 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { analyticsProductsOptions } from "../../api/analytics"
 import { ChartCard } from "../../components/chart-card"
-import { ExportButton } from "../../components/export-button"
 import { KpiRow, KpiTile } from "../../components/kpi-tile"
 import { PanelState } from "../../components/panel-state"
 import { SortableHead } from "../../components/sortable-head"
@@ -64,7 +64,11 @@ export function ProductsTab() {
 		return (
 			<div className="grid grid-cols-1 gap-3">
 				<div className="flex justify-end">
-					<ExportButton report="products" query={exportQuery} label="Products" />
+					<ExportButton
+						path="/api/analytics/products/export"
+						query={exportQuery}
+						label="Products"
+					/>
 				</div>
 				<PanelState
 					state="empty"
@@ -94,7 +98,7 @@ export function ProductsTab() {
 					{formatCount(data.totals.unitsSold)} units · top five hold{" "}
 					{formatBasisPoints(data.concentration.top5RevenueBp)} of revenue
 				</p>
-				<ExportButton report="products" query={exportQuery} label="Products" />
+				<ExportButton path="/api/analytics/products/export" query={exportQuery} label="Products" />
 			</div>
 
 			<KpiRow>

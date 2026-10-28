@@ -2,6 +2,7 @@ import { formatBasisPoints, formatBucket, formatCount } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ExportButton } from "#/components/common/export-button"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
 import {
 	type ChartConfig,
@@ -23,7 +24,6 @@ import { ApiError } from "#/lib/api"
 import { formatGhs } from "#/lib/format"
 import { analyticsReportOptions } from "../../api/analytics"
 import { ChartCard } from "../../components/chart-card"
-import { ExportButton } from "../../components/export-button"
 import { KpiRow, KpiTile } from "../../components/kpi-tile"
 import { PanelState } from "../../components/panel-state"
 import { useAnalyticsBranch } from "../../hooks/use-analytics-filters"
@@ -86,7 +86,7 @@ export function CreditTab() {
 					{formatCount(data.totals.customersWithBalance)} customers carry a balance ·{" "}
 					{formatCount(data.totals.onHoldCount)} on hold
 				</p>
-				<ExportButton report="credit" query={query} label="Credit" />
+				<ExportButton path="/api/analytics/credit/export" query={query} label="Credit" />
 			</div>
 
 			<KpiRow>
