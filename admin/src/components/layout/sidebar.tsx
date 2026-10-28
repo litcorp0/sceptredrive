@@ -1,9 +1,11 @@
-import type { Permission } from "@sceptre/shared"
-import { can } from "@sceptre/shared"
+import type { FlagKey, Permission } from "@sceptre/shared"
+import { can, FLAG_DEFAULTS, FLAG_KEYS } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
+	ArrowLeftRight,
+	BadgeCheck,
 	Building2,
 	ChartLine,
 	ClipboardList,
@@ -14,6 +16,7 @@ import {
 	MonitorSmartphone,
 	Package,
 	ReceiptText,
+	Scale,
 	ScrollText,
 	Settings2,
 	ShieldCheck,
@@ -39,6 +42,7 @@ import {
 import { useBranch } from "#/lib/branch-context"
 import { toRole } from "#/lib/role"
 import { approvalSummaryOptions } from "#/modules/approvals"
+import { type ResolvedSetting, settingsListOptions } from "#/modules/settings"
 
 /** Route paths the console shell links to. Presentation only — no new routes. */
 type NavPath =
@@ -57,6 +61,9 @@ type NavPath =
 	| "/procurement"
 	| "/inventory"
 	| "/suppliers"
+	| "/suppliers/transfers"
+	| "/suppliers/reconciliation"
+	| "/evat"
 	| "/audit"
 	| "/settings"
 
@@ -65,6 +72,8 @@ interface NavItem {
 	label: string
 	icon: LucideIcon
 	permission?: Permission
+	/** An entry a feature flag can hide without a deploy (P14-D41). */
+	flag?: FlagKey
 }
 
 interface NavGroup {
@@ -114,6 +123,20 @@ export const NAV_GROUPS: NavGroup[] = [
 			},
 			{ to: "/inventory", label: "Inventory", icon: Warehouse, permission: "inventory.read" },
 			{ to: "/suppliers", label: "Suppliers", icon: Truck, permission: "supplier.read" },
+			{
+				to: "/suppliers/transfers",
+				label: "Transfers",
+				icon: ArrowLeftRight,
+				permission: "payable.read",
+				flag: "flag.supplierTransfers",
+			},
+			{
+				to: "/suppliers/reconciliation",
+				label: "Reconciliation",
+				icon: Scale,
+				permission: "payable.read",
+				flag: "flag.supplierTransfers",
+			},
 			{ to: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
 			{ to: "/loyalty", label: "Loyalty", icon: Gift, permission: "loyalty.read" },
 		],
@@ -140,6 +163,7 @@ export const NAV_GROUPS: NavGroup[] = [
 	{
 		label: "System",
 		items: [
+			{ to: "/evat", label: "E-VAT", icon: BadgeCheck, permission: "evat.read" },
 			{ to: "/audit", label: "Audit log", icon: ScrollText, permission: "audit.read" },
 			{ to: "/settings", label: "Settings", icon: Settings2, permission: "settings.read" },
 		],
@@ -177,6 +201,7 @@ const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
 	["invoices", "Invoices"],
 	["payments", "Payments"],
 	["aging", "Aging"],
+	["reconciliation", "Reconciliation"],
 	["statement", "Statement"],
 	["orders", "Orders"],
 	["write-offs", "Write-offs"],
@@ -259,15 +284,27 @@ export function topbarBreadcrumb(pathname: string): { section: string | null; pa
 	return page === section ? { section: null, page } : { section, page }
 }
 
-function visibleGroups(roleValue: string): NavGroup[] {
+function visibleGroups(roleValue: string, flags: Record<FlagKey, boolean>): NavGroup[] {
 	const role = toRole(roleValue)
 
 	return NAV_GROUPS.map((group) => ({
 		label: group.label,
 		items: group.items.filter(
-			(item) => !item.permission || (role !== null && can(role, item.permission)),
+			(item) =>
+				(!item.permission || (role !== null && can(role, item.permission))) &&
+				(!item.flag || flags[item.flag]),
 		),
 	})).filter((group) => group.items.length > 0)
+}
+
+/** A flag is a typed setting; a key with no row resolves to its registry default (P14-D41). */
+function flagValues(settings: ResolvedSetting[] | undefined): Record<FlagKey, boolean> {
+	const values: Record<FlagKey, boolean> = { ...FLAG_DEFAULTS }
+	for (const key of FLAG_KEYS) {
+		const row = settings?.find((setting) => setting.key === key)
+		if (typeof row?.value === "boolean") values[key] = row.value
+	}
+	return values
 }
 
 /**
@@ -301,7 +338,13 @@ function ApprovalBadge() {
  */
 export function AppSidebar({ role }: { role: string }) {
 	const { isMobile, setOpenMobile } = useSidebar()
-	const groups = visibleGroups(role)
+	const roleValue = toRole(role)
+	const canReadSettings = roleValue !== null && can(roleValue, "settings.read")
+	const settingsQuery = useQuery({
+		...settingsListOptions(),
+		enabled: canReadSettings,
+	})
+	const groups = visibleGroups(role, flagValues(settingsQuery.data?.settings))
 
 	return (
 		<Sidebar collapsible="icon" className="print:hidden">

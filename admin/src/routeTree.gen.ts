@@ -21,6 +21,7 @@ import { Route as AuthenticatedBranchesRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedCatalogRouteRouteImport } from './routes/_authenticated/catalog/route'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
 import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
+import { Route as AuthenticatedEvatRouteImport } from './routes/_authenticated/evat'
 import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authenticated/inventory/route'
 import { Route as AuthenticatedLoyaltyRouteImport } from './routes/_authenticated/loyalty'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
@@ -53,6 +54,7 @@ import { Route as AuthenticatedStaffPermissionsRouteImport } from './routes/_aut
 import { Route as AuthenticatedSuppliersIndexRouteImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSuppliersSupplierIdRouteImport } from './routes/_authenticated/suppliers/$supplierId'
 import { Route as AuthenticatedSuppliersAgingRouteImport } from './routes/_authenticated/suppliers/aging'
+import { Route as AuthenticatedSuppliersReconciliationRouteImport } from './routes/_authenticated/suppliers/reconciliation'
 import { Route as AuthenticatedCatalogProductsIndexRouteImport } from './routes/_authenticated/catalog/products/index'
 import { Route as AuthenticatedCatalogProductsIdRouteImport } from './routes/_authenticated/catalog/products.$id'
 import { Route as AuthenticatedCatalogProductsNewRouteImport } from './routes/_authenticated/catalog/products.new'
@@ -83,6 +85,8 @@ import { Route as AuthenticatedSuppliersInvoicesInvoiceIdRouteImport } from './r
 import { Route as AuthenticatedSuppliersInvoicesNewRouteImport } from './routes/_authenticated/suppliers/invoices/new'
 import { Route as AuthenticatedSuppliersPaymentsIndexRouteImport } from './routes/_authenticated/suppliers/payments/index'
 import { Route as AuthenticatedSuppliersPaymentsPaymentIdRouteImport } from './routes/_authenticated/suppliers/payments/$paymentId'
+import { Route as AuthenticatedSuppliersTransfersIndexRouteImport } from './routes/_authenticated/suppliers/transfers/index'
+import { Route as AuthenticatedSuppliersTransfersTransferIdRouteImport } from './routes/_authenticated/suppliers/transfers/$transferId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -147,6 +151,11 @@ const AuthenticatedCustomersRouteRoute =
     path: '/customers',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedEvatRoute = AuthenticatedEvatRouteImport.update({
+  id: '/evat',
+  path: '/evat',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedInventoryRouteRoute =
   AuthenticatedInventoryRouteRouteImport.update({
     id: '/inventory',
@@ -331,6 +340,12 @@ const AuthenticatedSuppliersAgingRoute =
     path: '/aging',
     getParentRoute: () => AuthenticatedSuppliersRouteRoute,
   } as any)
+const AuthenticatedSuppliersReconciliationRoute =
+  AuthenticatedSuppliersReconciliationRouteImport.update({
+    id: '/reconciliation',
+    path: '/reconciliation',
+    getParentRoute: () => AuthenticatedSuppliersRouteRoute,
+  } as any)
 const AuthenticatedCatalogProductsIndexRoute =
   AuthenticatedCatalogProductsIndexRouteImport.update({
     id: '/',
@@ -511,6 +526,18 @@ const AuthenticatedSuppliersPaymentsPaymentIdRoute =
     path: '/payments/$paymentId',
     getParentRoute: () => AuthenticatedSuppliersRouteRoute,
   } as any)
+const AuthenticatedSuppliersTransfersIndexRoute =
+  AuthenticatedSuppliersTransfersIndexRouteImport.update({
+    id: '/transfers/',
+    path: '/transfers/',
+    getParentRoute: () => AuthenticatedSuppliersRouteRoute,
+  } as any)
+const AuthenticatedSuppliersTransfersTransferIdRoute =
+  AuthenticatedSuppliersTransfersTransferIdRouteImport.update({
+    id: '/transfers/$transferId',
+    path: '/transfers/$transferId',
+    getParentRoute: () => AuthenticatedSuppliersRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -528,6 +555,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/evat': typeof AuthenticatedEvatRoute
   '/loyalty': typeof AuthenticatedLoyaltyRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -548,6 +576,7 @@ export interface FileRoutesByFullPath {
   '/staff/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/suppliers/reconciliation': typeof AuthenticatedSuppliersReconciliationRoute
   '/approvals/': typeof AuthenticatedApprovalsIndexRoute
   '/branches/': typeof AuthenticatedBranchesIndexRoute
   '/catalog/': typeof AuthenticatedCatalogIndexRoute
@@ -576,6 +605,7 @@ export interface FileRoutesByFullPath {
   '/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
   '/suppliers/invoices/new': typeof AuthenticatedSuppliersInvoicesNewRoute
   '/suppliers/payments/$paymentId': typeof AuthenticatedSuppliersPaymentsPaymentIdRoute
+  '/suppliers/transfers/$transferId': typeof AuthenticatedSuppliersTransfersTransferIdRoute
   '/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
   '/customers/$id/': typeof AuthenticatedCustomersIdIndexRoute
   '/inventory/counts/': typeof AuthenticatedInventoryCountsIndexRoute
@@ -586,6 +616,7 @@ export interface FileRoutesByFullPath {
   '/procurement/orders/': typeof AuthenticatedProcurementOrdersIndexRoute
   '/suppliers/invoices/': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/suppliers/payments/': typeof AuthenticatedSuppliersPaymentsIndexRoute
+  '/suppliers/transfers/': typeof AuthenticatedSuppliersTransfersIndexRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -595,6 +626,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/evat': typeof AuthenticatedEvatRoute
   '/loyalty': typeof AuthenticatedLoyaltyRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -613,6 +645,7 @@ export interface FileRoutesByTo {
   '/staff/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/suppliers/reconciliation': typeof AuthenticatedSuppliersReconciliationRoute
   '/approvals': typeof AuthenticatedApprovalsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/catalog': typeof AuthenticatedCatalogIndexRoute
@@ -641,6 +674,7 @@ export interface FileRoutesByTo {
   '/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
   '/suppliers/invoices/new': typeof AuthenticatedSuppliersInvoicesNewRoute
   '/suppliers/payments/$paymentId': typeof AuthenticatedSuppliersPaymentsPaymentIdRoute
+  '/suppliers/transfers/$transferId': typeof AuthenticatedSuppliersTransfersTransferIdRoute
   '/catalog/products': typeof AuthenticatedCatalogProductsIndexRoute
   '/customers/$id': typeof AuthenticatedCustomersIdIndexRoute
   '/inventory/counts': typeof AuthenticatedInventoryCountsIndexRoute
@@ -651,6 +685,7 @@ export interface FileRoutesByTo {
   '/procurement/orders': typeof AuthenticatedProcurementOrdersIndexRoute
   '/suppliers/invoices': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/suppliers/payments': typeof AuthenticatedSuppliersPaymentsIndexRoute
+  '/suppliers/transfers': typeof AuthenticatedSuppliersTransfersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -669,6 +704,7 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
+  '/_authenticated/evat': typeof AuthenticatedEvatRoute
   '/_authenticated/loyalty': typeof AuthenticatedLoyaltyRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -690,6 +726,7 @@ export interface FileRoutesById {
   '/_authenticated/staff_/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/_authenticated/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/_authenticated/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
+  '/_authenticated/suppliers/reconciliation': typeof AuthenticatedSuppliersReconciliationRoute
   '/_authenticated/approvals/': typeof AuthenticatedApprovalsIndexRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
   '/_authenticated/catalog/': typeof AuthenticatedCatalogIndexRoute
@@ -718,6 +755,7 @@ export interface FileRoutesById {
   '/_authenticated/suppliers/invoices/$invoiceId': typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
   '/_authenticated/suppliers/invoices/new': typeof AuthenticatedSuppliersInvoicesNewRoute
   '/_authenticated/suppliers/payments/$paymentId': typeof AuthenticatedSuppliersPaymentsPaymentIdRoute
+  '/_authenticated/suppliers/transfers/$transferId': typeof AuthenticatedSuppliersTransfersTransferIdRoute
   '/_authenticated/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
   '/_authenticated/customers/$id/': typeof AuthenticatedCustomersIdIndexRoute
   '/_authenticated/inventory/counts/': typeof AuthenticatedInventoryCountsIndexRoute
@@ -728,6 +766,7 @@ export interface FileRoutesById {
   '/_authenticated/procurement/orders/': typeof AuthenticatedProcurementOrdersIndexRoute
   '/_authenticated/suppliers/invoices/': typeof AuthenticatedSuppliersInvoicesIndexRoute
   '/_authenticated/suppliers/payments/': typeof AuthenticatedSuppliersPaymentsIndexRoute
+  '/_authenticated/suppliers/transfers/': typeof AuthenticatedSuppliersTransfersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -747,6 +786,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/audit'
     | '/change-password'
+    | '/evat'
     | '/loyalty'
     | '/operations'
     | '/settings'
@@ -767,6 +807,7 @@ export interface FileRouteTypes {
     | '/staff/permissions'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
+    | '/suppliers/reconciliation'
     | '/approvals/'
     | '/branches/'
     | '/catalog/'
@@ -795,6 +836,7 @@ export interface FileRouteTypes {
     | '/suppliers/invoices/$invoiceId'
     | '/suppliers/invoices/new'
     | '/suppliers/payments/$paymentId'
+    | '/suppliers/transfers/$transferId'
     | '/catalog/products/'
     | '/customers/$id/'
     | '/inventory/counts/'
@@ -805,6 +847,7 @@ export interface FileRouteTypes {
     | '/procurement/orders/'
     | '/suppliers/invoices/'
     | '/suppliers/payments/'
+    | '/suppliers/transfers/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -814,6 +857,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/audit'
     | '/change-password'
+    | '/evat'
     | '/loyalty'
     | '/operations'
     | '/settings'
@@ -832,6 +876,7 @@ export interface FileRouteTypes {
     | '/staff/permissions'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
+    | '/suppliers/reconciliation'
     | '/approvals'
     | '/branches'
     | '/catalog'
@@ -860,6 +905,7 @@ export interface FileRouteTypes {
     | '/suppliers/invoices/$invoiceId'
     | '/suppliers/invoices/new'
     | '/suppliers/payments/$paymentId'
+    | '/suppliers/transfers/$transferId'
     | '/catalog/products'
     | '/customers/$id'
     | '/inventory/counts'
@@ -870,6 +916,7 @@ export interface FileRouteTypes {
     | '/procurement/orders'
     | '/suppliers/invoices'
     | '/suppliers/payments'
+    | '/suppliers/transfers'
   id:
     | '__root__'
     | '/_authenticated'
@@ -887,6 +934,7 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics'
     | '/_authenticated/audit'
     | '/_authenticated/change-password'
+    | '/_authenticated/evat'
     | '/_authenticated/loyalty'
     | '/_authenticated/operations'
     | '/_authenticated/settings'
@@ -908,6 +956,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff_/permissions'
     | '/_authenticated/suppliers/$supplierId'
     | '/_authenticated/suppliers/aging'
+    | '/_authenticated/suppliers/reconciliation'
     | '/_authenticated/approvals/'
     | '/_authenticated/branches/'
     | '/_authenticated/catalog/'
@@ -936,6 +985,7 @@ export interface FileRouteTypes {
     | '/_authenticated/suppliers/invoices/$invoiceId'
     | '/_authenticated/suppliers/invoices/new'
     | '/_authenticated/suppliers/payments/$paymentId'
+    | '/_authenticated/suppliers/transfers/$transferId'
     | '/_authenticated/catalog/products/'
     | '/_authenticated/customers/$id/'
     | '/_authenticated/inventory/counts/'
@@ -946,6 +996,7 @@ export interface FileRouteTypes {
     | '/_authenticated/procurement/orders/'
     | '/_authenticated/suppliers/invoices/'
     | '/_authenticated/suppliers/payments/'
+    | '/_authenticated/suppliers/transfers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1040,6 +1091,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof AuthenticatedCustomersRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/evat': {
+      id: '/_authenticated/evat'
+      path: '/evat'
+      fullPath: '/evat'
+      preLoaderRoute: typeof AuthenticatedEvatRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/inventory': {
@@ -1266,6 +1324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSuppliersAgingRouteImport
       parentRoute: typeof AuthenticatedSuppliersRouteRoute
     }
+    '/_authenticated/suppliers/reconciliation': {
+      id: '/_authenticated/suppliers/reconciliation'
+      path: '/reconciliation'
+      fullPath: '/suppliers/reconciliation'
+      preLoaderRoute: typeof AuthenticatedSuppliersReconciliationRouteImport
+      parentRoute: typeof AuthenticatedSuppliersRouteRoute
+    }
     '/_authenticated/catalog/products/': {
       id: '/_authenticated/catalog/products/'
       path: '/'
@@ -1474,6 +1539,20 @@ declare module '@tanstack/react-router' {
       path: '/payments/$paymentId'
       fullPath: '/suppliers/payments/$paymentId'
       preLoaderRoute: typeof AuthenticatedSuppliersPaymentsPaymentIdRouteImport
+      parentRoute: typeof AuthenticatedSuppliersRouteRoute
+    }
+    '/_authenticated/suppliers/transfers/': {
+      id: '/_authenticated/suppliers/transfers/'
+      path: '/transfers'
+      fullPath: '/suppliers/transfers/'
+      preLoaderRoute: typeof AuthenticatedSuppliersTransfersIndexRouteImport
+      parentRoute: typeof AuthenticatedSuppliersRouteRoute
+    }
+    '/_authenticated/suppliers/transfers/$transferId': {
+      id: '/_authenticated/suppliers/transfers/$transferId'
+      path: '/transfers/$transferId'
+      fullPath: '/suppliers/transfers/$transferId'
+      preLoaderRoute: typeof AuthenticatedSuppliersTransfersTransferIdRouteImport
       parentRoute: typeof AuthenticatedSuppliersRouteRoute
     }
   }
@@ -1695,12 +1774,15 @@ const AuthenticatedProcurementRouteRouteWithChildren =
 interface AuthenticatedSuppliersRouteRouteChildren {
   AuthenticatedSuppliersSupplierIdRoute: typeof AuthenticatedSuppliersSupplierIdRoute
   AuthenticatedSuppliersAgingRoute: typeof AuthenticatedSuppliersAgingRoute
+  AuthenticatedSuppliersReconciliationRoute: typeof AuthenticatedSuppliersReconciliationRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedSuppliersInvoicesInvoiceIdRoute: typeof AuthenticatedSuppliersInvoicesInvoiceIdRoute
   AuthenticatedSuppliersInvoicesNewRoute: typeof AuthenticatedSuppliersInvoicesNewRoute
   AuthenticatedSuppliersPaymentsPaymentIdRoute: typeof AuthenticatedSuppliersPaymentsPaymentIdRoute
+  AuthenticatedSuppliersTransfersTransferIdRoute: typeof AuthenticatedSuppliersTransfersTransferIdRoute
   AuthenticatedSuppliersInvoicesIndexRoute: typeof AuthenticatedSuppliersInvoicesIndexRoute
   AuthenticatedSuppliersPaymentsIndexRoute: typeof AuthenticatedSuppliersPaymentsIndexRoute
+  AuthenticatedSuppliersTransfersIndexRoute: typeof AuthenticatedSuppliersTransfersIndexRoute
 }
 
 const AuthenticatedSuppliersRouteRouteChildren: AuthenticatedSuppliersRouteRouteChildren =
@@ -1708,6 +1790,8 @@ const AuthenticatedSuppliersRouteRouteChildren: AuthenticatedSuppliersRouteRoute
     AuthenticatedSuppliersSupplierIdRoute:
       AuthenticatedSuppliersSupplierIdRoute,
     AuthenticatedSuppliersAgingRoute: AuthenticatedSuppliersAgingRoute,
+    AuthenticatedSuppliersReconciliationRoute:
+      AuthenticatedSuppliersReconciliationRoute,
     AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
     AuthenticatedSuppliersInvoicesInvoiceIdRoute:
       AuthenticatedSuppliersInvoicesInvoiceIdRoute,
@@ -1715,10 +1799,14 @@ const AuthenticatedSuppliersRouteRouteChildren: AuthenticatedSuppliersRouteRoute
       AuthenticatedSuppliersInvoicesNewRoute,
     AuthenticatedSuppliersPaymentsPaymentIdRoute:
       AuthenticatedSuppliersPaymentsPaymentIdRoute,
+    AuthenticatedSuppliersTransfersTransferIdRoute:
+      AuthenticatedSuppliersTransfersTransferIdRoute,
     AuthenticatedSuppliersInvoicesIndexRoute:
       AuthenticatedSuppliersInvoicesIndexRoute,
     AuthenticatedSuppliersPaymentsIndexRoute:
       AuthenticatedSuppliersPaymentsIndexRoute,
+    AuthenticatedSuppliersTransfersIndexRoute:
+      AuthenticatedSuppliersTransfersIndexRoute,
   }
 
 const AuthenticatedSuppliersRouteRouteWithChildren =
@@ -1737,6 +1825,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
+  AuthenticatedEvatRoute: typeof AuthenticatedEvatRoute
   AuthenticatedLoyaltyRoute: typeof AuthenticatedLoyaltyRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -1763,6 +1852,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
+  AuthenticatedEvatRoute: AuthenticatedEvatRoute,
   AuthenticatedLoyaltyRoute: AuthenticatedLoyaltyRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
