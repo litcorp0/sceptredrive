@@ -57,3 +57,16 @@
 	/* Neutralise only the registry ring; keep elevation and aria-invalid cues. */
 	--tw-ring-shadow: 0 0 #0000;
 }
+
+/* Operator request: no visible scrollbars anywhere, while wheel, touch and
+   keyboard scrolling keep working. */
+* {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+	display: none;
+	width: 0;
+	height: 0;
+}
