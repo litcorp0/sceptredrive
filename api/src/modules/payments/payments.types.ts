@@ -55,6 +55,19 @@ export interface PaymentView {
 
 export type MockSettlementOutcome = 'PAID' | 'FAILED' | 'EXPIRED'
 
+/**
+ * The outcomes the mock transfer harness can settle into. Uppercase on purpose:
+ * the body is strict, so `paid` or `SUCCESS ` is a 400 rather than a settlement
+ * that silently moved nothing (the provider's own vocabulary is lowercase).
+ */
+export type MockTransferSettlementOutcome = 'SUCCESS' | 'FAILED' | 'REVERSED'
+
+export interface MockSettleTransferInput {
+  /** Our `sdt-…` reference, never the provider's transfer code. */
+  reference: string
+  outcome: MockTransferSettlementOutcome
+}
+
 export interface PaymentQuery {
   refresh: boolean
 }

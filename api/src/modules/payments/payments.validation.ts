@@ -66,8 +66,16 @@ export const mockSettleSchema = z
   })
   .strict()
 
+export const mockSettleTransferSchema = z
+  .object({
+    reference: z.string().trim().min(1).max(100),
+    outcome: z.enum(['SUCCESS', 'FAILED', 'REVERSED']),
+  })
+  .strict()
+
 export const validateCreatePayment = validateJson(createPaymentSchema)
 export const validatePaymentQuery = validateQuery(paymentQuerySchema)
 export const validatePaymentIdParam = validateParam(paymentIdParamSchema)
 export const validateClaimPayment = validateJson(claimPaymentSchema)
 export const validateMockSettle = validateJson(mockSettleSchema)
+export const validateMockSettleTransfer = validateJson(mockSettleTransferSchema)

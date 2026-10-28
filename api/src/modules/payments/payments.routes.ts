@@ -11,6 +11,7 @@ import {
   validateClaimPayment,
   validateCreatePayment,
   validateMockSettle,
+  validateMockSettleTransfer,
   validatePaymentIdParam,
   validatePaymentQuery,
 } from './payments.validation.ts'
@@ -92,6 +93,17 @@ mockPaymentRoutes.post(
   requirePermission('settings.update'),
   validateMockSettle,
   (c) => paymentsController.settleMockPayment(c, c.req.valid('json')),
+)
+
+// The supplier-transfer half of the same harness: it settles through
+// `applyTransferEvent`, so ending a walkthrough with a real payment proves the
+// path Paystack's webhook and the console's verify will take in production.
+mockPaymentRoutes.post(
+  '/api/payments/mock/settle-transfer',
+  requireSession,
+  requirePermission('settings.update'),
+  validateMockSettleTransfer,
+  (c) => paymentsController.settleMockTransfer(c, c.req.valid('json')),
 )
 
 /** One seam for `app.ts` and the mode test: the mock route is conditional. */

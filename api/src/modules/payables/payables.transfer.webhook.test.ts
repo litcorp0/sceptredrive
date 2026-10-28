@@ -1,11 +1,27 @@
 import { createHmac } from 'node:crypto'
 import { db } from '@sceptre/db'
 import { and, eq, inArray } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { databaseAvailable, randomToken, uniqueSuffix } from '../../../test/integration.ts'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import {
+  authedHeaders,
+  createTestUser,
+  databaseAvailable,
+  deleteTestUser,
+  randomToken,
+  signIn,
+  uniqueSuffix,
+} from '../../../test/integration.ts'
+import { app } from '../../app.ts'
+import { AppError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { factory } from '../../http/factory.ts'
 import { branch } from '../org/branches.schema.ts'
+import {
+  getMockTransferByReference,
+  resetMockProvider,
+} from '../payments/payments.mock.provider.ts'
+import { getPaymentProvider } from '../payments/payments.provider.ts'
+import { mountPaymentRoutes } from '../payments/payments.routes.ts'
 import { paymentEvent } from '../payments/payments.schema.ts'
 import { createPaystackWebhookRoutes } from '../payments/payments.webhook.routes.ts'
 import { auditLog } from '../platform/audit.schema.ts'
@@ -18,6 +34,7 @@ import {
   supplierTransferAllocation,
 } from './payables.schema.ts'
 import * as payablesService from './payables.service.ts'
+import type { TransferView } from './payables.types.ts'
 
 const available = await databaseAvailable()
 if (!available)
@@ -29,6 +46,44 @@ const suffix = uniqueSuffix()
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+function settleTransferRequest(body: unknown) {
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }
+}
+
+describe('mock settle-transfer route registration', () => {
+  it('does not exist when the app is built for test mode', async () => {
+    const testMode = factory.createApp()
+    mountPaymentRoutes(testMode, 'test')
+
+    const response = await testMode.request(
+      '/api/payments/mock/settle-transfer',
+      settleTransferRequest({ reference: 'sdt-any', outcome: 'SUCCESS' }),
+    )
+    expect(response.status).toBe(404)
+  })
+
+  it('exists but is session-gated when the app is built for mock mode', async () => {
+    const mockMode = factory.createApp()
+    // The real app maps AppError to its status; this mini app needs the same seam
+    // to prove the route exists rather than merely 500ing.
+    mockMode.onError((error, c) => {
+      if (error instanceof AppError) return c.json({ error: error.code }, error.statusCode as 500)
+      return c.json({ error: 'INTERNAL' }, 500)
+    })
+    mountPaymentRoutes(mockMode, 'mock')
+
+    const response = await mockMode.request(
+      '/api/payments/mock/settle-transfer',
+      settleTransferRequest({ reference: 'sdt-any', outcome: 'SUCCESS' }),
+    )
+    expect(response.status).toBe(401)
+  })
+})
 
 /** A delivery body in Paystack's shape; `failures` is where a reason lives. */
 function transferBody(
@@ -70,6 +125,9 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
   let branchId = ''
   let supplierId = ''
   let paymentDetailId = ''
+  let adminUserId = ''
+  /** A real session: the mock harness routes are `requireSession` + permission. */
+  let adminCookie = ''
 
   const adminUser = {
     id: `webhook-admin-${suffix}`,
@@ -137,6 +195,10 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
       .returning({ id: supplierPaymentDetail.id })
     paymentDetailId = createdDetail?.id ?? ''
     detailIds.push(paymentDetailId)
+
+    const admin = await createTestUser({ role: 'ADMIN', name: 'Transfer Harness Admin' })
+    adminUserId = admin.id
+    adminCookie = await signIn(admin.email)
   })
 
   afterAll(async () => {
@@ -187,6 +249,7 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
       await db.delete(auditLog).where(inArray(auditLog.entityId, entityIds))
     }
     if (branchIds.length > 0) await db.delete(branch).where(inArray(branch.id, branchIds))
+    if (adminUserId) await deleteTestUser(adminUserId)
   })
 
   /** An open instruction with a 50 000 plan against a 100 000 invoice. */
@@ -476,5 +539,177 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
       .from(paymentEvent)
       .where(eq(paymentEvent.providerReference, reference))
     expect(events).toHaveLength(0)
+  })
+
+  /**
+   * The harness route settles through `applyTransferEvent`, so these cases are
+   * the production state machine reached over HTTP — the same writer the webhook
+   * above uses.
+   */
+  describe('settling a transfer over the mock harness route', () => {
+    beforeEach(() => {
+      resetMockProvider()
+    })
+
+    function postSettleTransfer(body: { reference: string; outcome: string }) {
+      return app.request('/api/payments/mock/settle-transfer', {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify(body),
+      })
+    }
+
+    /** The mock only settles a transfer it issued; this is its `initiateTransfer`. */
+    async function registerMockTransfer(reference: string, amountMinor: number) {
+      await getPaymentProvider().initiateTransfer({
+        reference,
+        amountMinor,
+        recipientCode: 'RCP_mock_harness',
+        reason: 'Harness fixture',
+        currency: 'GHS',
+      })
+    }
+
+    it('posts exactly one payment and moves the transfer to SUCCESS', async () => {
+      const { transferId, invoiceId, reference } = await createScenario()
+      await registerMockTransfer(reference, 50_000)
+
+      const response = await postSettleTransfer({ reference, outcome: 'SUCCESS' })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        transfer: TransferView
+        paymentId: string | null
+      }
+
+      expect(body.transfer).toMatchObject({
+        id: transferId,
+        reference,
+        status: 'SUCCESS',
+        amountMinor: 50_000,
+        unallocatedMinor: 0,
+        failureCode: null,
+      })
+      expect(body.transfer.settledAt).not.toBeNull()
+      expect(body.paymentId).not.toBeNull()
+      expect(body.transfer.paymentId).toBe(body.paymentId)
+      // The view never carries routing state (P14-D28).
+      expect(JSON.stringify(body.transfer)).not.toContain('RCP_mock_harness')
+
+      const payments = await db
+        .select()
+        .from(supplierPayment)
+        .where(eq(supplierPayment.idempotencyKey, `transfer:${transferId}`))
+      expect(payments).toHaveLength(1)
+      expect(payments[0]).toMatchObject({
+        id: body.paymentId,
+        amountMinor: 50_000,
+        reference,
+        status: 'COMPLETED',
+        createdBy: 'system:paystack',
+      })
+
+      const [invoice] = await db
+        .select({
+          status: supplierInvoice.status,
+          amountPaidMinor: supplierInvoice.amountPaidMinor,
+        })
+        .from(supplierInvoice)
+        .where(eq(supplierInvoice.id, invoiceId))
+      expect(invoice).toMatchObject({ status: 'PARTIAL', amountPaidMinor: 50_000 })
+
+      // The settlement row proves it went through `applyTransferEvent`.
+      const auditRows = await db
+        .select({ action: auditLog.action })
+        .from(auditLog)
+        .where(
+          and(eq(auditLog.entityId, transferId), eq(auditLog.action, 'supplier_transfer.settled')),
+        )
+      expect(auditRows).toHaveLength(1)
+    })
+
+    it('changes nothing when the same settlement is replayed', async () => {
+      const { transferId, invoiceId, reference } = await createScenario()
+      await registerMockTransfer(reference, 50_000)
+
+      const firstResponse = await postSettleTransfer({ reference, outcome: 'SUCCESS' })
+      expect(firstResponse.status).toBe(200)
+      const first = (await firstResponse.json()) as {
+        transfer: TransferView
+        paymentId: string | null
+      }
+
+      const secondResponse = await postSettleTransfer({ reference, outcome: 'SUCCESS' })
+      expect(secondResponse.status).toBe(200)
+      const second = (await secondResponse.json()) as {
+        transfer: TransferView
+        paymentId: string | null
+      }
+
+      expect(second.paymentId).toBe(first.paymentId)
+      expect(second.transfer.settledAt).toBe(first.transfer.settledAt)
+
+      const payments = await db
+        .select({ id: supplierPayment.id })
+        .from(supplierPayment)
+        .where(eq(supplierPayment.idempotencyKey, `transfer:${transferId}`))
+      expect(payments).toHaveLength(1)
+
+      const [invoice] = await db
+        .select({ amountPaidMinor: supplierInvoice.amountPaidMinor })
+        .from(supplierInvoice)
+        .where(eq(supplierInvoice.id, invoiceId))
+      expect(invoice?.amountPaidMinor).toBe(50_000)
+    })
+
+    it('posts nothing for FAILED and leaves the invoice untouched', async () => {
+      const { transferId, invoiceId, reference } = await createScenario()
+      await registerMockTransfer(reference, 50_000)
+
+      const response = await postSettleTransfer({ reference, outcome: 'FAILED' })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        transfer: TransferView
+        paymentId: string | null
+      }
+
+      expect(body.transfer).toMatchObject({ id: transferId, status: 'FAILED', paymentId: null })
+      expect(body.paymentId).toBeNull()
+      expect(await paymentFor(transferId)).toBeNull()
+
+      const [invoice] = await db
+        .select({
+          status: supplierInvoice.status,
+          amountPaidMinor: supplierInvoice.amountPaidMinor,
+        })
+        .from(supplierInvoice)
+        .where(eq(supplierInvoice.id, invoiceId))
+      expect(invoice).toMatchObject({ status: 'OPEN', amountPaidMinor: 0 })
+    })
+
+    it('answers 404 with a stable code for a reference the mock never issued', async () => {
+      const reference = `sdt-${crypto.randomUUID()}`
+
+      const response = await postSettleTransfer({ reference, outcome: 'SUCCESS' })
+      expect(response.status).toBe(404)
+
+      const body = (await response.json()) as { error?: { code?: string } }
+      expect(body.error?.code).toBe('MOCK_TRANSFER_NOT_FOUND')
+    })
+
+    it('rejects an unknown outcome with 400 before the provider moves', async () => {
+      const { transferId, reference } = await createScenario()
+      await registerMockTransfer(reference, 50_000)
+
+      const response = await postSettleTransfer({ reference, outcome: 'PAID' })
+      expect(response.status).toBe(400)
+
+      expect(getMockTransferByReference(reference)?.status).toBe('pending')
+      expect(await paymentFor(transferId)).toBeNull()
+      const [transfer] = await db
+        .select({ status: supplierTransfer.status })
+        .from(supplierTransfer)
+        .where(eq(supplierTransfer.id, transferId))
+      expect(transfer?.status).toBe('PENDING')
+    })
   })
 })
