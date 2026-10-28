@@ -1,4 +1,4 @@
-import { useNavigate, useRouterState } from "@tanstack/react-router"
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router"
 import {
 	Select,
 	SelectContent,
@@ -9,6 +9,22 @@ import {
 import { useBranch } from "#/lib/branch-context"
 
 /**
+ * The search fields the shell may rewrite. The router-wide search now includes `/pos`'s
+ * `tab` vocabulary as well, so a reducer that spreads `prev` produces a wider type than
+ * `/analytics` accepts. This is the analytics shape, named once.
+ */
+type BranchSearchWrite = {
+	tab?: "sales" | "products" | "inventory" | "credit" | "loyalty" | "payables" | "tax"
+	from?: string
+	to?: string
+	granularity?: "day" | "week" | "month"
+	branchId?: string
+	sort?: string
+	direction?: "asc" | "desc"
+	offset?: number
+}
+
+/**
  * Branch scope for the console. Behaviour is unchanged: administrators switch
  * between branches (or all of them), managers are pinned to their own branch
  * and see it as a locked badge. Only the fascia styling differs.
@@ -17,6 +33,7 @@ export function BranchSwitcher() {
 	const { branches, activeBranchId, activeBranch, setActiveBranchId, canSelectBranch } = useBranch()
 	const navigate = useNavigate()
 	const pathname = useRouterState({ select: (state) => state.location.pathname })
+	const search = useSearch({ strict: false }) as BranchSearchWrite
 
 	/**
 	 * Keep the URL and the shell switcher in step on the two pages where branch is a search
@@ -29,13 +46,13 @@ export function BranchSwitcher() {
 		if (pathname === "/analytics") {
 			void navigate({
 				to: "/analytics",
-				search: (prev) => ({ ...prev, branchId: id ?? undefined }),
+				search: { ...search, branchId: id ?? undefined },
 				replace: true,
 			})
 		} else if (pathname === "/") {
 			void navigate({
 				to: "/",
-				search: (prev) => ({ ...prev, branchId: id ?? undefined }),
+				search: { ...search, branchId: id ?? undefined },
 				replace: true,
 			})
 		}
