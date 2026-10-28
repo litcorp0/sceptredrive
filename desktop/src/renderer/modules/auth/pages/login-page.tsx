@@ -22,6 +22,7 @@ import { desktopApi, isDesktopAvailable } from '@/lib/desktop-api'
 import { lockoutPolicyFor, readCachedConfig } from '@/lib/pos-config'
 import { usePos } from '@/lib/powersync/provider'
 import { ManagerUnlock } from '../components/manager-unlock'
+import { ResetTerminalButton } from '../components/reset-terminal'
 import { lockoutMessage } from '../utils/lockout-copy'
 
 type Phase = 'loading' | 'select' | 'pin' | 'activate' | 'change'
@@ -342,6 +343,10 @@ export function LoginRoute() {
               }}
             />
           ) : null}
+
+          <div className="mt-6 border-t border-border pt-4 text-center">
+            <ResetTerminalButton />
+          </div>
         </div>
       </section>
     </main>
@@ -604,6 +609,9 @@ function CredentialProblemScreen({
         <Button type="button" onClick={reenrol} disabled={busy} className="mt-4 h-12 w-full">
           {busy ? 'Resetting…' : 'Re-enrol this terminal'}
         </Button>
+        <div className="mt-4 text-center">
+          <ResetTerminalButton label="Reset local data instead" />
+        </div>
       </div>
     </main>
   )
@@ -691,6 +699,9 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
         <p className="mt-3 text-xs text-muted-foreground">
           Enrolment needs the network once. After that, cash and credit sales work offline.
         </p>
+        <div className="mt-6 text-center">
+          <ResetTerminalButton label="Reset local data" />
+        </div>
       </div>
     </main>
   )

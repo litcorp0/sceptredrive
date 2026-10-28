@@ -1226,10 +1226,12 @@ Safety rails:
 After a wipe:
 
 1. Restart the API and PowerSync; they hold pooled connections.
-2. Re-enrol every terminal (§3.4); device tokens are gone.
-3. Clear the POS local database **before** it syncs. A terminal holding local
-   sales would otherwise upload them to an empty server. Re-enrolment plus a
-   local reset is the clean path.
+2. On every terminal, open the POS sign-in screen and choose **Reset this
+   terminal**, then confirm. This deletes the local sales, held carts, cached
+   branch/staff data and the device credential, and returns the app to
+   enrolment. It is the only safe path: a terminal holding local sales would
+   otherwise upload them to an empty server.
+3. Re-enrol every terminal (§3.4); device tokens are gone.
 4. Run `bun run seed:admin`, then rebuild the data from §2 onward.
 
 ### 15.3 The demo dataset

@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   )
   console.log('[db:truncate] next: bun run seed:admin, then restart the API and PowerSync.')
   console.log(
-    '[db:truncate] terminals must re-enrol; clear the POS local database before it syncs to an empty server.',
+    '[db:truncate] on each terminal, use "Reset this terminal" on the sign-in screen, then re-enrol.',
   )
 }
 

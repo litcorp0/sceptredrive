@@ -74,8 +74,8 @@ export function getDatabase(): Promise<PowerSyncDatabase> {
   return databasePromise
 }
 
-/** Test/teardown seam: closes and forgets the instance. */
-export async function closeDatabaseForTests(): Promise<void> {
+/** Closes and forgets the open database; the next `getDatabase` opens it again. */
+export async function closeDatabase(): Promise<void> {
   if (!databasePromise) return
   const db = await databasePromise
   databasePromise = null
