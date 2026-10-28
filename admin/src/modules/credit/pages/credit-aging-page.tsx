@@ -43,6 +43,19 @@ export function CreditAgingPage() {
 
 	const agingQuery = useQuery(agingOptions(effectiveBranchId, asOf))
 
+	// Printed provenance comes from the report's own branch rows, not from the branch
+	// list: a manager whose `/api/branches` call is still in flight must not have their
+	// report print as "All branches".
+	const reportedBranch = agingQuery.data?.branches.find(
+		(branch) => branch.branch.id === effectiveBranchId,
+	)?.branch
+	const branchLabel =
+		effectiveBranchId === null
+			? "All branches"
+			: reportedBranch
+				? `${reportedBranch.name} (${reportedBranch.code})`
+				: (selectedBranch?.name ?? effectiveBranchId)
+
 	const agingError =
 		agingQuery.error instanceof ApiError
 			? agingQuery.error.message
@@ -111,7 +124,7 @@ export function CreditAgingPage() {
 			<PrintSheet
 				title="Credit aging"
 				meta={[
-					{ label: "Branch", value: selectedBranch?.name ?? "All branches" },
+					{ label: "Branch", value: branchLabel },
 					{ label: "As at", value: formatDay(agingQuery.data?.asOf ?? asOf) },
 				]}
 			/>

@@ -56,6 +56,13 @@ export function PayablesAgingPage() {
 
 	const agingQuery = useQuery(payablesAgingOptions(effectiveBranchId, asOf, supplier?.id ?? null))
 
+	// A named branch is never reported as "All branches": if the branch list has not
+	// loaded, the id is printed rather than a provenance claim that is false.
+	const branchLabel =
+		effectiveBranchId === null
+			? "All branches"
+			: (branches.find((branch) => branch.id === effectiveBranchId)?.name ?? effectiveBranchId)
+
 	const aging = agingQuery.data
 	const totals = aging?.totals ?? EMPTY_BUCKETS
 	const totalOutstandingMinor = aging?.totalOutstandingMinor ?? 0
@@ -146,11 +153,7 @@ export function PayablesAgingPage() {
 			<PrintSheet
 				title="Payables aging"
 				meta={[
-					{
-						label: "Branch",
-						value:
-							branches.find((branch) => branch.id === effectiveBranchId)?.name ?? "All branches",
-					},
+					{ label: "Branch", value: branchLabel },
 					{ label: "As at", value: formatDay(aging?.asOf ?? asOf) },
 					{
 						label: "Supplier",

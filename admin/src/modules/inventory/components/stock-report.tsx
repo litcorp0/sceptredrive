@@ -82,7 +82,7 @@ export function StockReport() {
 		? (() => {
 				const row = branches.find((entry) => entry.id === report.branchId)
 				if (row) return `${row.name} (${row.code})`
-				// A manager may not hold `branch.read`; the rows still know their branch code.
+				// The branch list can lag the report; the rows still know their branch code.
 				return report.rows[0]?.branchCode ?? report.branchId
 			})()
 		: "All branches"
@@ -297,7 +297,7 @@ export function StockReport() {
 												{formatGhs(row.valueMinor)}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.threshold ?? "—"}
+												{row.threshold === null ? "—" : formatCount(row.threshold)}
 											</TableCell>
 											<TableCell>
 												{row.belowThreshold ? (

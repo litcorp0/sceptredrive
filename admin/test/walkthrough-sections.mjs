@@ -186,14 +186,6 @@ function bodyRows(page) {
 }
 
 /**
- * Per-section data assertions for the screens Phase 12 added.
- *
- * A title proves the route rendered; it does not prove the screen queried its own list and
- * showed the answer. Each callback runs after the generic `visit()` check, so a screen that
- * throws still fails there first, and these assertions fail if the table or empty state is
- * missing.
- */
-/**
  * The export/print contract every report screen shares (P14-D19/D20).
  *
  * The button is a canvas download, not a link, so its endpoint is asserted through
@@ -236,6 +228,14 @@ async function expectExportAndPrint(page, path) {
 	return expectPrintSheet(page)
 }
 
+/**
+ * Per-section data assertions for the screens Phase 12 added.
+ *
+ * A title proves the route rendered; it does not prove the screen queried its own list and
+ * showed the answer. Each callback runs after the generic `visit()` check, so a screen that
+ * throws still fails there first, and these assertions fail if the table or empty state is
+ * missing.
+ */
 const SECTION_ASSERTIONS = new Map([
 	[
 		"/approvals",
@@ -628,8 +628,8 @@ const SECTION_ASSERTIONS = new Map([
 				text.slice(0, 120),
 			)
 
-			const report = await contextApi(page.request, "GET", "/api/inventory/stock/report")
-			const truncated = report.body?.truncated === true
+			const report = await screenJson(page, "/api/inventory/stock/report")
+			const truncated = report?.truncated === true
 			check(
 				text.includes("This report is capped") === truncated,
 				"/inventory/stock report states truncation exactly when the API does",
@@ -640,6 +640,11 @@ const SECTION_ASSERTIONS = new Map([
 			check(
 				/Branch/.test(metaText) && /Period/.test(metaText) && /As at/.test(metaText),
 				"/inventory/stock print sheet names its branch, period and instant",
+				metaText.slice(0, 160),
+			)
+			check(
+				Boolean(report) && metaText.includes(sharedDateTime(report.asOf)),
+				"/inventory/stock prints the instant the projection was read",
 				metaText.slice(0, 160),
 			)
 			await shot(page, "plan14-stock-report-1440.png")
@@ -654,6 +659,12 @@ const SECTION_ASSERTIONS = new Map([
 				"/customers/aging print sheet states the as-of date",
 				metaText.slice(0, 120),
 			)
+			const aging = await screenJson(page, "/api/credit/aging")
+			check(
+				Boolean(aging) && metaText.includes(sharedDay(aging.asOf)),
+				"/customers/aging prints the report's asOf, not today's date",
+				metaText.slice(0, 160),
+			)
 			await shot(page, "plan14-credit-aging-1440.png")
 		},
 	],
@@ -666,6 +677,12 @@ const SECTION_ASSERTIONS = new Map([
 				"/suppliers/aging print sheet states its as-of date and supplier filter",
 				metaText.slice(0, 120),
 			)
+			const aging = await screenJson(page, "/api/payables/aging")
+			check(
+				Boolean(aging) && metaText.includes(sharedDay(aging.asOf)),
+				"/suppliers/aging prints the report's asOf, not today's date",
+				metaText.slice(0, 160),
+			)
 			await shot(page, "plan14-payables-aging-1440.png")
 		},
 	],
@@ -677,6 +694,12 @@ const SECTION_ASSERTIONS = new Map([
 			check(
 				/Liability as at/.test(metaText) && /\d{1,2}:\d{2}/.test(metaText),
 				"/loyalty print sheet stamps the liability as of now",
+				metaText.slice(0, 160),
+			)
+			const liability = await screenJson(page, "/api/loyalty/liability")
+			check(
+				Boolean(liability) && metaText.includes(sharedDateTime(liability.asOf)),
+				"/loyalty prints the instant the liability was read",
 				metaText.slice(0, 160),
 			)
 			const text = await page.locator("main").innerText()
@@ -811,6 +834,51 @@ async function contextFetch(request, method, path, { data, token } = {}) {
 
 function contextApi(request, method, path, data) {
 	return contextFetch(request, method, path, { data })
+}
+
+/**
+ * The JSON the screen itself read, re-fetched from the exact URL the browser asked for.
+ *
+ * Asserting provenance against a hand-built query would compare two different reads; this
+ * compares the printed page with the response that produced it.
+ */
+async function screenJson(page, fragment) {
+	const url = await page.evaluate(
+		(needle) =>
+			performance
+				.getEntriesByType("resource")
+				.map((entry) => entry.name)
+				.find((name) => name.includes(needle)) ?? null,
+		fragment,
+	)
+	if (!url) return null
+	return (await contextFetch(page.request, "GET", url.slice(url.indexOf("/api")))).body
+}
+
+// The shared formatters' contract, restated in plain node: `formatDay` is en-GB
+// `28 Oct 2026` and `formatDateTime` is `28 Oct 2026, 15:04`. The walkthrough cannot import
+// the workspace package, so this is the same Intl call rather than a hard-coded date.
+function sharedDay(iso) {
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	}).formatToParts(new Date(iso))
+	const pick = (type) => parts.find((part) => part.type === type)?.value ?? ""
+	return `${pick("day")} ${pick("month")} ${pick("year")}`
+}
+
+function sharedDateTime(iso) {
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	}).formatToParts(new Date(iso))
+	const pick = (type) => parts.find((part) => part.type === type)?.value ?? ""
+	return `${pick("day")} ${pick("month")} ${pick("year")}, ${pick("hour")}:${pick("minute")}`
 }
 
 /** The pending-approval badge in the sidebar; absent means a clean queue, i.e. zero. */
