@@ -5,6 +5,12 @@
 
 **Milestone:** v1
 **Updated:** 2026-10-28
+
+> **2026-10-28 (post-Phase-14):** Two-factor authentication was removed at the
+> operator's request. Sign-in is email + password; migration `0018` drops the
+> `two_factor` table and `user.two_factor_enabled`. The console no longer has a
+> setup page, an auth-policy endpoint, or an `auth.requireTwoFactor` setting.
+
 **Status:** **Phase 14 (Admin Operations & E-VAT) is complete and verified — 13/13 plans.**
 Every gate is green: `check-types` 6/6, `lint` exit 0 with 19 pre-existing warnings,
 `modules:check:strict` **21/21 admin and 16/16 POS**, brand gate over **1 201** files, shared
