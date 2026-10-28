@@ -81,7 +81,9 @@ export function StockReport() {
 	const branchLabel = report?.branchId
 		? (() => {
 				const row = branches.find((entry) => entry.id === report.branchId)
-				return row ? `${row.name} (${row.code})` : report.branchId
+				if (row) return `${row.name} (${row.code})`
+				// A manager may not hold `branch.read`; the rows still know their branch code.
+				return report.rows[0]?.branchCode ?? report.branchId
 			})()
 		: "All branches"
 
