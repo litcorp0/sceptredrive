@@ -82,7 +82,6 @@ function makeUser(overrides: Partial<SessionUser>): SessionUser {
     phone: null,
     isActive: true,
     mustChangePassword: false,
-    twoFactorEnabled: false,
     image: null,
     ...overrides,
   } as SessionUser

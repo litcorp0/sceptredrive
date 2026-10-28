@@ -100,7 +100,6 @@ describe.skipIf(!available)('credit service', () => {
       phone: null,
       isActive: true,
       mustChangePassword: false,
-      twoFactorEnabled: false,
       image: null,
       ...overrides,
     } as SessionUser

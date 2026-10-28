@@ -24,7 +24,6 @@ export type StaffRow = Pick<
   | 'phone'
   | 'isActive'
   | 'mustChangePassword'
-  | 'twoFactorEnabled'
   | 'pinVersion'
   | 'pinMustChange'
   | 'createdAt'

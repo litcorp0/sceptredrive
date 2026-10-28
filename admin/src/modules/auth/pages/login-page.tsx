@@ -25,7 +25,7 @@ export function LoginPage() {
 		setError(null)
 		setSubmitting(true)
 		try {
-			const { data, error: signInError } = await authClient.signIn.email({ email, password })
+			const { error: signInError } = await authClient.signIn.email({ email, password })
 
 			if (signInError) {
 				setError(
@@ -33,13 +33,6 @@ export function LoginPage() {
 						? "Too many attempts. Please wait a moment and try again."
 						: "Invalid email or password.",
 				)
-				return
-			}
-
-			// The two-factor plugin returns { twoFactorRedirect: true, twoFactorMethods }
-			// at runtime; the client's inferred response type is incomplete.
-			if ((data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect === true) {
-				await navigate({ to: "/two-factor", search: { redirect: redirectTo } })
 				return
 			}
 

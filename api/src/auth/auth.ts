@@ -1,17 +1,10 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { db } from '@sceptre/db'
 import { type BetterAuthOptions, betterAuth } from 'better-auth'
-import { twoFactor } from 'better-auth/plugins/two-factor'
 import { env } from '../config/env.ts'
 import { email } from '../email/index.ts'
 import { logger } from '../logger.ts'
-import {
-  account,
-  session,
-  twoFactor as twoFactorTable,
-  user,
-  verification,
-} from '../modules/identity/staff.schema.ts'
+import { account, session, user, verification } from '../modules/identity/staff.schema.ts'
 import { writeAudit } from '../modules/platform/audit.service.ts'
 import { authDatabaseHooks } from './hooks.ts'
 import { hashPassword, verifyPassword } from './password.ts'
@@ -39,7 +32,7 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
     transaction: true,
-    schema: { user, session, account, verification, twoFactor: twoFactorTable },
+    schema: { user, session, account, verification },
   }),
   emailAndPassword: {
     enabled: true,
@@ -79,7 +72,6 @@ export const auth = betterAuth({
     max: 100,
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
-      '/two-factor/*': { window: 60, max: 5 },
       '/request-password-reset': { window: 60, max: 3 },
     },
   },
@@ -106,7 +98,6 @@ export const auth = betterAuth({
     },
   },
   databaseHooks: authDatabaseHooks,
-  plugins: [twoFactor({ issuer: 'Sceptre Drive' })],
 })
 
 export type Auth = typeof auth

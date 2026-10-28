@@ -162,7 +162,6 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
     phone: null,
     isActive: true,
     mustChangePassword: false,
-    twoFactorEnabled: false,
     image: null,
   } as SessionUser
 

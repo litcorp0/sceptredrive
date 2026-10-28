@@ -11,7 +11,6 @@ export interface Staff {
 	phone: string | null
 	isActive: boolean
 	mustChangePassword: boolean
-	twoFactorEnabled: boolean
 	pinVersion: number
 	pinMustChange: boolean
 	createdAt: string

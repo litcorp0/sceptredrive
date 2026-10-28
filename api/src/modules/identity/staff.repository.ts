@@ -20,7 +20,6 @@ export const staffColumns = {
   phone: userTable.phone,
   isActive: userTable.isActive,
   mustChangePassword: userTable.mustChangePassword,
-  twoFactorEnabled: userTable.twoFactorEnabled,
   pinVersion: userTable.pinVersion,
   pinMustChange: userTable.pinMustChange,
   createdAt: userTable.createdAt,

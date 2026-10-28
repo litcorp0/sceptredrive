@@ -65,7 +65,6 @@ describe.skipIf(!available)('customers service', () => {
       phone: null,
       isActive: true,
       mustChangePassword: false,
-      twoFactorEnabled: false,
       image: null,
       ...overrides,
     } as SessionUser

@@ -6,7 +6,7 @@ import type { Session } from "#/lib/auth-client"
 /**
  * Reads the current session from the API on the server, forwarding the
  * browser's cookie header. `disableCookieCache` keeps guards honest: role,
- * branch, 2FA, and mustChangePassword changes take effect immediately instead
+ * branch, and mustChangePassword changes take effect immediately instead
  * of after the 5-minute cookie cache expires.
  *
  * Never throws: a network failure is treated as an anonymous visitor.

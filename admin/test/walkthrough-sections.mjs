@@ -15,7 +15,6 @@
  * Usage: node admin/test/walkthrough-sections.mjs      (or: bun run --filter admin test:walkthrough)
  * Env:   ADMIN_URL, API_BASE_URL, EVIDENCE_DIR
  */
-import { createHmac } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { chromium } from "playwright"
@@ -27,7 +26,6 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const evidenceDir = process.env.EVIDENCE_DIR
 	? path.resolve(repoRoot, process.env.EVIDENCE_DIR)
 	: path.resolve(repoRoot, ".planning/phases/09-analytics-dashboard/evidence/shots")
-const totpFile = process.env.TOTP_FILE ?? "/tmp/opencode/admin-totp.json"
 const managerPasswordFile =
 	process.env.MANAGER_PASSWORD_FILE ?? "/tmp/opencode/manager-password.txt"
 fs.mkdirSync(evidenceDir, { recursive: true })
@@ -55,35 +53,6 @@ function section(title) {
 
 // --- auth -------------------------------------------------------------------
 
-function base32Decode(secret) {
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-	let bits = ""
-	for (const char of secret.replace(/=+$/, "").toUpperCase()) {
-		const value = alphabet.indexOf(char)
-		if (value === -1) continue
-		bits += value.toString(2).padStart(5, "0")
-	}
-	const bytes = []
-	for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(Number.parseInt(bits.slice(i, i + 8), 2))
-	return Buffer.from(bytes)
-}
-
-function totpCode(secret) {
-	const counter = Math.floor(Date.now() / 1000 / 30)
-	const buffer = Buffer.alloc(8)
-	buffer.writeUInt32BE(Math.floor(counter / 2 ** 32), 0)
-	buffer.writeUInt32BE(counter % 2 ** 32, 4)
-	const digest = createHmac("sha1", base32Decode(secret)).update(buffer).digest()
-	const offset = digest[digest.length - 1] & 0x0f
-	const code =
-		(((digest[offset] & 0x7f) << 24) |
-			(digest[offset + 1] << 16) |
-			(digest[offset + 2] << 8) |
-			digest[offset + 3]) %
-		1_000_000
-	return String(code).padStart(6, "0")
-}
-
 async function robustFill(page, selector, value) {
 	for (let attempt = 0; attempt < 10; attempt += 1) {
 		await page.fill(selector, value)
@@ -99,31 +68,6 @@ async function signIn(page, email, password) {
 	await robustFill(page, "#password", password)
 	await page.getByRole("button", { name: "Sign in" }).click()
 	await page.waitForURL((url) => !new URL(url).pathname.startsWith("/login"), { timeout: 30_000 })
-
-	const url = new URL(page.url())
-	if (url.pathname.startsWith("/two-factor")) {
-		if (url.searchParams.get("setup")) {
-			await page.getByText("Set up two-factor authentication").waitFor()
-			await robustFill(page, "#current-password", password)
-			await page.getByRole("button", { name: "Continue" }).click()
-			await page.getByText("Scan this QR code").waitFor()
-			await page.getByText("Can't scan? Show the manual key").click()
-			const secret = (await page.locator("details p.font-mono").innerText()).trim()
-			fs.mkdirSync(path.dirname(totpFile), { recursive: true })
-			fs.writeFileSync(totpFile, JSON.stringify({ secret }))
-			await page.getByRole("button", { name: "I've saved my backup codes" }).click()
-			await page.getByText("Enter the code from your app").waitFor()
-			await robustFill(page, "#code", totpCode(secret))
-			await page.getByRole("button", { name: "Verify" }).click()
-		} else {
-			const { secret } = JSON.parse(fs.readFileSync(totpFile, "utf8"))
-			await robustFill(page, "#code", totpCode(secret))
-			await page.getByRole("button", { name: "Verify" }).click()
-		}
-		await page.waitForURL((value) => !new URL(value).pathname.startsWith("/two-factor"), {
-			timeout: 30_000,
-		})
-	}
 	await page.waitForLoadState("networkidle")
 }
 
@@ -2457,7 +2401,7 @@ try {
 	)
 
 	// Hand the authenticated session to the performance evidence script, so it can time the
-	// endpoints without duplicating the TOTP dance.
+	// endpoints without signing in again.
 	const cookies = await context.cookies()
 	const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
 	fs.writeFileSync("/tmp/opencode/analytics-cookie.txt", cookieHeader)

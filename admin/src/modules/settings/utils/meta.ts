@@ -22,12 +22,7 @@ export const SETTING_META: SettingMetaMap = {
 		description: "Show the POS conflict queue and let managers resolve conflicts.",
 	},
 
-	// --- Access, staff and receipts ------------------------------------------
-	"auth.requireTwoFactor": {
-		label: "Require two-factor authentication",
-		description:
-			"Administrators must set up an authenticator app before using the console. Enable 2FA on your own account before turning this on.",
-	},
+	// --- Staff and receipts ------------------------------------------------
 	"staff.idPrefix": {
 		label: "Staff ID prefix",
 		description: "Prefix for staff IDs, e.g. GA-0001. 1–8 letters or digits.",

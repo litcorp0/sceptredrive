@@ -79,7 +79,6 @@ describe.skipIf(!available)('suppliers module', () => {
       phone: null,
       isActive: true,
       mustChangePassword: false,
-      twoFactorEnabled: false,
       image: null,
       ...overrides,
     } as SessionUser

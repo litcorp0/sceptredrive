@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router"
-import { ChevronDownIcon, KeyRoundIcon, LogOutIcon, ShieldCheckIcon } from "lucide-react"
+import { ChevronDownIcon, KeyRoundIcon, LogOutIcon } from "lucide-react"
 import { Button } from "#/components/ui/button"
 import {
 	DropdownMenu,
@@ -49,14 +49,6 @@ export function UserMenu({ session }: { session: Session }) {
 						Change password
 					</Link>
 				</DropdownMenuItem>
-				{session.user.twoFactorEnabled !== true ? (
-					<DropdownMenuItem asChild>
-						<Link to="/two-factor" className="cursor-pointer">
-							<ShieldCheckIcon className="size-4" />
-							Set up two-factor
-						</Link>
-					</DropdownMenuItem>
-				) : null}
 				<DropdownMenuSeparator />
 				<DropdownMenuItem
 					className="cursor-pointer"

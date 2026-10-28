@@ -13,7 +13,6 @@ export const user = pgTable('user', {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-  twoFactorEnabled: boolean('two_factor_enabled').default(false),
   role: text('role').default('CASHIER').notNull(),
   branchId: uuid('branch_id').references(() => branch.id, { onDelete: 'set null' }),
   staffId: text('staff_id').unique(),
@@ -85,29 +84,9 @@ export const verification = pgTable(
   (table) => [index('verification_identifier_idx').on(table.identifier)],
 )
 
-export const twoFactor = pgTable(
-  'two_factor',
-  {
-    id: text('id').primaryKey(),
-    secret: text('secret').notNull(),
-    backupCodes: text('backup_codes').notNull(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    verified: boolean('verified').default(true),
-    failedVerificationCount: integer('failed_verification_count').default(0),
-    lockedUntil: timestamp('locked_until'),
-  },
-  (table) => [
-    index('two_factor_secret_idx').on(table.secret),
-    index('two_factor_user_idx').on(table.userId),
-  ],
-)
-
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
-  twoFactors: many(twoFactor),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -120,13 +99,6 @@ export const sessionRelations = relations(session, ({ one }) => ({
 export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
-    references: [user.id],
-  }),
-}))
-
-export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
-  user: one(user, {
-    fields: [twoFactor.userId],
     references: [user.id],
   }),
 }))

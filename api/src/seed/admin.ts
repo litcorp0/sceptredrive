@@ -14,8 +14,7 @@ const DEFAULT_ADMIN_NAME = 'Sceptre Drive Admin'
 
 /**
  * Idempotently creates the bootstrap admin from ADMIN_EMAIL / ADMIN_PASSWORD.
- * The admin has no branch and no TOTP secret: two-factor is a first-login task,
- * and `auth.requireTwoFactor` makes it mandatory once an admin has enrolled.
+ * The admin has no branch. Two-factor authentication is not part of the product.
  *
  * `input` exists for the `seed:admin` CLI, which can add another administrator
  * without editing `.env`. The password is never logged.

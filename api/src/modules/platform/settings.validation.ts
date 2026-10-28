@@ -50,11 +50,6 @@ type FlagSettingsMatchRegistry = [FlagSettingKey] extends [FlagKey]
 export const FLAG_SETTING_KEYS_ARE_EXACT: FlagSettingsMatchRegistry = true
 
 export const SETTING_DEFINITIONS = {
-  'auth.requireTwoFactor': {
-    schema: z.boolean(),
-    defaultValue: false,
-    branchScoped: false,
-  },
   'staff.idPrefix': {
     schema: z
       .string()

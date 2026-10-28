@@ -184,7 +184,7 @@ bun run seed:admin
 ```
 
 - Reads `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-- Creates role `ADMIN`, no branch, no TOTP secret.
+- Creates role `ADMIN` with no branch. Authentication is email + password.
 - Idempotent by email: if the account exists it prints `already present`.
 - Optional overrides:
 
@@ -218,13 +218,7 @@ bun run sync:up
 
 1. Open `http://localhost:3000/login`.
 2. Sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-3. Open the user menu (top right) → **Set up two-factor**.
-4. Confirm the password, scan the QR code with an authenticator app, and store
-   the backup codes.
-5. Only after your own 2FA works, go to **Settings → Access** and enable
-   **Require two-factor authentication**. Enabling it before enrolling would
-   lock you out of the console.
-6. Change the seeded password from the user menu → **Change password** if the
+3. Change the seeded password from the user menu → **Change password** if the
    seeded value was shared.
 
 **Verify:** `Settings → Staff` shows you as `ADMIN` with a staff ID such as
@@ -461,28 +455,13 @@ On the staff row → **Set PIN**.
 The manager who sets the PIN tells the cashier the temporary value out of band.
 Never send a PIN by email or put it in a ticket.
 
-### 4.4 Enable two-factor for every admin
-
-User menu → **Set up two-factor**. Then, when all admins are enrolled, turn on
-`auth.requireTwoFactor` in **Settings → Access**. From then on an admin without
-TOTP is redirected to setup and cannot use the console.
-
-Break-glass if an admin loses both authenticator and backup codes:
-
-```bash
-bun run --filter api two-factor:reset -- --email admin@example.com
-```
-
-That removes the TOTP secret and backup codes and disables 2FA for the account.
-It weakens the account; use it deliberately.
-
-### 4.5 Deactivate leavers, never delete
+### 4.4 Deactivate leavers, never delete
 
 **Staff → Deactivate**. Sessions end, the POS binding is refused, and the audit
 trail keeps the person's name. The last active admin cannot be deactivated or
 demoted; create the replacement first.
 
-### 4.6 Check the permission matrix
+### 4.5 Check the permission matrix
 
 **Staff → Permissions** shows what each role can do. It is read-only. The short
 version:
@@ -1313,7 +1292,6 @@ Run this list the day before real trading.
 
 ### Identity and access
 
-- [ ] Every admin has TOTP enabled; `auth.requireTwoFactor` is on.
 - [ ] The seeded admin password is changed, or the account is disabled after a
       named admin exists.
 - [ ] One manager per retail branch; every cashier has a branch.
@@ -1453,7 +1431,6 @@ The API is authoritative; the console merely hides what a role cannot use.
 | Payables | `payable.invoicePrefix`, `payable.invoiceSequence`, `payable.paymentPrefix`, `payable.paymentSequence` |
 | Tax | `tax.sellerTin`, `tax.sellerVatNumber` |
 | Feature flags | `flag.supplierTransfers`, `flag.evatSubmission`, `flag.posConflictResolution` |
-| Access | `auth.requireTwoFactor` |
 | Staff | `staff.idPrefix`, `staff.idSequence` |
 | Receipts | `receipt.header` |
 | Catalog | `catalog.skuPrefix`, `catalog.skuSequence` |

@@ -385,7 +385,6 @@ describe.skipIf(!available)('POS credit repayment', () => {
       phone: null,
       isActive: true,
       mustChangePassword: false,
-      twoFactorEnabled: false,
       image: null,
     } as SessionUser
 

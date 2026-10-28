@@ -22,7 +22,7 @@ double-selling or losing a transaction.
      OWASP Top 10 / ASVS 5.0 / LLM guidance as acceptance criteria.
    - `powersync` — before any sync work.
    - `better-auth-best-practices` (+ `email-and-password-best-practices`,
-     `better-auth-security-best-practices`, `two-factor-authentication-best-practices`,
+     `better-auth-security-best-practices`,
      `organization-best-practices` when the task touches those areas).
    - `hono` — before any API route/middleware work.
    - `supabase-postgres-best-practices` — before schema, query, or index work.

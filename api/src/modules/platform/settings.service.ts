@@ -161,15 +161,6 @@ export async function updateSetting(
     throw new AppError(400, 'VALIDATION_ERROR', issue?.message ?? 'Invalid setting value')
   }
 
-  // Never let an administrator make TOTP mandatory while their own account has
-  // no authenticator: the console would immediately lock them out of Settings
-  // and there would be no way back without the CLI break-glass script.
-  if (key === 'auth.requireTwoFactor' && parsed.data === true && user.twoFactorEnabled !== true) {
-    throw new ForbiddenError(
-      'Set up two-factor authentication on your own account before requiring it for administrators',
-    )
-  }
-
   // The ABC thresholds are cumulative score shares, so B at or below A would
   // make every product class C. One key's schema cannot see the other value, so
   // the pair is checked here, before anything is written (P12-D29).
