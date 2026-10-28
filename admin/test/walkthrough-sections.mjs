@@ -138,6 +138,7 @@ const SECTIONS = [
 	["/branches", "Branches"],
 	["/terminals", "Terminals"],
 	["/staff", "Staff"],
+	["/staff/permissions", "Permissions"],
 	["/catalog/products", "Products"],
 	["/catalog/products/new", "New product"],
 	["/catalog/categories", "Categories"],
@@ -284,6 +285,123 @@ const SECTION_ASSERTIONS = new Map([
 				text.slice(0, 120),
 			)
 			await shot(page, "plan12-over-limit-1440.png")
+		},
+	],
+	[
+		"/settings",
+		async (page) => {
+			// The API is the list of keys. Reading the same response the page read proves parity: a
+			// key the server defines but the console drops is exactly the defect this assertion is
+			// for, and it was 27 keys wide before Phase 14.
+			const response = await contextApi(page.request, "GET", "/api/settings")
+			const expected = response.body?.settings ?? []
+			const rendered = await page.locator("main [data-setting-key]").count()
+			check(
+				expected.length > 0 && rendered === expected.length,
+				"/settings renders one row per key the API returns",
+				`${rendered} rows for ${expected.length} keys`,
+			)
+
+			const flags = expected.filter((row) => String(row.key).startsWith("flag."))
+			const switches = await page
+				.locator('main [data-setting-key^="flag."] [data-slot="switch"]')
+				.count()
+			check(
+				flags.length > 0 && switches === flags.length,
+				"/settings renders every registry flag as a switch",
+				`${switches} switches for ${flags.length} flags`,
+			)
+
+			// The source badge is derived from the API rather than assumed: a database where every
+			// flag already has a row legitimately has no Default, and an assertion that demanded one
+			// would fail for the wrong reason.
+			const sourceLabel = (source) =>
+				source === "branch" ? "Branch" : source === "global" ? "Global" : "Default"
+			const mismatched = []
+			for (const flag of flags) {
+				const row = page.locator(`main [data-setting-key="${flag.key}"]`)
+				const text = (await row.count()) === 1 ? await row.innerText() : ""
+				if (!text.includes(sourceLabel(flag.source))) {
+					mismatched.push(`${flag.key} → ${sourceLabel(flag.source)}`)
+				}
+			}
+			check(
+				mismatched.length === 0,
+				"/settings shows each flag's source as the API resolves it",
+				mismatched.join(", ") || undefined,
+			)
+			await shot(page, "plan14-settings-1440.png")
+		},
+	],
+	[
+		"/staff/permissions",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Permission", "Administrator", "Manager", "Cashier"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/staff/permissions renders the three role columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			// 66 is `PERMISSIONS.length` in packages/shared/src/permissions.ts. The walkthrough is
+			// plain node, so the number is stated here and the caption is the server-shared truth it
+			// must agree with.
+			const rows = await page.locator("main [data-permission]").count()
+			check(rows === 66, "/staff/permissions renders one row per permission", `${rows} rows`)
+
+			const text = await page.locator("main").innerText()
+			check(
+				/66\s+permissions/.test(text) &&
+					/Administrator\s+66/.test(text) &&
+					/Manager\s+54/.test(text) &&
+					/Cashier\s+0/.test(text),
+				"/staff/permissions captions the per-role counts",
+				text.slice(0, 160).replace(/\s+/g, " "),
+			)
+			check(
+				/the API decides, and the console's own checks are cosmetic/i.test(text),
+				"/staff/permissions says the API enforces and the console is cosmetic",
+			)
+			await shot(page, "plan14-permissions-1440.png")
+		},
+	],
+	[
+		"/audit",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Entity ID", "Terminal", "Request ID"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/audit names the entity, the terminal and the request",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No entries match these filters."),
+				"/audit shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+
+			if (rows > 0) {
+				const cells = await bodyRows(page).first().locator('[data-slot="table-cell"]').count()
+				check(cells === 9, "/audit renders every column on a row", `${cells} cells`)
+				const copyControls = await page.locator('main button[aria-label^="Copy "]').count()
+				check(
+					copyControls > 0,
+					"/audit's ids have a copy control with an accessible name",
+					`${copyControls} controls`,
+				)
+			} else {
+				check(true, "/audit had no audited row to inspect beyond its columns")
+			}
+			await shot(page, "plan14-audit-1440.png")
 		},
 	],
 ])
