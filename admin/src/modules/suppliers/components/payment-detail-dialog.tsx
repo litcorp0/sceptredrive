@@ -192,6 +192,11 @@ export function PaymentDetailDialog({
 									value={accountNumber}
 									onChange={(event) => setAccountNumber(event.target.value)}
 								/>
+								{isEdit ? (
+									<p className="text-xs text-muted-foreground">
+										Saving this forgets the Paystack recipient; the next transfer creates a new one.
+									</p>
+								) : null}
 							</div>
 
 							<div className="grid gap-1.5">
@@ -253,6 +258,12 @@ export function PaymentDetailDialog({
 										value={phone}
 										onChange={(event) => setPhone(event.target.value)}
 									/>
+									{isEdit ? (
+										<p className="text-xs text-muted-foreground">
+											Saving this forgets the Paystack recipient; the next transfer creates a new
+											one.
+										</p>
+									) : null}
 								</div>
 							</div>
 

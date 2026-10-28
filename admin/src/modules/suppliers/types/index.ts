@@ -89,6 +89,8 @@ export interface SupplierPaymentDetailView {
 	phone: string | null
 	isDefault: boolean
 	isActive: boolean
+	/** A Paystack recipient exists for this destination (P14-D27). The code is never exposed. */
+	recipientReady: boolean
 	createdAt: string
 	updatedAt: string
 }

@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { FLAG_DEFAULTS } from "@sceptre/shared"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -20,13 +22,24 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
+import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
+import { settingsListOptions } from "#/modules/settings"
 import { supplierKeys } from "../api/keys"
 import { updateSupplierPaymentDetail } from "../api/suppliers"
 import type { SupplierPaymentDetailView } from "../types"
 import { momoNetworkLabel, paymentAccountDisplay } from "../utils/payment-detail"
 import { PaymentDetailDialog } from "./payment-detail-dialog"
 
+const authenticatedRoute = getRouteApi("/_authenticated")
+
+/**
+ * The saved bank and mobile-money destinations, and what Paystack knows about each.
+ *
+ * `recipientReady` is the server's answer, never a guess: a detail with no recipient is not
+ * broken, it simply has not been used yet. A transfer from a row is fixed to that supplier and
+ * that destination, so the destination cannot silently change under the instruction (P14-D27).
+ */
 export function PaymentDetailsPanel({
 	supplierId,
 	paymentDetails,
@@ -36,9 +49,18 @@ export function PaymentDetailsPanel({
 	paymentDetails: SupplierPaymentDetailView[]
 	canEdit: boolean
 }) {
+	const { session } = authenticatedRoute.useRouteContext()
 	const queryClient = useQueryClient()
 	const [dialogOpen, setDialogOpen] = useState(false)
 	const [editing, setEditing] = useState<SupplierPaymentDetailView | null>(null)
+
+	const canTransfer = hasPermission(session.user.role, "payable.transfer")
+	const settingsQuery = useQuery({ ...settingsListOptions(), enabled: canTransfer })
+	const flagRow = settingsQuery.data?.settings.find(
+		(setting) => setting.key === "flag.supplierTransfers",
+	)
+	const transfersEnabled =
+		typeof flagRow?.value === "boolean" ? flagRow.value : FLAG_DEFAULTS["flag.supplierTransfers"]
 
 	const updateMutation = useMutation({
 		mutationFn: (input: {
@@ -87,8 +109,11 @@ export function PaymentDetailsPanel({
 								<TableHead className="w-36">Label</TableHead>
 								<TableHead>Account</TableHead>
 								<TableHead className="w-52">Bank / network</TableHead>
+								<TableHead className="w-44">Paystack recipient</TableHead>
 								<TableHead className="w-40">Status</TableHead>
-								{canEdit ? <TableHead className="w-64 text-right">Actions</TableHead> : null}
+								{canEdit || (canTransfer && transfersEnabled) ? (
+									<TableHead className="w-72 text-right">Actions</TableHead>
+								) : null}
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -112,49 +137,72 @@ export function PaymentDetailsPanel({
 											: `${momoNetworkLabel(detail.momoNetwork)} · ${detail.phone ?? "—"}`}
 									</TableCell>
 									<TableCell>
+										<StatusBadge variant={detail.recipientReady ? "ok" : "muted"}>
+											{detail.recipientReady ? "Paystack ready" : "Created on first transfer"}
+										</StatusBadge>
+									</TableCell>
+									<TableCell>
 										<div className="flex flex-wrap gap-1">
 											{detail.isDefault ? <StatusBadge tone="green">Default</StatusBadge> : null}
 											<ActiveBadge active={detail.isActive} />
 										</div>
 									</TableCell>
-									{canEdit ? (
+									{canEdit || (canTransfer && transfersEnabled) ? (
 										<TableCell className="text-right">
 											<div className="flex flex-wrap justify-end gap-1">
-												{detail.isActive && !detail.isDefault ? (
-													<Button
-														variant="ghost"
-														size="sm"
-														disabled={updateMutation.isPending}
-														onClick={() =>
-															updateMutation.mutate({ detail, patch: { isDefault: true } })
-														}
-													>
-														Make default
+												{canTransfer && transfersEnabled && detail.isActive ? (
+													<Button asChild variant="outline" size="sm">
+														<Link
+															to="/suppliers/transfers"
+															search={{
+																supplierId,
+																paymentDetailId: detail.id,
+																dialog: "transfer",
+															}}
+														>
+															Transfer
+														</Link>
 													</Button>
 												) : null}
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => {
-														setEditing(detail)
-														setDialogOpen(true)
-													}}
-												>
-													Edit
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													disabled={updateMutation.isPending}
-													onClick={() =>
-														updateMutation.mutate({
-															detail,
-															patch: { isActive: !detail.isActive },
-														})
-													}
-												>
-													{detail.isActive ? "Deactivate" : "Activate"}
-												</Button>
+												{canEdit ? (
+													<>
+														{detail.isActive && !detail.isDefault ? (
+															<Button
+																variant="ghost"
+																size="sm"
+																disabled={updateMutation.isPending}
+																onClick={() =>
+																	updateMutation.mutate({ detail, patch: { isDefault: true } })
+																}
+															>
+																Make default
+															</Button>
+														) : null}
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => {
+																setEditing(detail)
+																setDialogOpen(true)
+															}}
+														>
+															Edit
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
+															disabled={updateMutation.isPending}
+															onClick={() =>
+																updateMutation.mutate({
+																	detail,
+																	patch: { isActive: !detail.isActive },
+																})
+															}
+														>
+															{detail.isActive ? "Deactivate" : "Activate"}
+														</Button>
+													</>
+												) : null}
 											</div>
 										</TableCell>
 									) : null}
