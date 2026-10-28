@@ -10,11 +10,15 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Switch } from "#/components/ui/switch"
+import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import type { ResolvedSetting, SettingControl, SettingMeta, SettingScope } from "../types"
 import { sourceLabel, valueNote, writableBySentence } from "../utils/meta"
 
 /** The draft a text-like control starts from. `String(null)` would render "null". */
-function draftOf(setting: ResolvedSetting): string {
+function draftOf(setting: ResolvedSetting, control: SettingControl): string {
+	if (control === "money") {
+		return typeof setting.value === "number" ? formatMinorPlain(setting.value) : ""
+	}
 	return setting.value === null || setting.value === undefined ? "" : String(setting.value)
 }
 
@@ -56,20 +60,21 @@ export function SettingRow({
 	const descriptionId = useId()
 	const scopeId = useId()
 	const scopeHelpId = useId()
-	const [draft, setDraft] = useState(() => draftOf(setting))
+	const [draft, setDraft] = useState(() => draftOf(setting, control))
 	const [scope, setScope] = useState<SettingScope>("branch")
 	const [error, setError] = useState<string | null>(null)
 
 	// A refetch (another tab, a branch switch) replaces the effective value; the draft and the
 	// scope choice follow it rather than keeping a stale edit on screen.
 	useEffect(() => {
-		setDraft(draftOf(setting))
+		setDraft(draftOf(setting, control))
 		setScope("branch")
 		setError(null)
-	}, [setting])
+	}, [setting, control])
 
-	const dirty = draft !== draftOf(setting)
+	const dirty = draft !== draftOf(setting, control)
 	const note = valueNote(setting.key, setting.value)
+	const parsedDraft = control === "money" ? parseGhsToMinor(draft) : null
 	const chooseScope = setting.branchScoped && canWrite && canSetGlobally
 	const describedBy = [
 		meta.description ? descriptionId : null,
@@ -77,6 +82,13 @@ export function SettingRow({
 	].filter(Boolean)
 
 	function parse(raw: string): { ok: true; value: unknown } | { ok: false; message: string } {
+		if (control === "money") {
+			const minor = parseGhsToMinor(raw)
+			if (minor === null) {
+				return { ok: false, message: "Enter an amount in cedis, e.g. 10000.00." }
+			}
+			return { ok: true, value: minor }
+		}
 		if (control !== "number") return { ok: true, value: raw }
 		const trimmed = raw.trim()
 		if (trimmed === "") return { ok: false, message: "Enter a number." }
@@ -168,7 +180,8 @@ export function SettingRow({
 						id={inputId}
 						type={control === "number" ? "number" : "text"}
 						step={control === "number" ? "any" : undefined}
-						inputMode={control === "number" ? "decimal" : undefined}
+						inputMode={control === "number" || control === "money" ? "decimal" : undefined}
+						placeholder={control === "money" ? "10000.00" : undefined}
 						className="h-8 w-40"
 						value={draft}
 						disabled={!canWrite || pending}
@@ -182,6 +195,14 @@ export function SettingRow({
 					</Button>
 				)}
 			</div>
+
+			{control === "money" ? (
+				<p className="text-xs text-muted-foreground md:col-span-2 md:text-right">
+					{parsedDraft === null
+						? "Enter an amount in cedis, e.g. 10000.00."
+						: `= ${formatGhs(parsedDraft)} (${parsedDraft.toLocaleString("en-GH")} pesewas)`}
+				</p>
+			) : null}
 
 			{chooseScope ? (
 				<div className="flex items-start gap-2 md:col-span-2 md:justify-end">

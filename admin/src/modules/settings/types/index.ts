@@ -24,10 +24,11 @@ export interface SettingsUpdateInput {
 }
 
 /**
- * The control a row renders. `text` and `select` stay strings, `number` is parsed to a number
- * and `boolean` to a boolean. An unknown key is always `text`.
+ * The control a row renders. `text` and `select` stay strings, `number` is parsed to a number,
+ * `money` is parsed from cedis to integer pesewas, and `boolean` to a boolean. An unknown key is
+ * always `text`.
  */
-export type SettingControl = "text" | "number" | "boolean" | "select"
+export type SettingControl = "text" | "number" | "boolean" | "select" | "money"
 
 /**
  * Where a write lands. `branch` writes the branch's own row; `all` writes the global row every

@@ -1,4 +1,3 @@
-import { formatGhs } from "#/lib/format"
 import type { ResolvedSetting, SettingControl, SettingMeta, SettingMetaMap } from "../types"
 
 /**
@@ -124,9 +123,10 @@ export const SETTING_META: SettingMetaMap = {
 			"The next stock count number to allocate. It advances only when a count is recorded; gaps are acceptable.",
 	},
 	"inventory.countVarianceToleranceMinor": {
-		label: "Count variance tolerance (pesewas)",
+		label: "Count variance tolerance (GH₵)",
+		control: "money",
 		description:
-			"A posted count whose absolute variance value is larger than this raises a trigger count.",
+			"A posted count whose absolute variance value is larger than this raises a trigger count. Enter cedis; stored as integer pesewas.",
 	},
 	"inventory.writeOffPrefix": {
 		label: "Write-off serial prefix",
@@ -145,9 +145,10 @@ export const SETTING_META: SettingMetaMap = {
 
 	// --- Procurement ----------------------------------------------------------
 	"procurement.approvalThresholdMinor": {
-		label: "Purchase approval threshold (pesewas)",
+		label: "Purchase approval threshold (GH₵)",
+		control: "money",
 		description:
-			"At or above this goods value an admin must decide a purchase order. Administrators only: a branch that can raise its own limit has no limit.",
+			"At or above this goods value an admin must decide a purchase order. Enter cedis; stored as integer pesewas. Administrators only: a branch that can raise its own limit has no limit.",
 	},
 	"procurement.safetyDays": {
 		label: "Safety days of cover",
@@ -235,14 +236,16 @@ export const SETTING_META: SettingMetaMap = {
 			"Refuse a sale when the terminal has no open shift. Turning this off lets the till sell without a drawer.",
 	},
 	"pos.shiftVarianceToleranceMinor": {
-		label: "Shift variance tolerance (pesewas)",
+		label: "Shift variance tolerance (GH₵)",
+		control: "money",
 		description:
-			"A close whose absolute variance is larger than this raises a review. Administrators only: a branch that sets its own tolerance has none.",
+			"A close whose absolute variance is larger than this raises a review. Enter cedis; stored as integer pesewas. Administrators only: a branch that sets its own tolerance has none.",
 	},
 	"pos.refundApprovalThresholdMinor": {
-		label: "Refund approval threshold (pesewas)",
+		label: "Refund approval threshold (GH₵)",
+		control: "money",
 		description:
-			"At or above this gross refund an admin must decide it. Administrators only: a branch that sets its own cap has none.",
+			"At or above this gross refund an admin must decide it. Enter cedis; stored as integer pesewas. Administrators only: a branch that sets its own cap has none.",
 	},
 
 	// --- Tax and seller identity ---------------------------------------------
@@ -291,7 +294,9 @@ export function writableBySentence(writableBy: ResolvedSetting["writableBy"]): s
  */
 export function valueNote(key: string, value: unknown): string | null {
 	if (typeof value !== "number") return null
-	if (key.endsWith("Minor")) return `Equals ${formatGhs(value)}. Enter whole pesewas.`
+	if (key.endsWith("Minor")) {
+		return `Stored as ${value.toLocaleString("en-GH")} pesewas. Enter cedis; the equivalent is shown below.`
+	}
 	if (key.endsWith("Bp")) return "Basis points: 1 bp = 0.01%."
 	if (key.endsWith("Percent")) return "Whole percent, 0–100."
 	return null
