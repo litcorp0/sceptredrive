@@ -2,6 +2,7 @@ import { TanStackDevtools } from "@tanstack/react-devtools"
 import type { QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
+import { NotFoundPage } from "../components/common/not-found"
 import { ThemeProvider } from "../components/theme-provider"
 import { Toaster } from "../components/ui/sonner"
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools"
@@ -39,6 +40,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		],
 	}),
 	shellComponent: RootDocument,
+	notFoundComponent: NotFoundPage,
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
