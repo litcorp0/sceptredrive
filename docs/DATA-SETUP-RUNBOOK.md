@@ -77,6 +77,10 @@ the authority. Manager overrides at the till are PIN-authorized and audited.
 
 - All money is stored as **integer pesewas**. `GH₵ 12.34` is `1234`. Never enter
   fractions of a pesewa.
+- **Money notation:** the database, API and every calculation use integer
+  pesewas; the console and receipts display cedis. `1 cedi = 100 pesewas`, so
+  `1,000,000` pesewas is `GH₵ 10,000.00`. Where a stored integer matters, this
+  runbook shows both.
 - Stock movements, credit ledger entries and loyalty ledger entries are
   **append-only**. A correction is a compensating entry, never an edit or a
   delete.
@@ -304,16 +308,22 @@ account exists and the cashier attaches the customer to the sale.
 
 ### 2.5 Inventory and procurement policy
 
+The console asks for **cedis** and stores **whole pesewas**. Enter the value in
+the left-hand cedi column; the field shows the pesewas equivalent as you type.
+
+| Setting | Label | Value (cedis) | Stored (pesewas) |
+|---|---|---|---|
+| `inventory.countVarianceToleranceMinor` | Count variance tolerance | `GH₵ 10.00` | `1000` |
+| `procurement.approvalThresholdMinor` | Purchase approval threshold | `GH₵ 10,000.00` | `1000000` |
+| `pos.shiftVarianceToleranceMinor` | Shift variance tolerance | `GH₵ 20.00` | `2000` |
+| `pos.refundApprovalThresholdMinor` | Refund approval threshold | `GH₵ 200.00` | `20000` |
+
 | Setting | Label | Recommended first value |
 |---|---|---|
-| `inventory.countVarianceToleranceMinor` | Count variance tolerance (pesewas) | `1000` (GH₵ 10) |
 | `inventory.abcAThresholdBp` | ABC class A share (basis points) | `8000` (80%) |
 | `inventory.abcBThresholdBp` | ABC class B share (basis points) | `9500` (95%) |
-| `procurement.approvalThresholdMinor` | Purchase approval threshold (pesewas) | `1000000` (GH₵ 10,000) |
 | `procurement.safetyDays` | Safety days of cover | `7` |
 | `procurement.defaultLeadDays` | Assumed lead time (days) | `14` |
-| `pos.shiftVarianceToleranceMinor` | Shift variance tolerance (pesewas) | `2000` (GH₵ 20) |
-| `pos.refundApprovalThresholdMinor` | Refund approval threshold (pesewas) | `20000` (GH₵ 200) |
 
 A and B thresholds must satisfy A < B; the service refuses an invalid pair.
 Tolerances are branch-overridable but admin-writable: a branch that sets its own
@@ -348,10 +358,19 @@ Go to **Branches → New branch**.
 | Area | blank | Optional |
 | Address | `...` | Optional |
 | Phone | `...` | Optional |
-| Code | `ACC-WH1` | Suggested from city/area; must be unique |
 
-The code is the branch's short identity and appears in terminal codes. Keep it
-short, uppercase and stable. You cannot change it later from the edit form.
+The **code is generated automatically** from the type, city and area — you do not
+type it. The dialog shows a read-only preview; the final code is confirmed on
+save and may gain a suffix if it is already taken.
+
+| Type | Inputs | Example code |
+|---|---|---|
+| Retail, with area | city + area | `ACC-SPX` |
+| Retail, no area | city | `ACC-R1`, then `ACC-R2` |
+| Warehouse | city | `ACC-WH1`, then `ACC-WH2` |
+
+The code is the branch's short identity and appears in terminal codes. You
+cannot change it later from the edit form.
 
 Create **all warehouses before retail branches** if you plan to open stock in a
 warehouse and transfer it out. A retail branch can receive directly, but the
@@ -359,8 +378,9 @@ warehouse-first flow gives a cleaner movement trail.
 
 ### 3.2 Create retail branches
 
-Repeat **New branch** with type `Retail`, for example `ACC-SPX` / `Accra
-Spintex`. Each retail branch is a separate stock, shift and credit world.
+Repeat **New branch** with type `Retail`, for example city `Accra` and area
+`Spintex`, which yields `ACC-SPX`. Each retail branch is a separate stock, shift
+and credit world.
 
 A branch is never deleted. **Deactivate** it when it closes; historical sales,
 stock and ledgers keep referring to it.
@@ -1438,8 +1458,9 @@ The API is authoritative; the console merely hides what a role cannot use.
 | Receipts | `receipt.header` |
 | Catalog | `catalog.skuPrefix`, `catalog.skuSequence` |
 
-Money keys end in `Minor` and are entered in **whole pesewas**. Percentage keys
-are whole percent. Basis-point keys use `1 bp = 0.01%`.
+Money keys end in `Minor` and are entered in **cedis** in the console; they are
+stored as whole pesewas. Percentage keys are whole percent. Basis-point keys use
+`1 bp = 0.01%`. CSV exports keep raw pesewas so a spreadsheet can total exactly.
 
 ---
 
