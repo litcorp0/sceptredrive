@@ -98,7 +98,10 @@ export function StockReport() {
 
 	const meta: PrintSheetMeta[] = [
 		{ label: "Branch", value: branchLabel },
-		{ label: "Period", value: formatRange(from, to) },
+		{
+			label: "Period",
+			value: report ? formatRange(report.period.from, report.period.to) : formatRange(from, to),
+		},
 		{ label: "As at", value: report ? formatDateTime(report.asOf) : "—" },
 	]
 	if (search.lowStock === "true") meta.push({ label: "Filter", value: "Low stock only" })
