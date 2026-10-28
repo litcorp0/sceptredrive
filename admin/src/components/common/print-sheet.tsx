@@ -33,13 +33,24 @@ interface PrintSheetProps {
  *
  * On screen it is `hidden`; `@media print` in `styles.css` shows it and hides the toolbar
  * that produced it. `data-print-meta` is the contract the walkthrough reads.
+ *
+ * The timestamp is stamped on `beforeprint`, not at mount: a page whose filters changed
+ * five minutes ago was not "generated" when it first rendered, and the printed time is the
+ * one that has to match the figures beside it.
+ *
+ * The title is an `h1` because the printed sheet is a document of its own; the screen's own
+ * `h1` is chrome the printer never sees, and a sheet that starts at `h2` misstates the
+ * outline of the page it becomes.
  */
 export function PrintSheet({ title, meta, children }: PrintSheetProps) {
 	const { session } = authenticatedRoute.useRouteContext()
-	// Set after mount: a server-rendered clock would disagree with the client's on hydration.
+	// Null until print (or mount), so a server-rendered clock cannot disagree on hydration.
 	const [generatedAt, setGeneratedAt] = useState<Date | null>(null)
 	useEffect(() => {
 		setGeneratedAt(new Date())
+		const restamp = () => setGeneratedAt(new Date())
+		window.addEventListener("beforeprint", restamp)
+		return () => window.removeEventListener("beforeprint", restamp)
 	}, [])
 
 	const author = session.user.staffId
@@ -58,7 +69,7 @@ export function PrintSheet({ title, meta, children }: PrintSheetProps) {
 			data-print-sheet={title}
 			className="mb-4 hidden border-b pb-3 print:block"
 		>
-			<h2 className="font-display text-lg">{title}</h2>
+			<h1 className="font-display text-lg">{title}</h1>
 			<dl data-slot="print-meta" className="mt-2 grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
 				{rows.map((row) => (
 					<div key={row.label} className="flex min-w-0 gap-2">

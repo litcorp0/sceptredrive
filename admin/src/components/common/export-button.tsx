@@ -69,6 +69,7 @@ export function ExportButton({
 			onClick={download}
 			disabled={pending || disabled}
 			title={title}
+			aria-label={`Export ${label} CSV`}
 			data-slot="export-button"
 			data-export-path={path}
 		>
