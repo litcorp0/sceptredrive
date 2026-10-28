@@ -27,7 +27,7 @@ export function OrderNewPage() {
 	}
 
 	return (
-		<section className="mx-auto max-w-4xl">
+		<section className="mx-auto">
 			<BackLink />
 			<PageHeader
 				title="New purchase order"
