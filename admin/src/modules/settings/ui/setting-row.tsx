@@ -23,9 +23,10 @@ function draftOf(setting: ResolvedSetting): string {
  * scope, and hands a typed value to `onSave`. The page owns the mutation, so no fetch happens
  * here.
  *
- * A branch-scoped key is written to the selected branch. "All branches" is a switch a person has
+ * A branch-scoped key is written to the selected branch. "All branches" is a switch an admin has
  * to turn on for that row — never the state of the branch switcher — and while it is on the save
- * button says what it will do (P14-D43).
+ * button says what it will do (P14-D43). A manager is not offered the choice, because the API
+ * writes their own branch whatever the client asks for.
  *
  * A key with no metadata still renders: the label is the key, the control is plain text, and the
  * page never has to know it exists.
@@ -35,6 +36,7 @@ export function SettingRow({
 	meta,
 	control,
 	canWrite,
+	canSetGlobally,
 	reason,
 	pending,
 	onSave,
@@ -43,6 +45,8 @@ export function SettingRow({
 	meta: SettingMeta
 	control: SettingControl
 	canWrite: boolean
+	/** Only an admin may write the global row, so only an admin is offered the choice. */
+	canSetGlobally: boolean
 	/** Why the control is disabled. Never shown while `canWrite`. */
 	reason: string | null
 	pending: boolean
@@ -66,7 +70,7 @@ export function SettingRow({
 
 	const dirty = draft !== draftOf(setting)
 	const note = valueNote(setting.key, setting.value)
-	const chooseScope = setting.branchScoped && canWrite
+	const chooseScope = setting.branchScoped && canWrite && canSetGlobally
 	const describedBy = [
 		meta.description ? descriptionId : null,
 		note ? `${descriptionId}-note` : null,

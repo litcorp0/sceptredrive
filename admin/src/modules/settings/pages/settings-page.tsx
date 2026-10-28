@@ -226,6 +226,7 @@ export function SettingsPage() {
 													meta={meta}
 													control={controlFor(setting, meta)}
 													canWrite={canWrite}
+													canSetGlobally={isAdmin}
 													reason={reason}
 													pending={
 														updateMutation.isPending &&
