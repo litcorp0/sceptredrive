@@ -2229,6 +2229,18 @@ export async function getTransfer(user: SessionUser, transferId: string): Promis
   return detail
 }
 
+/**
+ * The transfer as the API returns it, with no session: the seam a system path
+ * uses when it has already authorised itself (the operator-gated mock harness).
+ * Staff-facing reads call `getTransfer`, which enforces branch scope. The view
+ * still drops `recipientCode` (P14-D28).
+ */
+export async function getTransferView(transferId: string): Promise<TransferView> {
+  const row = await findTransferById(transferId)
+  if (!row) throw new NotFoundError('Supplier transfer not found')
+  return toTransferView(row)
+}
+
 export interface ProviderBalanceView {
   currency: 'GHS'
   /** Null when the provider could not be asked: the console shows "unavailable". */

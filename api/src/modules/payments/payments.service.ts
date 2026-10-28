@@ -3,8 +3,12 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { normalizeGhanaPhone } from '@sceptre/shared'
 import { env } from '../../config/env.ts'
 import { AppError, NotFoundError, ValidationError } from '../../http/errors.ts'
-import { applyTransferEvent } from '../payables/payables.service.ts'
-import type { TransferEvent } from '../payables/payables.types.ts'
+import {
+  applyTransferEvent,
+  getTransferView,
+  transferEventFromProvider,
+} from '../payables/payables.service.ts'
+import type { TransferEvent, TransferView } from '../payables/payables.types.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
 import { addConflict } from '../pos/pos.conflicts.ts'
@@ -18,7 +22,7 @@ import {
   updateRefundTender,
 } from '../pos/pos.repository.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
-import { settleMockPayment } from './payments.mock.provider.ts'
+import { settleMockPayment, settleMockTransfer } from './payments.mock.provider.ts'
 import {
   getPaymentProvider,
   type PaymentProvider,
@@ -33,6 +37,7 @@ import type {
   ClaimPaymentInput,
   CreatePaymentInput,
   MockSettlementOutcome,
+  MockTransferSettlementOutcome,
   PaymentMethod,
   PaymentView,
 } from './payments.types.ts'
@@ -911,4 +916,48 @@ export function settleMockProviderPayment(
   outcome: MockSettlementOutcome,
 ): boolean {
   return settleMockPayment(reference, outcome)
+}
+
+/** The mock's provider vocabulary, keyed by the harness route's outcome. */
+const MOCK_TRANSFER_OUTCOMES: Record<
+  MockTransferSettlementOutcome,
+  'success' | 'failed' | 'reversed'
+> = {
+  SUCCESS: 'success',
+  FAILED: 'failed',
+  REVERSED: 'reversed',
+}
+
+function mockTransferNotFound(): AppError {
+  return new AppError(
+    404,
+    'MOCK_TRANSFER_NOT_FOUND',
+    'The mock provider has no transfer with that reference',
+  )
+}
+
+/**
+ * The transfer half of the mock harness (P14 walkthrough). It moves the fake
+ * provider's state and then settles through the **real** path — provider verify →
+ * `transferEventFromProvider` → `applyTransferEvent` — exactly as the console's
+ * verify button and the sweep do, so a walkthrough that passes here has exercised
+ * the production state machine rather than a direct payment insert.
+ *
+ * A reference the mock never issued is a 404 with its own code, so "the harness
+ * has not seen this reference" is distinguishable from "the route is not mounted"
+ * (both would otherwise be a bare `NOT_FOUND`).
+ */
+export async function settleMockSupplierTransfer(
+  reference: string,
+  outcome: MockTransferSettlementOutcome,
+): Promise<{ transfer: TransferView; paymentId: string | null }> {
+  if (!settleMockTransfer(reference, MOCK_TRANSFER_OUTCOMES[outcome])) {
+    throw mockTransferNotFound()
+  }
+
+  const event = transferEventFromProvider(await getPaymentProvider().verifyTransfer(reference))
+  const settled = await db.transaction(async (tx) => applyTransferEvent(tx, event))
+  if (!settled.transferId) throw mockTransferNotFound()
+
+  return { transfer: await getTransferView(settled.transferId), paymentId: settled.paymentId }
 }
