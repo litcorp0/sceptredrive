@@ -106,4 +106,30 @@ describe('reportPrintJob', () => {
     const refunds = text.split('\n').find((line) => line.startsWith('Cash refunds'))
     expect(refunds?.endsWith('GHS -500.00')).toBe(true)
   })
+
+  it('names the drawer’s cashier, and the closer only on a takeover', () => {
+    const rows = (text: string, label: string): string[] =>
+      text
+        .split('\n')
+        .filter((line) => line.startsWith(label))
+        .map((line) => line.trimEnd())
+
+    const cashier = reportDocumentText(
+      closedShiftDocument({ report: report(), identity: IDENTITY, cashierName: 'Ama Mensah' }),
+    )
+    expect(rows(cashier, 'Cashier')[0]?.endsWith('Ama Mensah')).toBe(true)
+    expect(cashier).not.toContain('Closed by')
+
+    // The same document with a manager at the drawer: both names, one each.
+    const takeover = reportDocumentText(
+      closedShiftDocument({
+        report: report(),
+        identity: IDENTITY,
+        cashierName: 'Ama Mensah',
+        closedByName: 'Kofi Boateng',
+      }),
+    )
+    expect(rows(takeover, 'Cashier')[0]?.endsWith('Ama Mensah')).toBe(true)
+    expect(rows(takeover, 'Closed by')[0]?.endsWith('Kofi Boateng')).toBe(true)
+  })
 })

@@ -10,6 +10,7 @@ import type { OpenShiftSummary, PosIdentityRow } from '@/lib/pos-runtime'
 import { usePosDatabase } from '@/lib/powersync/provider'
 import { buildReportDocument } from '@/lib/receipt/report-render'
 import { navigate, useHashRoute, useRedirect } from '@/lib/router'
+import { readCashierName } from '@/lib/sale/sale-repository'
 import { type LocalShiftReport, localShiftReport, readShiftFigures } from '@/lib/shift/shift-report'
 import { findShiftById } from '@/lib/shift/shift-repository'
 import { computeExpectedCash } from '@/lib/shift/shift-service'
@@ -43,6 +44,8 @@ export function ShiftReportScreen({
   const db = usePosDatabase()
   const route = useHashRoute()
   const [report, setReport] = useState<LocalShiftReport | null>(null)
+  /** The open drawer's cashier: the X names the drawer, not whoever is signed in. */
+  const [cashierName, setCashierName] = useState<string | null>(null)
   const [printNote, setPrintNote] = useState<string | null>(null)
   const [printing, setPrinting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +73,11 @@ export function ShiftReportScreen({
           cashRefundsMinor: figures.cashRefundsMinor,
         })
         setReport(localShiftReport(row, figures, expectedCashMinor, new Date().toISOString()))
+        // A missing binding costs the name, not the document: the line falls
+        // back to the cashier's staff number.
+        const name = await readCashierName(db, row.cashierStaffId).catch(() => null)
+        if (cancelled) return
+        setCashierName(name)
         setError(null)
       } catch (loadError) {
         if (!cancelled) {
@@ -99,7 +107,9 @@ export function ShiftReportScreen({
             kind: 'X',
             report,
             identity,
-            cashierName: staff.name,
+            // The X is the same document as the Z, so it names the drawer's
+            // cashier too — and nobody has closed it yet, so no closer's line.
+            cashierName: cashierName ?? shift?.cashierStaffId ?? staff.name,
             seller: config.receiptHeader,
           }),
         )

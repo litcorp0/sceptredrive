@@ -120,7 +120,7 @@ async function openShiftOrThrow(
 const TAKE_OVER_ROLES: readonly Role[] = ['MANAGER', 'ADMIN']
 
 /** True when the signed-in staff member opened this drawer themselves. */
-function isOwnDrawer(
+export function isOwnDrawer(
   shift: Pick<LocalShift, 'cashierUserId'>,
   staff: Pick<StaffSession, 'userId'>,
 ): boolean {

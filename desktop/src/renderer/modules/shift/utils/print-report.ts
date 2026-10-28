@@ -58,12 +58,17 @@ export async function printReportDocument(
 /**
  * The X and Z share one document builder; `kind` is the only difference a
  * reader sees on paper ("not stored, not a close" versus "stored at close").
+ *
+ * `cashierName` is the shift's cashier and `closedByName` the person who closed
+ * it: the caller compares staff identities and passes the closer only when the
+ * two differ, so the paper names both exactly when it has to.
  */
 export function shiftReportContext(input: {
   kind: 'X' | 'Z'
   report: LocalShiftReport
   identity: Pick<PosIdentityRow, 'branchCode' | 'branchName' | 'terminalCode'>
   cashierName: string
+  closedByName?: string | null | undefined
   seller?: string | undefined
   currencySymbol?: string | undefined
   reprint?: boolean | undefined
@@ -78,6 +83,7 @@ export function shiftReportContext(input: {
     openedAt: input.report.openedAt,
     closedAt: input.report.closedAt,
     cashierName: input.cashierName,
+    closedByName: input.closedByName,
     generatedAt: input.report.generatedAt,
     varianceLabel: varianceWords(input.report.varianceMinor ?? 0),
     currencySymbol: input.currencySymbol,
@@ -91,6 +97,7 @@ export function closedShiftDocument(input: {
   report: LocalShiftReport
   identity: Pick<PosIdentityRow, 'branchCode' | 'branchName' | 'terminalCode'>
   cashierName: string
+  closedByName?: string | null | undefined
   seller?: string | undefined
   currencySymbol?: string | undefined
   reprint?: boolean | undefined
@@ -102,6 +109,7 @@ export function closedShiftDocument(input: {
       report: input.report,
       identity: input.identity,
       cashierName: input.cashierName,
+      closedByName: input.closedByName,
       seller: input.seller,
       currencySymbol: input.currencySymbol,
       reprint: input.reprint,

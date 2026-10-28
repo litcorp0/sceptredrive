@@ -18,6 +18,7 @@ import { navigate } from '@/lib/router'
 import { readCashierName } from '@/lib/sale/sale-repository'
 import {
   closeAuthority,
+  isOwnDrawer,
   loadShiftState,
   openShift,
   recordCashMovement,
@@ -100,8 +101,11 @@ export function ShiftRoute() {
     setHolds(await listHeldCarts(db))
     // The drawer knows who opened it, and a manager closing it has to name
     // them: the binding table is the till's only local name for that staff
-    // member, so a missing row falls back to their staff number.
-    setDrawerCashierName(next.shift ? await readCashierName(db, next.shift.cashierStaffId) : null)
+    // member, so a missing row falls back to their staff number — and a failed
+    // lookup costs the name, not the drawer screen.
+    setDrawerCashierName(
+      next.shift ? await readCashierName(db, next.shift.cashierStaffId).catch(() => null) : null,
+    )
   }
 
   useEffect(() => {
@@ -180,7 +184,9 @@ export function ShiftRoute() {
     note?: string
     holdsDecision: 'KEEP' | 'VOID_ALL'
   }) {
-    if (!db) return
+    // A hoisted function declaration does not inherit the render's signed-in
+    // narrowing, so the screen's guard is restated where the name is used.
+    if (!db || !staff) return
     const result = await closeShiftWithReport(db, input)
     setDialog(null)
     setLastClose(result)
@@ -188,6 +194,13 @@ export function ShiftRoute() {
     await refresh()
 
     if (session) {
+      // The drawer belongs to its cashier and the count belongs to the closer.
+      // Sameness is decided on staff identity, not on two display names —
+      // re-read from the close's own shift row rather than trusting state that
+      // has just been refreshed.
+      const drawerOwner =
+        (await readCashierName(db, result.shift.cashierStaffId).catch(() => null)) ??
+        result.shift.cashierStaffId
       const document = closedShiftDocument({
         report: result.report,
         identity: {
@@ -195,7 +208,8 @@ export function ShiftRoute() {
           branchName: session.branch.name,
           terminalCode: session.terminal.code,
         },
-        cashierName: staff?.name ?? '',
+        cashierName: drawerOwner,
+        closedByName: isOwnDrawer(result.shift, staff) ? null : staff.name,
         seller: session.config.receiptHeader,
       })
       setReportDocument(document)

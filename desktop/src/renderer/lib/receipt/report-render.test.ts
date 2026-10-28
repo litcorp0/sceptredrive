@@ -74,12 +74,42 @@ describe('buildReportDocument', () => {
     expect(document.title).toBe('Z-REPORT')
     expect(document.reference).toBe('ACC-SPX-T01-S-20261027-01')
 
-    const order = ['Z-REPORT', 'SALES', 'TAX', 'TENDERS', 'DRAWER', 'VOIDS', 'Signature']
+    const order = ['Z-REPORT', 'Cashier', 'SALES', 'TAX', 'TENDERS', 'DRAWER', 'VOIDS', 'Signature']
     const positions = order.map((label) => text.indexOf(label))
     for (const [index, position] of positions.entries()) {
       expect(position, `${order[index]} is on the paper`).toBeGreaterThan(-1)
       if (index > 0) expect(position).toBeGreaterThan(positions[index - 1] as number)
     }
+  })
+
+  it('names the drawer’s cashier and the manager who closed it, in that order', () => {
+    const text = reportDocumentText(
+      buildReportDocument(FIGURES, context({ closedByName: 'Kofi Boateng' })),
+    )
+    const header = rowsOf(text).slice(0, 6)
+
+    expect(header.filter((row) => row.label === 'Cashier')).toEqual([
+      { label: 'Cashier', value: 'Ama Mensah' },
+    ])
+    expect(header.filter((row) => row.label === 'Closed by')).toEqual([
+      { label: 'Closed by', value: 'Kofi Boateng' },
+    ])
+    // The drawer is the cashier's; the count and the signature are the closer's.
+    expect(text.indexOf('Cashier')).toBeLessThan(text.indexOf('Closed by'))
+    expect(text.indexOf('Closed by')).toBeLessThan(text.indexOf('SALES'))
+    expect(rowsOf(text).at(-2)).toEqual({ label: 'Closed by', value: 'Kofi Boateng' })
+  })
+
+  it('prints one Cashier line when the cashier closed their own drawer', () => {
+    const text = reportDocumentText(buildReportDocument(FIGURES, context()))
+
+    expect(text).not.toContain('Closed by')
+    // One line in the header, and the same person signs at the foot.
+    expect(rowsOf(text).filter((row) => row.label === 'Cashier')).toEqual([
+      { label: 'Cashier', value: 'Ama Mensah' },
+      { label: 'Cashier', value: 'Ama Mensah' },
+    ])
+    expect(rowsOf(text).at(-2)).toEqual({ label: 'Cashier', value: 'Ama Mensah' })
   })
 
   it('carries the tender breakdown and the tax split', () => {
@@ -122,13 +152,19 @@ describe('buildReportDocument', () => {
   })
 
   it('lays every row out inside 42 columns, with a full-width rule', () => {
-    const text = reportDocumentText(buildReportDocument(FIGURES, context()))
-    for (const line of text.split('\n')) {
-      expect(line.length, JSON.stringify(line)).toBeLessThanOrEqual(REPORT_COLUMNS)
+    const texts = [
+      reportDocumentText(buildReportDocument(FIGURES, context())),
+      // A takeover adds a row; it must not push the widest one past the paper.
+      reportDocumentText(buildReportDocument(FIGURES, context({ closedByName: 'Kofi Boateng' }))),
+    ]
+    for (const text of texts) {
+      for (const line of text.split('\n')) {
+        expect(line.length, JSON.stringify(line)).toBeLessThanOrEqual(REPORT_COLUMNS)
+      }
+      const rules = text.split('\n').filter((line) => /^-+$/.test(line))
+      expect(rules.length).toBeGreaterThan(0)
+      for (const rule of rules) expect(rule).toHaveLength(REPORT_COLUMNS)
     }
-    const rules = text.split('\n').filter((line) => /^-+$/.test(line))
-    expect(rules.length).toBeGreaterThan(0)
-    for (const rule of rules) expect(rule).toHaveLength(REPORT_COLUMNS)
   })
 
   it('formats money from integer pesewas without a float round-trip', () => {

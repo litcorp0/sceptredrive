@@ -72,7 +72,15 @@ export interface ReportDocumentContext {
   shiftNumber: string
   openedAt: string
   closedAt: string | null
+  /** The shift's cashier: whose drawer this is, not who is holding the pen. */
   cashierName: string
+  /**
+   * The person who closed the drawer, when that is somebody else — a manager
+   * taking the count over at shift end (P14-D12). The caller compares staff
+   * identities, not names, and passes `null` when they are the same person, so
+   * an ordinary close prints one `Cashier` line and no duplication.
+   */
+  closedByName?: string | null | undefined
   /** When this document was produced; for a Z that is the close. */
   generatedAt: string
   /**
@@ -140,6 +148,11 @@ export function buildReportDocument(
     })
   }
   lines.push({ kind: 'row', label: 'Cashier', value: context.cashierName })
+  // Only a takeover says so: the drawer belongs to the cashier, the count and
+  // the signature belong to whoever closed it.
+  if (context.closedByName) {
+    lines.push({ kind: 'row', label: 'Closed by', value: context.closedByName })
+  }
 
   lines.push({ kind: 'rule' })
   lines.push({ kind: 'title', label: 'SALES' })
@@ -250,7 +263,13 @@ export function buildReportDocument(
     value: formatAccraDateTime(context.generatedAt),
   })
   lines.push({ kind: 'rule' })
-  lines.push({ kind: 'row', label: 'Cashier', value: context.cashierName })
+  // The signature belongs to the person who counted the drawer. On an X nobody
+  // has closed anything, so it stays the cashier's line.
+  lines.push({
+    kind: 'row',
+    label: context.closedByName ? 'Closed by' : 'Cashier',
+    value: context.closedByName ?? context.cashierName,
+  })
   lines.push({ kind: 'row', label: 'Signature', value: '______________________' })
 
   return {
