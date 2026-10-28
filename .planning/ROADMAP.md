@@ -439,6 +439,10 @@ with reason codes and outbox upload.
 conflicts; supplier transfers run through Paystack; E-VAT receipts are queued and submitted
 through an adapter.
 
+**Status:** ✅ Complete (verified 2026-10-28 — see
+`phases/14-admin-operations-evatu/14-VERIFICATION.md`; gates in `evidence/suites.txt`;
+walkthrough in `evidence/walkthrough-ops.txt`; mutations in `evidence/mutations.txt`)
+
 **Dependencies:** Phases 5, 13
 **Requirements:** ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03
 

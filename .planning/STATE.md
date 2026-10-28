@@ -4,29 +4,29 @@
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-27
-**Status:** **Phase 13 (POS Payments, Returns & Shifts) is complete and verified — 13/13 plans.**
+**Updated:** 2026-10-28
+**Status:** **Phase 14 (Admin Operations & E-VAT) is complete and verified — 13/13 plans.**
 Every gate is green: `check-types` 6/6, `lint` exit 0 with 19 pre-existing warnings,
-`modules:check:strict` **19/19 admin and 16/16 POS**, brand gate over **1 112** files, shared **318**,
-API **710**, desktop **593**, packaged print **21/21**, packaged shell **42/42**. The counter audit is
-**149/150** on a pre-existing check of the audit's own device, not of this phase. Verification found
-and fixed one real defect: cash refunds were missing from expected cash, on the server and on the till.
-Phase 12 is complete and verified (13/13). Phase 11 is complete and verified (11/11 plans); Phase 10
+`modules:check:strict` **21/21 admin and 16/16 POS**, brand gate over **1 201** files, shared
+**345**, API **822**, desktop **610**, packaged build green. The external walkthrough is
+**41 PASS / 0 FAIL / 1 NOT-DRIVEN**, and six mutations were applied and six caught. Phase 14
+took the two Phase 13 carry-forwards (the console's refund list and the printed Z's cash
+refund line) and found a third, worse one: Phase 13's drawer fix never reached
+`computeExpectedCash`, so a cash-refunded shift closed short by exactly the refund and
+`api` check-types was red at its final commit. That is fixed and proven.
+**Next action:** plan and execute **Phase 15 — Production Hardening & Launch**
+(`OPS-01…08`). It is blocked on deployment inputs (VPS, domain, PowerSync Cloud projects,
+Paystack live keys, GRA onboarding, Windows signing certificate); see
+`PROJECT.md`'s operator setup gates. Phase 14's verification is
+`phases/14-admin-operations-evatu/14-VERIFICATION.md`; its evidence is
+`phases/14-admin-operations-evatu/evidence/` (`suites.txt`, `walkthrough-ops.txt`,
+`mutations.txt`).
+Phase 13 is complete and verified (13/13 plans). Phase 12 is complete and verified (13/13). Phase 11 is complete and verified (11/11 plans); Phase 10
 is complete and verified (10/10 plans). The roadmap was re-sequenced on 2026-10-24: four interface
 phases (7 Identity/Design System, 8 Admin Modules & Shell, 9 Analytics & Dashboard, 10 Desktop
 Modules & Shift Home) were inserted ahead of the former Phases 7–9, and a later audit the same day
 added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & Approvals). The former
 7/8/9 became Phases 13/14/15.
-**Next action:** execute **Phase 14 — Admin Operations & E-VAT**. It is **planned, not
-started**: thirteen plans, `00-DECISIONS.md` (P14-D1…D47), `01-RESEARCH.md` (14 official
-sources, 64 verified repository facts), `README.md` and `PARALLEL.md` live in
-`phases/14-admin-operations-evatu/`. Wave 1 is Plan 01 alone (`packages/shared`); wave 2 is
-Plan 02 alone (schema). Phase 13's verification is
-`phases/13-pos-payments-returns/13-VERIFICATION.md`; its evidence is
-`phases/13-pos-payments-returns/evidence/` (`suites.txt`, `walkthrough-payments.txt`, `mutations.txt`,
-`counter-audit.txt`). Two things Phase 14 inherits are named in that document's §6 and are
-**taken** by it: the console's refund list, and a drawer block on the printed Z that does not
-itemise cash refunds even though the figure now subtracts them.
 
 ---
 
@@ -48,8 +48,75 @@ itemise cash refunds even though the figure now subtracts them.
 | 11 | Procurement, Replenishment & Supplier Returns | ✅ Complete (11/11 plans, verified) |
 | 12 | Branch Operations & Approval Workflow | ✅ Complete (13/13 plans, verified) |
 | 13 | POS Payments, Returns & Shifts | ✅ Complete (13/13 plans, verified) |
-| 14 | Admin Operations & E-VAT | 🔷 Planned (13 plans) |
+| 14 | Admin Operations & E-VAT | ✅ Complete (13/13 plans, verified) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+
+### Phase 14 execution notes (2026-10-28)
+
+- **Phase 14 is complete and verified.** `14-VERIFICATION.md` maps the five roadmap criteria,
+  the eleven requirements and the OWASP table to a numbered leg, a committed test or a
+  command. The external walkthrough is **41 PASS / 0 FAIL / 1 NOT-DRIVEN**, and six
+  mutations were applied and six caught. Ninety commits from `d1348ab` (the planning
+  commit); the sync contract is untouched (`powersync/` and `packages/brand/` have an empty
+  diff over the phase).
+- **Numbers.** shared **318 → 345** (+27 tests, 4 files), API **710 → 822** (+112, 17 files),
+  desktop **593 → 610** (+17), admin modules **19 → 21** (`pos-oversight`, `evat`), POS
+  modules **16/16**, brand gate **1 201** files, `check-types` 6/6, lint exit 0 with the 19
+  pre-existing warnings in `.planning/**/evidence/`.
+- **What each plan produced.** 01 `db4b304`…`942f2ac` (six permissions, three flags, the
+  conflict/transfer/E-VAT vocabulary); 02 `25689c2`, `5e77bb6`, `df335a7`, `ce4822a`,
+  `6723ae2` (four enums in 0016, the DDL in 0017, five settings); 03 `4cb027f`…`c6df655`
+  (oversight lists, the receipt copy, one report arithmetic with two gates, cart voids);
+  04 `ed3e167`, `f062140`, `95670ef` (the queue and the resolution with the six-table
+  checksum); 05 `75b3dc7`…`a38acce` (stock report, five exports, period filters, `saleId`);
+  06 `396ec7d`…`8b02bdc`, `e260348` (the seam, recipients, settlement, the sweep, the
+  reconciliation); 07 `fac1a40`…`b5d22bb`, plus `2f0e793`, `e8d6285` (the mock provider, the
+  queue, the ladder, E700 adoption, the failure surface); 08 `823cad0`…`02c64ef` (the
+  `pos-oversight` module); 09 `28c5e0d`…`00a3c0d`, plus three review fixes (shared export and
+  print, stock report, audit export); 10 `22ee8a6`…`7b47b61` (transfers, reconciliation,
+  E-VAT); 11 `4629471`…`9819f8b` (every setting, flags, the permission matrix); 12
+  `02f461c`…`96d47a5`, `e85e50a` (the Z's drawer block and the manager close); 13 this pass.
+- **Seven defects were found during execution and fixed, not worked around.**
+  (a) **Phase 13's drawer fix never reached `computeExpectedCash`** — it read
+  `cashRefundsMinor` from SQL and then ignored it, so a cash-refunded shift closed short by
+  exactly the refund, and `pos.test.ts` did not compile, which means Phase 13's "check-types
+  6/6" claim was false at its final commit. Fixed in `f96fd89`; the stored shift row and
+  the Z are now asserted. (b) The supplier-transfer tables were declared in
+  `payments.schema.ts`; moved to payables (`396ec7d`), no DDL change. (c) A truncated stock
+  report exported a `TOTAL` over the whole population while writing 5 000 rows; it now
+  refuses with `400 REPORT_TOO_LARGE` (`7e1b395`) and the console says so (`4e1266a`).
+  (d) Payables ageing counted credit-note-only suppliers in the total but gave them no row
+  (same commit). (e) The mock transfer settlement was a controller opening a transaction;
+  moved to a service (`cdf07b4`). (f) A new test file depended on the ambient
+  `PAYSTACK_MODE` and failed only in the full matrix; it now builds its own app
+  (`115d87e`). (g) `inventory.api.test.ts` read `audit_log` without an order (`41419ac`).
+- **Three operator decisions were confirmed before execution**: no approval threshold for
+  supplier transfers, a reversal keeps the payment until a manager voids it, and feature
+  flags are typed boolean settings rather than a second store.
+- **Deviations from the plans, all recorded rather than hidden.** The refund list carries
+  `approvedBy` instead of a cashier name (the `refund` table has no cashier column); the cash
+  refund figure is derived once in `selectShiftCashTotals` instead of being duplicated in
+  the figures selector; the shift detail returns `reportState` (`STORED|LIVE|MISSING`) while
+  the report route keeps the strict `SHIFT_REPORT_MISSING`; the E-VAT deadline is derived
+  (`overdue`) rather than a status, because a retry that is late is still worth attempting;
+  the console's settings page renders unknown keys instead of dropping them, and the
+  permission matrix arrives as `/staff/permissions`.
+- **Two schema facts worth remembering.** `shift_report.cash_refund_minor` is nullable on
+  purpose: a snapshot taken before this phase never measured it, so the print says "not
+  itemised" rather than inventing a zero. And `evat_submission` has two partial unique
+  indexes (one per sale, one per refund) because PostgreSQL treats each NULL as distinct.
+- **The test database is shared and accumulates.** A killed vitest run leaves orphan
+  fixtures that make `analytics.test.ts` fail with doubled aggregates; dropping and
+  recreating `sceptre_drive_test` before a gate run is the supported recovery. Two full-suite
+  runs were also started concurrently in this pass and produced exactly that symptom —
+  proof of the mechanism, not a phase defect.
+- **Carry-forwards.** Approval expiry (still unimplemented, still needs a policy); the
+  browser walkthrough has sections and assertions but no screenshots this pass; `test:counter`
+  was not run (needs Electron + PowerSync); no live Paystack transfer and no GRA response;
+  no QR on paper until GRA onboarding; `flag.evatSubmission` off at sale time can strand a
+  later refund in `WAITING_FOR_INVOICE`; the payables ageing screen still sums buckets in the
+  browser; `pos.repayment.test.ts` leaves `evat_submission` rows behind; the two demo price
+  overrides remain.
 
 ### Phase 14 planning notes (2026-10-27)
 
