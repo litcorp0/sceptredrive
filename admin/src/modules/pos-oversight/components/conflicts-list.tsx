@@ -1,4 +1,4 @@
-import { formatDateTime } from "@sceptre/shared"
+import { FLAG_DEFAULTS, formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ShieldAlert, ShieldQuestion } from "lucide-react"
@@ -19,6 +19,7 @@ import {
 } from "#/components/ui/table"
 import { ApiError } from "#/lib/api"
 import { hasPermission } from "#/lib/role"
+import { settingsListOptions } from "#/modules/settings"
 import { conflictsOptions } from "../api/oversight"
 import type { ConflictListQuery } from "../types"
 import {
@@ -42,12 +43,26 @@ interface ConflictsListProps {
  * The conflict queue, HIGH severity first (the API orders it; the console does not re-sort).
  *
  * A row opens the sheet rather than navigating: the reviewer needs the conflict and its
- * document side by side, and a resolution is a short decision. Resolving is only offered
- * to a role that holds `conflict.resolve`; everyone else sees the queue read-only.
+ * document side by side, and a resolution is a short decision. Resolving is offered only
+ * when the role holds `conflict.resolve` **and** `flag.posConflictResolution` is on
+ * (P14-D41, Plan 10 §6). With the flag off the queue stays readable — the flag switches
+ * resolution off, not oversight.
  */
 export function ConflictsList({ query, onOffsetChange, onClearFilters }: ConflictsListProps) {
 	const { session } = authenticatedRoute.useRouteContext()
 	const canResolve = hasPermission(session.user.role, "conflict.resolve")
+
+	// A flag is a typed setting (P14-D41), not a second store. A missing row means its
+	// registry default, never "off", and only a real boolean turns resolution on.
+	const settingsQuery = useQuery(settingsListOptions())
+	const resolutionSetting = settingsQuery.data?.settings.find(
+		(setting) => setting.key === "flag.posConflictResolution",
+	)
+	const resolutionEnabled =
+		typeof resolutionSetting?.value === "boolean"
+			? resolutionSetting.value
+			: FLAG_DEFAULTS["flag.posConflictResolution"]
+
 	const [selectedId, setSelectedId] = useState<string | null>(null)
 
 	const conflictsQuery = useQuery(conflictsOptions(query))
@@ -202,6 +217,7 @@ export function ConflictsList({ query, onOffsetChange, onClearFilters }: Conflic
 				conflictId={selectedId}
 				onClose={() => setSelectedId(null)}
 				canResolve={canResolve}
+				resolutionEnabled={resolutionEnabled}
 			/>
 		</>
 	)

@@ -81,15 +81,22 @@ function SubjectLink({ subject }: { subject: ConflictSubject }) {
  * The submit button is enabled by the shared `resolutionProblem`, the same function the
  * API validates with, so the console cannot offer a resolution the server refuses. The
  * form says plainly what it does not do: a resolution is a record, never a repair.
+ *
+ * Resolution is a decision the operator can switch off: with
+ * `flag.posConflictResolution` false the form is replaced by one sentence, and the queue
+ * itself stays readable (P14-D41).
  */
 export function ConflictSheet({
 	conflictId,
 	onClose,
 	canResolve,
+	resolutionEnabled,
 }: {
 	conflictId: string | null
 	onClose: () => void
 	canResolve: boolean
+	/** The feature flag, read by the list from `GET /api/settings`. */
+	resolutionEnabled: boolean
 }) {
 	const queryClient = useQueryClient()
 	const detailQuery = useQuery(conflictOptions(conflictId))
@@ -234,6 +241,13 @@ export function ConflictSheet({
 										{detail.resolutionNote ? ` — ${detail.resolutionNote}` : ""}
 									</p>
 								</section>
+							) : !resolutionEnabled ? (
+								<p className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+									Resolution is switched off in settings (
+									<code className="font-mono text-xs">flag.posConflictResolution</code>), so the
+									queue stays readable but no conflict can be closed until an administrator turns it
+									back on.
+								</p>
 							) : canResolve ? (
 								<form
 									className="grid gap-3 border-t pt-3"
