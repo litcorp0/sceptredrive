@@ -4,6 +4,7 @@ import { getRouteApi } from "@tanstack/react-router"
 import { cn } from "cn"
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 import { useState } from "react"
+import { ExportButton } from "#/components/common/export-button"
 import { PageHeader } from "#/components/common/page-header"
 import { Pagination } from "#/components/common/pagination"
 import { TableMessage } from "#/components/common/table-message"
@@ -38,6 +39,8 @@ export function AuditPage() {
 	const [action, setAction] = useState("")
 	const [entity, setEntity] = useState("")
 	const [actorStaffId, setActorStaffId] = useState("")
+	const [actorId, setActorId] = useState("")
+	const [entityId, setEntityId] = useState("")
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
 	const [offset, setOffset] = useState(0)
@@ -46,12 +49,16 @@ export function AuditPage() {
 	const debouncedAction = useDebouncedValue(action, 300)
 	const debouncedEntity = useDebouncedValue(entity, 300)
 	const debouncedActor = useDebouncedValue(actorStaffId, 300)
+	const debouncedActorId = useDebouncedValue(actorId, 300)
+	const debouncedEntityId = useDebouncedValue(entityId, 300)
 
 	// Reset pagination whenever the filters change (derived state, no effect).
 	const filterSignature = JSON.stringify([
 		debouncedAction,
 		debouncedEntity,
 		debouncedActor,
+		debouncedActorId,
+		debouncedEntityId,
 		from,
 		to,
 		activeBranchId,
@@ -62,17 +69,22 @@ export function AuditPage() {
 		setOffset(0)
 	}
 
+	// The export takes exactly the filters on screen and no paging: the file is the whole
+	// result, refused rather than truncated past the API's cap. It never carries `before`/
+	// `after` — the API does not select them (P14-D44).
+	const filters = {
+		action: debouncedAction || undefined,
+		entity: debouncedEntity || undefined,
+		actorStaffId: debouncedActor || undefined,
+		actorId: debouncedActorId || undefined,
+		entityId: debouncedEntityId || undefined,
+		from: from ? new Date(from).toISOString() : undefined,
+		to: to ? new Date(`${to}T23:59:59`).toISOString() : undefined,
+		branchId: activeBranchId ?? undefined,
+	}
+
 	const auditQuery = useQuery({
-		...auditListOptions({
-			action: debouncedAction || undefined,
-			entity: debouncedEntity || undefined,
-			actorStaffId: debouncedActor || undefined,
-			from: from ? new Date(from).toISOString() : undefined,
-			to: to ? new Date(`${to}T23:59:59`).toISOString() : undefined,
-			branchId: activeBranchId ?? undefined,
-			limit: PAGE_SIZE,
-			offset,
-		}),
+		...auditListOptions({ ...filters, limit: PAGE_SIZE, offset }),
 		enabled: canRead,
 	})
 
@@ -94,9 +106,26 @@ export function AuditPage() {
 
 	return (
 		<div>
-			<PageHeader title="Audit log" description="Every change made in the console, newest first." />
+			<PageHeader
+				title="Audit log"
+				description="Every change made in the console, newest first."
+				actions={
+					<div className="flex max-w-72 flex-col items-end gap-1">
+						<ExportButton
+							path="/api/audit/export"
+							query={filters}
+							label="Audit log"
+							disabled={auditQuery.isLoading}
+							title="Time, actor, action, entity and ids — never the payloads"
+						/>
+						<p className="text-right text-xs text-muted-foreground">
+							The file never contains before/after payloads.
+						</p>
+					</div>
+				}
+			/>
 
-			<div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+			<div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
 				<div className="grid gap-1">
 					<Label htmlFor="audit-action" className="text-xs text-muted-foreground">
 						Action
@@ -122,8 +151,20 @@ export function AuditPage() {
 					/>
 				</div>
 				<div className="grid gap-1">
+					<Label htmlFor="audit-entity-id" className="text-xs text-muted-foreground">
+						Entity ID
+					</Label>
+					<Input
+						id="audit-entity-id"
+						placeholder="entity uuid"
+						className="h-8 font-mono text-xs"
+						value={entityId}
+						onChange={(event) => setEntityId(event.target.value)}
+					/>
+				</div>
+				<div className="grid gap-1">
 					<Label htmlFor="audit-actor" className="text-xs text-muted-foreground">
-						Actor ID
+						Staff ID
 					</Label>
 					<Input
 						id="audit-actor"
@@ -131,6 +172,18 @@ export function AuditPage() {
 						className="h-8 font-mono text-xs"
 						value={actorStaffId}
 						onChange={(event) => setActorStaffId(event.target.value)}
+					/>
+				</div>
+				<div className="grid gap-1">
+					<Label htmlFor="audit-actor-id" className="text-xs text-muted-foreground">
+						Actor user ID
+					</Label>
+					<Input
+						id="audit-actor-id"
+						placeholder="user uuid"
+						className="h-8 font-mono text-xs"
+						value={actorId}
+						onChange={(event) => setActorId(event.target.value)}
 					/>
 				</div>
 				<div className="grid gap-1">
