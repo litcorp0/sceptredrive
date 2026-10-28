@@ -8,6 +8,10 @@
  * in their dialogs) instead of moving to `hooks/`: they close over local state and callbacks, so
  * extracting them would have been a rewrite rather than a move (decision D9). `hooks/` gets
  * created when something is genuinely shared.
+ *
+ * Phase 14 adds `PermissionsPage` at `/staff/permissions`: a read-only matrix generated from
+ * `@sceptre/shared`'s `PERMISSIONS`/`ROLE_PERMISSIONS`, so the console cannot claim a role can
+ * do something the API would refuse.
  */
 export { staffKeys } from "./api/keys"
 export {
@@ -27,6 +31,7 @@ export { EditStaffDialog } from "./components/edit-staff-dialog"
 export { PinDialog } from "./components/pin-dialog"
 export { PinStatusBadge } from "./components/pin-status-badge"
 export { StaffTable } from "./components/staff-table"
+export { PermissionsPage } from "./pages/permissions-page"
 export { StaffPage } from "./pages/staff-page"
 export type {
 	CreateStaffResult,

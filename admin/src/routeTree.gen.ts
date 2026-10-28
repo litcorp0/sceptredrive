@@ -47,6 +47,7 @@ import { Route as AuthenticatedInventoryStockRouteImport } from './routes/_authe
 import { Route as AuthenticatedProcurementIndexRouteImport } from './routes/_authenticated/procurement/index'
 import { Route as AuthenticatedProcurementReplenishmentRouteImport } from './routes/_authenticated/procurement/replenishment'
 import { Route as AuthenticatedProcurementSuppliersRouteImport } from './routes/_authenticated/procurement/suppliers'
+import { Route as AuthenticatedStaffPermissionsRouteImport } from './routes/_authenticated/staff_.permissions'
 import { Route as AuthenticatedSuppliersIndexRouteImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSuppliersSupplierIdRouteImport } from './routes/_authenticated/suppliers/$supplierId'
 import { Route as AuthenticatedSuppliersAgingRouteImport } from './routes/_authenticated/suppliers/aging'
@@ -291,6 +292,12 @@ const AuthenticatedProcurementSuppliersRoute =
     path: '/suppliers',
     getParentRoute: () => AuthenticatedProcurementRouteRoute,
   } as any)
+const AuthenticatedStaffPermissionsRoute =
+  AuthenticatedStaffPermissionsRouteImport.update({
+    id: '/staff_/permissions',
+    path: '/staff/permissions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSuppliersIndexRoute =
   AuthenticatedSuppliersIndexRouteImport.update({
     id: '/',
@@ -504,6 +511,7 @@ export interface FileRoutesByFullPath {
   '/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
+  '/staff/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/approvals/': typeof AuthenticatedApprovalsIndexRoute
@@ -564,6 +572,7 @@ export interface FileRoutesByTo {
   '/customers/over-limit': typeof AuthenticatedCustomersOverLimitRoute
   '/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
+  '/staff/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/approvals': typeof AuthenticatedApprovalsIndexRoute
@@ -635,6 +644,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory/stock': typeof AuthenticatedInventoryStockRouteWithChildren
   '/_authenticated/procurement/replenishment': typeof AuthenticatedProcurementReplenishmentRoute
   '/_authenticated/procurement/suppliers': typeof AuthenticatedProcurementSuppliersRoute
+  '/_authenticated/staff_/permissions': typeof AuthenticatedStaffPermissionsRoute
   '/_authenticated/suppliers/$supplierId': typeof AuthenticatedSuppliersSupplierIdRoute
   '/_authenticated/suppliers/aging': typeof AuthenticatedSuppliersAgingRoute
   '/_authenticated/approvals/': typeof AuthenticatedApprovalsIndexRoute
@@ -706,6 +716,7 @@ export interface FileRouteTypes {
     | '/inventory/stock'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
+    | '/staff/permissions'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
     | '/approvals/'
@@ -766,6 +777,7 @@ export interface FileRouteTypes {
     | '/customers/over-limit'
     | '/procurement/replenishment'
     | '/procurement/suppliers'
+    | '/staff/permissions'
     | '/suppliers/$supplierId'
     | '/suppliers/aging'
     | '/approvals'
@@ -836,6 +848,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory/stock'
     | '/_authenticated/procurement/replenishment'
     | '/_authenticated/procurement/suppliers'
+    | '/_authenticated/staff_/permissions'
     | '/_authenticated/suppliers/$supplierId'
     | '/_authenticated/suppliers/aging'
     | '/_authenticated/approvals/'
@@ -1149,6 +1162,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/procurement/suppliers'
       preLoaderRoute: typeof AuthenticatedProcurementSuppliersRouteImport
       parentRoute: typeof AuthenticatedProcurementRouteRoute
+    }
+    '/_authenticated/staff_/permissions': {
+      id: '/_authenticated/staff_/permissions'
+      path: '/staff/permissions'
+      fullPath: '/staff/permissions'
+      preLoaderRoute: typeof AuthenticatedStaffPermissionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/suppliers/': {
       id: '/_authenticated/suppliers/'
@@ -1608,6 +1628,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedTerminalsRoute: typeof AuthenticatedTerminalsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedApprovalsApprovalIdRoute: typeof AuthenticatedApprovalsApprovalIdRoute
+  AuthenticatedStaffPermissionsRoute: typeof AuthenticatedStaffPermissionsRoute
   AuthenticatedApprovalsIndexRoute: typeof AuthenticatedApprovalsIndexRoute
 }
 
@@ -1632,6 +1653,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTerminalsRoute: AuthenticatedTerminalsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedApprovalsApprovalIdRoute: AuthenticatedApprovalsApprovalIdRoute,
+  AuthenticatedStaffPermissionsRoute: AuthenticatedStaffPermissionsRoute,
   AuthenticatedApprovalsIndexRoute: AuthenticatedApprovalsIndexRoute,
 }
 

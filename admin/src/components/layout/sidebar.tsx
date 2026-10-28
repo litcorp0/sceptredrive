@@ -15,6 +15,7 @@ import {
 	Package,
 	ScrollText,
 	Settings2,
+	ShieldCheck,
 	Truck,
 	Users,
 	Warehouse,
@@ -47,6 +48,7 @@ type NavPath =
 	| "/branches"
 	| "/terminals"
 	| "/staff"
+	| "/staff/permissions"
 	| "/customers"
 	| "/loyalty"
 	| "/catalog"
@@ -119,6 +121,12 @@ export const NAV_GROUPS: NavGroup[] = [
 				permission: "terminal.read",
 			},
 			{ to: "/staff", label: "Staff", icon: Users, permission: "staff.read" },
+			{
+				to: "/staff/permissions",
+				label: "Permissions",
+				icon: ShieldCheck,
+				permission: "staff.read",
+			},
 		],
 	},
 	{
@@ -166,6 +174,7 @@ const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
 	["write-offs", "Write-offs"],
 	["over-limit", "Over limit"],
 	["replenishment", "Replenishment"],
+	["permissions", "Permissions"],
 	["submit", "Submit"],
 	["new", "New"],
 	["edit", "Edit"],
