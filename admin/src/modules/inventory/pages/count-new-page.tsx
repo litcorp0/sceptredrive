@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -100,7 +101,7 @@ export function CountNewPage() {
 							<SelectContent>
 								{selectableBranches.map((branch) => (
 									<SelectItem key={branch.id} value={branch.id}>
-										{branch.code} · {branch.name}
+										{formatBranchLabel(branch)}
 									</SelectItem>
 								))}
 							</SelectContent>

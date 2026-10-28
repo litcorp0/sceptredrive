@@ -30,6 +30,8 @@ import { Skeleton } from "#/components/ui/skeleton"
 import { Textarea } from "#/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group"
 import { ApiError } from "#/lib/api"
+import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { toastApiError } from "#/lib/toast"
 import { posKeys } from "../api/keys"
 import { conflictOptions, resolveConflict } from "../api/oversight"
@@ -99,6 +101,7 @@ export function ConflictSheet({
 	resolutionEnabled: boolean
 }) {
 	const queryClient = useQueryClient()
+	const { branches } = useBranch()
 	const detailQuery = useQuery(conflictOptions(conflictId))
 	const [status, setStatus] = useState<"RESOLVED" | "DISMISSED">("RESOLVED")
 	const [code, setCode] = useState<ConflictResolutionCode | "">("")
@@ -149,7 +152,7 @@ export function ConflictSheet({
 					<SheetTitle>{detail ? conflictTypeLabel(detail.type) : "Conflict"}</SheetTitle>
 					<SheetDescription>
 						{detail
-							? `Raised ${formatDateTime(detail.createdAt)} · ${detail.branchCode} · ${detail.terminalCode}`
+							? `Raised ${formatDateTime(detail.createdAt)} · ${branchLabelFor(branches, { code: detail.branchCode })} · ${detail.terminalCode}`
 							: "The queue row, its document and the decision."}
 					</SheetDescription>
 				</SheetHeader>
@@ -201,7 +204,7 @@ export function ConflictSheet({
 								</div>
 								<div className="flex justify-between gap-3">
 									<dt className="text-muted-foreground">Branch</dt>
-									<dd>{detail.branchCode}</dd>
+									<dd>{branchLabelFor(branches, { code: detail.branchCode })}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
 									<dt className="text-muted-foreground">Terminal</dt>

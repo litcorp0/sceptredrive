@@ -27,6 +27,7 @@ import {
 } from "#/components/ui/table"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { settingsListOptions } from "#/modules/settings"
@@ -244,9 +245,7 @@ export function ReconciliationPage() {
 											key={`${row.state}-${row.transferId ?? row.paymentId ?? row.reference}`}
 											row={row}
 											showBranch={canSelectBranch}
-											branchCode={
-												branches.find((branch) => branch.id === row.branchId)?.code ?? "—"
-											}
+											branchLabel={branchLabelFor(branches, { id: row.branchId })}
 										/>
 									))
 								)}
@@ -352,11 +351,11 @@ function ReconciliationTiles({
 function ReconciliationTableRow({
 	row,
 	showBranch,
-	branchCode,
+	branchLabel,
 }: {
 	row: TransferReconciliationRow
 	showBranch: boolean
-	branchCode: string
+	branchLabel: string
 }) {
 	const reversedWithPayment = row.status === "REVERSED" && row.paymentId !== null
 	const successWithoutPayment = row.status === "SUCCESS" && row.paymentId === null
@@ -375,7 +374,7 @@ function ReconciliationTableRow({
 					{row.supplierName}
 				</Link>
 			</TableCell>
-			{showBranch ? <TableCell className="text-muted-foreground">{branchCode}</TableCell> : null}
+			{showBranch ? <TableCell className="text-muted-foreground">{branchLabel}</TableCell> : null}
 			<TableCell>
 				{row.transferId ? (
 					<Link

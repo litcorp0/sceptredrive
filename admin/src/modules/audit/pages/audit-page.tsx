@@ -20,6 +20,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
 import { auditListOptions } from "../api/audit"
@@ -101,8 +102,8 @@ export function AuditPage() {
 
 	const entries = auditQuery.data?.entries ?? []
 	const total = auditQuery.data?.total ?? 0
-	const branchCode = (branchId: string | null) =>
-		branchId ? (branches.find((branch) => branch.id === branchId)?.code ?? "—") : "—"
+	const branchLabel = (branchId: string | null) =>
+		branchId ? branchLabelFor(branches, { id: branchId }) : "—"
 
 	return (
 		<div>
@@ -243,7 +244,7 @@ export function AuditPage() {
 								<AuditRow
 									key={entry.id}
 									entry={entry}
-									branchCode={branchCode(entry.branchId)}
+									branchLabel={branchLabel(entry.branchId)}
 									expanded={expandedId === entry.id}
 									onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
 								/>
@@ -261,12 +262,12 @@ export function AuditPage() {
 
 function AuditRow({
 	entry,
-	branchCode,
+	branchLabel,
 	expanded,
 	onToggle,
 }: {
 	entry: AuditEntry
-	branchCode: string
+	branchLabel: string
 	expanded: boolean
 	onToggle: () => void
 }) {
@@ -304,7 +305,7 @@ function AuditRow({
 				<TableCell className="font-mono text-xs text-muted-foreground">
 					{entry.actorStaffId ?? "system"}
 				</TableCell>
-				<TableCell className="font-mono text-xs text-muted-foreground">{branchCode}</TableCell>
+				<TableCell className="text-xs text-muted-foreground">{branchLabel}</TableCell>
 				<TableCell>
 					{entry.terminalId ? (
 						<IdCell value={entry.terminalId} what="terminal id" />

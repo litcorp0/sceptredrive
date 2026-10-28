@@ -1,4 +1,4 @@
-import { formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -47,7 +47,7 @@ export function ReceiptDetailPage() {
 		return <p className="text-sm text-destructive">Couldn't load this receipt.</p>
 	}
 
-	const branchName = branches.find((branch) => branch.id === receipt.branchId)?.name ?? "Branch"
+	const branch = branches.find((candidate) => candidate.id === receipt.branchId) ?? null
 	const lines = receipt.lines ?? []
 
 	return (
@@ -64,7 +64,7 @@ export function ReceiptDetailPage() {
 					<h2 className="font-mono text-lg font-semibold tracking-tight">{receipt.number}</h2>
 				</div>
 				<p className="mt-1 text-sm text-muted-foreground">
-					{branchName} ·{" "}
+					{formatBranchLabel(branch)} ·{" "}
 					{receipt.supplierId ? (
 						<Link
 							to="/suppliers/$supplierId"

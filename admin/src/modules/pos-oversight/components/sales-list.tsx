@@ -1,4 +1,4 @@
-import { formatCount, formatDateTime } from "@sceptre/shared"
+import { formatBranchLabel, formatCount, formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { PackageSearch, ShieldAlert } from "lucide-react"
@@ -135,7 +135,9 @@ export function SalesList({ query, onOffsetChange, onClearFilters }: SalesListPr
 								<TableCell className="text-muted-foreground">
 									<time dateTime={sale.occurredAt}>{formatDateTime(sale.occurredAt)}</time>
 								</TableCell>
-								<TableCell className="text-muted-foreground">{sale.branchCode}</TableCell>
+								<TableCell className="text-muted-foreground">
+									{formatBranchLabel({ name: sale.branchName, code: sale.branchCode })}
+								</TableCell>
 								<TableCell className="text-muted-foreground">{sale.terminalCode}</TableCell>
 								<TableCell className="max-w-36 truncate">{sale.cashierName}</TableCell>
 								<TableCell className="text-right tabular-nums">

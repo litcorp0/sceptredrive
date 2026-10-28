@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { CheckIcon, XIcon } from "lucide-react"
@@ -227,7 +228,10 @@ export function AnonymizeCustomerDialog({
 									<span>
 										Unreconciled credit:{" "}
 										{creditBlockers
-											.map((profile) => `${profile.branchCode} ${formatGhs(profile.balanceMinor)}`)
+											.map(
+												(profile) =>
+													`${formatBranchLabel({ name: profile.branchName, code: profile.branchCode })} ${formatGhs(profile.balanceMinor)}`,
+											)
 											.join(", ")}
 									</span>
 								</>

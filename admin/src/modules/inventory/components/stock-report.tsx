@@ -26,6 +26,7 @@ import {
 } from "#/components/ui/table"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import { categoryListOptions } from "#/modules/catalog"
 import { STOCK_REPORT_EXPORT_PATH, stockReportOptions } from "../api/inventory"
@@ -296,7 +297,9 @@ export function StockReport() {
 											<TableCell className="font-mono text-xs">{row.sku}</TableCell>
 											<TableCell className="font-medium">{row.productName}</TableCell>
 											<TableCell className="text-muted-foreground">{row.categoryName}</TableCell>
-											<TableCell className="font-mono text-xs">{row.branchCode}</TableCell>
+											<TableCell className="text-muted-foreground">
+												{branchLabelFor(branches, { code: row.branchCode })}
+											</TableCell>
 											<TableCell className="text-right tabular-nums">
 												{formatCount(row.quantityOnHand)}
 											</TableCell>

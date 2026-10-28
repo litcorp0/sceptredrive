@@ -1,5 +1,6 @@
 export * from './approvals.ts'
 export * from './branch-code.ts'
+export * from './branch-label.ts'
 export * from './cart-void.ts'
 export * from './conflicts.ts'
 export * from './counting.ts'

@@ -17,6 +17,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 import { receiptListOptions } from "../api/inventory"
@@ -28,7 +29,7 @@ const PAGE_SIZE = 20
 
 export function ReceiptsPage() {
 	const { session } = authenticatedRoute.useRouteContext()
-	const { activeBranchId, activeBranch, canSelectBranch } = useBranch()
+	const { activeBranchId, activeBranch, branches, canSelectBranch } = useBranch()
 	const canReceive = hasPermission(session.user.role, "inventory.receive")
 
 	const [from, setFrom] = useState("")
@@ -127,7 +128,9 @@ export function ReceiptsPage() {
 										</Link>
 									</TableCell>
 									{canSelectBranch ? (
-										<TableCell className="text-muted-foreground">{receipt.branchCode}</TableCell>
+										<TableCell className="text-muted-foreground">
+											{branchLabelFor(branches, { code: receipt.branchCode })}
+										</TableCell>
 									) : null}
 									<TableCell className="max-w-48 truncate">
 										{receipt.supplierId ? (

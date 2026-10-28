@@ -1,4 +1,4 @@
-import { formatDateTime, formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDateTime, formatDay } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -91,7 +91,7 @@ export function TransferDetailPage() {
 		<section>
 			<PageHeader
 				title={`Transfer ${transfer.number}`}
-				description={`${transfer.fromBranchCode} · ${transfer.fromBranchName} → ${transfer.toBranchCode} · ${transfer.toBranchName}`}
+				description={`${formatBranchLabel({ name: transfer.fromBranchName, code: transfer.fromBranchCode })} → ${formatBranchLabel({ name: transfer.toBranchName, code: transfer.toBranchCode })}`}
 				actions={
 					<div className="flex flex-wrap gap-2">
 						<Button asChild variant="outline" size="sm">

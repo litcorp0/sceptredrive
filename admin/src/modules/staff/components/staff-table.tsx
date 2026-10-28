@@ -27,8 +27,8 @@ interface StaffTableProps {
 	offset: number
 	isLoading: boolean
 	isError: boolean
-	/** Rendered branch code for a member, or "Global" for an admin account. */
-	branchCode: (branchId: string | null) => string
+	/** Rendered branch label for a member, or "Global" for an admin account. */
+	branchLabel: (branchId: string | null) => string
 	currentUserId: string
 	canUpdate: boolean
 	canResetPassword: boolean
@@ -51,7 +51,7 @@ export function StaffTable({
 	offset,
 	isLoading,
 	isError,
-	branchCode,
+	branchLabel,
 	currentUserId,
 	canUpdate,
 	canResetPassword,
@@ -96,7 +96,7 @@ export function StaffTable({
 									<RoleBadge role={member.role} />
 								</TableCell>
 								<TableCell className="font-mono text-xs text-muted-foreground">
-									{branchCode(member.branchId)}
+									{branchLabel(member.branchId)}
 								</TableCell>
 								<TableCell>
 									<PinStatusBadge

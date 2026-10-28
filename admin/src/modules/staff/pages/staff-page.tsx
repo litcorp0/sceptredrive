@@ -15,6 +15,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { useDebouncedValue } from "#/lib/hooks"
 import { hasPermission } from "#/lib/role"
 import { toastApiError } from "#/lib/toast"
@@ -89,8 +90,8 @@ export function StaffPage() {
 
 	const staff = staffQuery.data?.staff ?? []
 	const total = staffQuery.data?.total ?? 0
-	const branchCode = (branchId: string | null) =>
-		branchId ? (branches.find((branch) => branch.id === branchId)?.code ?? "—") : "Global"
+	const branchLabel = (branchId: string | null) =>
+		branchId ? branchLabelFor(branches, { id: branchId }) : "Global"
 
 	// Managers may only reset cashier PINs; admins may reset anyone's.
 	const canResetPinFor = (member: Staff) =>
@@ -201,7 +202,7 @@ export function StaffPage() {
 				offset={offset}
 				isLoading={staffQuery.isLoading}
 				isError={staffQuery.isError}
-				branchCode={branchCode}
+				branchLabel={branchLabel}
 				currentUserId={session.user.id}
 				canUpdate={canUpdate}
 				canResetPassword={canResetPassword}

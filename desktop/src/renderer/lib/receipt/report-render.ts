@@ -1,4 +1,4 @@
-import { formatAccraDateTime } from '@sceptre/shared'
+import { formatAccraDateTime, formatBranchLabel } from '@sceptre/shared'
 import type { ReportDocument, ReportLine } from '../../../shared/printing'
 import { formatMinorPlain } from '../format'
 
@@ -132,8 +132,11 @@ export function buildReportDocument(
   }
 
   lines.push({ kind: 'title', label: context.seller })
-  lines.push({ kind: 'title', label: context.branchName })
-  lines.push({ kind: 'title', label: `${context.branchCode} - ${context.terminalCode}` })
+  lines.push({
+    kind: 'title',
+    label: formatBranchLabel({ name: context.branchName, code: context.branchCode }),
+  })
+  lines.push({ kind: 'title', label: context.terminalCode })
   lines.push({ kind: 'rule' })
   lines.push({ kind: 'title', label: kind === 'Z' ? 'Z-REPORT' : 'X-REPORT' })
   lines.push({ kind: 'title', label: context.shiftNumber })

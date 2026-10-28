@@ -14,6 +14,7 @@ import {
 	ChartTooltipContent,
 } from "#/components/ui/chart"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import {
 	analyticsOverviewOptions,
@@ -58,7 +59,7 @@ const rankingConfig = {
 export function DashboardPage() {
 	const search = routeApi.useSearch()
 	const navigate = routeApi.useNavigate()
-	const { activeBranch, activeBranchId, canSelectBranch } = useBranch()
+	const { activeBranch, activeBranchId, branches, canSelectBranch } = useBranch()
 
 	// P9-D4: URL branch wins when present, otherwise the shell switcher. A manager never sends
 	// one, so a hand-edited parameter cannot turn their page into a 403.
@@ -124,7 +125,7 @@ export function DashboardPage() {
 		revenue: slice.revenueBaseMinor,
 	}))
 	const ranking = data.branchRanking.map((branch) => ({
-		name: branch.code,
+		name: branchLabelFor(branches, { code: branch.code }),
 		take: branch.takeMinor,
 	}))
 

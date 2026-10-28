@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -100,7 +101,7 @@ export function TerminalFormDialog({
 								<SelectContent>
 									{retailBranches.map((branch) => (
 										<SelectItem key={branch.id} value={branch.id}>
-											{branch.code} · {branch.name}
+											{formatBranchLabel(branch)}
 										</SelectItem>
 									))}
 								</SelectContent>

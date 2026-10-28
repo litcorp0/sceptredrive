@@ -1,4 +1,4 @@
-import { formatAccraDateTime, formatDateTime } from '@sceptre/shared'
+import { formatAccraDateTime, formatBranchLabel, formatDateTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import { ScreenHeader, StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
@@ -132,7 +132,8 @@ export function ShiftReportScreen({
             Sceptre Drive POS
           </p>
           <p className="text-sm font-semibold">
-            {identity.branchCode} · {identity.terminalCode}
+            {formatBranchLabel({ name: identity.branchName, code: identity.branchCode })} ·{' '}
+            {identity.terminalCode}
           </p>
         </div>
         <div className="text-right text-sm">

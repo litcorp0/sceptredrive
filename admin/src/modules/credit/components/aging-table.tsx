@@ -1,4 +1,4 @@
-import { formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDay } from "@sceptre/shared"
 import { Link } from "@tanstack/react-router"
 import { TableMessage } from "#/components/common/table-message"
 import {
@@ -24,10 +24,7 @@ export function AgingTable({ branch, asOf }: { branch: BranchAging; asOf: string
 	return (
 		<div className="rounded-lg border bg-card">
 			<div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-				<p className="font-medium">
-					{branch.branch.name}
-					<span className="ml-2 font-mono text-xs text-muted-foreground">{branch.branch.code}</span>
-				</p>
+				<p className="font-medium">{formatBranchLabel(branch.branch)}</p>
 				<p className="text-sm">
 					<span className="text-muted-foreground">Outstanding: </span>
 					<span className="font-semibold tabular-nums">{formatGhs(branch.totals.total)}</span>

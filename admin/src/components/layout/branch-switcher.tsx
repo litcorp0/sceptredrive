@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router"
 import {
 	Select,
@@ -62,7 +63,7 @@ export function BranchSwitcher() {
 		return (
 			<div className="flex h-8 max-w-36 items-center rounded-md border border-white/15 bg-white/5 px-2.5 text-sm text-topbar-foreground sm:max-w-none">
 				<span className="truncate">
-					{activeBranch ? `${activeBranch.code} · ${activeBranch.name}` : "No branch assigned"}
+					{activeBranch ? formatBranchLabel(activeBranch) : "No branch assigned"}
 				</span>
 			</div>
 		)
@@ -81,7 +82,7 @@ export function BranchSwitcher() {
 				<SelectItem value="all">All branches</SelectItem>
 				{branches.map((branch) => (
 					<SelectItem key={branch.id} value={branch.id}>
-						{branch.code} · {branch.name}
+						{formatBranchLabel(branch)}
 					</SelectItem>
 				))}
 			</SelectContent>

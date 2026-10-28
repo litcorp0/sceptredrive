@@ -1,4 +1,4 @@
-import { priceBandBounds, withinPriceBand } from "@sceptre/shared"
+import { formatBranchLabel, priceBandBounds, withinPriceBand } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { type FormEvent, useEffect, useState } from "react"
@@ -165,7 +165,7 @@ function OverrideRow({
 			})
 			return
 		}
-		toast.success(`Price saved for ${branch.code}`)
+		toast.success(`Price saved for ${formatBranchLabel(branch)}`)
 	}
 
 	const saveMutation = useMutation({
@@ -209,8 +209,7 @@ function OverrideRow({
 		<form onSubmit={handleSubmit} className="grid gap-3 px-4 py-3">
 			<div className="flex flex-wrap items-center gap-3">
 				<div className="min-w-36 flex-1">
-					<p className="text-sm font-medium">{branch.name}</p>
-					<p className="font-mono text-xs text-muted-foreground">{branch.code}</p>
+					<p className="text-sm font-medium">{formatBranchLabel(branch)}</p>
 				</div>
 
 				<p className="text-xs text-muted-foreground">

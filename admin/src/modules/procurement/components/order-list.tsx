@@ -11,6 +11,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table"
+import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import type { OrderListRow } from "../types"
 import { OrderStatusBadge } from "../ui/order-status-badge"
@@ -40,6 +42,7 @@ export function OrderList({
 	onOffsetChange: (offset: number) => void
 	emptyMessage?: string
 }) {
+	const { branches } = useBranch()
 	const columns = canSelectBranch ? 8 : 7
 
 	return (
@@ -91,7 +94,9 @@ export function OrderList({
 										</Link>
 									</TableCell>
 									{canSelectBranch ? (
-										<TableCell className="text-muted-foreground">{order.branchCode}</TableCell>
+										<TableCell className="text-muted-foreground">
+											{branchLabelFor(branches, { code: order.branchCode })}
+										</TableCell>
 									) : null}
 									<TableCell>
 										<OrderStatusBadge status={order.status} />

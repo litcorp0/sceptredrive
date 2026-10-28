@@ -18,6 +18,8 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { ApiError } from "#/lib/api"
+import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { hasPermission } from "#/lib/role"
 import { settingsListOptions } from "#/modules/settings"
 import { conflictsOptions } from "../api/oversight"
@@ -50,6 +52,7 @@ interface ConflictsListProps {
  */
 export function ConflictsList({ query, onOffsetChange, onClearFilters }: ConflictsListProps) {
 	const { session } = authenticatedRoute.useRouteContext()
+	const { branches } = useBranch()
 	const canResolve = hasPermission(session.user.role, "conflict.resolve")
 
 	// A flag is a typed setting (P14-D41), not a second store. A missing row means its
@@ -172,7 +175,9 @@ export function ConflictsList({ query, onOffsetChange, onClearFilters }: Conflic
 								<TableCell className="text-muted-foreground">
 									<time dateTime={conflict.createdAt}>{formatDateTime(conflict.createdAt)}</time>
 								</TableCell>
-								<TableCell className="text-muted-foreground">{conflict.branchCode}</TableCell>
+								<TableCell className="text-muted-foreground">
+									{branchLabelFor(branches, { code: conflict.branchCode })}
+								</TableCell>
 								<TableCell className="text-muted-foreground">{conflict.terminalCode}</TableCell>
 								<TableCell>
 									{conflict.saleId ? (

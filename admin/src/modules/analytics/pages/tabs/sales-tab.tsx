@@ -22,6 +22,8 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { ApiError } from "#/lib/api"
+import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import { analyticsSalesOptions } from "../../api/analytics"
 import { ChartCard } from "../../components/chart-card"
@@ -47,6 +49,7 @@ const hourConfig = {
 export function SalesTab() {
 	const search = routeApi.useSearch()
 	const navigate = routeApi.useNavigate()
+	const { branches } = useBranch()
 	const { branchId } = useAnalyticsBranch(search.branchId)
 	const query = toReportQuery(search, branchId, { limit: SALES_PAGE_SIZE })
 	const report = useQuery(analyticsSalesOptions(query))
@@ -276,7 +279,7 @@ export function SalesTab() {
 										</Link>
 									</TableCell>
 									<TableCell>{formatDateTime(row.occurredAt)}</TableCell>
-									<TableCell>{row.branchCode}</TableCell>
+									<TableCell>{branchLabelFor(branches, { code: row.branchCode })}</TableCell>
 									<TableCell>{row.terminalCode}</TableCell>
 									<TableCell>{row.cashierName}</TableCell>
 									<TableCell className="text-right font-mono tabular-nums">

@@ -1,4 +1,4 @@
-import { formatDay } from '@sceptre/shared'
+import { formatBranchLabel, formatDay } from '@sceptre/shared'
 import { ScreenHeader } from '@/components/common'
 import { AppHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -87,7 +87,8 @@ export function HomePage({
           title="This terminal today"
           description={
             <>
-              {formatDay(`${day}T00:00:00.000Z`)} · {identity.terminalCode} · {identity.branchCode}
+              {formatDay(`${day}T00:00:00.000Z`)} · {identity.terminalCode} ·{' '}
+              {formatBranchLabel({ name: identity.branchName, code: identity.branchCode })}
             </>
           }
           actions={

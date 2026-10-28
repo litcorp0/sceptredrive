@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -200,7 +201,7 @@ export function OrderForm({
 									<SelectContent>
 										{branches.map((branch) => (
 											<SelectItem key={branch.id} value={branch.id}>
-												{branch.code} · {branch.name}
+												{formatBranchLabel(branch)}
 											</SelectItem>
 										))}
 									</SelectContent>

@@ -1,3 +1,4 @@
+import { formatBranchLabel } from '@sceptre/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useUnprintedCount } from '@/modules/sales'
@@ -58,7 +59,9 @@ export function AppHeader({
       >
         <span className="min-w-0">
           <span className="block text-[11px] font-medium tracking-wide text-topbar-muted uppercase">
-            {identity?.branchName ?? 'Sceptre Drive'} · {identity?.branchCode ?? '—'}
+            {identity
+              ? formatBranchLabel({ name: identity.branchName, code: identity.branchCode })
+              : 'Sceptre Drive'}
           </span>
           <span
             className="block truncate text-sm font-semibold text-topbar-foreground"

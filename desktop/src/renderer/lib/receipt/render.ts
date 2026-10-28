@@ -1,5 +1,6 @@
 import {
   formatAccraDateTime,
+  formatBranchLabel,
   formatTenderLabel,
   REFUND_REASON_LABELS,
   REFUND_RESTOCK_LABELS,
@@ -264,8 +265,8 @@ export function toEscPosLines(model: ReceiptModel, options: RenderOptions = {}):
   }
 
   centerRow(model.header.seller, true)
-  centerRow(model.header.branch)
-  centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
+  centerRow(formatBranchLabel({ name: model.header.branch, code: model.header.branchCode }))
+  centerRow(model.header.terminal)
   rows.push({ text: divider })
   centerRow(`RECEIPT ${model.header.receiptNumber}`, true)
   pair('Date', formatAccraDateTime(model.header.occurredAt))
@@ -495,8 +496,8 @@ export function refundToEscPosLines(
   }
 
   centerRow(model.header.seller, true)
-  centerRow(model.header.branch)
-  centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
+  centerRow(formatBranchLabel({ name: model.header.branch, code: model.header.branchCode }))
+  centerRow(model.header.terminal)
   rows.push({ text: divider })
   centerRow('*** REFUND ***', true)
   centerRow(`REFUND ${model.header.refundNumber}`, true)
@@ -635,8 +636,8 @@ export function repaymentToEscPosLines(
   }
 
   centerRow(model.header.seller, true)
-  centerRow(model.header.branch)
-  centerRow(`${model.header.branchCode} - ${model.header.terminal}`)
+  centerRow(formatBranchLabel({ name: model.header.branch, code: model.header.branchCode }))
+  centerRow(model.header.terminal)
   rows.push({ text: divider })
   centerRow('*** CREDIT REPAYMENT ***', true)
   centerRow(`RECEIPT ${model.header.number}`, true)

@@ -1,4 +1,4 @@
-import { formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon, DownloadIcon, PencilIcon, PrinterIcon } from "lucide-react"
@@ -81,7 +81,8 @@ export function OrderDetailPage() {
 		)
 	}
 
-	const branchName = branches.find((branch) => branch.id === order.branchId)?.name ?? "Branch"
+	const branch = branches.find((candidate) => candidate.id === order.branchId) ?? null
+	const branchLabel = branch ? formatBranchLabel(branch) : "Branch"
 	const canEdit = order.status === "DRAFT" && hasPermission(session.user.role, "procurement.create")
 
 	return (
@@ -103,7 +104,7 @@ export function OrderDetailPage() {
 							>
 								{order.supplierName}
 							</Link>{" "}
-							· {order.supplierCode} · {branchName}
+							· {order.supplierCode} · {branchLabel}
 						</p>
 						<p className="mt-0.5 text-sm text-muted-foreground">
 							Expected {order.expectedDate ? formatDay(order.expectedDate) : "—"} · raised{" "}
@@ -252,7 +253,7 @@ export function OrderDetailPage() {
 				)}
 			</div>
 
-			<OrderPrintSheet detail={detail} branchName={branchName} />
+			<OrderPrintSheet detail={detail} branchLabel={branchLabel} />
 		</section>
 	)
 }

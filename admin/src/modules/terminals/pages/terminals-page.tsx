@@ -16,6 +16,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { hasPermission } from "#/lib/role"
 import { terminalListOptions } from "../api/terminals"
 import { DevicesDialog } from "../components/devices-dialog"
@@ -49,8 +50,7 @@ export function TerminalsPage() {
 	)
 
 	const terminals = terminalsQuery.data?.terminals ?? []
-	const branchCode = (branchId: string) =>
-		branches.find((branch) => branch.id === branchId)?.code ?? "—"
+	const branchLabel = (branchId: string) => branchLabelFor(branches, { id: branchId })
 
 	return (
 		<div>
@@ -102,7 +102,7 @@ export function TerminalsPage() {
 									<TableCell className="font-mono text-xs">{terminal.code}</TableCell>
 									<TableCell className="font-medium">{terminal.name}</TableCell>
 									<TableCell className="font-mono text-xs text-muted-foreground">
-										{branchCode(terminal.branchId)}
+										{branchLabel(terminal.branchId)}
 									</TableCell>
 									<TableCell>
 										<ActiveBadge active={terminal.isActive} />

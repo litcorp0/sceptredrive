@@ -1,4 +1,4 @@
-import { formatDateTime, formatTime } from '@sceptre/shared'
+import { formatBranchLabel, formatDateTime, formatTime } from '@sceptre/shared'
 import { useEffect, useState } from 'react'
 import { ScreenHeader, StatusNote } from '@/components/common'
 import { Button } from '@/components/ui/button'
@@ -225,7 +225,7 @@ export function ShiftRoute() {
             Sceptre Drive POS
           </p>
           <p className="text-sm font-semibold">
-            {session?.branch.code ?? '—'} · {session?.terminal.code ?? '—'}
+            {session ? formatBranchLabel(session.branch) : '—'} · {session?.terminal.code ?? '—'}
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm">

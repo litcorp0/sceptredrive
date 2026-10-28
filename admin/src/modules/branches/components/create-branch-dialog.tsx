@@ -76,7 +76,7 @@ export function CreateBranchDialog({
 				phone: phone || undefined,
 			}),
 		onSuccess: async (data) => {
-			toast.success(`Branch ${data.branch.code} created`)
+			toast.success(`Branch ${data.branch.name} (${data.branch.code}) created`)
 			await queryClient.invalidateQueries({ queryKey: branchKeys.all })
 			onOpenChange(false)
 			resetForm()

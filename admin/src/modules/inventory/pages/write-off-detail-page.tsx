@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -69,8 +70,11 @@ export function WriteOffDetailPage() {
 	}
 
 	const writeOff = detail.writeOff
-	const branchName =
-		branches.find((branch) => branch.id === writeOff.branchId)?.name ?? writeOff.branchName
+	const branch = branches.find((candidate) => candidate.id === writeOff.branchId) ?? null
+	const branchName = branch?.name ?? writeOff.branchName
+	const branchLabel = branch
+		? formatBranchLabel(branch)
+		: formatBranchLabel({ name: writeOff.branchName, code: writeOff.branchCode })
 	const actorLabel = session.user.staffId ?? session.user.id
 	const canWithdraw = writeOff.status === "PENDING_APPROVAL" && writeOff.requestedBy === actorLabel
 
@@ -79,7 +83,7 @@ export function WriteOffDetailPage() {
 			<PageHeader
 				eyebrow="Inventory"
 				title={`Write-off ${writeOff.number}`}
-				description={`${branchName} · raised complete; the admin's decision posts the movements.`}
+				description={`${branchLabel} · raised complete; the admin's decision posts the movements.`}
 				actions={back}
 			/>
 

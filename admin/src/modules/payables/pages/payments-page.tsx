@@ -1,4 +1,4 @@
-import { formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDay } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -297,7 +297,9 @@ export function PaymentsPage() {
 										</Link>
 									</TableCell>
 									{canSelectBranch ? (
-										<TableCell className="text-muted-foreground">{payment.branchCode}</TableCell>
+										<TableCell className="text-muted-foreground">
+											{formatBranchLabel({ name: payment.branchName, code: payment.branchCode })}
+										</TableCell>
 									) : null}
 									<TableCell>
 										<PaymentMethodBadge method={payment.method} />

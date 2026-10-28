@@ -1,4 +1,4 @@
-import { formatAccraDateTime, formatTenderLabel } from '@sceptre/shared'
+import { formatAccraDateTime, formatBranchLabel, formatTenderLabel } from '@sceptre/shared'
 import { Card } from '@/components/ui/card'
 import { formatMinorWithSymbol } from '@/lib/format'
 import type { ReceiptModel } from '@/lib/receipt/render'
@@ -55,10 +55,8 @@ export function ReceiptView({ model }: { model: ReceiptModel }) {
 
         <header className="text-center">
           <p className="text-sm font-bold uppercase">{header.seller}</p>
-          <p>{header.branch}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {header.branchCode} · {header.terminal}
-          </p>
+          <p>{formatBranchLabel({ name: header.branch, code: header.branchCode })}</p>
+          <p className="text-[11px] text-muted-foreground">{header.terminal}</p>
           <p className="mt-2 border-y border-dashed border-foreground/30 py-1 text-[11px] font-semibold">
             RECEIPT {header.receiptNumber}
           </p>

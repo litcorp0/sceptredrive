@@ -1,4 +1,4 @@
-import { formatDay, toDateInputValue } from "@sceptre/shared"
+import { formatBranchLabel, formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -312,7 +312,9 @@ export function InvoicesPage() {
 										)}
 									</TableCell>
 									{canSelectBranch ? (
-										<TableCell className="text-muted-foreground">{invoice.branchCode}</TableCell>
+										<TableCell className="text-muted-foreground">
+											{formatBranchLabel({ name: invoice.branchName, code: invoice.branchCode })}
+										</TableCell>
 									) : null}
 									<TableCell className="text-muted-foreground">
 										{formatDay(invoice.invoiceDate)}

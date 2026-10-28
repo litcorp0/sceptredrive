@@ -97,7 +97,7 @@ export function SettingsPage() {
 
 	const description = canSelectBranch
 		? activeBranch
-			? `Every setting the server defines, resolved for ${activeBranch.code}. A branch value overrides the global value.`
+			? `Every setting the server defines, resolved for ${activeBranch.name} (${activeBranch.code}). A branch value overrides the global value.`
 			: "Every setting the server defines, resolved with global values and built-in defaults. Select a branch to see its overrides."
 		: "Every setting the server defines, resolved for your branch."
 

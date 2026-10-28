@@ -13,10 +13,10 @@ import { formatOrderLine } from "../utils/order"
  */
 export function OrderPrintSheet({
 	detail,
-	branchName,
+	branchLabel,
 }: {
 	detail: OrderDetail
-	branchName: string
+	branchLabel: string
 }) {
 	const { order, lines } = detail
 
@@ -27,7 +27,7 @@ export function OrderPrintSheet({
 					<p className="text-xs font-medium tracking-[0.08em] uppercase">Sceptre Drive</p>
 					<h1 className="mt-1 font-display text-2xl tracking-[-0.015em]">Purchase order</h1>
 					<p className="mt-1 font-mono text-sm">{order.number}</p>
-					<p className="mt-1 text-sm text-muted-foreground">{branchName}</p>
+					<p className="mt-1 text-sm text-muted-foreground">{branchLabel}</p>
 				</div>
 				<div className="text-right text-sm">
 					<OrderStatusBadge status={order.status} />

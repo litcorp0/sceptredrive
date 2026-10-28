@@ -1,4 +1,4 @@
-import { formatDay } from "@sceptre/shared"
+import { formatBranchLabel, formatDay } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -99,8 +99,12 @@ export function ProductDetailPage() {
 	const readOnly = !canUpdate || !product.isActive
 	const latestReceipt = latestReceiptQuery.data?.movements[0]
 	const latestReceiptBranch = latestReceipt
-		? (branches.find((branch) => branch.id === latestReceipt.branchId)?.name ??
-			latestReceipt.branchCode)
+		? (() => {
+				const branch = branches.find((entry) => entry.id === latestReceipt.branchId)
+				return branch
+					? formatBranchLabel(branch)
+					: formatBranchLabel({ name: "", code: latestReceipt.branchCode })
+			})()
 		: null
 
 	return (

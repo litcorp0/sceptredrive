@@ -1,4 +1,4 @@
-import type { Role } from "@sceptre/shared"
+import { formatBranchLabel, type Role } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type FormEvent, useEffect, useState } from "react"
 import { Button } from "#/components/ui/button"
@@ -172,7 +172,7 @@ export function CreateStaffDialog({
 											.filter((branch) => branch.isActive)
 											.map((branch) => (
 												<SelectItem key={branch.id} value={branch.id}>
-													{branch.code}
+													{formatBranchLabel(branch)}
 												</SelectItem>
 											))}
 									</SelectContent>

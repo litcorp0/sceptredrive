@@ -11,6 +11,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { formatGhs } from "#/lib/format"
 import type { LoyaltyLiabilityReport } from "../types"
 
@@ -30,12 +31,8 @@ const NUMBER_COLUMNS = [
  */
 export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) {
 	const { branches } = useBranch()
-	const branchName = (branchId: string | null) =>
-		branchId === null
-			? "Global (expiry)"
-			: (branches.find((branch) => branch.id === branchId)?.name ?? "—")
-	const branchCode = (branchId: string | null) =>
-		branchId === null ? null : (branches.find((branch) => branch.id === branchId)?.code ?? null)
+	const branchLabel = (branchId: string | null) =>
+		branchId === null ? "Global (expiry)" : branchLabelFor(branches, { id: branchId })
 
 	const { activity } = report
 	const totals = Object.fromEntries(
@@ -123,14 +120,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 								) : (
 									activity.rows.map((row) => (
 										<TableRow key={row.branchId ?? "global"}>
-											<TableCell>
-												{branchName(row.branchId)}
-												{branchCode(row.branchId) ? (
-													<span className="ml-2 font-mono text-xs text-muted-foreground">
-														{branchCode(row.branchId)}
-													</span>
-												) : null}
-											</TableCell>
+											<TableCell>{branchLabel(row.branchId)}</TableCell>
 											<TableCell className="text-right tabular-nums">
 												{formatCount(row.earnedPoints)}
 											</TableCell>
@@ -195,7 +185,7 @@ export function LiabilityReport({ report }: { report: LoyaltyLiabilityReport }) 
 										>
 											{row.customerName}
 										</Link>
-										<p className="text-xs text-muted-foreground">{branchName(row.branchId)}</p>
+										<p className="text-xs text-muted-foreground">{branchLabel(row.branchId)}</p>
 									</div>
 									<span className="tabular-nums text-sm font-medium text-destructive">
 										{formatCount(row.balancePoints)} points

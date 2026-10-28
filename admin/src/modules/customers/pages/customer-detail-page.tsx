@@ -1,4 +1,4 @@
-import { formatDay, formatGhanaPhone } from "@sceptre/shared"
+import { formatBranchLabel, formatDay, formatGhanaPhone } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -343,10 +343,10 @@ export function CustomerDetailPage() {
 										{profiles.map((profile) => (
 											<TableRow key={profile.id}>
 												<TableCell className="font-medium">
-													{profile.branchName}
-													<span className="ml-2 font-mono text-xs text-muted-foreground">
-														{profile.branchCode}
-													</span>
+													{formatBranchLabel({
+														name: profile.branchName,
+														code: profile.branchCode,
+													})}
 												</TableCell>
 												<TableCell className="text-right tabular-nums">
 													{formatGhs(profile.limitMinor)}

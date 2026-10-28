@@ -1,4 +1,4 @@
-import { formatDateTime, formatDay, formatGhanaPhone } from "@sceptre/shared"
+import { formatBranchLabel, formatDateTime, formatDay, formatGhanaPhone } from "@sceptre/shared"
 import { formatGhs } from "#/lib/format"
 import type { CreditStatement, StatementEntry } from "../types"
 import {
@@ -27,8 +27,7 @@ export function StatementView({ statement }: { statement: CreditStatement }) {
 					<p className="text-sm text-muted-foreground">Customer credit statement</p>
 				</div>
 				<div className="text-right text-sm">
-					<p className="font-medium">{statement.branch.name}</p>
-					<p className="text-muted-foreground">{statement.branch.code}</p>
+					<p className="font-medium">{formatBranchLabel(statement.branch)}</p>
 				</div>
 			</div>
 

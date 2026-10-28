@@ -159,7 +159,7 @@ export function EditBranchForm({
 			<ConfirmDialog
 				open={confirmOpen}
 				onOpenChange={setConfirmOpen}
-				title={`Deactivate ${branch.code}?`}
+				title={`Deactivate ${branch.name} (${branch.code})?`}
 				description="The branch stays visible in reports and history, but new terminals cannot be added and staff cannot be assigned to it. This can be reversed by an administrator in the database."
 				confirmLabel="Deactivate"
 				destructive

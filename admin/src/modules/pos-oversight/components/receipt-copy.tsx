@@ -1,4 +1,4 @@
-import { formatCount, formatDateTime, formatTenderLabel } from "@sceptre/shared"
+import { formatBranchLabel, formatCount, formatDateTime, formatTenderLabel } from "@sceptre/shared"
 import { formatGhs } from "#/lib/format"
 import type { ReceiptCopy } from "../types"
 import { signatureGroups } from "../utils/labels"
@@ -39,10 +39,8 @@ export function ReceiptCopyDocument({ copy }: { copy: ReceiptCopy }) {
 
 			<header className="mt-3 grid gap-0.5 text-center">
 				<p className="font-semibold whitespace-pre-line">{header.seller}</p>
-				<p>{header.branch}</p>
-				<p className="text-black/70">
-					{header.branchCode} · {header.terminal}
-				</p>
+				<p>{formatBranchLabel({ name: header.branch, code: header.branchCode })}</p>
+				<p className="text-black/70">{header.terminal}</p>
 			</header>
 
 			<div className="mt-2 grid gap-0.5 border-y border-dashed border-black/30 py-1.5">

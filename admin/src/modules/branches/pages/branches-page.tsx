@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { PlusIcon } from "lucide-react"
@@ -49,8 +50,7 @@ export function BranchesPage() {
 				<Table>
 					<TableHeader>
 						<TableRow>
-							<TableHead className="w-28">Code</TableHead>
-							<TableHead>Name</TableHead>
+							<TableHead className="w-64">Branch</TableHead>
 							<TableHead className="w-32">Type</TableHead>
 							<TableHead>City / Area</TableHead>
 							<TableHead className="w-24">Status</TableHead>
@@ -59,20 +59,19 @@ export function BranchesPage() {
 					</TableHeader>
 					<TableBody>
 						{branchesQuery.isLoading ? (
-							<TableMessage colSpan={6}>Loading branches…</TableMessage>
+							<TableMessage colSpan={5}>Loading branches…</TableMessage>
 						) : branchesQuery.isError ? (
-							<TableMessage colSpan={6} tone="error">
+							<TableMessage colSpan={5} tone="error">
 								Couldn't load branches.
 							</TableMessage>
 						) : branches.length === 0 ? (
-							<TableMessage colSpan={6}>
+							<TableMessage colSpan={5}>
 								No branches yet. Create the first one to get started.
 							</TableMessage>
 						) : (
 							branches.map((branch) => (
 								<TableRow key={branch.id}>
-									<TableCell className="font-mono text-xs">{branch.code}</TableCell>
-									<TableCell className="font-medium">{branch.name}</TableCell>
+									<TableCell className="font-medium">{formatBranchLabel(branch)}</TableCell>
 									<TableCell>
 										<StatusBadge tone={branch.type === "WAREHOUSE" ? "amber" : "zinc"}>
 											{branch.type === "WAREHOUSE" ? "Warehouse" : "Retail"}

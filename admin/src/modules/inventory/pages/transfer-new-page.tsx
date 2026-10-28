@@ -1,3 +1,4 @@
+import { formatBranchLabel } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { ChevronLeftIcon } from "lucide-react"
@@ -177,7 +178,7 @@ export function TransferNewPage() {
 							<SelectContent>
 								{sourceBranches.map((branch) => (
 									<SelectItem key={branch.id} value={branch.id}>
-										{branch.code} · {branch.name}
+										{formatBranchLabel(branch)}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -193,7 +194,7 @@ export function TransferNewPage() {
 								<SelectContent>
 									{selectableBranches.map((branch) => (
 										<SelectItem key={branch.id} value={branch.id}>
-											{branch.code} · {branch.name}
+											{formatBranchLabel(branch)}
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -203,7 +204,7 @@ export function TransferNewPage() {
 								id="to-branch"
 								readOnly
 								aria-readonly="true"
-								value={activeBranch ? `${activeBranch.code} · ${activeBranch.name}` : "Your branch"}
+								value={activeBranch ? formatBranchLabel(activeBranch) : "Your branch"}
 							/>
 						)}
 					</div>

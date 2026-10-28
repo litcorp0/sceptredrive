@@ -21,6 +21,7 @@ import {
 	TableRow,
 } from "#/components/ui/table"
 import { useBranch } from "#/lib/branch-context"
+import { branchLabelFor } from "#/lib/branch-label"
 import { hasPermission } from "#/lib/role"
 import { countListOptions } from "../api/counts"
 import { CountStatusBadge } from "../components/count-status-badge"
@@ -33,7 +34,7 @@ const ALL = "all"
 
 export function CountsPage() {
 	const { session } = authenticatedRoute.useRouteContext()
-	const { activeBranchId } = useBranch()
+	const { activeBranchId, branches } = useBranch()
 	const navigate = useNavigate()
 	const canCount = hasPermission(session.user.role, "inventory.count")
 
@@ -123,8 +124,10 @@ export function CountsPage() {
 								<TableRow key={count.id}>
 									<TableCell className="font-mono text-xs">{count.number}</TableCell>
 									<TableCell>
-										{count.branchCode}
-										<span className="block text-xs text-muted-foreground">{count.branchName}</span>
+										{branchLabelFor(branches, {
+											id: count.branchId,
+											code: count.branchCode,
+										})}
 									</TableCell>
 									<TableCell>
 										<CountStatusBadge status={count.status} />

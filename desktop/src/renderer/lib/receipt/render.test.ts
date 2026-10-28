@@ -193,8 +193,8 @@ describe('42-column ESC/POS text', () => {
    */
   const SINGLE_CASH_DOCUMENT = [
     '              Sceptre Drive',
-    '             Accra - Spintex',
-    '          ACC-SPX - ACC-SPX-T01',
+    '        Accra - Spintex (ACC-SPX)',
+    '               ACC-SPX-T01',
     '------------------------------------------',
     '    RECEIPT ACC-SPX-T01-20261023-0007',
     'Date                     23 Oct 2026 10:15',

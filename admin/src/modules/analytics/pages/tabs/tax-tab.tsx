@@ -1,4 +1,4 @@
-import { formatBasisPoints, formatBucket, formatCount } from "@sceptre/shared"
+import { formatBasisPoints, formatBranchLabel, formatBucket, formatCount } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
@@ -252,9 +252,7 @@ export function TaxTab() {
 							<TableBody>
 								{data.byBranch.map((row) => (
 									<TableRow key={row.branchId}>
-										<TableCell>
-											{row.code} · {row.name}
-										</TableCell>
+										<TableCell>{formatBranchLabel({ name: row.name, code: row.code })}</TableCell>
 										<TableCell className="text-right font-mono tabular-nums">
 											{formatGhs(row.baseMinor)}
 										</TableCell>

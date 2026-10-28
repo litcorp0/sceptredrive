@@ -1,5 +1,5 @@
 import type { PowerSyncDatabase } from '@powersync/web'
-import { PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
+import { formatBranchLabel, PIN_PROBLEM_MESSAGES, pinProblem } from '@sceptre/shared'
 import { cn } from 'cn'
 import { useCallback, useEffect, useState } from 'react'
 import { PinPad, StatusNote } from '@/components/common'
@@ -189,7 +189,9 @@ export function LoginRoute() {
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-4 border-b border-white/15 pb-2">
             <dt className="text-topbar-muted">Branch</dt>
-            <dd className="font-mono">{identity?.branch ?? session?.branch.code ?? '—'}</dd>
+            <dd className="font-mono">
+              {session ? formatBranchLabel(session.branch) : (identity?.branch ?? '—')}
+            </dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-white/15 pb-2">
             <dt className="text-topbar-muted">Terminal</dt>

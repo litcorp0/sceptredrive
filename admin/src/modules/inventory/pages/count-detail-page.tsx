@@ -1,4 +1,4 @@
-import { formatDateTime } from "@sceptre/shared"
+import { formatBranchLabel, formatDateTime } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ChevronLeftIcon, SearchIcon } from "lucide-react"
@@ -201,7 +201,7 @@ export function CountDetailPage() {
 		<section>
 			<PageHeader
 				title={`Count ${count.number}`}
-				description={`${count.branchCode} · ${count.branchName}${
+				description={`${formatBranchLabel({ name: count.branchName, code: count.branchCode })}${
 					count.note ? ` · ${count.note}` : ""
 				}`}
 				actions={

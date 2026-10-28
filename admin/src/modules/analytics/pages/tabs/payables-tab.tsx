@@ -1,4 +1,4 @@
-import { formatBucket } from "@sceptre/shared"
+import { formatBranchLabel, formatBucket } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
@@ -207,9 +207,7 @@ export function PayablesTab() {
 							<TableBody>
 								{data.topSuppliers.map((row) => (
 									<TableRow key={row.supplierId}>
-										<TableCell>
-											{row.code} · {row.name}
-										</TableCell>
+										<TableCell>{formatBranchLabel({ name: row.name, code: row.code })}</TableCell>
 										<TableCell className="text-right font-mono tabular-nums">
 											{formatGhs(row.outstandingMinor)}
 										</TableCell>

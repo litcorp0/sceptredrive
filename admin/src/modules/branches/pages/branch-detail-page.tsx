@@ -48,7 +48,7 @@ export function BranchDetailPage() {
 
 			<PageHeader
 				title={branch.name}
-				description={`${branch.code} · ${branch.type === "WAREHOUSE" ? "Warehouse" : "Retail"}`}
+				description={`${branch.name} (${branch.code}) · ${branch.type === "WAREHOUSE" ? "Warehouse" : "Retail"}`}
 				actions={<ActiveBadge active={branch.isActive} />}
 			/>
 
