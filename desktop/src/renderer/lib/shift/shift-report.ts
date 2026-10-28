@@ -220,7 +220,7 @@ export async function writeShiftReport(tx: Transaction, report: LocalShiftReport
         momo_minor, card_minor, bank_transfer_minor, change_minor, cash_in_minor, cash_out_minor,
         expected_cash_minor, counted_cash_minor, variance_minor, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       // The row id is the shift id: one report per drawer, enforced locally the
       // same way `unique(shift_id)` enforces it on the server.

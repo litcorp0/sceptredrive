@@ -236,6 +236,11 @@ describe('writeShiftReport', () => {
     expect(columns).toBeDefined()
     expect(parameters).toHaveLength(columns?.length ?? 0)
 
+    // A placeholder-to-column mismatch is a runtime SQLite error even when the
+    // parameter array has the right length; assert the statement itself.
+    const placeholders = /VALUES\s*\(([\s\S]*?)\)/.exec(sql)?.[1]?.match(/\?/g) ?? []
+    expect(placeholders).toHaveLength(columns?.length ?? 0)
+
     const stored: Record<string, unknown> = {}
     for (const [index, column] of (columns ?? []).entries()) {
       stored[column] = parameters?.[index]
