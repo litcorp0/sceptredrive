@@ -40,13 +40,22 @@ export function DrawerTile({
           </a>
         </div>
       ) : (
-        <p
-          className="mt-1 font-mono text-2xl font-semibold tabular-nums"
-          data-money
-          data-testid="home-drawer"
-        >
-          {formatGhs(expectedCashMinor)}
-        </p>
+        <>
+          <p
+            className="mt-1 font-mono text-2xl font-semibold tabular-nums"
+            data-money
+            data-testid="home-drawer"
+          >
+            {formatGhs(expectedCashMinor)}
+          </p>
+          <a
+            href="#shift"
+            className="inline-flex h-11 items-center text-sm font-medium text-brand-ink underline underline-offset-4 hover:no-underline"
+            data-testid="home-shift-details"
+          >
+            Shift details
+          </a>
+        </>
       )}
     </div>
   )

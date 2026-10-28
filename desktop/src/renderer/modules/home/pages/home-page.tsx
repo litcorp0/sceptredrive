@@ -96,6 +96,15 @@ export function HomePage({
               <Button
                 type="button"
                 variant="outline"
+                onClick={() => navigate('shift')}
+                className="h-14 px-5 text-sm"
+                data-testid="home-shift"
+              >
+                Shift
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => navigate('pos/refund')}
                 className="h-14 px-5 text-sm"
                 data-testid="home-refund"
