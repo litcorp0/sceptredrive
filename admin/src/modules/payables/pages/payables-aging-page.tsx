@@ -1,7 +1,10 @@
-import { toDateInputValue } from "@sceptre/shared"
+import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { useState } from "react"
+import { ExportButton } from "#/components/common/export-button"
+import { PrintButton } from "#/components/common/print-button"
+import { PrintSheet } from "#/components/common/print-sheet"
 import { type PickedSupplier, SupplierCombobox } from "#/components/common/supplier-combobox"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
@@ -70,7 +73,7 @@ export function PayablesAgingPage() {
 
 	return (
 		<div className="grid gap-4">
-			<div className="flex flex-wrap items-end gap-3">
+			<div className="flex flex-wrap items-end gap-3 print:hidden">
 				<div className="grid gap-1.5">
 					<Label htmlFor="payables-aging-asof" className="text-xs text-muted-foreground">
 						As of
@@ -124,7 +127,37 @@ export function PayablesAgingPage() {
 						Clear supplier
 					</Button>
 				) : null}
+
+				<div className="ml-auto flex gap-2 pb-1">
+					<ExportButton
+						path="/api/payables/aging/export"
+						query={{
+							branchId: effectiveBranchId ?? undefined,
+							asOf: asOf || undefined,
+							supplierId: supplier?.id,
+						}}
+						label="Payables aging"
+						disabled={!aging}
+					/>
+					<PrintButton label="payables aging" disabled={!aging} />
+				</div>
 			</div>
+
+			<PrintSheet
+				title="Payables aging"
+				meta={[
+					{
+						label: "Branch",
+						value:
+							branches.find((branch) => branch.id === effectiveBranchId)?.name ?? "All branches",
+					},
+					{ label: "As at", value: formatDay(aging?.asOf ?? asOf) },
+					{
+						label: "Supplier",
+						value: supplier ? `${supplier.name} (${supplier.code})` : "All suppliers",
+					},
+				]}
+			/>
 
 			{agingQuery.isLoading ? (
 				<p className="text-sm text-muted-foreground">Loading payables aging…</p>

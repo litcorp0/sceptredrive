@@ -2,6 +2,9 @@ import { formatDay, toDateInputValue } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { useState } from "react"
+import { ExportButton } from "#/components/common/export-button"
+import { PrintButton } from "#/components/common/print-button"
+import { PrintSheet } from "#/components/common/print-sheet"
 import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
@@ -95,13 +98,23 @@ export function CreditAgingPage() {
 						Customers over their limit
 					</Link>
 				</Button>
+
+				<ExportButton
+					path="/api/credit/aging/export"
+					query={{ branchId: effectiveBranchId ?? undefined, asOf: asOf || undefined }}
+					label="Credit aging"
+					disabled={!agingQuery.data}
+				/>
+				<PrintButton label="credit aging" disabled={!agingQuery.data} />
 			</div>
 
-			<div className="hidden print:block">
-				<p className="text-lg font-semibold">
-					Credit aging — as of {formatDay(agingQuery.data?.asOf ?? asOf)}
-				</p>
-			</div>
+			<PrintSheet
+				title="Credit aging"
+				meta={[
+					{ label: "Branch", value: selectedBranch?.name ?? "All branches" },
+					{ label: "As at", value: formatDay(agingQuery.data?.asOf ?? asOf) },
+				]}
+			/>
 
 			{agingQuery.isLoading ? (
 				<p className="text-sm text-muted-foreground">Loading aging report…</p>
