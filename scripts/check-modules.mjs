@@ -47,6 +47,7 @@ const REQUIRED_MODULES = [
   'credit',
   'customers',
   'dashboard',
+  'evat',
   'inventory',
   'loyalty',
   'operations',
