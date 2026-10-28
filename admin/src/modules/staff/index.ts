@@ -19,7 +19,7 @@ export {
 	deactivateStaff,
 	reactivateStaff,
 	resetStaffPassword,
-	setStaffPin,
+	resetStaffPin,
 	staffDetailOptions,
 	staffListOptions,
 	staffPinStatus,
@@ -28,7 +28,6 @@ export {
 export { CreateStaffDialog } from "./components/create-staff-dialog"
 export { type Credentials, CredentialsDialog } from "./components/credentials-dialog"
 export { EditStaffDialog } from "./components/edit-staff-dialog"
-export { PinDialog } from "./components/pin-dialog"
 export { PinStatusBadge } from "./components/pin-status-badge"
 export { StaffTable } from "./components/staff-table"
 export { PermissionsPage } from "./pages/permissions-page"
@@ -36,8 +35,7 @@ export { StaffPage } from "./pages/staff-page"
 export type {
 	CreateStaffResult,
 	ResetPasswordResult,
-	SetStaffPinInput,
-	SetStaffPinResult,
+	ResetPinResult,
 	Staff,
 	StaffCreateInput,
 	StaffListQuery,

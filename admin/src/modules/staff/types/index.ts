@@ -25,14 +25,17 @@ export interface StaffPinStatus {
 	activeBindings: number
 }
 
-export interface SetStaffPinResult {
-	staffId: string
-	pinVersion: number
-}
-
 export interface CreateStaffResult {
 	staff: Staff
 	temporaryPassword: string
+	temporaryPin: string | null
+	invitationSent: boolean
+}
+
+export interface ResetPinResult {
+	staffId: string
+	pinVersion: number
+	temporaryPin: string
 	invitationSent: boolean
 }
 
@@ -54,10 +57,6 @@ export interface StaffUpdateInput {
 	phone?: string
 	role?: Role
 	branchId?: string | null
-}
-
-export interface SetStaffPinInput {
-	pin: string
 }
 
 export type StaffListQuery = {

@@ -23,12 +23,12 @@ import {
 	deactivateStaff,
 	reactivateStaff,
 	resetStaffPassword,
+	resetStaffPin,
 	staffListOptions,
 } from "../api/staff"
 import { CreateStaffDialog } from "../components/create-staff-dialog"
 import { type Credentials, CredentialsDialog } from "../components/credentials-dialog"
 import { EditStaffDialog } from "../components/edit-staff-dialog"
-import { PinDialog } from "../components/pin-dialog"
 import { StaffTable } from "../components/staff-table"
 import type { Staff } from "../types"
 
@@ -70,10 +70,9 @@ export function StaffPage() {
 
 	const [createOpen, setCreateOpen] = useState(false)
 	const [editStaff, setEditStaff] = useState<Staff | null>(null)
-	const [pinStaff, setPinStaff] = useState<Staff | null>(null)
 	const [credentials, setCredentials] = useState<Credentials | null>(null)
 	const [confirmAction, setConfirmAction] = useState<{
-		kind: "deactivate" | "reactivate" | "reset"
+		kind: "deactivate" | "reactivate" | "reset" | "reset-pin"
 		staff: Staff
 	} | null>(null)
 
@@ -104,7 +103,28 @@ export function StaffPage() {
 			setCredentials({
 				title: "Password reset",
 				email: target?.email ?? "",
+				staffId: target?.staffId ?? null,
 				password: data.temporaryPassword,
+				invitationSent: data.invitationSent,
+			})
+			setConfirmAction(null)
+			await queryClient.invalidateQueries({ queryKey: staffKeys.all })
+		},
+		onError: (error) => {
+			setConfirmAction(null)
+			toastApiError(error)
+		},
+	})
+
+	const resetPinMutation = useMutation({
+		mutationFn: (staffId: string) => resetStaffPin(staffId),
+		onSuccess: async (data, staffId) => {
+			const target = staff.find((member) => member.id === staffId)
+			setCredentials({
+				title: "PIN reset",
+				email: target?.email ?? "",
+				staffId: data.staffId,
+				pin: data.temporaryPin,
 				invitationSent: data.invitationSent,
 			})
 			setConfirmAction(null)
@@ -189,7 +209,7 @@ export function StaffPage() {
 				onOffsetChange={setOffset}
 				onEdit={setEditStaff}
 				onResetPassword={(member) => setConfirmAction({ kind: "reset", staff: member })}
-				onSetPin={setPinStaff}
+				onResetPin={(member) => setConfirmAction({ kind: "reset-pin", staff: member })}
 				onToggleActive={(member) =>
 					setConfirmAction({
 						kind: member.isActive ? "deactivate" : "reactivate",
@@ -207,7 +227,9 @@ export function StaffPage() {
 						setCredentials({
 							title: "Account created",
 							email: result.staff.email,
+							staffId: result.staff.staffId,
 							password: result.temporaryPassword,
+							pin: result.temporaryPin,
 							invitationSent: result.invitationSent,
 						})
 					}
@@ -217,8 +239,6 @@ export function StaffPage() {
 			{editStaff ? (
 				<EditStaffDialog staff={editStaff} onClose={() => setEditStaff(null)} isAdmin={isAdmin} />
 			) : null}
-
-			{pinStaff ? <PinDialog staff={pinStaff} onClose={() => setPinStaff(null)} /> : null}
 
 			{credentials ? (
 				<CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
@@ -230,29 +250,39 @@ export function StaffPage() {
 				title={
 					confirmAction?.kind === "reset"
 						? `Reset password for ${confirmAction.staff.name}?`
-						: confirmAction?.kind === "deactivate"
-							? `Deactivate ${confirmAction.staff.name}?`
-							: `Reactivate ${confirmAction?.staff.name}?`
+						: confirmAction?.kind === "reset-pin"
+							? `Reset PIN for ${confirmAction.staff.name}?`
+							: confirmAction?.kind === "deactivate"
+								? `Deactivate ${confirmAction.staff.name}?`
+								: `Reactivate ${confirmAction?.staff.name}?`
 				}
 				description={
 					confirmAction?.kind === "reset"
 						? "A new temporary password is generated, all their sessions are signed out, and they must choose a new password at next sign-in."
-						: confirmAction?.kind === "deactivate"
-							? "They are signed out immediately and cannot sign in until reactivated."
-							: "They can sign in again with their existing password."
+						: confirmAction?.kind === "reset-pin"
+							? "A new temporary PIN is generated, every terminal binding is revoked, and they must choose a new PIN at next till sign-in. The PIN is emailed and shown once."
+							: confirmAction?.kind === "deactivate"
+								? "They are signed out immediately and cannot sign in until reactivated."
+								: "They can sign in again with their existing password."
 				}
 				confirmLabel={
 					confirmAction?.kind === "reset"
 						? "Reset password"
-						: confirmAction?.kind === "deactivate"
-							? "Deactivate"
-							: "Reactivate"
+						: confirmAction?.kind === "reset-pin"
+							? "Reset PIN"
+							: confirmAction?.kind === "deactivate"
+								? "Deactivate"
+								: "Reactivate"
 				}
 				destructive={confirmAction?.kind !== "reactivate"}
-				pending={resetMutation.isPending || setActiveMutation.isPending}
+				pending={
+					resetMutation.isPending || resetPinMutation.isPending || setActiveMutation.isPending
+				}
 				onConfirm={() => {
 					if (!confirmAction) return
 					if (confirmAction.kind === "reset") resetMutation.mutate(confirmAction.staff.id)
+					else if (confirmAction.kind === "reset-pin")
+						resetPinMutation.mutate(confirmAction.staff.id)
 					else
 						setActiveMutation.mutate({
 							staffId: confirmAction.staff.id,

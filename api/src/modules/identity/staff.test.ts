@@ -1,4 +1,5 @@
 import { db } from '@sceptre/db'
+import { pinProblem } from '@sceptre/shared'
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -40,6 +41,7 @@ interface StaffResponse {
 
 interface CreateStaffResponse extends StaffResponse {
   temporaryPassword: string
+  temporaryPin: string | null
   invitationSent: boolean
 }
 
@@ -152,7 +154,7 @@ describe.skipIf(!available)('staff management API', () => {
     }
   })
 
-  it('creates a cashier with a sequential staff ID and a temporary password', async () => {
+  it('creates a cashier with a sequential staff ID and temporary credentials', async () => {
     cashierEmail = `cashier-${suffix}@sceptre.test`
     const { status, body } = await createStaffViaApi(adminCookie, {
       email: cashierEmail.toUpperCase(),
@@ -171,7 +173,21 @@ describe.skipIf(!available)('staff management API', () => {
     expect(body.staff.mustChangePassword).toBe(true)
     expect(body.staff.isActive).toBe(true)
     expect(body.temporaryPassword).toHaveLength(16)
+    expect(body.temporaryPin).toMatch(/^\d{6}$/)
+    expect(pinProblem(body.temporaryPin ?? '')).toBeNull()
     expect(body.invitationSent).toBe(true)
+
+    const pinRows = await db
+      .select({
+        pinHash: userTable.pinHash,
+        pinVersion: userTable.pinVersion,
+        pinMustChange: userTable.pinMustChange,
+      })
+      .from(userTable)
+      .where(eq(userTable.id, cashierId))
+    expect(pinRows[0]?.pinHash).not.toBeNull()
+    expect(pinRows[0]?.pinVersion).toBe(1)
+    expect(pinRows[0]?.pinMustChange).toBe(true)
 
     const auditRows = await db
       .select()
@@ -413,7 +429,7 @@ describe.skipIf(!available)('staff management API', () => {
     expect(response.status).toBe(201)
     const body = await readJson<{ staffId: string; pinVersion: number }>(response)
     expect(body.staffId).toBe(cashierStaffId)
-    expect(body.pinVersion).toBe(1)
+    expect(body.pinVersion).toBe(2)
     expect(JSON.stringify(body)).not.toMatch(/pinHash|pin_hash|2468/)
 
     const rows = await db
@@ -424,7 +440,7 @@ describe.skipIf(!available)('staff management API', () => {
       })
       .from(userTable)
       .where(eq(userTable.id, cashierId))
-    expect(rows[0]?.pinVersion).toBe(1)
+    expect(rows[0]?.pinVersion).toBe(2)
     expect(rows[0]?.pinMustChange).toBe(true)
     expect(rows[0]?.pinHash).toMatch(/^\$argon2id\$/)
     expect(await verifyPassword({ hash: rows[0]?.pinHash ?? '', password: '2468' })).toBe(true)
@@ -548,7 +564,7 @@ describe.skipIf(!available)('staff management API', () => {
       .select({ pinVersion: userTable.pinVersion })
       .from(userTable)
       .where(eq(userTable.id, id))
-    expect(rows[0]?.pinVersion).toBe(2)
+    expect(rows[0]?.pinVersion).toBe(3)
 
     const bindings = await db
       .select({ revokedAt: posStaffBinding.revokedAt })
@@ -571,7 +587,7 @@ describe.skipIf(!available)('staff management API', () => {
     }>(response)
     expect(body).toEqual({
       hasPin: true,
-      pinVersion: 1,
+      pinVersion: 2,
       pinMustChange: true,
       activeBindings: 0,
     })
@@ -659,5 +675,38 @@ describe.skipIf(!available)('staff management API', () => {
       headers: authedHeaders(adminCookie),
     })
     expect(stillLast.status).toBe(409)
+  })
+
+  it('generates and emails a new temporary PIN on reset', async () => {
+    const before = await db
+      .select({ pinVersion: userTable.pinVersion })
+      .from(userTable)
+      .where(eq(userTable.id, cashierId))
+
+    const response = await app.request(`/api/staff/${cashierId}/pin/reset`, {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+    })
+
+    expect(response.status).toBe(201)
+    const body = await readJson<{
+      staffId: string
+      pinVersion: number
+      temporaryPin: string
+      invitationSent: boolean
+    }>(response)
+    expect(body.staffId).toMatch(/^GA-\d{4}$/)
+    expect(body.temporaryPin).toMatch(/^\d{6}$/)
+    expect(pinProblem(body.temporaryPin)).toBeNull()
+    expect(body.pinVersion).toBe((before[0]?.pinVersion ?? 0) + 1)
+    expect(body.invitationSent).toBe(true)
+    expect(JSON.stringify(body)).not.toMatch(/pinHash|pin_hash|argon2/i)
+
+    const rows = await db
+      .select({ pinHash: userTable.pinHash, pinMustChange: userTable.pinMustChange })
+      .from(userTable)
+      .where(eq(userTable.id, cashierId))
+    expect(rows[0]?.pinHash).not.toBeNull()
+    expect(rows[0]?.pinMustChange).toBe(true)
   })
 })

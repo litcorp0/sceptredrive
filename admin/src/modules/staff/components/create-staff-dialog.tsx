@@ -38,7 +38,12 @@ export function CreateStaffDialog({
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
-	onCreated: (result: { staff: Staff; temporaryPassword: string; invitationSent: boolean }) => void
+	onCreated: (result: {
+		staff: Staff
+		temporaryPassword: string
+		temporaryPin: string | null
+		invitationSent: boolean
+	}) => void
 	/** Passed in rather than read from the route: components do not reach into the route tree. */
 	session: Session
 }) {

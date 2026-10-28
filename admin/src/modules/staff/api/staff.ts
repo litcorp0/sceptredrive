@@ -3,8 +3,7 @@ import { apiRequest } from "#/lib/api"
 import type {
 	CreateStaffResult,
 	ResetPasswordResult,
-	SetStaffPinInput,
-	SetStaffPinResult,
+	ResetPinResult,
 	Staff,
 	StaffCreateInput,
 	StaffListQuery,
@@ -44,8 +43,8 @@ export function staffPinStatus(id: string) {
 	return apiRequest<StaffPinStatus>(`/api/staff/${id}/pin-status`)
 }
 
-export function setStaffPin(id: string, input: SetStaffPinInput) {
-	return apiRequest<SetStaffPinResult>(`/api/staff/${id}/pin`, { method: "POST", body: input })
+export function resetStaffPin(id: string) {
+	return apiRequest<ResetPinResult>(`/api/staff/${id}/pin/reset`, { method: "POST" })
 }
 
 export function deactivateStaff(id: string) {

@@ -36,7 +36,7 @@ interface StaffTableProps {
 	onOffsetChange: (offset: number) => void
 	onEdit: (member: Staff) => void
 	onResetPassword: (member: Staff) => void
-	onSetPin: (member: Staff) => void
+	onResetPin: (member: Staff) => void
 	onToggleActive: (member: Staff) => void
 }
 
@@ -59,7 +59,7 @@ export function StaffTable({
 	onOffsetChange,
 	onEdit,
 	onResetPassword,
-	onSetPin,
+	onResetPin,
 	onToggleActive,
 }: StaffTableProps) {
 	return (
@@ -143,9 +143,9 @@ export function StaffTable({
 											{canResetPinFor(member) ? (
 												<DropdownMenuItem
 													className="cursor-pointer"
-													onSelect={() => onSetPin(member)}
+													onSelect={() => onResetPin(member)}
 												>
-													Set PIN
+													Reset PIN
 												</DropdownMenuItem>
 											) : null}
 											{canUpdate && member.id !== currentUserId ? (

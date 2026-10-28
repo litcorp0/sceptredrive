@@ -64,6 +64,14 @@ staffRoutes.post(
   (c) => staffController.setStaffPin(c, c.req.valid('param').id, c.req.valid('json')),
 )
 
+staffRoutes.post(
+  '/api/staff/:id/pin/reset',
+  requireSession,
+  requirePermission('staff.pin.reset'),
+  validateStaffIdParam,
+  (c) => staffController.resetStaffPin(c, c.req.valid('param').id),
+)
+
 staffRoutes.get(
   '/api/staff/:id/pin-status',
   requireSession,

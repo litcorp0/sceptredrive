@@ -59,6 +59,13 @@ export async function setStaffPin(c: Context<AppEnv>, id: string, body: SetStaff
   return c.json(result, 201)
 }
 
+export async function resetStaffPin(c: Context<AppEnv>, id: string) {
+  const user = currentUser(c)
+  const actor = actorFromContext(c)
+  const result = await staffService.resetStaffPin(user, actor, id)
+  return c.json(result, 201)
+}
+
 export async function getStaffPinState(c: Context<AppEnv>, id: string) {
   const user = currentUser(c)
   const state = await staffService.getStaffPinState(user, id)

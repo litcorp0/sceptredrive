@@ -56,6 +56,7 @@ export interface CreateStaffInput {
 export interface CreateStaffResult {
   staff: StaffRow
   temporaryPassword: string
+  temporaryPin: string | null
   invitationSent: boolean
 }
 
@@ -86,6 +87,14 @@ export interface SetPinResult {
   pinVersion: number
 }
 
+/** A generated PIN is returned once so the console can show it after email. */
+export interface ResetPinResult {
+  staffId: string
+  pinVersion: number
+  temporaryPin: string
+  invitationSent: boolean
+}
+
 export interface ChangeOwnPasswordInput {
   currentPassword: string
   newPassword: string
@@ -94,5 +103,8 @@ export interface ChangeOwnPasswordInput {
 export interface InvitationData {
   to: string
   name: string
-  temporaryPassword: string
+  staffId: string | null
+  role: string
+  temporaryPassword?: string | undefined
+  temporaryPin?: string | undefined
 }

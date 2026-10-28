@@ -429,9 +429,10 @@ Go to **Staff → New staff account**.
 | Phone | Optional |
 
 A manager **must** have a branch; an admin **must not**. The API enforces both.
-The account receives a temporary password and an invitation email (or the
-temporary password is shown when email is not configured). The first console
-sign-in forces a password change.
+The account receives a temporary password, a temporary PIN (managers can use the
+till too), and a welcome email. The first console sign-in forces a password
+change; the first till sign-in forces a PIN change. The console shows both
+credentials once if email is not configured.
 
 Create one manager per retail branch, plus one for the warehouse if that
 warehouse has staff.
@@ -439,21 +440,23 @@ warehouse has staff.
 ### 4.2 Create cashiers
 
 Same dialog, role `Cashier`, branch set. A cashier never signs into the admin
-console; the account exists for POS identity, PIN and audit.
+console; the account exists for POS identity, PIN and audit. The generated PIN
+is emailed with the account details and must be changed at first till sign-in.
 
-### 4.3 Set the first PIN
+### 4.3 The temporary PIN is generated
 
-On the staff row → **Set PIN**.
+You do **not** type a PIN. The API generates a six-digit temporary PIN for every
+cashier and manager, hashes it, emails it with the staff ID, and shows it once
+in the console.
 
-- 4–6 digits.
-- Avoid repeated digits and straight sequences.
-- This is a **temporary PIN**: it signs the cashier out of every POS terminal
-  and they must choose a new PIN at the till on first use.
+- It signs the cashier out of every POS terminal and must be changed at the
+  till on first use.
+- **Staff → Reset PIN** generates a new one, revokes every terminal binding and
+  emails it. Use it when a PIN is forgotten or a phone is lost.
+- A manager can reset cashier PINs; only an admin can reset another manager’s
+  PIN.
 - Resetting a PIN bumps its version; every bound terminal must adopt the new
   version.
-
-The manager who sets the PIN tells the cashier the temporary value out of band.
-Never send a PIN by email or put it in a ticket.
 
 ### 4.4 Deactivate leavers, never delete
 

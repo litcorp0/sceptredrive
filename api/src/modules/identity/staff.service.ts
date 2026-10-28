@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto'
 import { db } from '@sceptre/db'
-import type { Role } from '@sceptre/shared'
+import { pinProblem, type Role } from '@sceptre/shared'
 import { auth } from '../../auth/auth.ts'
 import { hashPassword, verifyPassword } from '../../auth/password.ts'
 import { assertBranchAccess, branchScope, roleOf } from '../../auth/scope.ts'
@@ -38,6 +38,7 @@ import type {
   InvitationData,
   ListStaffFilters,
   ResetPasswordResult,
+  ResetPinResult,
   SetPinResult,
   StaffPinState,
   StaffRow,
@@ -55,13 +56,75 @@ export function generateTemporaryPassword(): string {
   return password
 }
 
+/**
+ * A six-digit temporary POS PIN. The shared policy rejects repeated digits and
+ * straight sequences, so generation retries until the value passes the same
+ * check the console applies to a manually chosen PIN.
+ */
+export function generateTemporaryPin(): string {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const pin = String(randomInt(0, 1_000_000)).padStart(6, '0')
+    if (pinProblem(pin) === null) return pin
+  }
+  throw new AppError(500, 'INTERNAL', 'Could not generate a temporary PIN')
+}
+
 async function sendInvitation(data: InvitationData): Promise<boolean> {
   const loginUrl = `${env.ADMIN_URL}/login`
+  const lines = [`Hello ${data.name},`, '']
+
+  if (data.temporaryPassword) {
+    lines.push('An account has been created for you on Sceptre Drive.', '')
+  } else if (data.temporaryPin) {
+    lines.push('Your Sceptre Drive POS PIN has been reset.', '')
+  }
+
+  if (data.staffId) lines.push(`Staff ID: ${data.staffId}`)
+  if (data.role) {
+    const roleLabels: Record<string, string> = {
+      ADMIN: 'Administrator',
+      MANAGER: 'Manager',
+      CASHIER: 'Cashier',
+    }
+    lines.push(`Role: ${roleLabels[data.role] ?? data.role}`)
+  }
+  if (data.staffId || data.role) lines.push('')
+
+  if (data.temporaryPassword) {
+    lines.push(
+      'Console sign-in:',
+      `  ${loginUrl}`,
+      `  Email: ${data.to}`,
+      `  Temporary password: ${data.temporaryPassword}`,
+      '',
+    )
+  }
+
+  if (data.temporaryPin) {
+    lines.push(
+      'Till sign-in:',
+      '  Use your staff ID (or email) and this temporary PIN:',
+      `  Temporary PIN: ${data.temporaryPin}`,
+      '',
+    )
+  }
+
+  if (data.temporaryPassword) {
+    lines.push('Choose a new password at your first console sign-in.')
+  }
+  if (data.temporaryPin) {
+    lines.push('Choose a new PIN at your first till sign-in.')
+  }
+  lines.push('', 'If you did not expect this, tell your administrator.')
+
   try {
     await email.send({
       to: data.to,
-      subject: 'Your Sceptre Drive account',
-      text: `Hello ${data.name},\n\nAn account has been created for you on Sceptre Drive.\n\nSign in at ${loginUrl}\nEmail: ${data.to}\nTemporary password: ${data.temporaryPassword}\n\nYou will be asked to choose a new password after signing in.`,
+      subject:
+        data.temporaryPin && !data.temporaryPassword
+          ? 'Your Sceptre Drive POS PIN was reset'
+          : 'Your Sceptre Drive account',
+      text: lines.join('\n'),
     })
     return true
   } catch (error) {
@@ -134,6 +197,12 @@ export async function createStaff(
 
   const staffId = await allocateStaffId(db)
   const temporaryPassword = generateTemporaryPassword()
+  // Managers can authorize at the till as well as cashiers, so both get a
+  // temporary PIN. Admins can still use the manual API path if they want to
+  // put a specific PIN on an account; their own account is not branch-bound.
+  const temporaryPin =
+    input.role === 'CASHIER' || input.role === 'MANAGER' ? generateTemporaryPin() : null
+  const pinHash = temporaryPin ? await hashPassword(temporaryPin) : null
 
   let createdUserId: string
   try {
@@ -156,6 +225,7 @@ export async function createStaff(
           staffId,
           phone: input.phone ?? null,
           mustChangePassword: true,
+          ...(pinHash ? { pinHash, pinVersion: 1, pinMustChange: true } : {}),
         },
         tx,
       )
@@ -172,6 +242,7 @@ export async function createStaff(
             role: updated.role,
             branchId: updated.branchId,
             email: updated.email,
+            hasPin: pinHash !== null,
           },
           branchId: updated.branchId,
         },
@@ -183,10 +254,13 @@ export async function createStaff(
     const invitationSent = await sendInvitation({
       to: emailAddress,
       name: input.name.trim(),
+      staffId: staff.staffId,
+      role: staff.role,
       temporaryPassword,
+      temporaryPin: temporaryPin ?? undefined,
     })
 
-    return { staff, temporaryPassword, invitationSent }
+    return { staff, temporaryPassword, temporaryPin, invitationSent }
   } catch (error) {
     await deleteUserRow(createdUserId).catch((cleanupError) => {
       logger.error({ err: cleanupError, userId: createdUserId }, 'failed to clean up staff user')
@@ -399,6 +473,8 @@ export async function resetStaffPassword(
   const invitationSent = await sendInvitation({
     to: target.email,
     name: target.name,
+    staffId: target.staffId,
+    role: target.role,
     temporaryPassword,
   })
 
@@ -456,6 +532,75 @@ export async function setStaffPin(
 
     return { staffId: target.staffId, pinVersion: updated.pinVersion }
   })
+}
+
+/**
+ * Generates a new temporary PIN, revokes every terminal binding, and emails it.
+ * The plain PIN is returned once for the one-time console dialog; only its hash
+ * is stored.
+ */
+export async function resetStaffPin(
+  actorUser: SessionUser,
+  actor: AuditActor,
+  id: string,
+): Promise<ResetPinResult> {
+  const temporaryPin = generateTemporaryPin()
+  const pinHash = await hashPassword(temporaryPin)
+
+  const result = await db.transaction(async (tx) => {
+    const target = await findUserById(id, tx)
+    if (!target) throw new NotFoundError('Staff member not found')
+
+    assertCanManagePin(actorUser, target)
+
+    if (!target.isActive) {
+      throw new ConflictError('Cannot reset a PIN for a deactivated staff member')
+    }
+    const staffId = target.staffId
+    if (!staffId) {
+      throw new ConflictError('This account has no staff ID and cannot use a POS terminal')
+    }
+
+    const updated = await updateStaffPin(id, pinHash, tx)
+    if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to reset the staff PIN')
+
+    const revoked = await revokeStaffBindings(target.id, actor.actorStaffId ?? actor.actorId, tx)
+
+    // Never audit the PIN or its hash: only the version and binding count.
+    await writeAudit(
+      {
+        ...actor,
+        action: 'staff.pin.reset',
+        entity: 'user',
+        entityId: target.id,
+        after: {
+          staffId,
+          pinVersion: updated.pinVersion,
+          revokedBindings: revoked,
+          pinMustChange: true,
+        },
+        branchId: target.branchId,
+      },
+      tx,
+    )
+
+    return { target, staffId, pinVersion: updated.pinVersion }
+  })
+
+  const invitationSent = await sendInvitation({
+    to: result.target.email,
+    name: result.target.name,
+    staffId: result.staffId,
+    role: result.target.role,
+    temporaryPin,
+  })
+
+  return {
+    staffId: result.staffId,
+    pinVersion: result.pinVersion,
+    temporaryPin,
+    invitationSent,
+  }
 }
 
 /** PIN metadata for the console badge and dialog; never returns the hash. */
