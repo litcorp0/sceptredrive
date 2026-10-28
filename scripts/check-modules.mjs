@@ -35,7 +35,8 @@ const API_FILE = path.join(ADMIN_SRC, 'lib', 'api.ts')
 
 const STRICT = process.argv.includes('--strict')
 
-/** The modules this phase migrates (D1's fifteen minus `analytics`), plus Phase 12's two. */
+/** The modules this phase migrates (D1's fifteen minus `analytics`), plus Phase 12's two,
+ *  plus Phase 14's `pos-oversight` (Plan 08) and `evat` (Plan 10). */
 const REQUIRED_MODULES = [
   'analytics',
   'approvals',
@@ -50,6 +51,7 @@ const REQUIRED_MODULES = [
   'loyalty',
   'operations',
   'payables',
+  'pos-oversight',
   'procurement',
   'replenishment',
   'settings',
