@@ -135,6 +135,10 @@ const SECTIONS = [
 	["/analytics", "Analytics"],
 	["/approvals", "Approvals"],
 	["/operations", "Branch operations"],
+	["/pos?tab=sales", "Sales"],
+	["/pos?tab=refunds", "Refunds"],
+	["/pos?tab=shifts", "Shifts"],
+	["/pos?tab=conflicts", "Conflicts"],
 	["/branches", "Branches"],
 	["/terminals", "Terminals"],
 	["/staff", "Staff"],
@@ -238,6 +242,158 @@ const SECTION_ASSERTIONS = new Map([
 			await shot(page, "plan12-operations-1440.png")
 		},
 	],
+	[
+		"/pos?tab=sales",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = [
+				"Receipt",
+				"When",
+				"Branch",
+				"Terminal",
+				"Cashier",
+				"Items",
+				"Total",
+				"Refunded",
+				"Conflicts",
+			].filter((header) => !headers.includes(header))
+			check(
+				missing.length === 0,
+				"/pos?tab=sales renders the document columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No sales match these filters."),
+				"/pos?tab=sales shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(!/NaN|undefined/.test(text), "/pos?tab=sales formats every figure", text.slice(0, 120))
+			await shot(page, "plan08-pos-sales-1440.png")
+		},
+	],
+	[
+		"/pos?tab=refunds",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = [
+				"Number",
+				"When",
+				"Receipt",
+				"Refunded",
+				"Reason",
+				"Tenders",
+				"Approval",
+			].filter((header) => !headers.includes(header))
+			check(
+				missing.length === 0,
+				"/pos?tab=refunds renders the refund columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No refunds match these filters."),
+				"/pos?tab=refunds shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+
+			// The list must not silently be an approvals list: read the same page the screen
+			// read, and prove a refund with no approval is rendered where one exists. The demo
+			// seed records no refunds, so an empty answer is stated rather than faked.
+			const response = await contextApi(page.request, "GET", "/api/pos/oversight/refunds?limit=50")
+			const refunds = response.body?.refunds ?? []
+			const withoutApproval = refunds.filter((refund) => refund.approvalId === null).length
+			if (refunds.length === 0) {
+				check(true, "/pos?tab=refunds has no seeded refund; its empty state is the honest result")
+			} else {
+				check(
+					withoutApproval === 0 || text.includes("Not required"),
+					"/pos?tab=refunds includes a refund with no approval",
+					`${withoutApproval} without approval of ${refunds.length} on the first page`,
+				)
+			}
+			await shot(page, "plan08-pos-refunds-1440.png")
+		},
+	],
+	[
+		"/pos?tab=shifts",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = [
+				"Number",
+				"Status",
+				"Opened",
+				"Closed",
+				"Terminal",
+				"Cashier",
+				"Counted",
+				"Expected",
+				"Variance",
+				"Review",
+			].filter((header) => !headers.includes(header))
+			check(
+				missing.length === 0,
+				"/pos?tab=shifts renders the drawer columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+			const rows = await bodyRows(page).count()
+			const text = await page.locator("main").innerText()
+			check(
+				rows > 0 || text.includes("No shifts match these filters."),
+				"/pos?tab=shifts shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			check(!/NaN|undefined/.test(text), "/pos?tab=shifts formats every figure", text.slice(0, 120))
+			await shot(page, "plan08-pos-shifts-1440.png")
+		},
+	],
+	[
+		"/pos?tab=conflicts",
+		async (page) => {
+			const headers = await tableHeaders(page)
+			const missing = ["Conflict", "Created", "Branch", "Terminal", "Document", "Status"].filter(
+				(header) => !headers.includes(header),
+			)
+			check(
+				missing.length === 0,
+				"/pos?tab=conflicts renders the queue columns",
+				missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
+			)
+
+			let rows = await bodyRows(page).count()
+			let text = await page.locator("main").innerText()
+			// The demo seed's one sample conflict is RESOLVED, and the queue defaults to OPEN.
+			// Read the history so the assertion can see a row instead of calling an empty
+			// queue a passing severity check.
+			if (rows === 0) {
+				await page.goto(`${adminUrl}/pos?tab=conflicts&status=ALL`, {
+					waitUntil: "networkidle",
+				})
+				await page.locator("main").waitFor()
+				rows = await bodyRows(page).count()
+				text = await page.locator("main").innerText()
+			}
+			check(
+				rows > 0 || text.includes("No conflicts match these filters."),
+				"/pos?tab=conflicts shows its rows or its own empty state",
+				`${rows} rows`,
+			)
+			if (rows > 0) {
+				const firstRow = await bodyRows(page).first().innerText()
+				check(
+					/\b(High|Medium|Low)\b/.test(firstRow),
+					"/pos?tab=conflicts names a severity on its first row",
+					firstRow.slice(0, 100).replace(/\s+/g, " "),
+				)
+			} else {
+				check(true, "/pos?tab=conflicts had no seeded conflict to inspect")
+			}
+			await shot(page, "plan08-pos-conflicts-1440.png")
+		},
+	],
+
 	[
 		"/inventory/write-offs",
 		async (page) => {
@@ -727,6 +883,35 @@ try {
 	await inSection("/suppliers", "^/suppliers/[^/]+$", "supplier detail")
 	await inSection("/suppliers/invoices", "^/suppliers/invoices/[^/]+$", "invoice detail")
 	await inSection("/suppliers/payments", "^/suppliers/payments/[^/]+$", "payment detail")
+
+	// The receipt copy is the one document whose header must say what it is, and whose
+	// figures must match the sale the list linked. The expected text is the caption, so a
+	// detail route that renders the list again cannot pass.
+	const saleHref = await inSection(
+		"/pos?tab=sales",
+		"^/pos/sales/[^/]+$",
+		"sale detail",
+		"Copy of receipt — not a till reprint",
+	)
+	if (saleHref) {
+		const receiptText = await page.locator("main").innerText()
+		const salesResponse = await contextApi(page.request, "GET", "/api/pos/oversight/sales?limit=1")
+		const receiptNumber = salesResponse.body?.sales?.[0]?.receiptNumber
+		check(
+			typeof receiptNumber === "string" && receiptText.includes(receiptNumber),
+			"the receipt copy shows the receipt number the sale carries",
+			typeof receiptNumber === "string" ? receiptNumber : "no sale on the API's first page",
+		)
+		check(/TOTAL/.test(receiptText), "the receipt copy shows a TOTAL figure")
+		check(
+			!/NaN|undefined/.test(receiptText),
+			"the receipt copy formats every figure",
+			receiptText.slice(0, 120).replace(/\s+/g, " "),
+		)
+		await shot(page, "plan08-pos-sale-detail-1440.png")
+	} else {
+		check(true, "sale detail: no sale row to open, and the sales list showed its empty state")
+	}
 
 	const customerHref = await inSection("/customers", "^/customers/[^/]+$", "customer detail")
 	if (customerHref) await visit(page, `${customerHref}/statement`, null)
