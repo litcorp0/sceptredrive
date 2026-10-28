@@ -30,11 +30,14 @@ import { formatGhs } from "#/lib/format"
 import { hasPermission } from "#/lib/role"
 // This screen is payables' even though its URL says suppliers; the supplier read stays on the
 // suppliers barrel.
+import { settingsListOptions } from "#/modules/settings"
 import { supplierDetailOptions } from "#/modules/suppliers"
 import { paymentListOptions } from "../api/payables"
 import { PaymentFormDialog } from "../components/payment-form-dialog"
 import { PaymentMethodBadge } from "../components/payment-method-badge"
+import { TransferDialog } from "../components/transfer-dialog"
 import type { SupplierPaymentMethod, SupplierPaymentStatus } from "../types"
+import { readFlag } from "../utils/flags"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
 const paymentsRoute = getRouteApi("/_authenticated/suppliers/payments/")
@@ -51,6 +54,10 @@ export function PaymentsPage() {
 	const navigate = paymentsRoute.useNavigate()
 	const { branches, activeBranchId, canSelectBranch } = useBranch()
 	const canRecord = hasPermission(session.user.role, "payable.payment")
+	const canTransfer = hasPermission(session.user.role, "payable.transfer")
+
+	const settingsQuery = useQuery(settingsListOptions())
+	const transfersEnabled = readFlag(settingsQuery.data?.settings, "flag.supplierTransfers")
 
 	const [supplier, setSupplier] = useState<PickedSupplier | null>(null)
 	const [method, setMethod] = useState<"ALL" | SupplierPaymentMethod>("ALL")
@@ -60,6 +67,7 @@ export function PaymentsPage() {
 	const [to, setTo] = useState("")
 	const [offset, setOffset] = useState(0)
 	const [dialogOpen, setDialogOpen] = useState(false)
+	const [transferOpen, setTransferOpen] = useState(false)
 
 	const initialSupplierQuery = useQuery({
 		...supplierDetailOptions(supplierId as string),
@@ -221,7 +229,18 @@ export function PaymentsPage() {
 				</div>
 			</div>
 
-			<div className="mb-3 flex justify-end">
+			{!transfersEnabled ? (
+				<output className="mb-3 block text-sm text-muted-foreground">
+					Supplier transfers are switched off in settings. Record payments by hand instead.
+				</output>
+			) : null}
+
+			<div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+				{transfersEnabled && canTransfer ? (
+					<Button size="sm" variant="outline" onClick={() => setTransferOpen(true)}>
+						Transfer
+					</Button>
+				) : null}
 				{canRecord ? (
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<PlusIcon className="size-4" aria-hidden="true" />
@@ -316,6 +335,14 @@ export function PaymentsPage() {
 				onOpenChange={setDialogOpen}
 				initialSupplier={supplier}
 			/>
+
+			{transfersEnabled && canTransfer ? (
+				<TransferDialog
+					open={transferOpen}
+					onOpenChange={setTransferOpen}
+					initialSupplier={supplier}
+				/>
+			) : null}
 		</section>
 	)
 }

@@ -1,4 +1,9 @@
-import type { PaymentListQuery, SupplierInvoiceListQuery } from "../types"
+import type {
+	PaymentListQuery,
+	SupplierInvoiceListQuery,
+	TransferListQuery,
+	TransferReconciliationQuery,
+} from "../types"
 
 /**
  * Every key the payables module owns.
@@ -24,6 +29,10 @@ export const payablesKeys = {
 	invoiceSupplier: ["invoice-supplier"] as const,
 	receiptInvoice: ["receipt-invoice"] as const,
 	aging: ["payables-aging"] as const,
+	transfers: ["supplier-transfers"] as const,
+	transfer: ["supplier-transfer"] as const,
+	providerBalance: ["provider-balance"] as const,
+	reconciliation: ["supplier-transfer-reconciliation"] as const,
 
 	invoiceList: (filters: SupplierInvoiceListQuery) => [...payablesKeys.invoices, filters] as const,
 	invoiceDetail: (invoiceId: string) => [...payablesKeys.invoice, invoiceId] as const,
@@ -38,4 +47,8 @@ export const payablesKeys = {
 	receiptInvoiceFor: (receiptId: string) => [...payablesKeys.receiptInvoice, receiptId] as const,
 	agingReport: (branchId: string | null | undefined, asOf: string, supplierId: string | null) =>
 		[...payablesKeys.aging, branchId, asOf, supplierId] as const,
+	transferList: (filters: TransferListQuery) => [...payablesKeys.transfers, filters] as const,
+	transferDetail: (transferId: string) => [...payablesKeys.transfer, transferId] as const,
+	reconciliationReport: (filters: TransferReconciliationQuery) =>
+		[...payablesKeys.reconciliation, filters] as const,
 }

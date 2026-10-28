@@ -347,3 +347,155 @@ export interface PayablesAgingResult {
 	totalOutstandingMinor: number
 	totalOnAccountMinor: number
 }
+
+// --- Supplier transfers (P14-D22 … D32) -------------------------------------
+//
+// A transfer is the intent; `payment` is the fact, written only when the provider
+// reports the money moved. The console never advances a status itself: every state
+// here comes straight from the API's payload.
+
+export type TransferStatus =
+	| "PENDING"
+	| "AWAITING_OTP"
+	| "SUCCESS"
+	| "FAILED"
+	| "REVERSED"
+	| "BLOCKED"
+	| "REJECTED"
+
+/** The destination type, inherited from the saved payment detail. Never chosen here. */
+export type TransferMethod = "BANK" | "MOMO"
+
+/** The transfer as the API returns it: no recipient code, ever (P14-D28). */
+export interface TransferView {
+	id: string
+	branchId: string
+	supplierId: string
+	supplierCode: string
+	supplierName: string
+	paymentDetailId: string
+	method: TransferMethod
+	amountMinor: number
+	reference: string
+	idempotencyKey: string
+	status: TransferStatus
+	provider: "PAYSTACK" | "MOCK"
+	providerTransferCode: string | null
+	providerTransferId: string | null
+	reason: string
+	note: string | null
+	failureCode: string | null
+	failureMessage: string | null
+	paymentId: string | null
+	unallocatedMinor: number
+	initiatedBy: string | null
+	finalizedAt: string | null
+	settledAt: string | null
+	lastVerifiedAt: string | null
+	createdAt: string
+}
+
+export interface TransferAllocationView {
+	id: string
+	invoiceId: string
+	invoiceNumber: string
+	supplierInvoiceNumber: string
+	amountMinor: number
+}
+
+export interface TransferDetail {
+	transfer: TransferView
+	/** The plan: which invoices the transfer was meant to settle. */
+	allocations: TransferAllocationView[]
+	/** The fact, when it exists: the payment written on `transfer.success`. */
+	payment: SupplierPaymentDetail | null
+	/** Money moved without a payment, or returned after one. A person must look. */
+	attention: boolean
+}
+
+export interface TransferCreateInput {
+	supplierId: string
+	branchId?: string
+	paymentDetailId: string
+	amountMinor: number
+	allocations?: PaymentAllocationInput[]
+	note?: string
+	idempotencyKey: string
+}
+
+export interface TransferFinalizeInput {
+	otp: string
+}
+
+export interface TransferCreateResult {
+	transfer: TransferDetail
+	replayed: boolean
+	/** The provider did not answer; the row stays pending and the sweep verifies it. */
+	providerUnavailable: boolean
+}
+
+export type TransferListQuery = {
+	supplierId?: string
+	branchId?: string
+	status?: TransferStatus
+	from?: string
+	to?: string
+	limit?: number
+	offset?: number
+}
+
+export interface TransferListResult {
+	transfers: TransferView[]
+	total: number
+	branchId: string | null
+}
+
+/** Null means the provider could not be asked — never zero (P14-D29). */
+export interface ProviderBalanceView {
+	currency: "GHS"
+	balanceMinor: number | null
+}
+
+export type TransferReconciliationQuery = {
+	from?: string
+	to?: string
+	branchId?: string
+}
+
+export type ReconciliationState = "manual" | "settled" | "unposted"
+
+export interface TransferReconciliationRow {
+	state: ReconciliationState
+	supplierId: string
+	supplierCode: string
+	supplierName: string
+	branchId: string
+	transferId: string | null
+	paymentId: string | null
+	/** The transfer reference, or the payment number for a manual payment. */
+	reference: string
+	status: TransferStatus | null
+	amountMinor: number
+	paymentAmountMinor: number | null
+	unallocatedMinor: number
+	feeMinor: number | null
+	failureCode: string | null
+	failureMessage: string | null
+	occurredAt: string
+	attention: boolean
+}
+
+export interface TransferReconciliationResult {
+	from: string | null
+	to: string | null
+	branchId: string | null
+	rows: TransferReconciliationRow[]
+	totals: {
+		settledMinor: number
+		manualMinor: number
+		/** Money that left the provider balance and has no payment. */
+		unpostedMinor: number
+		failedCount: number
+		reversedCount: number
+	}
+}

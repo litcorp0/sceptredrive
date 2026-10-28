@@ -11,12 +11,21 @@ import type {
 	PaymentListQuery,
 	PaymentListResult,
 	PaymentVoidInput,
+	ProviderBalanceView,
 	SupplierBalanceResult,
 	SupplierInvoiceDetail,
 	SupplierInvoiceListQuery,
 	SupplierInvoiceListResult,
 	SupplierInvoiceRow,
 	SupplierPaymentDetail,
+	TransferCreateInput,
+	TransferCreateResult,
+	TransferDetail,
+	TransferFinalizeInput,
+	TransferListQuery,
+	TransferListResult,
+	TransferReconciliationQuery,
+	TransferReconciliationResult,
 } from "../types"
 import { payablesKeys } from "./keys"
 
@@ -127,6 +136,83 @@ export function payablesAgingOptions(
 				asOf: asOf || undefined,
 				supplierId: supplierId ?? undefined,
 			}),
+	})
+}
+
+/** `GET /api/payables/transfers` — the intent list, filtered and paged by the screen. */
+export function listTransfers(query: TransferListQuery = {}) {
+	return apiRequest<TransferListResult>("/api/payables/transfers", { query })
+}
+
+export function transferListOptions(filters: TransferListQuery) {
+	return queryOptions({
+		queryKey: payablesKeys.transferList(filters),
+		queryFn: () => listTransfers(filters),
+	})
+}
+
+/** `GET /api/payables/transfers/:id` — the intent, its plan and the payment it posted. */
+export function getTransfer(id: string) {
+	return apiRequest<TransferDetail>(`/api/payables/transfers/${id}`)
+}
+
+export function transferDetailOptions(transferId: string) {
+	return queryOptions({
+		queryKey: payablesKeys.transferDetail(transferId),
+		queryFn: () => getTransfer(transferId),
+	})
+}
+
+/** The server mints the reference and owns every state transition; the console sends the plan. */
+export function createTransfer(input: TransferCreateInput) {
+	return apiRequest<TransferCreateResult>("/api/payables/transfers", {
+		method: "POST",
+		body: input,
+	})
+}
+
+/** The OTP a bank or the business owner's phone received (P14-D24). */
+export function finalizeTransfer(id: string, input: TransferFinalizeInput) {
+	return apiRequest<{ transfer: TransferDetail }>(`/api/payables/transfers/${id}/finalize`, {
+		method: "POST",
+		body: input,
+	})
+}
+
+/** One manual refresh through the same state writer the webhook uses. */
+export function verifyTransfer(id: string) {
+	return apiRequest<{ transfer: TransferDetail }>(`/api/payables/transfers/${id}/verify`, {
+		method: "POST",
+	})
+}
+
+/**
+ * `GET /api/payables/provider-balance` — null means "could not be asked", and the console must
+ * show it as unavailable rather than as zero (P14-D29).
+ */
+export function getProviderBalance() {
+	return apiRequest<ProviderBalanceView>("/api/payables/provider-balance")
+}
+
+export function providerBalanceOptions() {
+	return queryOptions({
+		queryKey: payablesKeys.providerBalance,
+		queryFn: getProviderBalance,
+		staleTime: 30_000,
+	})
+}
+
+/** `GET /api/payables/transfers/reconciliation` — manual, settled and unposted in one list. */
+export function getTransferReconciliation(query: TransferReconciliationQuery = {}) {
+	return apiRequest<TransferReconciliationResult>("/api/payables/transfers/reconciliation", {
+		query,
+	})
+}
+
+export function transferReconciliationOptions(filters: TransferReconciliationQuery) {
+	return queryOptions({
+		queryKey: payablesKeys.reconciliationReport(filters),
+		queryFn: () => getTransferReconciliation(filters),
 	})
 }
 
