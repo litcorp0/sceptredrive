@@ -1,9 +1,8 @@
 import { formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
 import { cn } from "cn"
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 import { useState } from "react"
-import { CopyButton } from "#/components/common/copy-button"
 import { PageHeader } from "#/components/common/page-header"
 import { Pagination } from "#/components/common/pagination"
 import { TableMessage } from "#/components/common/table-message"
@@ -145,24 +144,28 @@ export function AuditPage() {
 				<Table>
 					<TableHeader>
 						<TableRow>
-							<TableHead className="w-10" />
-							<TableHead className="w-44">Time</TableHead>
+							<TableHead className="w-10">
+								<span className="sr-only">Details</span>
+							</TableHead>
+							<TableHead className="w-40">Time</TableHead>
 							<TableHead>Action</TableHead>
-							<TableHead className="w-28">Entity</TableHead>
+							<TableHead className="w-24">Entity</TableHead>
+							<TableHead className="w-44">Entity ID</TableHead>
 							<TableHead className="w-24">Actor</TableHead>
-							<TableHead className="w-24">Branch</TableHead>
-							<TableHead className="w-36">Request ID</TableHead>
+							<TableHead className="w-20">Branch</TableHead>
+							<TableHead className="w-44">Terminal</TableHead>
+							<TableHead className="w-44">Request ID</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{auditQuery.isLoading ? (
-							<TableMessage colSpan={7}>Loading audit entries…</TableMessage>
+							<TableMessage colSpan={9}>Loading audit entries…</TableMessage>
 						) : auditQuery.isError ? (
-							<TableMessage colSpan={7} tone="error">
+							<TableMessage colSpan={9} tone="error">
 								Couldn't load the audit log.
 							</TableMessage>
 						) : entries.length === 0 ? (
-							<TableMessage colSpan={7}>No entries match these filters.</TableMessage>
+							<TableMessage colSpan={9}>No entries match these filters.</TableMessage>
 						) : (
 							entries.map((entry) => (
 								<AuditRow
@@ -202,26 +205,44 @@ function AuditRow({
 			<TableRow className="cursor-pointer" onClick={hasDetail ? onToggle : undefined}>
 				<TableCell>
 					{hasDetail ? (
-						<Button variant="ghost" size="icon-xs" aria-label={expanded ? "Collapse" : "Expand"}>
-							{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							aria-expanded={expanded}
+							aria-label={expanded ? "Collapse changes" : "Show changes"}
+						>
+							{expanded ? (
+								<ChevronDownIcon aria-hidden="true" />
+							) : (
+								<ChevronRightIcon aria-hidden="true" />
+							)}
 						</Button>
 					) : null}
 				</TableCell>
 				<TableCell className="text-muted-foreground">{formatDateTime(entry.createdAt)}</TableCell>
 				<TableCell className="font-mono text-xs">{entry.action}</TableCell>
 				<TableCell className="text-muted-foreground">{entry.entity}</TableCell>
+				<TableCell>
+					{entry.entityId ? (
+						<IdCell value={entry.entityId} what="entity id" />
+					) : (
+						<span className="text-muted-foreground">—</span>
+					)}
+				</TableCell>
 				<TableCell className="font-mono text-xs text-muted-foreground">
 					{entry.actorStaffId ?? "system"}
 				</TableCell>
 				<TableCell className="font-mono text-xs text-muted-foreground">{branchCode}</TableCell>
 				<TableCell>
+					{entry.terminalId ? (
+						<IdCell value={entry.terminalId} what="terminal id" />
+					) : (
+						<span className="text-muted-foreground">—</span>
+					)}
+				</TableCell>
+				<TableCell>
 					{entry.requestId ? (
-						<span className="flex items-center gap-1">
-							<span className="max-w-24 truncate font-mono text-xs text-muted-foreground">
-								{entry.requestId}
-							</span>
-							<CopyButton value={entry.requestId} label="" className="h-6 px-1.5" />
-						</span>
+						<IdCell value={entry.requestId} what="request id" />
 					) : (
 						<span className="text-muted-foreground">—</span>
 					)}
@@ -229,12 +250,54 @@ function AuditRow({
 			</TableRow>
 			{expanded && hasDetail ? (
 				<TableRow>
-					<TableCell colSpan={7} className="bg-muted/30 p-4">
+					<TableCell colSpan={9} className="bg-muted/30 p-4">
 						<DiffView before={entry.before} after={entry.after} />
 					</TableCell>
 				</TableRow>
 			) : null}
 		</>
+	)
+}
+
+/**
+ * A truncated identifier with a copy control.
+ *
+ * The audit table is a support tool: the request id is what an engineer asks for, and the entity
+ * id is what identifies the row. Both are long enough to break the layout, so the cell truncates
+ * and the full value stays in the tooltip and on the clipboard. The control carries an explicit
+ * accessible name — an icon-only button with no label is a button a screen reader cannot name.
+ */
+function IdCell({ value, what }: { value: string; what: string }) {
+	return (
+		<span className="flex items-center gap-1">
+			<span className="max-w-32 truncate font-mono text-xs text-muted-foreground" title={value}>
+				{value}
+			</span>
+			<CopyId value={value} what={what} />
+		</span>
+	)
+}
+
+function CopyId({ value, what }: { value: string; what: string }) {
+	const [copied, setCopied] = useState(false)
+
+	return (
+		<Button
+			type="button"
+			variant="ghost"
+			size="icon-xs"
+			aria-label={copied ? `${what} copied` : `Copy ${what}`}
+			onClick={(event) => {
+				// The row toggles the diff on click; copying is not a request to expand it.
+				event.stopPropagation()
+				void navigator.clipboard.writeText(value).then(() => {
+					setCopied(true)
+					setTimeout(() => setCopied(false), 1500)
+				})
+			}}
+		>
+			{copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+		</Button>
 	)
 }
 
