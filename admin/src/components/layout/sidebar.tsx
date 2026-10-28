@@ -13,6 +13,7 @@ import {
 	type LucideIcon,
 	MonitorSmartphone,
 	Package,
+	ReceiptText,
 	ScrollText,
 	Settings2,
 	ShieldCheck,
@@ -44,6 +45,7 @@ type NavPath =
 	| "/"
 	| "/analytics"
 	| "/approvals"
+	| "/pos"
 	| "/operations"
 	| "/branches"
 	| "/terminals"
@@ -91,6 +93,12 @@ export const NAV_GROUPS: NavGroup[] = [
 		label: "Operations",
 		items: [
 			{ to: "/approvals", label: "Approvals", icon: Inbox, permission: "approval.read" },
+			{
+				to: "/pos",
+				label: "POS oversight",
+				icon: ReceiptText,
+				permission: "pos.oversight.read",
+			},
 			{
 				to: "/operations",
 				label: "Branch operations",
@@ -174,6 +182,10 @@ const PAGE_LABELS: ReadonlyMap<string, string> = new Map([
 	["write-offs", "Write-offs"],
 	["over-limit", "Over limit"],
 	["replenishment", "Replenishment"],
+	["sales", "Sales"],
+	["refunds", "Refunds"],
+	["shifts", "Shifts"],
+	["conflicts", "Conflicts"],
 	["permissions", "Permissions"],
 	["submit", "Submit"],
 	["new", "New"],

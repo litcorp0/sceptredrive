@@ -11,7 +11,7 @@ interface AttentionItem {
 	icon: typeof Clock
 	tone: "warn" | "danger" | "info"
 	/** An existing screen where the reader can act; omitted when none exists yet. */
-	to?: "/inventory/stock" | "/customers/aging" | "/loyalty" | "/terminals" | "/audit"
+	to?: "/inventory/stock" | "/customers/aging" | "/loyalty" | "/terminals" | "/pos"
 }
 
 /**
@@ -67,7 +67,7 @@ export function NeedsAttention({ attention }: { attention: OverviewResponse["att
 				: "Awaiting review",
 			icon: ShieldAlert,
 			tone: attention.conflictsBySeverity.high > 0 ? ("danger" as const) : ("warn" as const),
-			to: "/audit" as const,
+			to: "/pos" as const,
 		},
 	] satisfies AttentionItem[]
 
@@ -112,7 +112,15 @@ export function NeedsAttention({ attention }: { attention: OverviewResponse["att
 					)
 					return (
 						<li key={item.id}>
-							{item.to ? (
+							{item.to === "/pos" ? (
+								<Link
+									to="/pos"
+									search={{ tab: "conflicts" }}
+									className="flex items-start gap-3 rounded-lg border bg-card p-3 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+								>
+									{body}
+								</Link>
+							) : item.to ? (
 								<Link
 									to={item.to}
 									className="flex items-start gap-3 rounded-lg border bg-card p-3 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

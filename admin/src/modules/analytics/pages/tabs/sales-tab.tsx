@@ -1,6 +1,6 @@
 import { formatBucket, formatCount, formatDateTime } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi } from "@tanstack/react-router"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { Pagination } from "#/components/common/pagination"
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card"
@@ -65,6 +65,9 @@ export function SalesTab() {
 
 	const data = report.data
 	if (!data) return null
+	// Plan 05 added `saleId` to the API's sales row; the module's `SalesRow` type
+	// predates it. The link needs the id, so state the shape the API now returns.
+	const rows = data.rows as Array<(typeof data.rows)[number] & { saleId: string }>
 	const exportQuery = toAnalyticsQuery(search, branchId)
 
 	if (data.totals.salesCount === 0) {
@@ -263,9 +266,21 @@ export function SalesTab() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{data.rows.map((row) => (
+							{rows.map((row) => (
 								<TableRow key={row.receiptNumber}>
-									<TableCell className="font-mono text-xs">{row.receiptNumber}</TableCell>
+									<TableCell className="font-mono text-xs">
+										{row.saleId ? (
+											<Link
+												to="/pos/sales/$saleId"
+												params={{ saleId: row.saleId }}
+												className="hover:underline"
+											>
+												{row.receiptNumber}
+											</Link>
+										) : (
+											row.receiptNumber
+										)}
+									</TableCell>
 									<TableCell>{formatDateTime(row.occurredAt)}</TableCell>
 									<TableCell>{row.branchCode}</TableCell>
 									<TableCell>{row.terminalCode}</TableCell>
