@@ -35,9 +35,15 @@ export function TerminalsPage() {
 	const [enrollTerminal, setEnrollTerminal] = useState<Terminal | null>(null)
 	const [devicesTerminal, setDevicesTerminal] = useState<Terminal | null>(null)
 
+	const activeBranch = branches.find((branch) => branch.id === activeBranchId) ?? null
+	const activeBranchIsWarehouse = activeBranch?.type === "WAREHOUSE"
+	// A warehouse can never own a terminal, so filtering by it would guarantee an
+	// empty screen. Only an active retail branch narrows the list.
+	const branchFilterId = activeBranch?.type === "RETAIL" ? activeBranch.id : undefined
+
 	const terminalsQuery = useQuery(
 		terminalListOptions({
-			branchId: activeBranchId ?? undefined,
+			branchId: branchFilterId,
 			includeInactive: true,
 		}),
 	)
@@ -60,6 +66,12 @@ export function TerminalsPage() {
 					) : undefined
 				}
 			/>
+
+			{activeBranchIsWarehouse ? (
+				<p className="mb-3 text-xs text-muted-foreground">
+					Warehouses cannot host POS terminals, so this view shows terminals from every branch.
+				</p>
+			) : null}
 
 			<div className="rounded-lg border bg-card">
 				<Table>

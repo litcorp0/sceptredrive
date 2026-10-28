@@ -16,6 +16,7 @@ interface ShellBranch {
 	id: string
 	code: string
 	name: string
+	type: "RETAIL" | "WAREHOUSE"
 	isActive: boolean
 }
 
