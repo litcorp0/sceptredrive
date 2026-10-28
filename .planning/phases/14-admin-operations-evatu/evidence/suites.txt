@@ -1,0 +1,26 @@
+@sceptre/db check-types: Exited with code 0
+@sceptre/shared check-types: Exited with code 0
+@sceptre/brand check-types: Exited with code 0
+api check-types: Exited with code 0
+desktop check-types: Exited with code 0
+admin check-types: Exited with code 0
+Found 19 warnings.
+modules:check OK — 21/21 modules migrated
+modules:check:pos OK — 16/16 modules migrated
+modules:check:pos OK — 16/16 modules migrated
+brand check OK (1201 tracked files, old brand absent)
+admin build: Exited with code 0
+desktop build: Exited with code 0
+EXIT:0
+
+# bun run test (root, whole workspace)
+@sceptre/shared test:  Test Files  24 passed (24)   Tests  345 passed (345)
+desktop test:          Test Files  68 passed (68)   Tests  610 passed (610)
+api test:              Test Files  61 passed (61)   Tests  822 passed (822)
+EXIT:0
+
+# external walkthrough
+PASS 41  FAIL 0  NOT-DRIVEN 1
+
+# mutations
+CAUGHT 6  SURVIVED 0
