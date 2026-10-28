@@ -1,0 +1,67 @@
+
+## fixtures (created through the API)
+     admin session minted for admin@sceptre.local
+
+## leg 1 — a split sale, and the identity the receipt copy must reproduce
+PASS 1.1  a cash 40.00 + MoMo 60.00 sale applies
+PASS 1.2  SQL: Σ tenders − change = total
+
+## leg 2 — a 10.00 cash refund with a manager’s approval
+PASS 2.1  the refund applies and returns its server id
+PASS 2.2  SQL: the sale is byte-identical after the refund
+
+## leg 3 — oversight reads and the receipt copy
+PASS 3.1  the sales list carries the sale id and its refunded total
+PASS 3.2  the detail carries two tenders in order and the refund that points at the sale
+PASS 3.3  the receipt copy’s lines and tenders reproduce the sale exactly
+PASS 3.4  the copy is labelled a copy, not a reprint
+PASS 3.5  the full customer phone is absent from the payload (masked or omitted)
+PASS 3.6  a 10.00 refund below the 200.00 approval threshold is listed, with no approval
+
+## leg 4 — a conflict is resolved without touching the sale
+PASS 4.1  selling past on-hand applies the sale and records a HIGH conflict
+PASS 4.2  a manager resolves it with a code and a note
+PASS 4.3  SQL: the sale and its six tables are byte-identical after resolution
+PASS 4.4  a second resolution is a 409
+PASS 4.5  the till reads the same row as RESOLVED (its badge clears without a till change)
+PASS 4.6  a dismissal without a note is refused (and the row is already resolved, so 409 or 400)
+
+## leg 5 — the Z stores the figure its drawer arithmetic subtracts
+PASS 5.1  the shift closes with zero variance on the refund-reduced expectation
+PASS 5.2  the snapshot stores the cash refund it subtracts
+PASS 5.3  the device Z returns the stored figures
+PASS 5.4  a manager reads the same Z over a session
+PASS 5.5  a missing snapshot is refused, never rebuilt
+
+## leg 6 — the stock report and two exports reconcile
+PASS 6.1  the stock report total equals the projection
+PASS 6.2  a manager’s report is their branch, not all branches
+PASS 6.3  the credit CSV’s TOTAL equals the report’s own total, and has a row
+PASS 6.4  the audit CSV carries no payload, no customer phone and no email
+
+## leg 7 — a supplier transfer is money only when it settles
+PASS 7.1  a BANK payment detail is created for the supplier
+PASS 7.2  a supplier invoice exists to allocate against
+PASS 7.3  the transfer is created as an intent, not a payment
+PASS 7.4  no supplier payment exists yet
+PASS 7.5  settlement posts exactly one payment for the transfer amount
+PASS 7.6  a replayed settlement changes nothing (same payment)
+PASS 7.7  a failed transfer posts no payment and leaves the supplier balance alone
+PASS 7.8  the reconciliation shows a settled transfer and an unposted one
+
+## leg 8 — certification sits beside the document
+PASS 8.1  the sale has a certified submission with GRA’s fields and the mock’s own QR
+PASS 8.2  SQL: certifying the sale left it byte-identical
+PASS 8.3  a manager can read their branch’s submissions
+PASS 8.4  a manager cannot retry a submission (admin-only)
+NOT-DRIVEN 8.5  the retry ladder and E700 adoption — the mock’s refusal hooks are in-process test levers, not HTTP; covered by api/src/modules/evat/evat.test.ts
+
+## leg 9 — the permissions are enforced server-side
+PASS 9.1  a cashier cannot read oversight
+PASS 9.2  a cashier cannot resolve a conflict
+PASS 9.3  a manager cannot read another branch’s sale
+PASS 9.4  a manager cannot read the E-VAT retry surface as admin
+
+## teardown
+
+PASS 41  FAIL 0  NOT-DRIVEN 1

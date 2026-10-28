@@ -1,0 +1,9 @@
+Phase 14 mutations — 2026-10-28T02:10:31Z
+CAUGHT    a resolved conflict can be resolved again (the OPEN guard is dropped)  (api/src/modules/pos/pos.service.ts)
+CAUGHT    a dismissal needs no note (the shared rule is loosened)  (packages/shared/src/conflicts.ts)
+CAUGHT    a failed transfer posts a supplier payment  (api/src/modules/payables/payables.service.ts)
+CAUGHT    an incomplete E-VAT certificate is accepted  (api/src/modules/evat/evat.service.ts)
+CAUGHT    the movement filter cannot name a sale  (api/src/modules/inventory/inventory.validation.ts)
+CAUGHT    the printed Z drops the cash refund it subtracts  (desktop/src/renderer/lib/receipt/report-render.ts)
+
+CAUGHT 6  SURVIVED 0
