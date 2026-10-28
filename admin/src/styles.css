@@ -21,6 +21,22 @@
 	}
 }
 
+/* A receipt copy is a till-roll document: 80 mm wide, its own named page so the
+   A4 statement rules above survive. `receipt-copy-print` is set by the one
+   component that renders the server's receipt payload. */
+@media print {
+	@page receipt-copy {
+		size: 80mm auto;
+		margin: 4mm;
+	}
+
+	.receipt-copy-print {
+		page: receipt-copy;
+		width: 72mm;
+		max-width: 72mm;
+	}
+}
+
 /* Registry primitives set outline-none and a 50% ring. An unlayered rule
    restores one 3:1 focus indicator; --brand-ink measures 4.22:1 on canvas. */
 :is(button, a[href], input, select, textarea, summary, [role="button"], [role="menuitem"], [role="tab"], [role="option"], [tabindex]:not([tabindex="-1"])):focus-visible {
