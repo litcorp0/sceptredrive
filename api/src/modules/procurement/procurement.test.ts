@@ -988,13 +988,18 @@ describe.skipIf(!available)('purchase returns', () => {
     }>(aging)
     const row = body.suppliers.find((entry) => entry.supplierId === supplierId)
     expect(body.creditNotesMinor).toBeGreaterThan(0)
-    if (row) {
-      expect(row.creditMinor).toBeGreaterThan(0)
-      // The credit is reported beside the buckets, never inside them.
-      expect(Object.keys(row.buckets).sort()).toEqual(
-        ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'].sort(),
-      )
-    }
+    // A credit note can be a supplier's only balance, and that supplier is still a row:
+    // the ageing export's TOTAL is the sum of the rows it prints, so a credit it shows
+    // cannot be invisible in the body above it.
+    expect(row).toBeDefined()
+    expect(row?.creditMinor).toBeGreaterThan(0)
+    expect(body.suppliers.reduce((sum, entry) => sum + entry.creditMinor, 0)).toBe(
+      body.creditNotesMinor,
+    )
+    // The credit is reported beside the buckets, never inside them.
+    expect(Object.keys(row?.buckets ?? {}).sort()).toEqual(
+      ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'].sort(),
+    )
   })
 
   it('keeps another branch out of the return', async () => {

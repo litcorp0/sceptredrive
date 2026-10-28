@@ -1182,8 +1182,13 @@ export async function getAging(user: SessionUser, query: AgingQuery): Promise<Pa
   }
   for (const [creditSupplierId, credit] of creditBySupplier) {
     if (credit.totalMinor === 0) continue
-    const existing = bySupplier.get(creditSupplierId)
-    if (existing) existing.creditMinor = credit.totalMinor
+    // A credit note can be the supplier's only balance: it still earns a row, exactly as
+    // an on-account payment does, so the report's totals are the sum of what it lists.
+    ensureSupplier({
+      supplierId: creditSupplierId,
+      supplierCode: credit.code,
+      supplierName: credit.name,
+    }).creditMinor = credit.totalMinor
   }
 
   const suppliers = [...bySupplier.values()].sort((a, b) =>

@@ -516,7 +516,9 @@ describe.skipIf(!available)('stock report and exports', () => {
 
   // 5 001 products is a real fixture, not a mock: the insert and the delete dominate the
   // runtime, and the cap is the one behaviour that cannot be proven with three rows.
-  it('caps the row list at 5 000 and says it is truncated', { timeout: 30_000 }, async () => {
+  it('caps the row list at 5 000 and refuses to export a total it cannot show', {
+    timeout: 30_000,
+  }, async () => {
     const created = await db
       .insert(branch)
       .values({
@@ -565,10 +567,17 @@ describe.skipIf(!available)('stock report and exports', () => {
       `/api/inventory/stock/report/export?branchId=${branchCId}&${new URLSearchParams(PERIOD).toString()}`,
       adminCookie,
     )
-    expect(exportResponse.status).toBe(200)
-    const lines = csvLines(await exportResponse.text())
-    expect(lines).toHaveLength(5_000 + 2)
-    expect(lines.at(-1)?.startsWith(',TOTAL,')).toBe(true)
+    // The file would carry 5 000 rows and a TOTAL describing all 5 001. Refused instead
+    // of emitted, and no partial body is sent with the error.
+    expect(exportResponse.status).toBe(400)
+    expect(exportResponse.headers.get('content-type')).toContain('application/json')
+    const exportBody = await exportResponse.text()
+    expect(exportBody).not.toContain('product_id')
+    expect(exportBody).not.toContain('TOTAL')
+    const error = JSON.parse(exportBody) as { error: { code: string; message: string } }
+    expect(error.error.code).toBe('REPORT_TOO_LARGE')
+    expect(error.error.message).toMatch(/branch or category/)
+    expect(error.error.message).toMatch(/not truncated silently/)
   })
 
   it('reports movements by type, and the movement filter names what the ledger stores', async () => {

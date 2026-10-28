@@ -3,7 +3,7 @@ import { accraIsoDay, toCsv } from '@sceptre/shared'
 import { and, asc, desc, eq, gte, isNotNull, lt, lte, or, type SQL, sql } from 'drizzle-orm'
 import { resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { type CsvExport, csvFilename, enforceExportCap } from '../../http/csv.ts'
-import { ValidationError } from '../../http/errors.ts'
+import { AppError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { category } from '../catalog/catalog.schema.ts'
 import { getCountAccuracy } from '../counts/counts.service.ts'
@@ -353,6 +353,17 @@ export async function exportStockReport(
   query: StockReportQuery,
 ): Promise<CsvExport> {
   const report = await getStockReport(user, query)
+  // `totals` describes the whole filter, but `rows` stops at the report's cap. An export
+  // of those rows plus that TOTAL would be a file whose body does not add up, with nothing
+  // in it saying so. A capped export is refused, never truncated (`http/csv.ts`).
+  if (report.truncated) {
+    throw new AppError(
+      400,
+      'REPORT_TOO_LARGE',
+      `This filter matches ${report.total} stock rows and the report shows the first ${REPORT_ROW_CAP}; narrow it by branch or category and try again. The export is not truncated silently.`,
+      { total: report.total, limit: REPORT_ROW_CAP },
+    )
+  }
   enforceExportCap(report.rows.length)
 
   type Row = {
