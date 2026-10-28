@@ -114,6 +114,13 @@ const tenderSchema = z
     amountMinor: minorUnits,
     /** REQUIRED for MOMO | CARD | BANK_TRANSFER, forbidden otherwise (P13-D6). */
     paymentId: z.uuid().nullish(),
+    /**
+     * The Phase 13 till echoed the provider's reference here. The server still
+     * derives the display reference from `paymentId` and ignores this copy, but
+     * it accepts it so a sale queued by that build can be retried after the
+     * contract changed.
+     */
+    providerReference: z.string().trim().max(200).nullish(),
     override: overrideProofSchema.nullish(),
   })
   .strict()

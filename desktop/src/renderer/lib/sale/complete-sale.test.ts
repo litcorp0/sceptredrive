@@ -207,14 +207,12 @@ describe('prepareSale', () => {
         amountMinor: 4_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
       {
         method: 'CREDIT',
         amountMinor: 8_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
     ])
   })
@@ -613,14 +611,12 @@ describe('completeSale transaction', () => {
         amountMinor: 4_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
       {
         method: 'CREDIT',
         amountMinor: 8_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
     ])
     expect(payload.totals.changeMinor).toBe(0)

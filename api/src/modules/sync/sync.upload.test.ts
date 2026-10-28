@@ -421,6 +421,21 @@ describe.skipIf(!available)('POS upload endpoint', () => {
     expect(rows).toHaveLength(1)
   })
 
+  it('accepts the legacy providerReference on a tender and ignores it', async () => {
+    const id = crypto.randomUUID()
+    const transaction = saleTx(id, `U${suffix}-R-LEGACY`) as {
+      payload: { tenders: Array<Record<string, unknown>> }
+    }
+    transaction.payload.tenders[0] = {
+      ...transaction.payload.tenders[0],
+      providerReference: 'sd-cp_legacy',
+    }
+
+    const body = await readJson<PosUploadResponse>(await uploadRequest(batch([transaction])))
+    expect(body.results[0]?.status).toBe('APPLIED')
+    expect(body.results[0]?.serverId).toBe(id)
+  })
+
   it('creates one sale for concurrent identical batches', async () => {
     const id = crypto.randomUUID()
     const transaction = saleTx(id, `U${suffix}-R-RACE1`)

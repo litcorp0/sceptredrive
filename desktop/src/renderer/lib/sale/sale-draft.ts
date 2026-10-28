@@ -103,7 +103,6 @@ export interface SalePayloadDraft {
     amountMinor: number
     override: SaleProof | null
     paymentId: string | null
-    providerReference: string | null
   }>
   totals: {
     subtotalMinor: number
@@ -307,7 +306,6 @@ export function buildSaleDraft(input: SaleDraftInput): SaleDraft {
         amountMinor: tender.amountMinor,
         override: toSaleProof(tender.override),
         paymentId: tender.paymentId,
-        providerReference: tender.providerReference,
       })),
       totals: {
         subtotalMinor: totals.priced.subtotalMinor,

@@ -127,7 +127,6 @@ describe('buildSaleDraft — cash', () => {
         amountMinor: 25_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
     ])
   })
@@ -274,7 +273,6 @@ describe('buildSaleDraft — credit', () => {
           occurredAt: NOW,
         },
         paymentId: null,
-        providerReference: null,
       },
     ])
     expect(draft.payload.totals.changeMinor).toBe(0)
@@ -375,14 +373,12 @@ describe('buildSaleDraft — split tender', () => {
         amountMinor: 4_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
       {
         method: 'CREDIT',
         amountMinor: 6_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
     ])
     expect(draft.payload.totals.changeMinor).toBe(0)
@@ -444,19 +440,17 @@ describe('buildSaleDraft — electronic tender', () => {
         amountMinor: 4_000,
         override: null,
         paymentId: null,
-        providerReference: null,
       },
       {
         method: 'MOMO',
         amountMinor: 6_000,
         override: null,
         paymentId,
-        providerReference: 'sd-cp_1',
       },
     ])
   })
 
-  it('keeps the tender keys the strict upload schema expects', () => {
+  it('keeps exactly the keys the strict upload schema expects', () => {
     const draft = draftFor(cartWith([['p1', 10_000, 1]]), {
       method: 'CARD',
       amountMinor: 10_000,
@@ -465,7 +459,7 @@ describe('buildSaleDraft — electronic tender', () => {
     })
 
     expect(Object.keys(draft.payload.tenders[0] ?? {}).sort()).toEqual(
-      ['amountMinor', 'method', 'override', 'paymentId', 'providerReference'].sort(),
+      ['amountMinor', 'method', 'override', 'paymentId'].sort(),
     )
   })
 })
