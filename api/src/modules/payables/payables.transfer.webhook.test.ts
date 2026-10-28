@@ -11,10 +11,12 @@ import {
   signIn,
   uniqueSuffix,
 } from '../../../test/integration.ts'
-import { app } from '../../app.ts'
 import { AppError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { factory } from '../../http/factory.ts'
+import { requestLogger } from '../../http/logging.ts'
+import { requestId } from '../../http/request-id.ts'
+import { loadSession } from '../../http/session.ts'
 import { branch } from '../org/branches.schema.ts'
 import {
   getMockTransferByReference,
@@ -55,10 +57,37 @@ function settleTransferRequest(body: unknown) {
   }
 }
 
+/**
+ * Every request in this file is answered by an app built here with an explicit
+ * mode. `mountPaymentRoutes` defaults to `env.PAYSTACK_MODE`, and vitest reuses a
+ * worker across files, so relying on the module-level `app` would make these
+ * tests depend on the process env at the moment this file runs (a matrix leg can
+ * export `PAYSTACK_MODE=test`). The mode is a test input, never ambient state.
+ */
+function buildApp(mode: 'mock' | 'test') {
+  const harnessApp = factory.createApp()
+  harnessApp.use(requestId)
+  harnessApp.use(requestLogger)
+  harnessApp.use(loadSession)
+  // The same projection `app.ts` applies, so statuses and error codes match.
+  harnessApp.onError((error, c) => {
+    if (error instanceof AppError) {
+      return c.json(
+        { error: { code: error.code, message: error.message } },
+        error.statusCode as 500,
+      )
+    }
+    return c.json({ error: { code: 'INTERNAL', message: 'Internal server error' } }, 500)
+  })
+  mountPaymentRoutes(harnessApp, mode)
+  return harnessApp
+}
+
+const harnessApp = buildApp('mock')
+
 describe('mock settle-transfer route registration', () => {
   it('does not exist when the app is built for test mode', async () => {
-    const testMode = factory.createApp()
-    mountPaymentRoutes(testMode, 'test')
+    const testMode = buildApp('test')
 
     const response = await testMode.request(
       '/api/payments/mock/settle-transfer',
@@ -68,16 +97,7 @@ describe('mock settle-transfer route registration', () => {
   })
 
   it('exists but is session-gated when the app is built for mock mode', async () => {
-    const mockMode = factory.createApp()
-    // The real app maps AppError to its status; this mini app needs the same seam
-    // to prove the route exists rather than merely 500ing.
-    mockMode.onError((error, c) => {
-      if (error instanceof AppError) return c.json({ error: error.code }, error.statusCode as 500)
-      return c.json({ error: 'INTERNAL' }, 500)
-    })
-    mountPaymentRoutes(mockMode, 'mock')
-
-    const response = await mockMode.request(
+    const response = await harnessApp.request(
       '/api/payments/mock/settle-transfer',
       settleTransferRequest({ reference: 'sdt-any', outcome: 'SUCCESS' }),
     )
@@ -552,7 +572,7 @@ describe.skipIf(!available)('supplier transfer webhook', () => {
     })
 
     function postSettleTransfer(body: { reference: string; outcome: string }) {
-      return app.request('/api/payments/mock/settle-transfer', {
+      return harnessApp.request('/api/payments/mock/settle-transfer', {
         method: 'POST',
         headers: authedHeaders(adminCookie),
         body: JSON.stringify(body),
