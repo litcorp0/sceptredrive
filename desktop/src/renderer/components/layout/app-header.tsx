@@ -57,11 +57,18 @@ export function AppHeader({
         title="This terminal today"
         className="flex h-11 min-w-0 items-center gap-3 rounded-md px-1 text-left hover:bg-white/10"
       >
+        <img
+          src="/logo-inverse.png"
+          alt="Sceptre Drive"
+          className="h-8 w-auto shrink-0"
+          draggable={false}
+          decoding="async"
+        />
         <span className="min-w-0">
           <span className="block text-[11px] font-medium tracking-wide text-topbar-muted uppercase">
             {identity
               ? formatBranchLabel({ name: identity.branchName, code: identity.branchCode })
-              : 'Sceptre Drive'}
+              : 'Point of sale'}
           </span>
           <span
             className="block truncate text-sm font-semibold text-topbar-foreground"

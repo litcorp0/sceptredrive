@@ -69,6 +69,7 @@
     "sync:logs": "docker compose logs -f powersync",
     "sync:config-check": "bun run scripts/check-sync-config.mjs",
     "brand:check": "node scripts/check-brand.mjs",
+    "brand:assets": "node scripts/sync-brand-assets.mjs",
     "tokens:check": "node scripts/check-tokens.mjs",
     "modules:check": "node scripts/check-modules.mjs",
     "modules:check:strict": "node scripts/check-modules.mjs --strict && node scripts/check-desktop-modules.mjs --strict",

@@ -37,6 +37,15 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				rel: "stylesheet",
 				href: appCss,
 			},
+			{
+				rel: "icon",
+				type: "image/png",
+				href: "/logo-icon.png",
+			},
+			{
+				rel: "apple-touch-icon",
+				href: "/logo-icon.png",
+			},
 		],
 	}),
 	shellComponent: RootDocument,

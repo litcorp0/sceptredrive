@@ -349,21 +349,28 @@ export function AppSidebar({ role }: { role: string }) {
 	return (
 		<Sidebar collapsible="icon" className="print:hidden">
 			<SidebarHeader className="gap-0 p-0">
-				<div className="flex h-(--layout-topbar-height) items-center gap-2.5 px-4 group-data-[collapsible=icon]:px-1.5">
-					<span
-						aria-hidden="true"
-						className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ink font-display text-xs font-semibold tracking-normal text-canvas"
-					>
-						SD
-					</span>
-					<div className="min-w-0 group-data-[collapsible=icon]:hidden">
-						<p className="truncate font-display text-sm leading-none font-semibold">
-							Sceptre Drive
-						</p>
-						<p className="mt-1 truncate text-xs leading-none text-muted-foreground">
+				<div className="flex h-(--layout-topbar-height) items-center px-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+					<div className="flex min-w-0 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+						<img
+							src="/logo.png"
+							alt="Sceptre Drive"
+							className="block h-9 w-auto"
+							draggable={false}
+							decoding="async"
+						/>
+						<p className="truncate text-[10px] leading-none font-medium tracking-[0.14em] text-muted-foreground uppercase">
 							Admin console
 						</p>
 					</div>
+					<span className="hidden items-center gap-2 group-data-[collapsible=icon]:flex">
+						<span
+							aria-hidden="true"
+							className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ink font-display text-xs font-semibold tracking-normal text-canvas"
+						>
+							SD
+						</span>
+						<span className="sr-only">Sceptre Drive</span>
+					</span>
 				</div>
 			</SidebarHeader>
 

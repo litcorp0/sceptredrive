@@ -14,17 +14,17 @@ export function AuthShell({
 	return (
 		<div className="flex min-h-svh items-center justify-center bg-muted/40 p-6">
 			<div className="w-full max-w-sm">
-				<div className="mb-6 flex items-center gap-2.5">
-					<div
-						aria-hidden="true"
-						className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground"
-					>
-						SD
-					</div>
-					<div>
-						<p className="text-sm font-semibold leading-none">Sceptre Drive</p>
-						<p className="mt-1 text-xs text-muted-foreground">Admin console</p>
-					</div>
+				<div className="mb-6 flex flex-col gap-1.5">
+					<img
+						src="/logo.png"
+						alt="Sceptre Drive"
+						className="block h-12 w-auto self-start"
+						draggable={false}
+						decoding="async"
+					/>
+					<p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+						Admin console
+					</p>
 				</div>
 
 				<div className="rounded-lg border bg-card p-6 shadow-xs">

@@ -189,8 +189,15 @@ export function LoginRoute() {
     <main className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-1/3 flex-col justify-between bg-topbar p-8 text-topbar-foreground lg:flex">
         <div>
-          <p className="text-xs font-medium tracking-widest text-topbar-muted uppercase">
-            Sceptre Drive POS
+          <img
+            src="/logo-inverse.png"
+            alt="Sceptre Drive"
+            className="h-11 w-auto"
+            draggable={false}
+            decoding="async"
+          />
+          <p className="mt-4 text-xs font-medium tracking-widest text-topbar-muted uppercase">
+            Point of sale
           </p>
           <h1 className="mt-3 font-display text-2xl font-semibold">Terminal sign-in</h1>
           <p className="mt-2 text-sm text-topbar-muted">
@@ -602,8 +609,15 @@ function CredentialProblemScreen({
       data-kind={kind}
     >
       <div className="w-full max-w-md">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Sceptre Drive POS
+        <img
+          src="/logo.png"
+          alt="Sceptre Drive"
+          className="h-10 w-auto"
+          draggable={false}
+          decoding="async"
+        />
+        <p className="mt-3 text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Point of sale
         </p>
         <h1 className="mt-2 text-2xl font-semibold">
           {revoked ? 'This terminal was revoked' : 'This terminal is not recognised'}
@@ -683,8 +697,15 @@ function EnrollmentScreen({ onEnrolled }: { onEnrolled: () => Promise<void> }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Sceptre Drive POS
+        <img
+          src="/logo.png"
+          alt="Sceptre Drive"
+          className="h-10 w-auto"
+          draggable={false}
+          decoding="async"
+        />
+        <p className="mt-3 text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Point of sale
         </p>
         <h1 className="mt-2 text-2xl font-semibold">Enrol this terminal</h1>
         <p className="mt-2 text-sm text-muted-foreground">
