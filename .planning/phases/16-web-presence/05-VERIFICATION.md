@@ -46,7 +46,7 @@ instead of implying otherwise.
 | Gate | Result |
 |---|---|
 | `bun run check-types` | 7/7 workspaces exit 0 |
-| `bun run lint` | exit 0, 26 pre-existing warnings (evidence scripts and admin suppressions), no errors |
+| `bun run lint` | exit 0, **0 errors, 0 warnings** across all 1 267 files |
 | `bun run test` | shared **354**, API **850**, desktop **616**, web **26** — all pass |
 | `bun run build` | admin, desktop (Electron package) and web all exit 0 |
 | `bun run brand:check` | OK over **1 269** tracked files |
