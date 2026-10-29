@@ -16,6 +16,10 @@
  *
  * Run with a stable `POS_JWT_PRIVATE_KEY` in `.env`, otherwise the API's
  * ephemeral key changes on every restart and this file must be regenerated.
+ *
+ * The container must be recreated after this writes, not just started: a
+ * running PowerSync process keeps the config it booted with. `bun run sync:up`
+ * passes `--force-recreate` for exactly that reason.
  */
 import fs from 'node:fs'
 import path from 'node:path'

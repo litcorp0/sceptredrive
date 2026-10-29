@@ -49,7 +49,10 @@ services:
       POWERSYNC_CONFIG_PATH: /config/service.yaml
       PS_DATA_SOURCE_URI: ${PS_DATA_SOURCE_URI:-postgresql://powersync_role:powersync_role@postgres:5432/sceptre_drive}
       PS_STORAGE_URI: ${PS_STORAGE_URI:-postgresql://powersync_storage:powersync_storage@postgres:5432/sceptre_drive_powersync}
-      # The API runs on the host; the container fetches its JWKS over this alias.
+      # Fallback only: the committed service.yaml fetches this URI. `bun run sync:up`
+      # writes a generated config that inlines the public key, so local sync does
+      # not depend on the container reaching the host. A running container keeps
+      # its old config until it is recreated, which sync:up now does.
       PS_JWKS_URI: ${PS_JWKS_URI:-http://host.docker.internal:4000/.well-known/jwks.json}
       PS_ADMIN_TOKEN: ${PS_ADMIN_TOKEN:-dev-powersync-admin-token}
       PS_LOG_LEVEL: ${PS_LOG_LEVEL:-info}
