@@ -57,15 +57,18 @@ function listeningPids(port) {
 
 /**
  * Last resort: a descendant that detached into its own session is not in our
- * group. Only the four ports this command owns are swept, and only after the
- * group signal, so an unrelated app is not touched unless it crashed onto one
- * of our ports while the stack was running.
+ * group. Only a PID that appeared on one of our ports **after this wrapper
+ * started** is killed, so an unrelated dev stack that already owned a port is
+ * never touched. The baseline is captured before the runner is spawned.
  */
+const baseline = new Map(PORTS.map((port) => [port, new Set(listeningPids(port))]))
+
 function sweepPorts() {
   if (isWindows) return
   for (const port of PORTS) {
+    const before = baseline.get(port) ?? new Set()
     for (const pid of listeningPids(port)) {
-      if (pid === process.pid) continue
+      if (pid === process.pid || before.has(pid)) continue
       try {
         process.kill(pid, 'SIGKILL')
       } catch {
@@ -88,7 +91,7 @@ function shutdown(code) {
     signalTree('SIGKILL')
     sweepPorts()
     process.exit(code)
-  }, GRACE_MS).unref()
+  }, GRACE_MS)
 }
 
 /** A second Ctrl+C skips the grace period. */
@@ -123,5 +126,5 @@ child.on('exit', (code, signal) => {
     signalTree('SIGKILL')
     sweepPorts()
     process.exit(code ?? (signal ? 1 : 0))
-  }, 500).unref()
+  }, 500)
 })
