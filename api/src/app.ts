@@ -35,6 +35,7 @@ import { posRoutes } from './modules/pos/pos.routes.ts'
 import { procurementRoutes } from './modules/procurement/procurement.routes.ts'
 import { productsRoutes } from './modules/products/products.routes.ts'
 import { replenishmentRoutes } from './modules/replenishment/replenishment.routes.ts'
+import { siteRoutes } from './modules/site/site.routes.ts'
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.ts'
 import { syncRoutes } from './modules/sync/sync.routes.ts'
 import { transfersRoutes } from './modules/transfers/transfers.routes.ts'
@@ -82,6 +83,7 @@ app.use('*', corsMiddleware)
 
 app.route('/', healthRoutes)
 app.route('/', jwksRoutes)
+app.route('/', siteRoutes)
 app.route('/', authRoutes)
 app.route('/', branchesRoutes)
 app.route('/', terminalsRoutes)

@@ -10,6 +10,7 @@ import {
   findBranchById,
   insertBranch,
   listActiveBranchDirectoryRows,
+  listActiveRetailBranchContacts,
   listBranchRows,
   selectBranchCodes,
   updateBranchRow,
@@ -20,6 +21,7 @@ import type {
   BranchListFilters,
   BranchRow,
   BranchUpdateInput,
+  PublicBranchContact,
   SuggestCodeInput,
   SuggestCodeResult,
 } from './branches.types.ts'
@@ -47,6 +49,15 @@ export async function listBranchDirectory(user: SessionUser): Promise<BranchDire
   }
 
   return { branches: await listActiveBranchDirectoryRows() }
+}
+
+/**
+ * The public website's branch list. No session by design: this is marketing
+ * data, already public once the site is live. The caller (the site module)
+ * resolves the branch-scoped hours/map settings before projecting the id away.
+ */
+export async function listPublicBranchContacts(): Promise<PublicBranchContact[]> {
+  return listActiveRetailBranchContacts()
 }
 
 export async function getBranch(user: SessionUser, id: string): Promise<BranchRow> {

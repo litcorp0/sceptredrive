@@ -31,6 +31,16 @@ export interface BranchDirectoryResult {
   branches: BranchDirectoryEntry[]
 }
 
+/**
+ * The public contact columns for the website (Phase 16). Deliberately excludes
+ * `type`, `isActive` and timestamps; `id` stays internal so the site service can
+ * resolve the branch-scoped hours and map setting before projecting it away.
+ */
+export type PublicBranchContact = Pick<
+  BranchRow,
+  'id' | 'code' | 'name' | 'city' | 'area' | 'address' | 'phone'
+>
+
 export interface BranchCreateInput {
   /** Omit to let the server generate it from type, city and area. */
   code?: string | undefined

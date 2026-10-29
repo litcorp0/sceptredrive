@@ -1,4 +1,5 @@
 import type { FlagKey } from '@sceptre/shared'
+import { SHOP_STATUSES } from '@sceptre/shared'
 import { z } from 'zod'
 import { env } from '../../config/env.ts'
 import { validateJson, validateQuery } from '../../http/validation.ts'
@@ -105,6 +106,23 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 1,
     branchScoped: false,
   },
+  /**
+   * The line a brand-new branch credit profile is born with.
+   *
+   * `0` — the default — keeps the original behaviour: a profile starts with no
+   * credit, and every limit is a decision. A positive value is the admin granting
+   * a policy once ("any customer registered at this branch may owe up to this")
+   * instead of approving each customer, which is the same authority expressed
+   * once rather than N times. Admin-only on purpose: a manager who could raise it
+   * would have a back door around `CREDIT_LIMIT_CHANGE` (P12-D21), and a branch
+   * override would be that back door with a branch name on it.
+   */
+  'credit.defaultLimitMinor': {
+    schema: z.number().int().min(0).max(1_000_000),
+    defaultValue: 0,
+    branchScoped: true,
+    writableBy: 'admin',
+  },
   'catalog.skuPrefix': {
     schema: z
       .string()
@@ -124,6 +142,25 @@ export const SETTING_DEFINITIONS = {
     schema: z.enum(['INCLUSIVE', 'EXCLUSIVE']),
     defaultValue: 'INCLUSIVE',
     branchScoped: false,
+  },
+  /**
+   * Whether the business is VAT-registered at all (2026-10-29).
+   *
+   * `false` prices every line as `EXEMPT` — no VAT, NHIL or GETFund — regardless
+   * of what the catalogue says. A business that is not registered must not charge
+   * the levies, and the alternative (marking every product exempt by hand) is how
+   * one gets missed. `true` is the default so an existing deployment cannot stop
+   * collecting tax because a setting was never written.
+   *
+   * This is not a GRA switch and has nothing to do with `flag.evatSubmission`:
+   * that one decides whether a sale is *reported*; this one decides what the
+   * customer is *charged*.
+   */
+  'pricing.vatRegistered': {
+    schema: z.boolean(),
+    defaultValue: true,
+    branchScoped: false,
+    writableBy: 'admin',
   },
   'inventory.receiptPrefix': {
     schema: z
@@ -407,6 +444,131 @@ export const SETTING_DEFINITIONS = {
     schema: z.string().trim().max(30),
     defaultValue: '',
     branchScoped: false,
+    writableBy: 'admin',
+  },
+  /**
+   * The public website (Phase 16).
+   *
+   * These are copy and contact fields, not operating rules: an empty value is a
+   * field the site hides, never a fallback to a made-up phone number. The two
+   * branch-scoped keys exist because hours and a map pin differ by location;
+   * address and phone stay on the branch master, where the branch form already
+   * edits them, so there is one source for each fact.
+   */
+  'web.siteName': {
+    schema: z.string().trim().min(1).max(80),
+    defaultValue: 'Sceptre Drive',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.tagline': {
+    schema: z.string().trim().min(1).max(140),
+    defaultValue: 'Genuine and aftermarket spares for the cars and fleets you drive.',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.heroHeading': {
+    schema: z.string().trim().min(1).max(120),
+    defaultValue: 'Parts that keep Ghana moving.',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.heroBody': {
+    schema: z.string().trim().min(1).max(500),
+    defaultValue:
+      'Engine, brakes, suspension, electrical and fluids — find the part, check the branch, and talk to a counter that knows it.',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.aboutBody': {
+    schema: z.string().trim().min(1).max(2000),
+    defaultValue:
+      'Sceptre Drive supplies automotive spare parts across Ghana. We stock genuine, OEM-matched and quality aftermarket parts for everyday drivers, workshops and fleets. Every part is recorded, so a counter can trace what you bought and help you match it again.',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.announcement': {
+    schema: z.string().trim().max(160),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.shopStatus': {
+    schema: z.enum(SHOP_STATUSES),
+    defaultValue: 'COMING_SOON',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.contactEmail': {
+    schema: z.union([z.literal(''), z.email().max(160)]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.contactPhone': {
+    schema: z.union([
+      z.literal(''),
+      z
+        .string()
+        .trim()
+        .regex(/^\+?[0-9][0-9 -]{6,19}$/, 'Use a phone number with a country code'),
+    ]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.whatsapp': {
+    schema: z.union([
+      z.literal(''),
+      z
+        .string()
+        .trim()
+        .regex(/^\+?[0-9][0-9 -]{6,19}$/, 'Use a WhatsApp number with a country code'),
+    ]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.instagram': {
+    schema: z.union([
+      z.literal(''),
+      z.url().refine((value) => value.startsWith('https://'), 'Use an https:// link'),
+    ]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.facebook': {
+    schema: z.union([
+      z.literal(''),
+      z.url().refine((value) => value.startsWith('https://'), 'Use an https:// link'),
+    ]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.tiktok': {
+    schema: z.union([
+      z.literal(''),
+      z.url().refine((value) => value.startsWith('https://'), 'Use an https:// link'),
+    ]),
+    defaultValue: '',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
+  'web.branchHours': {
+    schema: z.string().trim().max(120),
+    defaultValue: '',
+    branchScoped: true,
+    writableBy: 'admin',
+  },
+  'web.branchMapUrl': {
+    schema: z.union([
+      z.literal(''),
+      z.url().refine((value) => value.startsWith('https://'), 'Use an https:// link'),
+    ]),
+    defaultValue: '',
+    branchScoped: true,
     writableBy: 'admin',
   },
   ...FLAG_SETTING_DEFINITIONS,
