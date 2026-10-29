@@ -46,7 +46,6 @@ export function ChartDataTable({ table }: { table: ChartTable }) {
 			</TableHeader>
 			<TableBody>
 				{table.rows.map((row, index) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: report rows are positional snapshots
 					<TableRow key={index}>
 						{table.columns.map((column) => (
 							<TableCell

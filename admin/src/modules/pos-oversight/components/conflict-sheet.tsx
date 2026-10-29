@@ -110,7 +110,6 @@ export function ConflictSheet({
 
 	// A new conflict starts with a clean form; a stale code would be a decision about
 	// the previous document.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the id changes
 	useEffect(() => {
 		setStatus("RESOLVED")
 		setCode("")

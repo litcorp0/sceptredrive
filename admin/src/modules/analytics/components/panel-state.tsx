@@ -22,11 +22,7 @@ export function PanelState({ state, label, message, onRetry, rows = 3 }: PanelSt
 			<div className="grid gap-3" aria-busy="true">
 				<output className="sr-only">{label} is loading</output>
 				{Array.from({ length: rows }, (_, index) => (
-					<Skeleton
-						// biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows are positional placeholders
-						key={index}
-						className="h-12 w-full"
-					/>
+					<Skeleton key={index} className="h-12 w-full" />
 				))}
 			</div>
 		)

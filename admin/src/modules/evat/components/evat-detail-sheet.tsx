@@ -249,7 +249,6 @@ function CertificatePanel({ submission }: { submission: EvatSubmissionView }) {
 				<p className="text-xs font-medium text-muted-foreground">Signature</p>
 				<p className="flex flex-wrap gap-2 font-mono text-xs">
 					{signatureGroups.map((group, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: a signature's groups are positional
 						<span key={`${group}-${index}`} className="rounded border px-1.5 py-0.5">
 							{group}
 						</span>

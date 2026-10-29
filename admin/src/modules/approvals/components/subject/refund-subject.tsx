@@ -185,7 +185,6 @@ export function RefundSubject({
 								) : (
 									// The arm carries no line id, so the row's position is the only key available.
 									subject.lines.map((line, index) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: the arm has no line id
 										<TableRow key={`${line.sku}-${index}`}>
 											<TableCell className="font-medium">{line.productName}</TableCell>
 											<TableCell className="font-mono text-xs">{line.sku}</TableCell>
@@ -255,7 +254,6 @@ export function RefundSubject({
 									// The subject arm carries no tender id (P13-D19 only sends method, amount and
 									// status), so the row's position is the only key the console can derive.
 									subject.tenders.map((tender, index) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: the arm has no tender id
 										<TableRow key={`${tender.method}-${index}`}>
 											<TableCell className="font-medium">
 												{tenderMethodLabel(tender.method)}

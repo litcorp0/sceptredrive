@@ -116,7 +116,6 @@ export function SettingsPage() {
 				<div className="grid gap-2" aria-busy="true">
 					<output className="sr-only">Loading settings</output>
 					{Array.from({ length: 6 }, (_, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows are positional placeholders
 						<Skeleton key={index} className="h-16 w-full" />
 					))}
 				</div>
