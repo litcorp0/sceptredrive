@@ -108,7 +108,9 @@ for (const route of ROUTES) {
 	const buyControls = await page
 		.getByRole("button", { name: /add to cart|buy now|checkout|pay now/i })
 		.count()
-	const buyLinks = await page.getByRole("link", { name: /add to cart|buy now|checkout|pay now/i }).count()
+	const buyLinks = await page
+		.getByRole("link", { name: /add to cart|buy now|checkout|pay now/i })
+		.count()
 	check(buyControls + buyLinks === 0, `${route.path} has no selling control`)
 }
 
