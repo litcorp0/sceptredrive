@@ -496,7 +496,7 @@ offline/E2E/load tests; installer signing and auto-update; runbooks and UAT.
 Drive sells and how to reach a branch, and every word, link, status and branch detail is
 edited in the admin console. The site is the seam for the future store, not the store.
 
-**Status:** ⏳ In progress — see `phases/16-web-presence/`
+**Status:** ✅ Complete and verified 2026-10-29 — see `phases/16-web-presence/05-VERIFICATION.md`
 **Dependencies:** Phase 1 (settings store, branch master), Phase 14 (console settings surface)
 **Requirements:** WEB-01…WEB-12
 

@@ -43,6 +43,7 @@ double-selling or losing a transaction.
 | API | Hono on Node 24, Zod, pino, Drizzle ORM, Better Auth, pg-boss |
 | Database | PostgreSQL 17 (Docker on VPS; local via Docker Compose) |
 | Admin / Manager | TanStack Start, React 19, Tailwind v4, shadcn, TanStack Query |
+| Public website | TanStack Start, React 19, Tailwind v4, `@sceptre/brand`; marketing only, no store |
 | Desktop POS | Electron Forge + Vite, React 19, Tailwind v4, shadcn, PowerSync Web SDK |
 | Offline sync | PowerSync Cloud for staging/production; self-hosted Docker service for development/CI; branch-scoped Sync Streams |
 | Payments | Paystack Ghana (MoMo, card, bank transfer, refunds, supplier transfers) |
@@ -57,7 +58,8 @@ double-selling or losing a transaction.
 admin/         TanStack Start console (Admin + Manager)
 api/           Hono API (also owns Drizzle schema, migrations, and seeds)
 desktop/       Electron Forge POS
-packages/      shared (domain logic), db (Postgres client), brand (design tokens)
+web/           Public website (TanStack Start); content edited in the console
+packages/      shared (domain logic), db (Postgres client), brand (design tokens + assets)
 powersync/     sync-config.yaml + setup docs
 design-system/ human-facing design rationale; `packages/brand` is the machine truth
 infra/         Dockerfiles, compose stacks, Caddyfile, backup scripts (Phase 15)
@@ -154,7 +156,7 @@ money, credit, stock, loyalty, permissions, or production still stops and asks.
 ## Commands
 
 From the repository root: `bun dev` (all workspaces), `bun dev:api`, `bun dev:admin`,
-`bun dev:pos`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun run test`, `bun build`,
+`bun dev:pos`, `bun dev:web`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun run test`, `bun build`,
 `bun run brand:check`, plus the `db:*` (migrate, seed, test prepare), `sync:*`
 (init, up, down, logs, config-check), and `*:pos` (build, package, make) scripts.
 `bun run test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh

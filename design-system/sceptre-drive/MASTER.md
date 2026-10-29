@@ -4,7 +4,8 @@
 This document explains the *why*; the token file is the *what*. If they disagree, the token
 file wins and this document is corrected.
 
-**Consumers:** `admin/` (TanStack Start console) and `desktop/` (Electron POS).
+**Consumers:** `admin/` (TanStack Start console), `desktop/` (Electron POS) and `web/`
+(the public site, which reuses the same tokens for a marketing surface).
 
 ---
 
