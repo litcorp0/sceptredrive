@@ -307,7 +307,8 @@ export const SETTING_META: SettingMetaMap = {
 	},
 	"web.contactPhone": {
 		label: "Contact phone",
-		description: "The number the site dials. Include the country code. Blank hides the call action.",
+		description:
+			"The number the site dials. Include the country code. Blank hides the call action.",
 	},
 	"web.whatsapp": {
 		label: "WhatsApp number",
@@ -333,8 +334,7 @@ export const SETTING_META: SettingMetaMap = {
 	},
 	"web.branchMapUrl": {
 		label: "Map link (this branch)",
-		description:
-			"An https:// maps link. Blank builds a map search from the branch address.",
+		description: "An https:// maps link. Blank builds a map search from the branch address.",
 	},
 }
 

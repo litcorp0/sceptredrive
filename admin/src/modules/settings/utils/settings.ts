@@ -50,8 +50,7 @@ const GROUP_META: Record<string, { label: string; description: string }> = {
 	receipt: { label: "Receipts", description: "Text printed on a receipt." },
 	web: {
 		label: "Website",
-		description:
-			"The public site: identity, contact, the shop notice and per-branch hours.",
+		description: "The public site: identity, contact, the shop notice and per-branch hours.",
 	},
 	catalog: { label: "Catalog", description: "Product SKU numbering." },
 }

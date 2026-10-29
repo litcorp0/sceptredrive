@@ -32,7 +32,9 @@ for (const app of APPS) {
   for (const file of FILES) {
     const source = path.join(SOURCE, file)
     if (!existsSync(source)) {
-      throw new Error(`Missing master asset ${path.relative(ROOT, source)}. See packages/brand/assets/README.md`)
+      throw new Error(
+        `Missing master asset ${path.relative(ROOT, source)}. See packages/brand/assets/README.md`,
+      )
     }
     const target = path.join(targetDir, file)
     copyFileSync(source, target)
