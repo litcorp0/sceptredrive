@@ -1,0 +1,178 @@
+@import "tailwindcss";
+@import "@sceptre/brand/tokens.css";
+@import "@sceptre/brand/fonts.css";
+@import "tw-animate-css";
+
+/*
+ * The public site (Phase 16).
+ *
+ * Every colour comes from @sceptre/brand; this file only defines layout and the
+ * ticket artifact. `tokens:check` fails if a brand hex appears here or anywhere
+ * under web/src.
+ */
+
+@theme inline {
+	--color-paper: var(--canvas);
+	--color-card: var(--surface);
+	--color-fascia: var(--topbar);
+	--color-fascia-foreground: var(--topbar-foreground);
+}
+
+:root {
+	--site-measure: 76rem;
+	--site-gutter: clamp(1.25rem, 4vw, 4rem);
+	--site-section: clamp(4.5rem, 9vw, 8rem);
+	--site-header-height: 4.5rem;
+	--ticket-notch: 10px;
+}
+
+@layer base {
+	html {
+		scroll-behavior: smooth;
+	}
+
+	body {
+		background-color: var(--canvas);
+		color: var(--ink);
+		font-family: var(--font-sans);
+		font-feature-settings: "cv11" 1;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	::selection {
+		background-color: var(--brand-tint);
+		color: var(--ink);
+	}
+}
+
+@layer components {
+	.site-container {
+		width: 100%;
+		max-width: var(--site-measure);
+		margin-inline: auto;
+		padding-inline: var(--site-gutter);
+	}
+
+	.site-section {
+		padding-block: var(--site-section);
+	}
+
+	.eyebrow {
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		font-weight: 500;
+		letter-spacing: 0.14em;
+		line-height: 1.4;
+		text-transform: uppercase;
+		color: var(--muted-ink);
+	}
+
+	.eyebrow-brand {
+		color: var(--ink);
+	}
+
+	.eyebrow-brand::before {
+		content: "";
+		display: inline-block;
+		width: 1.5rem;
+		height: 2px;
+		margin-right: 0.5rem;
+		vertical-align: middle;
+		background-color: var(--brand);
+	}
+
+	/* A hairline that reads as a rule, not a border between two boxes. */
+	.rule {
+		border-top: 1px solid var(--line);
+	}
+
+	/* The ticket's punched top edge. Pure CSS, so it prints and scales. */
+	.ticket-perf {
+		height: var(--ticket-notch);
+		background-image: radial-gradient(circle, var(--canvas) 2px, transparent 2.5px);
+		background-size: var(--ticket-notch) var(--ticket-notch);
+		background-position: center;
+		background-repeat: repeat-x;
+	}
+
+	.ticket-barcode {
+		height: 2.75rem;
+		background-image: repeating-linear-gradient(
+			90deg,
+			var(--ink) 0 2px,
+			transparent 2px 4px,
+			var(--ink) 4px 5px,
+			transparent 5px 9px,
+			var(--ink) 9px 12px,
+			transparent 12px 14px
+		);
+		opacity: 0.85;
+	}
+
+	/* One orchestrated load: the line draws, the ticket prints. */
+	.site-rise {
+		animation: site-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.site-print {
+		animation: site-print 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.site-draw {
+		stroke-dasharray: 420;
+		stroke-dashoffset: 420;
+		animation: site-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+	}
+
+	.part-row {
+		transition:
+			background-color 180ms ease,
+			padding-inline 180ms ease;
+	}
+
+	.part-row:hover,
+	.part-row:focus-visible {
+		background-color: var(--brand-tint);
+		padding-inline: 0.75rem;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.site-rise,
+		.site-print,
+		.site-draw {
+			animation: none;
+			stroke-dashoffset: 0;
+		}
+		.part-row {
+			transition: none;
+		}
+	}
+}
+
+@keyframes site-rise {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes site-print {
+	from {
+		opacity: 0.2;
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		opacity: 1;
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+@keyframes site-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}

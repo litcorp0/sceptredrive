@@ -24,16 +24,17 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
 const TOKENS_FILE = 'packages/brand/src/tokens.css'
-const APPS = ['admin', 'desktop']
+const APPS = ['admin', 'desktop', 'web']
 
 /** App stylesheets must consume the package, and nothing else may define the system. */
 const APP_STYLESHEETS = {
   admin: 'admin/src/styles.css',
   desktop: 'desktop/src/renderer/index.css',
+  web: 'web/src/styles.css',
 }
 
 /** Directories that must contain no brand colour literal. */
-const APP_SOURCE_DIRS = ['admin/src/', 'desktop/src/renderer/']
+const APP_SOURCE_DIRS = ['admin/src/', 'desktop/src/renderer/', 'web/src/']
 
 /** Case-insensitive brand literals. `1b1f23` is the ink; `f26a1b` is the brand orange. */
 const BRAND_HEXES = ['#f26a1b', '#1b1f23', 'f26a1b', '1b1f23']

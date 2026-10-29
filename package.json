@@ -9,7 +9,8 @@
       "admin",
       "api",
       "desktop",
-      "packages/*"
+      "packages/*",
+      "web"
     ],
     "catalog": {
       "@better-auth/drizzle-adapter": "1.7.10",
@@ -48,6 +49,7 @@
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",
     "dev:pos": "bun run --filter desktop dev",
+    "dev:web": "bun run --filter web dev",
     "build:pos": "bun run --filter desktop build",
     "package:pos": "bun run --filter desktop package",
     "make:pos": "bun run --filter desktop make",
