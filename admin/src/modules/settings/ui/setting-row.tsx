@@ -10,6 +10,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select"
 import { Switch } from "#/components/ui/switch"
+import { Textarea } from "#/components/ui/textarea"
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import type { ResolvedSetting, SettingControl, SettingMeta, SettingScope } from "../types"
 import { sourceLabel, valueNote, writableBySentence } from "../utils/meta"
@@ -140,7 +141,13 @@ export function SettingRow({
 				</p>
 			</div>
 
-			<div className="flex flex-wrap items-center gap-2 md:justify-end">
+			<div
+				className={
+					control === "textarea"
+						? "flex flex-col items-stretch gap-2 md:items-end"
+						: "flex flex-wrap items-center gap-2 md:justify-end"
+				}
+			>
 				{control === "boolean" ? (
 					<>
 						<Switch
@@ -175,6 +182,16 @@ export function SettingRow({
 							))}
 						</SelectContent>
 					</Select>
+				) : control === "textarea" ? (
+					<Textarea
+						id={inputId}
+						rows={4}
+						className="min-h-28 w-full md:w-[28rem]"
+						value={draft}
+						disabled={!canWrite || pending}
+						aria-describedby={describedBy.join(" ") || undefined}
+						onChange={(event) => setDraft(event.target.value)}
+					/>
 				) : (
 					<Input
 						id={inputId}
@@ -182,7 +199,13 @@ export function SettingRow({
 						step={control === "number" ? "any" : undefined}
 						inputMode={control === "number" || control === "money" ? "decimal" : undefined}
 						placeholder={control === "money" ? "10000.00" : undefined}
-						className="h-8 w-40"
+						className={
+							control === "number" || control === "money"
+								? "h-8 w-40"
+								: setting.key.startsWith("web.")
+									? "h-8 w-full md:w-80"
+									: "h-8 w-40"
+						}
 						value={draft}
 						disabled={!canWrite || pending}
 						aria-describedby={describedBy.join(" ") || undefined}
@@ -190,7 +213,12 @@ export function SettingRow({
 					/>
 				)}
 				{control === "boolean" ? null : (
-					<Button type="submit" size="sm" disabled={!canWrite || !dirty || pending}>
+					<Button
+						type="submit"
+						size="sm"
+						className={control === "textarea" ? "self-end" : undefined}
+						disabled={!canWrite || !dirty || pending}
+					>
 						{pending ? "Saving…" : scope === "all" ? "Set for every branch" : "Save"}
 					</Button>
 				)}

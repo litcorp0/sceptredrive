@@ -55,6 +55,12 @@ export const SETTING_META: SettingMetaMap = {
 	},
 
 	// --- Credit ---------------------------------------------------------------
+	"credit.defaultLimitMinor": {
+		label: "Default credit limit (GH₵)",
+		control: "money",
+		description:
+			"Every customer registered at this branch starts with this line. 0 means no credit until someone sets a limit. Administrators only: a manager who could raise it would bypass the approval on a limit increase.",
+	},
 	"credit.repaymentPrefix": {
 		label: "Repayment receipt prefix",
 		description: "Prefix for credit repayment receipts, e.g. REP-00001. 1–8 letters or digits.",
@@ -72,6 +78,11 @@ export const SETTING_META: SettingMetaMap = {
 	"catalog.skuSequence": {
 		label: "Next SKU number",
 		description: "The next number for new products. Saving a suggested SKU advances it.",
+	},
+	"pricing.vatRegistered": {
+		label: "The business is VAT-registered",
+		description:
+			"Off means no VAT, NHIL or GETFund on any line, whatever the catalogue says — use it until the business is registered (or if it never is). On charges the 20% stack on standard-rated products. This is not the GRA reporting switch.",
 	},
 	"pricing.taxMode": {
 		label: "Tax mode",
@@ -252,6 +263,78 @@ export const SETTING_META: SettingMetaMap = {
 	"tax.sellerVatNumber": {
 		label: "Seller VAT number",
 		description: "Printed on receipts and sent to GRA when present.",
+	},
+
+	// --- Website --------------------------------------------------------------
+	"web.siteName": {
+		label: "Site name",
+		description: "The business name in the site header, footer and page titles.",
+	},
+	"web.tagline": {
+		label: "Tagline",
+		description: "One line under the name in the header and the social preview.",
+	},
+	"web.heroHeading": {
+		label: "Home headline",
+		description: "The largest line on the home page. Keep it short.",
+	},
+	"web.heroBody": {
+		label: "Home introduction",
+		control: "textarea",
+		description: "The paragraph under the home headline.",
+	},
+	"web.aboutBody": {
+		label: "About the business",
+		control: "textarea",
+		description: "The story on the About page. Plain text; paragraphs are preserved.",
+	},
+	"web.announcement": {
+		label: "Announcement bar",
+		description: "Shown above the header on every page. Leave blank to hide it.",
+	},
+	"web.shopStatus": {
+		label: "Online shop",
+		control: "select",
+		options: [
+			{ value: "COMING_SOON", label: "Coming soon" },
+			{ value: "OPEN", label: "Open" },
+		],
+		description: "What the Shop page says. There is no checkout in this phase.",
+	},
+	"web.contactEmail": {
+		label: "Contact email",
+		description: "Shown on the contact page and in the footer. Leave blank to hide the action.",
+	},
+	"web.contactPhone": {
+		label: "Contact phone",
+		description: "The number the site dials. Include the country code. Blank hides the call action.",
+	},
+	"web.whatsapp": {
+		label: "WhatsApp number",
+		description:
+			"A number customers can message about a part. Include the country code. Blank hides the action.",
+	},
+	"web.instagram": {
+		label: "Instagram URL",
+		description: "An https:// profile link. Blank hides the icon.",
+	},
+	"web.facebook": {
+		label: "Facebook URL",
+		description: "An https:// profile link. Blank hides the icon.",
+	},
+	"web.tiktok": {
+		label: "TikTok URL",
+		description: "An https:// profile link. Blank hides the icon.",
+	},
+	"web.branchHours": {
+		label: "Opening hours (this branch)",
+		description:
+			"Set per branch, e.g. Mon–Sat, 8:00–18:00. Blank hides the hours line for that branch.",
+	},
+	"web.branchMapUrl": {
+		label: "Map link (this branch)",
+		description:
+			"An https:// maps link. Blank builds a map search from the branch address.",
 	},
 }
 

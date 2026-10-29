@@ -48,6 +48,11 @@ const GROUP_META: Record<string, { label: string; description: string }> = {
 	},
 	staff: { label: "Staff", description: "Staff ID numbering." },
 	receipt: { label: "Receipts", description: "Text printed on a receipt." },
+	web: {
+		label: "Website",
+		description:
+			"The public site: identity, contact, the shop notice and per-branch hours.",
+	},
 	catalog: { label: "Catalog", description: "Product SKU numbering." },
 }
 
@@ -65,6 +70,7 @@ const GROUP_ORDER: readonly string[] = [
 	"flag",
 	"staff",
 	"receipt",
+	"web",
 	"catalog",
 ]
 
