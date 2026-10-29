@@ -490,6 +490,40 @@ offline/E2E/load tests; installer signing and auto-update; runbooks and UAT.
 
 ---
 
+## Phase 16 — Web Presence & Console-Managed Site Content (post-v1, additive)
+
+**Goal:** A fast, accessible public website tells a car owner or a workshop what Sceptre
+Drive sells and how to reach a branch, and every word, link, status and branch detail is
+edited in the admin console. The site is the seam for the future store, not the store.
+
+**Status:** ⏳ In progress — see `phases/16-web-presence/`
+**Dependencies:** Phase 1 (settings store, branch master), Phase 14 (console settings surface)
+**Requirements:** WEB-01…WEB-12
+
+**Success Criteria**
+1. The supplied logo appears correctly in the admin console, the POS and the site — with an
+   inverse variant on charcoal and a usable favicon.
+2. An administrator edits the site's identity, hero, about, contact, social links, shop
+   status and per-branch hours/map in **Settings → Website**; the change is audited and
+   appears without a rebuild.
+3. `GET /api/public/site` returns only a whitelisted projection, excludes inactive and
+   warehouse branches, is rate-limited and cached, and leaks no key name, source or PII.
+4. The site renders every route from the endpoint, and falls back to valid bundled content
+   when the API is unavailable.
+5. The site is WCAG 2.2 AA: keyboard navigable, AA contrast, visible focus, 44 px targets,
+   reduced motion, one `h1` per page.
+6. SEO: per-route metadata, `AutoPartsStore` JSON-LD, sitemap and robots, a social image.
+7. `/shop` is an honest coming-soon seam; there is no cart, checkout, price, stock or
+   account surface.
+8. Every gate is green and `tokens:check` covers `web`.
+
+**Planned scope:** brand assets and logo wiring; `SiteContent` contract; `web.*` settings and
+the public endpoint; the Website settings group and a textarea control; the `web/` workspace;
+the marketing site (home, parts, services, branches, about, contact, shop teaser, 404); SEO,
+accessibility, performance, tests and verification.
+
+---
+
 ## Dependency Graph
 
 ```text
@@ -516,6 +550,10 @@ design system; their business dependencies are Phases 3 and 5. Phase 13 builds o
 layout from Phase 10 and uses the Phase 12 approval entity **only** for refunds at or above
 the cap when the terminal is online; a cash refund authorised offline completes on the till
 PIN and raises that approval retrospectively on sync.
+
+**Phase 16 (post-v1 web presence) depends on Phase 1 (settings store, branch master) and
+Phase 14 (the console settings surface).** It is independent of Phase 15's deployment
+inputs and can run before, after or beside it.
 
 ## Milestone Definition
 

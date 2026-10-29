@@ -110,9 +110,16 @@ on reconnect, without double-selling or losing a transaction.
 See `.planning/ROADMAP.md` for success criteria and `.planning/REQUIREMENTS.md`
 for the requirement-to-phase mapping.
 
+**Post-v1 additive:** Phase 16 — Web Presence & Console-Managed Site Content. A public
+marketing site for the business, with every word and contact detail edited in the admin
+console. It is the seam for the future store, not the store.
+
 ## Out of Scope (v1)
 
-- E-commerce storefront and customer mobile app
+- Customer mobile app
+- E-commerce storefront (Phase 16 ships the marketing site and a `/shop` teaser; cart,
+  checkout, prices, stock and customer accounts remain out of scope until a store phase is
+  planned)
 - Delivery and rider management
 - Payroll, attendance, and commissions
 - Full double-entry general ledger, financial statements, period close

@@ -344,6 +344,36 @@
 
 ---
 
+## Web Presence (WEB) — Phase 16, post-v1 additive
+
+- **WEB-01** — Brand asset set from the supplied artwork: transparent master, inverse for
+  charcoal, padded icon; one master in `packages/brand/assets`, copied to admin, desktop
+  and web.
+- **WEB-02** — Shared `SiteContent` contract (site identity, copy, contact, social, shop
+  status, public branches) and the shop-status vocabulary.
+- **WEB-03** — `web.*` settings registry with Zod schemas, defaults, branch-scoped hours and
+  map, written through the existing audited settings path.
+- **WEB-04** — Console Settings gains a Website group with labels, help text and a long-copy
+  (textarea) control; managers see it read-only.
+- **WEB-05** — Public, unauthenticated `GET /api/public/site` returning only a whitelisted
+  projection, rate-limited and cacheable.
+- **WEB-06** — Public branch read: active retail branches only; address and phone come from
+  the branch master; hours and map link are per-branch settings.
+- **WEB-07** — `web/` workspace on TanStack Start with Tailwind v4, shared brand tokens and
+  the same React/TanStack versions as the console.
+- **WEB-08** — Public routes: home, parts index, services, branches, about, contact, shop
+  teaser and 404; responsive and motion-aware.
+- **WEB-09** — SSR content fetch with a short cache and a complete typed fallback, so the
+  site renders with the API unavailable.
+- **WEB-10** — Every site-content edit is attributed and audited, and appears without a
+  redeploy.
+- **WEB-11** — SEO: per-route metadata, `AutoPartsStore`/`LocalBusiness` JSON-LD, sitemap,
+  robots and a social image.
+- **WEB-12** — WCAG 2.2 AA, reduced-motion support, optimized local photography and no
+  layout shift.
+
+---
+
 ## Coverage Check
 
 | Phase | Requirements |
@@ -363,5 +393,7 @@
 | 13 | POS-10…13, POS-15, POS-16, PAY-01…03, PAY-07 |
 | 14 | ADM-07, ADM-08, RPT-04…06, PAY-04…06, EVAT-01…03 |
 | 15 | OPS-01…08 |
+| 16 (post-v1) | WEB-01…12 |
 
-Every requirement maps to exactly one phase.
+Every v1 requirement maps to exactly one phase. Phase 16 is additive and does not change the
+v1 milestone.
