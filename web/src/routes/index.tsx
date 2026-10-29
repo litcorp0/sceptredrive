@@ -3,7 +3,7 @@ import { ArrowRight, MapPin, ScanBarcode, Users } from "lucide-react"
 import { CounterTicket } from "#/components/counter-ticket"
 import { Photo } from "#/components/photo"
 import { SectionHeading } from "#/components/section-heading"
-import { partMessage, telHref, waHref } from "#/lib/contact"
+import { ENQUIRY_MESSAGE, telHref, waHref } from "#/lib/contact"
 import { PART_FAMILIES } from "#/lib/parts"
 import { buttonOnFascia, buttonPrimary, buttonSecondary } from "#/lib/ui"
 import { useSiteContent } from "#/lib/use-site"
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/")({
 			{
 				name: "description",
 				content:
-					"Genuine, OEM-matched and aftermarket automotive spare parts for drivers, workshops and fleets across Ghana. Find a part, check a branch, talk to the counter.",
+					"Lubricants, batteries, belts, filters, spark plugs and light bulbs for drivers, workshops and fleets across Ghana. Find a branch and visit the counter.",
 			},
 		],
 	}),
@@ -54,7 +54,7 @@ const REASONS = [
 	{
 		icon: Users,
 		title: "Built for drivers and workshops",
-		body: "Walk-in customers, mechanics and fleets use the same counter. Ask about a trade account for repeat work.",
+		body: "Walk-in customers, mechanics and fleets use the same counter. Trade accounts are available for repeat work.",
 	},
 ] as const
 
@@ -62,7 +62,7 @@ function HomePage() {
 	const site = useSiteContent()
 	const identity = site.site
 	const call = telHref(identity.contactPhone)
-	const message = waHref(identity.whatsapp, partMessage("a part"))
+	const message = waHref(identity.whatsapp, ENQUIRY_MESSAGE)
 	const primaryBranch = site.branches[0]
 
 	return (
@@ -87,7 +87,7 @@ function HomePage() {
 					</p>
 					<div className="site-rise mt-8 flex flex-wrap gap-3 [animation-delay:240ms]">
 						<Link to="/parts" className={buttonPrimary}>
-							Find a part
+							See the range
 						</Link>
 						<Link to="/branches" className={buttonSecondary}>
 							Visit a branch
@@ -99,11 +99,7 @@ function HomePage() {
 				</div>
 
 				<div className="flex justify-center lg:justify-end">
-					<CounterTicket
-						families={PART_FAMILIES.slice(0, 5)}
-						site={identity}
-						branchName={primaryBranch?.name}
-					/>
+					<CounterTicket families={PART_FAMILIES} branchName={primaryBranch?.name} />
 				</div>
 			</section>
 
@@ -111,12 +107,12 @@ function HomePage() {
 				<div className="site-container site-section">
 					<div className="flex flex-wrap items-end justify-between gap-6">
 						<SectionHeading
-							eyebrow="The parts index"
+							eyebrow="The ranges"
 							title="Six families. One counter."
-							description="Search the index, then ask the counter to match the exact part. The shelf is deeper than this page."
+							description="Search the ranges, then visit a branch to check availability. The shelf is deeper than this page."
 						/>
 						<Link to="/parts" className={buttonSecondary}>
-							Open the index
+							See the full range
 							<ArrowRight aria-hidden="true" className="size-4" />
 						</Link>
 					</div>
@@ -178,7 +174,7 @@ function HomePage() {
 					<figcaption className="absolute inset-x-0 bottom-0 bg-fascia/90 p-5 text-fascia-foreground md:p-7">
 						<p className="eyebrow text-fascia-foreground/60">Workshop & fleet supply</p>
 						<p className="mt-2 max-w-2xl font-display text-xl font-semibold md:text-2xl">
-							Bring the part number or the old part. We will do the matching.
+							Workshop and fleet supply, from the counter.
 						</p>
 					</figcaption>
 				</figure>
@@ -253,8 +249,11 @@ function HomePage() {
 					<div>
 						<p className="eyebrow text-fascia-foreground/60">At the counter</p>
 						<h2 className="mt-3 max-w-2xl font-display text-4xl leading-[1.02] font-semibold tracking-[-0.03em] text-balance md:text-5xl">
-							Bring the part number. We will do the rest.
+							Find the counter nearest you.
 						</h2>
+						<p className="mt-3 max-w-xl text-sm leading-relaxed text-fascia-foreground/70">
+							We do not sell online. Visit a branch or contact us for general enquiries.
+						</p>
 					</div>
 					<div className="flex flex-wrap gap-3">
 						{call ? (

@@ -1,15 +1,11 @@
 # Photo credits
 
-The website ships local copies of these photographs. Each was resized and
-converted to AVIF/WebP; no other changes were made. The licence and author are
-recorded here because a downloaded image without provenance is a liability.
+The website ships a local copy of this photograph. It was resized and converted
+to AVIF/WebP; no other changes were made.
 
 | File | Title | Author | Licence | Source |
 |---|---|---|---|---|
 | `workshop-bench` | Car mechanic's workbench (Unsplash) | AJ Yorio | CC0 1.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Car_mechanic%27s_workbench_(Unsplash).jpg) |
-| `engine-block` | Close-up of an engine extracted from a car, with many disassembled parts | Ivan Radic | CC BY 2.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Close-up_of_an_engine_extracted_from_a_car,_with_many_disassembled_parts_(51145344822).jpg) |
-| `suspension-work` | Car mechanic worker repairing suspension with drill in garage | Shixart1985 | CC BY 2.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Car_mechanic_worker_repairing_suspension_with_drill_in_garage.jpg) |
-| `brake-rotor` | Ventilated Plain (Smooth) Brake Rotor | Atharv Chandel | CC BY 4.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Ventilated_Plain_(Smooth)_Brake_Rotor.jpg) |
 
 ## Replacing a photo
 

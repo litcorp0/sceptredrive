@@ -14,12 +14,13 @@ import type { SiteContent } from "@sceptre/shared"
 export const SITE_FALLBACK: SiteContent = {
 	site: {
 		name: "Sceptre Drive",
-		tagline: "Genuine and aftermarket spares for the cars and fleets you drive.",
+		tagline:
+			"Lubricants, batteries, belts, filters, spark plugs and light bulbs for the cars you drive.",
 		heroHeading: "Parts that keep Ghana moving.",
 		heroBody:
-			"Engine, brakes, suspension, electrical and fluids — find the part, check the branch, and talk to a counter that knows it.",
+			"Lubricants, batteries, belts, filters, spark plugs and light bulbs — the parts a car needs to keep moving. See the range, find a branch, and visit the counter.",
 		aboutBody:
-			"Sceptre Drive supplies automotive spare parts across Ghana. We stock genuine, OEM-matched and quality aftermarket parts for everyday drivers, workshops and fleets. Every part is recorded, so a counter can trace what you bought and help you match it again.",
+			"Sceptre Drive supplies lubricants, batteries, belts, filters, spark plugs and light bulbs across Ghana. We stock genuine, OEM-matched and quality aftermarket parts for everyday drivers, workshops and fleets. Every part is recorded, so a counter can trace what you bought and help you match it again.",
 		announcement: "",
 		shopStatus: "COMING_SOON",
 		contactEmail: "",

@@ -4,7 +4,13 @@ import type { SiteBranch } from "@sceptre/shared"
  * Phone and link builders. Every helper returns `null` for an empty value, so a
  * page can hide an action the operator has not configured instead of rendering
  * a dead `tel:` with no number.
+ *
+ * The site does not sell online: WhatsApp and email are for general enquiries
+ * and the physical counter, never an order.
  */
+
+/** One voice for every WhatsApp link, so the message cannot imply an order. */
+export const ENQUIRY_MESSAGE = "Hello Sceptre Drive, I'd like to make an enquiry."
 
 export function telHref(phone: string): string | null {
 	const value = phone.replace(/[^\d+]/g, "")
@@ -29,11 +35,4 @@ export function mapsHref(branch: SiteBranch): string | null {
 	return query
 		? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
 		: null
-}
-
-export function partMessage(part: string): string {
-	const trimmed = part.trim()
-	return trimmed
-		? `Hello Sceptre Drive, I'm looking for ${trimmed}.`
-		: "Hello Sceptre Drive, I'd like help finding a part."
 }

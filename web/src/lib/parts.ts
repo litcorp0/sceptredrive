@@ -1,8 +1,8 @@
 /**
- * The parts index is presentation copy, not inventory: it names the families a
- * counter carries and examples a person would ask for. There are no prices,
- * quantities or live stock here — the site does not know them, and a marketing
- * page that pretends to is worse than one that asks you to call.
+ * The ranges Sceptre Drive deals in — presentation copy, not inventory. The
+ * business stocks lubricants, batteries, belts, filters, spark plugs and light
+ * bulbs. This site does not sell them online; the index exists so a visitor
+ * knows what the counter carries and where to find it.
  */
 export interface PartFamily {
 	slug: string
@@ -10,50 +10,58 @@ export interface PartFamily {
 	name: string
 	summary: string
 	examples: string[]
+	/** Search aliases (singular/plural) that are not shown on the page. */
+	aliases?: string[]
 }
 
 export const PART_FAMILIES: PartFamily[] = [
 	{
-		slug: "engine-drivetrain",
-		code: "ENG",
-		name: "Engine & Drivetrain",
-		summary: "Filters, belts, gaskets and the parts that keep the engine turning.",
-		examples: ["Oil filters", "Air filters", "Timing belts", "Gaskets"],
+		slug: "lubricants",
+		code: "LUB",
+		name: "Lubricants",
+		summary: "Engine oils, gear oils and greases for the parts that move.",
+		examples: ["Engine oil", "Gear oil", "Grease", "Brake fluid"],
+		aliases: ["lubricant", "oil"],
 	},
 	{
-		slug: "brakes",
-		code: "BRK",
-		name: "Brakes",
-		summary: "Pads, discs, shoes and fluid for a pedal that feels right.",
-		examples: ["Brake pads", "Discs", "Shoes", "Brake fluid"],
+		slug: "batteries",
+		code: "BAT",
+		name: "Batteries",
+		summary: "Starting and auxiliary batteries for cars and light vehicles.",
+		examples: ["Petrol & diesel", "Maintenance-free", "12V", "Terminals"],
+		aliases: ["battery"],
 	},
 	{
-		slug: "suspension-steering",
-		code: "SUS",
-		name: "Suspension & Steering",
-		summary: "Shocks, bushings and joints for the roads you actually drive.",
-		examples: ["Shock absorbers", "Bushings", "Tie rods", "Ball joints"],
+		slug: "belts",
+		code: "BLT",
+		name: "Belts",
+		summary: "Fan, alternator and timing belts in the common sizes.",
+		examples: ["Fan belts", "Alternator belts", "Timing belts", "V-belts"],
+		aliases: ["belt"],
 	},
 	{
-		slug: "electrical-lighting",
-		code: "ELC",
-		name: "Electrical & Lighting",
-		summary: "Batteries, plugs and the electrics that start the day.",
-		examples: ["Batteries", "Spark plugs", "Bulbs", "Alternators"],
-	},
-	{
-		slug: "filters-fluids",
+		slug: "filters",
 		code: "FLT",
-		name: "Filters & Fluids",
-		summary: "Oil, coolant and the filters that keep them clean.",
-		examples: ["Engine oil", "Coolant", "Fuel filters", "Brake fluid"],
+		name: "Filters",
+		summary: "Oil, air and fuel filters for routine service.",
+		examples: ["Oil filters", "Air filters", "Fuel filters", "Cabin filters"],
+		aliases: ["filter"],
 	},
 	{
-		slug: "body-accessories",
-		code: "BDY",
-		name: "Body & Accessories",
-		summary: "Wipers, mirrors and the small parts that finish a car.",
-		examples: ["Wiper blades", "Mirrors", "Mats", "Care"],
+		slug: "spark-plugs",
+		code: "SPK",
+		name: "Spark Plugs",
+		summary: "Plugs for petrol engines, from standard to iridium.",
+		examples: ["Standard", "Iridium", "Platinum", "Resistor"],
+		aliases: ["plug", "spark plug"],
+	},
+	{
+		slug: "light-bulbs",
+		code: "LGT",
+		name: "Light Bulbs",
+		summary: "Head, tail and interior bulbs for the road and the dark.",
+		examples: ["Headlights", "Tail lights", "Indicators", "Interior bulbs"],
+		aliases: ["bulb", "bulbs", "light"],
 	},
 ]
 
@@ -72,7 +80,13 @@ export function filterParts(query: string): PartFamily[] {
 
 	return PART_FAMILIES.filter((family) => {
 		const haystack = normalize(
-			[family.name, family.code, family.summary, ...family.examples].join(" "),
+			[
+				family.name,
+				family.code,
+				family.summary,
+				...family.examples,
+				...(family.aliases ?? []),
+			].join(" "),
 		)
 		return haystack.includes(needle)
 	})

@@ -463,7 +463,8 @@ export const SETTING_DEFINITIONS = {
   },
   'web.tagline': {
     schema: z.string().trim().min(1).max(140),
-    defaultValue: 'Genuine and aftermarket spares for the cars and fleets you drive.',
+    defaultValue:
+      'Lubricants, batteries, belts, filters, spark plugs and light bulbs for the cars you drive.',
     branchScoped: false,
     writableBy: 'admin',
   },
@@ -476,14 +477,14 @@ export const SETTING_DEFINITIONS = {
   'web.heroBody': {
     schema: z.string().trim().min(1).max(500),
     defaultValue:
-      'Engine, brakes, suspension, electrical and fluids — find the part, check the branch, and talk to a counter that knows it.',
+      'Lubricants, batteries, belts, filters, spark plugs and light bulbs — the parts a car needs to keep moving. See the range, find a branch, and visit the counter.',
     branchScoped: false,
     writableBy: 'admin',
   },
   'web.aboutBody': {
     schema: z.string().trim().min(1).max(2000),
     defaultValue:
-      'Sceptre Drive supplies automotive spare parts across Ghana. We stock genuine, OEM-matched and quality aftermarket parts for everyday drivers, workshops and fleets. Every part is recorded, so a counter can trace what you bought and help you match it again.',
+      'Sceptre Drive supplies lubricants, batteries, belts, filters, spark plugs and light bulbs across Ghana. We stock genuine, OEM-matched and quality aftermarket parts for everyday drivers, workshops and fleets. Every part is recorded, so a counter can trace what you bought and help you match it again.',
     branchScoped: false,
     writableBy: 'admin',
   },

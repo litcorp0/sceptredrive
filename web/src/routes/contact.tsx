@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Mail, MapPin, MessageCircle, Phone } from "lucide-react"
 import { SectionHeading } from "#/components/section-heading"
-import { mailHref, mapsHref, partMessage, telHref, waHref } from "#/lib/contact"
+import { ENQUIRY_MESSAGE, mailHref, mapsHref, telHref, waHref } from "#/lib/contact"
 import { buttonSecondary } from "#/lib/ui"
 import { useSiteContent } from "#/lib/use-site"
 
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/contact")({
 			{
 				name: "description",
 				content:
-					"Call, message or visit the Sceptre Drive parts counter. Phone, WhatsApp, email and branch directions.",
+					"Call, message or visit the Sceptre Drive counter. Phone, WhatsApp, email and branch directions for general enquiries.",
 			},
 		],
 	}),
@@ -25,7 +25,7 @@ function ContactPage() {
 	const branchPhone = site.branches.find((branch) => branch.phone)?.phone ?? ""
 	const phone = identity.contactPhone || branchPhone
 	const call = telHref(phone)
-	const message = waHref(identity.whatsapp, partMessage("a part"))
+	const message = waHref(identity.whatsapp, ENQUIRY_MESSAGE)
 	const mail = mailHref(identity.contactEmail, "Parts enquiry")
 
 	return (
@@ -34,7 +34,7 @@ function ContactPage() {
 				level={1}
 				eyebrow="Contact"
 				title="Talk to the counter."
-				description="No ticket numbers and no call centre. Choose the way you want to reach a person who can check the shelf."
+				description="No ticket numbers and no call centre. Choose how to reach us for general enquiries, trade accounts or directions. We do not sell online."
 			/>
 
 			<div className="mt-10 grid gap-4 md:grid-cols-2">
@@ -48,7 +48,7 @@ function ContactPage() {
 							<span className="eyebrow">Call</span>
 							<span className="mt-2 block font-display text-2xl font-semibold">{phone}</span>
 							<span className="mt-1 block text-sm text-muted-ink">
-								Ask for a part, a price or a branch.
+								General enquiries, trade accounts and branch information.
 							</span>
 						</span>
 					</a>
@@ -68,7 +68,7 @@ function ContactPage() {
 								Message the counter
 							</span>
 							<span className="mt-1 block text-sm text-muted-ink">
-								Send a part number or a photo of the old part.
+								General enquiries and branch directions.
 							</span>
 						</span>
 					</a>
@@ -86,7 +86,7 @@ function ContactPage() {
 								{identity.contactEmail}
 							</span>
 							<span className="mt-1 block text-sm text-muted-ink">
-								For quotes, trade accounts and documents.
+								For trade accounts, documents and general enquiries.
 							</span>
 						</span>
 					</a>
@@ -109,8 +109,7 @@ function ContactPage() {
 
 			{!call && !message && !mail ? (
 				<div className="mt-6 border border-dashed border-line-strong p-6 text-sm text-muted-ink">
-					The counter's contact details are being updated. Use a branch below, or ask for directions
-					at the counter.
+					The counter's contact details are being updated. Use a branch below for directions.
 				</div>
 			) : null}
 

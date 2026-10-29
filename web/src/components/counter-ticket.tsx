@@ -1,4 +1,3 @@
-import type { SiteIdentity } from "@sceptre/shared"
 import type { PartFamily } from "#/lib/parts"
 
 /**
@@ -9,11 +8,9 @@ import type { PartFamily } from "#/lib/parts"
  */
 export function CounterTicket({
 	families,
-	site,
 	branchName,
 }: {
 	families: PartFamily[]
-	site: SiteIdentity
 	branchName?: string
 }) {
 	return (
@@ -30,9 +27,8 @@ export function CounterTicket({
 
 				<div className="mt-5 flex items-end justify-between gap-4">
 					<p className="font-mono text-[11px] tracking-[0.14em] text-muted-ink uppercase">
-						No. 001 · In stock at the counter
+						No. 001 · Parts range
 					</p>
-					<p className="font-mono text-xs text-muted-ink">GHS</p>
 				</div>
 
 				<h2 className="mt-1 font-display text-2xl font-semibold tracking-tight">Parts index</h2>
@@ -55,7 +51,7 @@ export function CounterTicket({
 				<div className="ticket-barcode mt-5" aria-hidden="true" />
 
 				<div className="mt-3 flex items-center justify-between gap-4 font-mono text-[10px] tracking-[0.12em] text-muted-ink uppercase">
-					<span>{site.shopStatus === "OPEN" ? "Shop open" : "Shop coming soon"}</span>
+					<span>No online sales</span>
 					<span>Counter copy</span>
 				</div>
 			</div>

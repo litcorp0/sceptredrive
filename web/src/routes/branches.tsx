@@ -29,7 +29,7 @@ function BranchesPage() {
 				level={1}
 				eyebrow="Find us"
 				title="A counter near the road."
-				description="Every branch is a parts counter. Address, hours and a phone number — no call centre in between."
+				description="Every branch is a parts counter. Address, hours and a phone number — no call centre in between. This site does not take orders."
 			/>
 
 			{site.branches.length === 0 ? (
@@ -64,14 +64,14 @@ function BranchesPage() {
 											Address
 										</dt>
 										<dd className="text-ink">
-											{branch.address ?? "Ask the counter for directions"}
+											{branch.address ?? "Directions available at the counter"}
 										</dd>
 									</div>
 									<div className="flex gap-3">
 										<dt className="w-14 shrink-0 font-mono text-[10px] tracking-[0.1em] text-muted-ink uppercase">
 											Hours
 										</dt>
-										<dd className="text-ink">{branch.hours ?? "Call for opening hours"}</dd>
+										<dd className="text-ink">{branch.hours ?? "Contact the branch for hours"}</dd>
 									</div>
 									<div className="flex gap-3">
 										<dt className="w-14 shrink-0 font-mono text-[10px] tracking-[0.1em] text-muted-ink uppercase">
@@ -83,7 +83,7 @@ function BranchesPage() {
 													{branch.phone ?? identity.contactPhone}
 												</a>
 											) : (
-												"Ask the counter"
+												"Contact the branch"
 											)}
 										</dd>
 									</div>

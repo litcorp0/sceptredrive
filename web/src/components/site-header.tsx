@@ -57,7 +57,7 @@ export function SiteHeader({ site }: { site: SiteIdentity }) {
 							to="/parts"
 							className="inline-flex h-10 items-center rounded-md bg-brand px-4 text-sm font-semibold text-brand-fg transition-colors hover:bg-ink hover:text-canvas"
 						>
-							Find a part
+							What we stock
 						</Link>
 					</div>
 
@@ -82,7 +82,7 @@ export function SiteHeader({ site }: { site: SiteIdentity }) {
 									to="/parts"
 									className="mt-2 rounded-md bg-brand px-3 py-3 text-center text-sm font-semibold text-brand-fg"
 								>
-									Find a part
+									What we stock
 								</Link>
 							</nav>
 						</div>

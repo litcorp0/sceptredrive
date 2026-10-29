@@ -4,9 +4,10 @@ The public site. A TanStack Start app in the root Bun workspace; it shares
 `@sceptre/brand` (colour, type, fonts) and `@sceptre/shared` (the `SiteContent`
 contract) with the console and the POS.
 
-**Now:** a marketing site with a parts index, services, branches, contact and a
-shop teaser. **Not yet:** a store. There is no cart, checkout, price, stock or
-customer account here.
+**Purpose:** the business's online presence — for Paystack onboarding and for
+customers who want to see what we stock and where to find us. **Not a shop:**
+there is no cart, checkout, price, stock, online payment or customer account
+here. Parts are supplied at the counter.
 
 ## Run it
 
@@ -34,13 +35,13 @@ set it when the real domain exists. Both are documented in `.env.example`.
 
 | Route | What it is |
 |---|---|
-| `/` | Hero, parts index, how the counter works, workshop band, branches, CTA |
-| `/parts` | Searchable index of six part families (`?q=` is shareable) |
-| `/services` | Workshop supply, fleet/trade, sourcing, part matching |
+| `/` | Hero, range index, how the counter works, workshop band, branches, CTA |
+| `/parts` | Searchable index of the six ranges — lubricants, batteries, belts, filters, spark plugs, light bulbs (`?q=` is shareable) |
+| `/services` | Counter supply, trade accounts, sourcing and range advice |
 | `/branches` | Address, hours, phone and directions for every retail branch |
 | `/about` | The business story and the three standards |
 | `/contact` | Call, WhatsApp, email and visit — no fake form |
-| `/shop` | The honest coming-soon seam for the future store |
+| `/shop` | The honest "no online sales" page and the future store seam |
 | `/sitemap.xml`, `/robots.txt` | Generated server routes |
 
 ## Design

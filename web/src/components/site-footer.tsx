@@ -32,7 +32,7 @@ export function SiteFooter({ site }: { site: SiteContent }) {
 						{identity.tagline}
 					</p>
 					<p className="mt-4 font-mono text-[11px] tracking-[0.12em] text-fascia-foreground/50 uppercase">
-						{identity.shopStatus === "OPEN" ? "Shop open" : "Online shop coming soon"}
+						Online presence · no online sales
 					</p>
 				</div>
 

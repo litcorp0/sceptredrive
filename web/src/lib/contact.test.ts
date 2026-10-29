@@ -1,6 +1,6 @@
 import type { SiteBranch } from "@sceptre/shared"
 import { describe, expect, it } from "vitest"
-import { mailHref, mapsHref, partMessage, telHref, waHref } from "./contact"
+import { ENQUIRY_MESSAGE, mailHref, mapsHref, telHref, waHref } from "./contact"
 
 const BRANCH: SiteBranch = {
 	code: "ACC-SPX",
@@ -49,8 +49,8 @@ describe("contact links", () => {
 		expect(mapsHref({ ...BRANCH, area: null, city: "" })).toBeNull()
 	})
 
-	it("names the part in the WhatsApp message", () => {
-		expect(partMessage("brake pads")).toContain("brake pads")
-		expect(partMessage("  ")).toContain("help finding a part")
+	it("uses one general enquiry message, never an order", () => {
+		expect(ENQUIRY_MESSAGE).toContain("enquiry")
+		expect(ENQUIRY_MESSAGE.toLowerCase()).not.toContain("order")
 	})
 })

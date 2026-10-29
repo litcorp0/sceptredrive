@@ -1,10 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { ArrowRight, MessageCircle, Phone } from "lucide-react"
 import { SectionHeading } from "#/components/section-heading"
-import { partMessage, telHref, waHref } from "#/lib/contact"
 import { filterParts, PART_FAMILIES } from "#/lib/parts"
-import { buttonPrimary, buttonSecondary } from "#/lib/ui"
-import { useSiteContent } from "#/lib/use-site"
+import { buttonSecondary } from "#/lib/ui"
 
 export const Route = createFileRoute("/parts")({
 	validateSearch: (search: Record<string, unknown>): { q?: string } => ({
@@ -12,11 +9,11 @@ export const Route = createFileRoute("/parts")({
 	}),
 	head: () => ({
 		meta: [
-			{ title: "Parts index — Sceptre Drive" },
+			{ title: "What we stock — Sceptre Drive" },
 			{
 				name: "description",
 				content:
-					"Engine, brakes, suspension, electrical, filters and body parts. Search the index, then ask the counter to match the exact part.",
+					"Lubricants, batteries, belts, filters, spark plugs and light bulbs. The ranges Sceptre Drive carries at its counters.",
 			},
 		],
 	}),
@@ -24,27 +21,24 @@ export const Route = createFileRoute("/parts")({
 })
 
 function PartsPage() {
-	const site = useSiteContent()
 	const { q: searchQuery } = Route.useSearch()
 	const q = searchQuery ?? ""
 	const navigate = Route.useNavigate()
 	const results = filterParts(q)
-	const call = telHref(site.site.contactPhone)
-	const message = waHref(site.site.whatsapp, partMessage(q || "a part"))
 	const query = q.trim()
 
 	return (
 		<section className="site-container site-section">
 			<SectionHeading
 				level={1}
-				eyebrow="The parts index"
-				title="Find the family. Ask for the part."
-				description="This is a guide to what the counter carries — not live stock. Give us the part number and we will confirm the exact match."
+				eyebrow="What we stock"
+				title="The ranges we carry."
+				description="Lubricants, batteries, belts, filters, spark plugs and light bulbs. This is a guide to the ranges, not live stock — visit a branch for availability."
 			/>
 
 			<div className="mt-10 max-w-2xl">
 				<label htmlFor="parts-search" className="sr-only">
-					Search the parts index
+					Search the ranges
 				</label>
 				<input
 					id="parts-search"
@@ -53,33 +47,24 @@ function PartsPage() {
 					onChange={(event) =>
 						navigate({ to: "/parts", search: { q: event.target.value }, replace: true })
 					}
-					placeholder="Try “brake”, “filter” or a code such as BRK"
+					placeholder="Try “battery”, “filter” or a code such as BAT"
 					className="h-14 w-full rounded-md border border-line-strong bg-surface px-4 text-base text-ink placeholder:text-muted-ink focus:border-brand-ink focus:outline-none md:text-lg"
 				/>
 				<p className="mt-2 font-mono text-[11px] tracking-[0.12em] text-muted-ink uppercase">
-					{results.length} of {PART_FAMILIES.length} families
+					{results.length} of {PART_FAMILIES.length} ranges
 					{query ? ` match “${query}”` : ""}
 				</p>
 			</div>
 
 			{results.length === 0 ? (
 				<div className="mt-10 max-w-2xl border border-dashed border-line-strong p-6">
-					<h2 className="font-display text-xl font-semibold">Nothing in the index matches that.</h2>
+					<h2 className="font-display text-xl font-semibold">No range matches that.</h2>
 					<p className="mt-2 text-sm text-muted-ink">
-						The shelf is deeper than the index. Ask the counter — a part can be sourced even when it
-						is not listed here.
+						Try a broader term such as “filter”, “battery” or “bulb”.
 					</p>
-					<div className="mt-5 flex flex-wrap gap-3">
-						{message ? (
-							<a href={message} target="_blank" rel="noreferrer" className={buttonPrimary}>
-								<MessageCircle aria-hidden="true" className="size-4" />
-								Ask on WhatsApp
-							</a>
-						) : null}
-						<Link to="/contact" className={buttonSecondary}>
-							Contact the counter
-						</Link>
-					</div>
+					<Link to="/parts" className={`${buttonSecondary} mt-5`}>
+						Clear the search
+					</Link>
 				</div>
 			) : (
 				<ul className="mt-10 grid gap-4 md:grid-cols-2">
@@ -98,26 +83,6 @@ function PartsPage() {
 							<p className="mt-4 font-mono text-[11px] tracking-[0.08em] text-ink uppercase">
 								{family.examples.join(" · ")}
 							</p>
-							<div className="mt-auto flex flex-wrap items-center gap-4 pt-6">
-								{message ? (
-									<a
-										href={waHref(site.site.whatsapp, partMessage(family.name)) ?? undefined}
-										target="_blank"
-										rel="noreferrer"
-										className="text-sm font-semibold text-ink underline decoration-brand-ink underline-offset-4 hover:decoration-2"
-									>
-										Ask about {family.name.toLowerCase()}
-									</a>
-								) : (
-									<Link
-										to="/contact"
-										className="text-sm font-semibold text-ink underline decoration-brand-ink underline-offset-4 hover:decoration-2"
-									>
-										Ask the counter
-									</Link>
-								)}
-								<ArrowRight aria-hidden="true" className="size-4 text-brand-ink" />
-							</div>
 						</li>
 					))}
 				</ul>
@@ -125,14 +90,8 @@ function PartsPage() {
 
 			<div className="mt-14 flex flex-wrap items-center gap-4 border-t border-line pt-8">
 				<p className="text-sm text-muted-ink">
-					Have the part number? Call and we will check the shelf.
+					This site does not take orders. Parts are supplied at the counter.
 				</p>
-				{call ? (
-					<a href={call} className={buttonSecondary}>
-						<Phone aria-hidden="true" className="size-4" />
-						{site.site.contactPhone}
-					</a>
-				) : null}
 				<Link
 					to="/branches"
 					className="text-sm font-semibold text-ink underline decoration-brand-ink underline-offset-4 hover:decoration-2"

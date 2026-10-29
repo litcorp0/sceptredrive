@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { Photo } from "#/components/photo"
 import { SectionHeading } from "#/components/section-heading"
+import { PART_FAMILIES } from "#/lib/parts"
 import { buttonSecondary } from "#/lib/ui"
 import { useSiteContent } from "#/lib/use-site"
 
@@ -65,18 +65,23 @@ function AboutPage() {
 							and a receipt that can be found again.
 						</p>
 					</div>
-					<figure>
-						<Photo
-							name="engine-block"
-							alt="A stripped car engine block on a workshop stand"
-							width={1200}
-							height={899}
-							className="aspect-[4/3] w-full border border-line object-cover"
-						/>
-						<figcaption className="mt-3 font-mono text-[11px] tracking-[0.12em] text-muted-ink uppercase">
-							Engine & drivetrain · counter stock
-						</figcaption>
-					</figure>
+					<aside className="border border-line bg-surface p-6">
+						<p className="eyebrow eyebrow-brand">What we stock</p>
+						<ul className="mt-5 border-y border-dashed border-line-strong/60">
+							{PART_FAMILIES.map((family) => (
+								<li
+									key={family.slug}
+									className="flex items-baseline gap-3 border-b border-dashed border-line py-2 last:border-b-0"
+								>
+									<span className="font-mono text-[11px] text-muted-ink">{family.code}</span>
+									<span className="flex-1 text-sm">{family.name}</span>
+								</li>
+							))}
+						</ul>
+						<p className="mt-5 text-xs leading-relaxed text-muted-ink">
+							Six ranges. Supplied at the counter; this site does not take orders.
+						</p>
+					</aside>
 				</div>
 			</section>
 

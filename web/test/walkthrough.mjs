@@ -17,12 +17,12 @@ const API = (process.env.API_URL ?? "http://localhost:4000").replace(/\/+$/, "")
 
 const ROUTES = [
 	{ path: "/", title: "Sceptre Drive — auto spare parts in Ghana" },
-	{ path: "/parts", title: "Parts index — Sceptre Drive" },
+	{ path: "/parts", title: "What we stock — Sceptre Drive" },
 	{ path: "/services", title: "Services — Sceptre Drive" },
 	{ path: "/branches", title: "Branches — Sceptre Drive" },
 	{ path: "/about", title: "About — Sceptre Drive" },
 	{ path: "/contact", title: "Contact — Sceptre Drive" },
-	{ path: "/shop", title: "Shop — Sceptre Drive" },
+	{ path: "/shop", title: "Online shop — Sceptre Drive" },
 ]
 
 let failed = 0
