@@ -130,10 +130,6 @@ async function goto(page, hash) {
   }, hash)
 }
 
-function slug(value) {
-  return value.replace(/[^A-Za-z0-9-]/g, '')
-}
-
 const TEMP_PIN = '7391'
 const FINAL_PIN = '9274'
 

@@ -212,12 +212,6 @@ function statusOf(db: SqlDb, id: string): string {
   return row?.status ?? 'missing'
 }
 
-function outboxCounts(db: SqlDb): { status: string; count: number }[] {
-  return db.sqlite
-    .query('SELECT status, COUNT(*) AS count FROM outbox GROUP BY status ORDER BY status')
-    .all() as { status: string; count: number }[]
-}
-
 async function scenario(name: string, run: () => Promise<void>): Promise<void> {
   const checksBefore = checks
   const failuresBefore = failures

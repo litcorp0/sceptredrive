@@ -47,6 +47,12 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
+/** Fails the evidence run loudly instead of asserting away a null. */
+function required<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) throw new Error(`Expected ${label}`)
+  return value
+}
+
 const NOW = '2026-10-23T10:00:00.000Z'
 const SHIFT_ID = '77777777-7777-7777-8777-777777777777'
 const CONTEXT = {
@@ -94,22 +100,34 @@ check('a scanner burst yields the barcode', scanned === '4006381333931', String(
 const scannedRow = catalogue.find((row) => row.barcode === scanned) ?? null
 check('the barcode resolves to one product', scannedRow?.sku === 'GIK-00001')
 
-const brakePads = toSellableProduct(scannedRow!, 11_000) // branch override price
+const brakePads = toSellableProduct(required(scannedRow, 'scanned product'), 11_000) // branch override price
 check('the branch override price wins', brakePads?.unitPriceMinor === 11_000)
 
 // 2. Search by name for the second product and press Enter.
 const filtered = catalogue.filter((row) => row.name.toLowerCase().includes('oil'))
 const enterTarget = pickEnterTarget('oil', filtered)
 check('Enter adds the only search result', enterTarget?.sku === 'GIK-00002')
-const oilFilter = toSellableProduct(enterTarget!, null)
+const oilFilter = toSellableProduct(required(enterTarget, 'search result'), null)
 
 // 3. Build the cart: 2 brake pads, 1 oil filter, 2 rags.
 let cart = emptyCart({ now: NOW, shiftId: SHIFT_ID })
-cart = cartReducer(cart, { type: 'addProduct', product: brakePads!, quantity: 2, now: NOW })
-cart = cartReducer(cart, { type: 'addProduct', product: oilFilter!, now: NOW })
 cart = cartReducer(cart, {
   type: 'addProduct',
-  product: toSellableProduct(catalogue[2]!, null)!,
+  product: required(brakePads, 'brake pads'),
+  quantity: 2,
+  now: NOW,
+})
+cart = cartReducer(cart, {
+  type: 'addProduct',
+  product: required(oilFilter, 'oil filter'),
+  now: NOW,
+})
+cart = cartReducer(cart, {
+  type: 'addProduct',
+  product: required(
+    toSellableProduct(required(catalogue[2], 'catalogue row 3'), null),
+    'rag product',
+  ),
   quantity: 2,
   now: NOW,
 })
@@ -145,12 +163,15 @@ cart = cartReducer(cart, { type: 'setLoyaltyRedeem', points: 250, now: NOW })
 // 6. A cashier applies a GHS 2.00 line discount — over the 0% cap, so a manager
 //    approves it at the till.
 totals = computeCartTotals(cart, CONTEXT)
-const lineId = cart.lines[1]!.id
-const lineDiscountMinor = discountAmountFromInput(
-  '2.00',
-  'AMOUNT',
-  totals.priced.lines[1]!.grossMinor,
-)!
+const lineId = required(cart.lines[1], 'second cart line').id
+const lineDiscountMinor = required(
+  discountAmountFromInput(
+    '2.00',
+    'AMOUNT',
+    required(totals.priced.lines[1], 'second priced line').grossMinor,
+  ),
+  'line discount',
+)
 check('the line discount parses to 200 pesewas', lineDiscountMinor === 200)
 
 const proposed = cartReducer(cart, {
@@ -286,11 +307,13 @@ check(
   'lines minus discounts equals the net base plus tax',
   draft.payload.totals.totalMinor === serverPriced.totalMinor,
 )
+const tender = draft.payload.tenders[0]
 check(
   'one credit tender for the full total',
   draft.payload.tenders.length === 1 &&
-    draft.payload.tenders[0]!.method === 'CREDIT' &&
-    draft.payload.tenders[0]!.amountMinor === draft.payload.totals.totalMinor,
+    tender !== undefined &&
+    tender.method === 'CREDIT' &&
+    tender.amountMinor === draft.payload.totals.totalMinor,
 )
 check('no change on a credit sale', draft.payload.totals.changeMinor === 0)
 check(

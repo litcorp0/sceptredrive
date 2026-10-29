@@ -24,7 +24,6 @@ import { spawn } from 'node:child_process'
  *     node .planning/phases/06-pos-offline-core/evidence/e2e-pos.mjs
  */
 import fs, { readFileSync } from 'node:fs'
-import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { Client } from 'pg'
@@ -71,33 +70,6 @@ await db.connect()
 function envValue(key) {
   const env = readFileSync(path.join(repo, '.env'), 'utf8')
   return (env.match(new RegExp(`^${key}="?([^"\\n]*)`, 'm')) ?? [])[1]
-}
-
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.on('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      server.close()
-      if (typeof address === 'string' || address === null) reject(new Error('no port'))
-      else resolve(address.port)
-    })
-  })
-}
-
-async function waitForCdp(port, timeoutMs) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
-      if (response.ok) return
-    } catch {
-      // not listening yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(`CDP did not become ready on ${port}`)
 }
 
 // --- API helpers (admin) -----------------------------------------------------

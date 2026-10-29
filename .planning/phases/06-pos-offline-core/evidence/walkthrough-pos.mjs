@@ -603,7 +603,6 @@ try {
     bearer: terminalB.device.accessToken,
     body: { staffCode: cashierStaff.staff_id, pin: NEW_PIN },
   })
-  const cashierB = cashierBResponse.body
   check('the cashier authorizes on device B', cashierBResponse.status === 201)
 
   const shiftB = crypto.randomUUID()
@@ -750,7 +749,6 @@ try {
   const kwame = customers.find((row) => row.phone === '+233241000002')
   check('the demo credit and loyalty customers are present', Boolean(akosua && kwame))
   const akosuaOpeningBalance = Number(akosua.balance_minor)
-  const akosuaLimit = Number(akosua.limit_minor)
 
   const stockBefore = Number(
     await sqlValue(

@@ -15,7 +15,7 @@
 import { createHmac } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { formatDateTime, formatDay } from '@sceptre/shared'
+import { formatDateTime } from '@sceptre/shared'
 import { chromium } from 'playwright'
 
 const adminUrl = process.env.ADMIN_URL ?? 'http://localhost:3000'
@@ -339,7 +339,6 @@ try {
     /\/customers\/[^/]+$/.test(new URL(page.url()).pathname),
     'customer ledger opens by keyboard',
   )
-  const customerId = new URL(page.url()).pathname.split('/').pop()
   await shot('plan07-04-admin-customer-ledger')
 
   // ---------------------------------------------------------------- step 7
