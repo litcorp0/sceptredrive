@@ -159,6 +159,9 @@ From the repository root: `bun dev` (all workspaces), `bun dev:api`, `bun dev:ad
 `bun dev:pos`, `bun dev:web`, `bun lint`, `bun lint:fix`, `bun check-types`, `bun run test`, `bun build`,
 `bun run brand:check`, plus the `db:*` (migrate, seed, test prepare), `sync:*`
 (init, up, down, logs, config-check), and `*:pos` (build, package, make) scripts.
+`bun dev` is wrapped by `scripts/dev.mjs`: one Ctrl+C (a second forces it) stops every
+workspace and releases ports 3000, 3004, 4000 and 5173, including Forge's renderer and the
+API's `node --watch` child.
 `bun run test` needs `sceptre_drive_test` migrated: run `bun run db:test:prepare` after a fresh
 `docker compose up -d`.
 

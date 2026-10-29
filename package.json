@@ -45,7 +45,7 @@
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
     "db:test:prepare": "docker compose exec -T postgres createdb -U sceptre_drive sceptre_drive_test || true && DATABASE_URL=postgresql://sceptre_drive:sceptre_drive@localhost:$(docker compose port postgres 5432 | cut -d: -f2)/sceptre_drive_test bun run --filter api db:migrate",
-    "dev": "bun run --parallel --if-present --filter '*' dev",
+    "dev": "node scripts/dev.mjs",
     "dev:api": "bun run --filter api dev",
     "dev:admin": "bun run --filter admin dev",
     "dev:pos": "bun run --filter desktop dev",
