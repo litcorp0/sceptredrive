@@ -3,6 +3,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import { Inbox, ShieldAlert } from "lucide-react"
 import { EmptyState } from "#/components/common/empty-state"
 import { PageHeader } from "#/components/common/page-header"
+import { StatusNote } from "#/components/common/status-note"
 import { Button } from "#/components/ui/button"
 import { Skeleton } from "#/components/ui/skeleton"
 import { ApiError } from "#/lib/api"
@@ -69,7 +70,21 @@ export function ApprovalDetailPage() {
 					</Button>
 				</div>
 			) : (
-				<ApprovalDetailPanel detail={detailQuery.data} />
+				<>
+					{/* 18-05: approving a product creates a catalogue row, not stock. Say so
+					    where the decision was just made, so the item cannot sit invisible. */}
+					{detailQuery.data.approval.type === "PRODUCT_CREATE" &&
+					detailQuery.data.approval.status === "APPROVED" ? (
+						<StatusNote tone="info">
+							The product exists but has no stock yet, so the till will treat it as out of stock.{" "}
+							<Link to="/inventory" className="font-medium text-primary hover:underline">
+								Record a receipt or opening stock
+							</Link>{" "}
+							before selling it.
+						</StatusNote>
+					) : null}
+					<ApprovalDetailPanel detail={detailQuery.data} />
+				</>
 			)}
 		</div>
 	)

@@ -169,8 +169,12 @@ API's `node --watch` child.
 
 - Cash and credit work offline; MoMo/card/bank require internet.
 - One cashier per terminal per shift; offline PIN login is device-bound.
-- Never block a sale at the till. Stock oversell, over-limit credit, and loyalty
-  double-spend are applied and recorded as sync conflicts for manager review.
+- **Never lose a sale at the till**, and never sell *silently* what the record says
+  is not there. Stock oversell, over-limit credit, and loyalty double-spend are
+  applied and recorded as sync conflicts for manager review. An item with nothing
+  on hand is the one refusal: the till blocks the add and a manager PIN authorises
+  it (`pos.outOfStockPolicy`), and the authorised sale still records the oversell
+  conflict. No other path may refuse a completed sale (Phase 18).
 - Every POS-originated mutation carries a client-generated idempotency key.
 - Manager overrides are PIN-authorized, reason-coded, audited, and revalidated on sync.
 

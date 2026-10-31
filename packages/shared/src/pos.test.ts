@@ -40,6 +40,36 @@ describe('allocateProportionally', () => {
 })
 
 describe('priceCart', () => {
+  /**
+   * A business that is not VAT-registered charges nothing: no VAT, no NHIL, no
+   * GETFund, whatever the product says. The line is stored as `EXEMPT`, because
+   * that is what the supply was.
+   */
+  it('charges no levy at all when the business is not VAT-registered', () => {
+    const cart = priceCart([line({ quantity: 3, unitPriceMinor: 55_000 })], {
+      taxMode: 'INCLUSIVE',
+      vatRegistered: false,
+    })
+
+    const priced = cart.lines[0]
+    if (!priced) throw new Error('expected one priced line')
+    expect(priced.taxCategory).toBe('EXEMPT')
+    expect(priced.vatMinor).toBe(0)
+    expect(priced.nhilMinor).toBe(0)
+    expect(priced.getfundMinor).toBe(0)
+    expect(priced.taxTotalMinor).toBe(0)
+    expect(priced.totalMinor).toBe(165_000)
+    expect(priced.baseMinor).toBe(165_000)
+    expect(cart.taxTotalMinor).toBe(0)
+    expect(cart.totalMinor).toBe(165_000)
+  })
+
+  it('keeps the catalogue category when the flag is omitted, so tax cannot vanish by accident', () => {
+    const cart = priceCart([line()], { taxMode: 'INCLUSIVE' })
+    expect(cart.lines[0]?.taxCategory).toBe('STANDARD')
+    expect(cart.taxTotalMinor).toBeGreaterThan(0)
+  })
+
   it('prices a tax-inclusive standard line', () => {
     const cart = priceCart([line()], { taxMode: 'INCLUSIVE' })
     const expected = taxBreakdown(10000, 'STANDARD', 'INCLUSIVE')

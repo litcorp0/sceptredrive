@@ -1,0 +1,1 @@
+ALTER TYPE "public"."sync_conflict_type" ADD VALUE 'SALE_AFTER_SHIFT_CLOSE';

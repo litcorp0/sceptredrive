@@ -37,7 +37,7 @@ export async function getProduct(c: Context<AppEnv>, id: string) {
 
 export async function updateProduct(c: Context<AppEnv>, id: string, input: ProductUpdateInput) {
   const actor = actorFromContext(c)
-  const product = await productsService.updateProduct(actor, id, input)
+  const product = await productsService.updateProduct(actor, currentUser(c), id, input)
   return c.json({ product })
 }
 

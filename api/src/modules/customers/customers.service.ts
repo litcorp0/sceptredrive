@@ -10,6 +10,7 @@ import {
   ValidationError,
 } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { ensureCreditProfile } from '../credit/credit.profile.ts'
 import { getBranch } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -107,6 +108,16 @@ export async function createCustomer(
     if (!row) throw new AppError(500, 'INTERNAL', 'Failed to create customer')
 
     await insertLoyaltyAccount(row.id, tx)
+    // The branch's default credit line is granted at registration, not at the
+    // first credit sale: the till learns the limit on its next sync, and the
+    // console shows a real figure instead of an empty profile. `ensureCreditProfile`
+    // leaves an existing profile alone, so this is never a retroactive change.
+    await ensureCreditProfile({
+      customerId: row.id,
+      branchId: createdBranchId,
+      actor,
+      executor: tx,
+    })
     await writeAudit(
       {
         ...actor,
@@ -171,6 +182,15 @@ export async function resolveDraftCustomer(
   if (!row) throw new AppError(500, 'INTERNAL', 'Failed to create the draft customer')
 
   await insertLoyaltyAccount(row.id, executor)
+  // A customer registered at the till gets the same default line as one
+  // registered in the console, so the next credit sale at any branch finds a
+  // profile instead of `NO_PROFILE`.
+  await ensureCreditProfile({
+    customerId: row.id,
+    branchId: input.branchId,
+    actor: input.actor,
+    executor,
+  })
   await writeAudit(
     {
       ...input.actor,

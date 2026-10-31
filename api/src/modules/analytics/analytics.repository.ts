@@ -14,6 +14,7 @@
 import type { DbExecutor } from '@sceptre/db'
 import { countAccuracyBp } from '@sceptre/shared'
 import { type SQL, sql } from 'drizzle-orm'
+import { effectiveThresholdSql } from '../inventory/stock-threshold.sql.ts'
 import type {
   AnalyticsBranchScope,
   AnalyticsWindow,
@@ -75,7 +76,6 @@ function windowClause(column: SQL, window: AnalyticsWindow): SQL {
  * at or above the quantity on hand. A zero threshold therefore alerts only at zero, which
  * is the owning service's semantics — do not "improve" the comparison here.
  */
-const LOW_STOCK_SQL = sql`st.threshold IS NOT NULL AND sl.quantity_on_hand <= st.threshold`
 
 /**
  * Loyalty postings are branch-scoped except for expiry, which the daily job writes once
@@ -154,6 +154,10 @@ export interface LineTotals {
   costMinor: number
   itemsSold: number
   taxTotalMinor: number
+  /** Revenue whose sold units carried no cost at all (17-04). */
+  uncostedRevenueBaseMinor: number
+  /** How many sale lines that revenue came from. */
+  uncostedLines: number
 }
 
 export async function selectLineTotals(
@@ -167,7 +171,10 @@ export async function selectLineTotals(
       SELECT COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_base_minor,
         COALESCE(SUM(l.unit_cost_minor::bigint * l.quantity), 0)::bigint AS cost_minor,
         COALESCE(SUM(l.quantity), 0)::bigint AS items_sold,
-        COALESCE(SUM(l.tax_total_minor), 0)::bigint AS tax_total_minor
+        COALESCE(SUM(l.tax_total_minor), 0)::bigint AS tax_total_minor,
+        COALESCE(SUM(l.base_minor) FILTER (WHERE l.unit_cost_minor = 0), 0)::bigint
+          AS uncosted_revenue_base_minor,
+        COUNT(*) FILTER (WHERE l.unit_cost_minor = 0)::bigint AS uncosted_lines
       FROM sale_line l
       JOIN sale s ON s.id = l.sale_id
       WHERE ${windowClause(sql`s.occurred_at`, window)}
@@ -179,6 +186,8 @@ export async function selectLineTotals(
     costMinor: toInt(row?.cost_minor),
     itemsSold: toInt(row?.items_sold),
     taxTotalMinor: toInt(row?.tax_total_minor),
+    uncostedRevenueBaseMinor: toInt(row?.uncosted_revenue_base_minor),
+    uncostedLines: toInt(row?.uncosted_lines),
   }
 }
 
@@ -302,8 +311,12 @@ export async function selectTopProducts(
       revenueBaseMinor,
       costMinor,
       grossProfitMinor,
+      // With no cost there is no margin to state. Reporting 100% would flatter a
+      // sale of goods nobody has priced (17-04).
       marginBp:
-        revenueBaseMinor === 0 ? null : Math.round((grossProfitMinor * 10_000) / revenueBaseMinor),
+        revenueBaseMinor === 0 || costMinor === 0
+          ? null
+          : Math.round((grossProfitMinor * 10_000) / revenueBaseMinor),
     }
   })
 }
@@ -368,6 +381,7 @@ export async function selectBranchRanking(
 
 export interface AttentionCounts {
   lowStockCount: number
+  outOfStockCount: number
   openConflictCount: number
   conflictsBySeverity: { low: number; medium: number; high: number }
   openShiftCount: number
@@ -379,15 +393,21 @@ export async function selectAttention(
   executor: DbExecutor,
   scope: AnalyticsBranchScope,
 ): Promise<AttentionCounts> {
-  const [lowStock] = await rows(
+  // Two disjoint buckets from one scan (18-02/D3). A `stock_threshold` row is no
+  // longer a prerequisite: without one the branch default applies.
+  const threshold = effectiveThresholdSql(sql`b.id`, sql`st.threshold`)
+  const onHand = sql`coalesce(sl.quantity_on_hand, 0)`
+  const [stockAttention] = await rows(
     executor,
     sql`
-      SELECT COUNT(*)::bigint AS count
-      FROM stock_level sl
-      JOIN stock_threshold st
-        ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
-      WHERE ${LOW_STOCK_SQL}
-        AND ${scopeClause(sql`sl.branch_id`, scope)}`,
+      SELECT
+        count(*) FILTER (WHERE ${onHand} BETWEEN 1 AND ${threshold})::bigint AS low,
+        count(*) FILTER (WHERE ${onHand} <= 0)::bigint AS out
+      FROM product p
+      JOIN branch b ON b.is_active = true AND ${scopeClause(sql`b.id`, scope)}
+      LEFT JOIN stock_level sl ON sl.product_id = p.id AND sl.branch_id = b.id
+      LEFT JOIN stock_threshold st ON st.product_id = p.id AND st.branch_id = b.id
+      WHERE p.is_active = true`,
   )
 
   const conflictRows = await rows(
@@ -441,7 +461,8 @@ export async function selectAttention(
   }
 
   return {
-    lowStockCount: toInt(lowStock?.count),
+    lowStockCount: toInt(stockAttention?.low),
+    outOfStockCount: toInt(stockAttention?.out),
     openConflictCount,
     conflictsBySeverity: severity,
     openShiftCount: toInt(openShifts?.count),
@@ -708,6 +729,8 @@ export interface ProductTotals {
   costMinor: number
   unitsSold: number
   distinctProducts: number
+  uncostedRevenueBaseMinor: number
+  uncostedLines: number
 }
 
 export async function selectProductTotals(
@@ -723,7 +746,10 @@ export async function selectProductTotals(
       SELECT COALESCE(SUM(l.base_minor), 0)::bigint AS revenue_base_minor,
         COALESCE(SUM(l.unit_cost_minor::bigint * l.quantity), 0)::bigint AS cost_minor,
         COALESCE(SUM(l.quantity), 0)::bigint AS units_sold,
-        COUNT(DISTINCT l.product_id)::bigint AS distinct_products
+        COUNT(DISTINCT l.product_id)::bigint AS distinct_products,
+        COALESCE(SUM(l.base_minor) FILTER (WHERE l.unit_cost_minor = 0), 0)::bigint
+          AS uncosted_revenue_base_minor,
+        COUNT(*) FILTER (WHERE l.unit_cost_minor = 0)::bigint AS uncosted_lines
       FROM sale_line l
       JOIN sale s ON s.id = l.sale_id
       JOIN product p ON p.id = l.product_id
@@ -737,6 +763,8 @@ export async function selectProductTotals(
     costMinor: toInt(row?.cost_minor),
     unitsSold: toInt(row?.units_sold),
     distinctProducts: toInt(row?.distinct_products),
+    uncostedRevenueBaseMinor: toInt(row?.uncosted_revenue_base_minor),
+    uncostedLines: toInt(row?.uncosted_lines),
   }
 }
 
@@ -822,7 +850,7 @@ export async function selectProductRows(
         costMinor,
         grossProfitMinor,
         marginBp:
-          revenueBaseMinor === 0
+          revenueBaseMinor === 0 || costMinor === 0
             ? null
             : Math.round((grossProfitMinor * 10_000) / revenueBaseMinor),
         salesCount: toInt(row.sales_count),
@@ -1012,20 +1040,28 @@ export async function selectStockTotals(
   executor: DbExecutor,
   scope: AnalyticsBranchScope,
 ): Promise<InventoryTotals> {
+  // Every active product at the branch, level or no level (18-01). Counting
+  // `stock_level` rows made a product that had never been received invisible, so
+  // the out-of-stock figure read 0 while the shelf was empty.
+  const threshold = effectiveThresholdSql(sql`b.id`, sql`st.threshold`)
+  const onHand = sql`coalesce(sl.quantity_on_hand, 0)`
   const [row] = await rows(
     executor,
     sql`
-      SELECT COALESCE(SUM(sl.quantity_on_hand::bigint * sl.avg_cost_minor), 0)::bigint
+      SELECT
+        coalesce(sum(${onHand}::bigint * coalesce(sl.avg_cost_minor, 0)), 0)::bigint
           AS stock_value_minor,
-        COALESCE(SUM(sl.quantity_on_hand), 0)::bigint AS units_on_hand,
-        COUNT(DISTINCT sl.product_id)::bigint AS distinct_products,
-        COUNT(*) FILTER (WHERE ${LOW_STOCK_SQL})::bigint AS low_stock_count,
-        COUNT(*) FILTER (WHERE sl.quantity_on_hand <= 0)::bigint AS out_of_stock_count,
-        COUNT(st.threshold)::bigint AS threshold_count
-      FROM stock_level sl
-      LEFT JOIN stock_threshold st
-        ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
-      WHERE ${scopeClause(sql`sl.branch_id`, scope)}`,
+        coalesce(sum(${onHand}), 0)::bigint AS units_on_hand,
+        count(*)::bigint AS distinct_products,
+        count(*) FILTER (WHERE ${onHand} BETWEEN 1 AND ${threshold})::bigint
+          AS low_stock_count,
+        count(*) FILTER (WHERE ${onHand} <= 0)::bigint AS out_of_stock_count,
+        count(st.threshold)::bigint AS threshold_count
+      FROM product p
+      JOIN branch b ON b.is_active = true AND ${scopeClause(sql`b.id`, scope)}
+      LEFT JOIN stock_level sl ON sl.product_id = p.id AND sl.branch_id = b.id
+      LEFT JOIN stock_threshold st ON st.product_id = p.id AND st.branch_id = b.id
+      WHERE p.is_active = true`,
   )
 
   return {
@@ -1038,23 +1074,27 @@ export async function selectStockTotals(
   }
 }
 
+/** Per-branch valuation and low-stock count, on the same basis as the totals (18-01). */
 export async function selectStockByBranch(
   executor: DbExecutor,
   scope: AnalyticsBranchScope,
 ): Promise<InventoryBranchRow[]> {
+  const threshold = effectiveThresholdSql(sql`b.id`, sql`st.threshold`)
+  const onHand = sql`coalesce(sl.quantity_on_hand, 0)`
   const result = await rows(
     executor,
     sql`
       SELECT b.id, b.code, b.name,
-        COALESCE(SUM(sl.quantity_on_hand::bigint * sl.avg_cost_minor), 0)::bigint
+        coalesce(sum(${onHand}::bigint * coalesce(sl.avg_cost_minor, 0)), 0)::bigint
           AS stock_value_minor,
-        COALESCE(SUM(sl.quantity_on_hand), 0)::bigint AS units_on_hand,
-        COUNT(*) FILTER (WHERE ${LOW_STOCK_SQL})::bigint AS low_stock_count
-      FROM stock_level sl
-      JOIN branch b ON b.id = sl.branch_id
-      LEFT JOIN stock_threshold st
-        ON st.product_id = sl.product_id AND st.branch_id = sl.branch_id
-      WHERE ${scopeClause(sql`sl.branch_id`, scope)}
+        coalesce(sum(${onHand}), 0)::bigint AS units_on_hand,
+        count(*) FILTER (WHERE ${onHand} BETWEEN 1 AND ${threshold})::bigint
+          AS low_stock_count
+      FROM branch b
+      JOIN product p ON p.is_active = true
+      LEFT JOIN stock_level sl ON sl.product_id = p.id AND sl.branch_id = b.id
+      LEFT JOIN stock_threshold st ON st.product_id = p.id AND st.branch_id = b.id
+      WHERE b.is_active = true AND ${scopeClause(sql`b.id`, scope)}
       GROUP BY b.id, b.code, b.name
       ORDER BY stock_value_minor DESC, b.code`,
   )

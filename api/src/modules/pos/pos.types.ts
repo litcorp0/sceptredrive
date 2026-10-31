@@ -212,6 +212,9 @@ export type SyncConflictType =
   // provider amount does not match ours. Kept in step with `sync_conflict_type`.
   | 'PAYMENT_LATE_SETTLEMENT'
   | 'PAYMENT_AMOUNT_MISMATCH'
+  // Phase 14 follow-up: a sale that reached the server after its shift's drawer
+  // was closed. Applied, never rejected, and flagged for a manager.
+  | 'SALE_AFTER_SHIFT_CLOSE'
 
 export type SyncConflictSeverity = 'LOW' | 'MEDIUM' | 'HIGH'
 

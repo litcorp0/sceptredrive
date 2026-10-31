@@ -86,6 +86,7 @@ export interface BranchRank {
 
 export interface AttentionSummary {
   lowStockCount: number
+  outOfStockCount: number
   openConflictCount: number
   conflictsBySeverity: { low: number; medium: number; high: number }
   openShiftCount: number
@@ -113,6 +114,9 @@ export interface OverviewTotals {
   revenueBaseMinor: number
   grossProfitMinor: number
   marginBp: number | null
+  /** Revenue sold with no cost at all; marginBp is null when this is everything. */
+  uncostedRevenueMinor: number
+  uncostedLines: number
   tax: TaxSplit
   salesCount: number
   avgBasketMinor: number
@@ -249,6 +253,8 @@ export interface ProductsResponse {
     costMinor: number
     grossProfitMinor: number
     marginBp: number | null
+    uncostedRevenueMinor: number
+    uncostedLines: number
     unitsSold: number
     distinctProducts: number
   }

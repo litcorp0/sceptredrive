@@ -174,7 +174,11 @@ export function DashboardPage() {
 				<KpiTile
 					label="Gross margin"
 					value={formatBasisPoints(data.totals.marginBp)}
-					detail={`${formatGhs(data.totals.grossProfitMinor)} gross profit`}
+					detail={
+						data.totals.marginBp === null && data.totals.uncostedRevenueMinor > 0
+							? `No cost known — ${formatGhs(data.totals.uncostedRevenueMinor)} sold without one`
+							: `${formatGhs(data.totals.grossProfitMinor)} gross profit`
+					}
 					delta={{
 						currentMinor: data.totals.grossProfitMinor,
 						previousMinor: data.deltas.grossProfit.previousMinor,
@@ -206,10 +210,36 @@ export function DashboardPage() {
 								? formatGhs(inventory.data.totals.stockValueMinor)
 								: "—"
 					}
+					detail="Average cost valuation"
+				/>
+				<KpiTile
+					label="Out of stock"
+					value={
+						inventory.isLoading
+							? "…"
+							: inventory.data
+								? formatCount(inventory.data.totals.outOfStockCount)
+								: "—"
+					}
 					detail={
-						inventory.data
-							? `${formatCount(inventory.data.totals.lowStockCount)} below threshold`
-							: "Average cost valuation"
+						<Link to="/inventory" className="hover:underline">
+							Products with nothing on hand
+						</Link>
+					}
+				/>
+				<KpiTile
+					label="Low stock"
+					value={
+						inventory.isLoading
+							? "…"
+							: inventory.data
+								? formatCount(inventory.data.totals.lowStockCount)
+								: "—"
+					}
+					detail={
+						<Link to="/inventory" className="hover:underline">
+							At or below the threshold
+						</Link>
 					}
 				/>
 			</KpiRow>

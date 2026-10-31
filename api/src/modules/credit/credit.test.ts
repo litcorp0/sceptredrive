@@ -22,9 +22,11 @@ import { approval } from '../approvals/approvals.schema.ts'
 import { decideApproval } from '../approvals/approvals.service.ts'
 import { customer } from '../customers/customers.schema.ts'
 import { user as userTable } from '../identity/staff.schema.ts'
+import { loyaltyAccount } from '../loyalty/loyalty.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
+import { setting } from '../platform/settings.schema.ts'
 import { findProfile, sumForCustomerBranch } from './credit.repository.ts'
 import { creditLedgerEntry, creditProfile } from './credit.schema.ts'
 import {
@@ -1159,8 +1161,10 @@ describe.skipIf(!available)('credit HTTP surface', () => {
   const suffix = uniqueSuffix()
   const createdUserIds: string[] = []
   const createdCustomerIds: string[] = []
+  const createdBranchIds: string[] = []
   let branchAId = ''
   let branchBId = ''
+  let defaultBranchId = ''
   let adminCookie = ''
   let managerCookie = ''
   let cashierCookie = ''
@@ -1200,10 +1204,18 @@ describe.skipIf(!available)('credit HTTP surface', () => {
           type: 'RETAIL',
           city: 'Kumasi',
         },
+        {
+          code: `CRDHTTP-${suffix}-D`,
+          name: `Credit HTTP default ${suffix}`,
+          type: 'RETAIL',
+          city: 'Tema',
+        },
       ])
       .returning({ id: branch.id })
     branchAId = branches[0]?.id ?? ''
     branchBId = branches[1]?.id ?? ''
+    defaultBranchId = branches[2]?.id ?? ''
+    createdBranchIds.push(defaultBranchId)
 
     const admin = await createTestUser({ role: 'ADMIN' })
     createdUserIds.push(admin.id)
@@ -1224,6 +1236,9 @@ describe.skipIf(!available)('credit HTTP surface', () => {
         .delete(creditLedgerEntry)
         .where(inArray(creditLedgerEntry.customerId, createdCustomerIds))
       await db.delete(creditProfile).where(inArray(creditProfile.customerId, createdCustomerIds))
+      // `POST /api/customers` also opens a loyalty account; the customer FK is
+      // RESTRICT, so the account goes first.
+      await db.delete(loyaltyAccount).where(inArray(loyaltyAccount.customerId, createdCustomerIds))
       await db.delete(customer).where(inArray(customer.id, createdCustomerIds))
     }
     if (createdUserIds.length > 0) {
@@ -1231,9 +1246,11 @@ describe.skipIf(!available)('credit HTTP surface', () => {
       await db.delete(userTable).where(inArray(userTable.id, createdUserIds))
     }
     // `approval.branch_id` restricts the branch delete below.
-    const ownedBranches = [branchAId, branchBId].filter((id) => id !== '')
+    const ownedBranches = [branchAId, branchBId, ...createdBranchIds].filter((id) => id !== '')
     if (ownedBranches.length > 0) {
       await db.delete(approval).where(inArray(approval.branchId, ownedBranches))
+      // A default-limit row the late-sale tests wrote must not outlive them.
+      await db.delete(setting).where(inArray(setting.branchId, ownedBranches))
     }
     for (const id of ownedBranches) {
       await db.delete(branch).where(eq(branch.id, id))
@@ -1833,5 +1850,101 @@ describe.skipIf(!available)('credit HTTP surface', () => {
     })
     expect(adminAll.status).toBe(200)
     expect((await readJson<{ branchId: string | null }>(adminAll)).branchId).toBeNull()
+  })
+
+  /**
+   * The default credit line (2026-10-28): the admin grants the policy once, in
+   * settings, instead of approving each customer's first limit. It is a birth
+   * value, never a rewrite — turning it on must not hand credit to yesterday's
+   * customers, and turning it up must not touch a profile that already exists.
+   */
+  it('gives a registered customer the branch default line, and only new profiles', async () => {
+    const setDefault = async (value: number) => {
+      const response = await app.request('/api/settings', {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({
+          key: 'credit.defaultLimitMinor',
+          value,
+          branchId: defaultBranchId,
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(200)
+    }
+
+    let phoneSeq = 0
+    const register = async (name: string): Promise<string> => {
+      phoneSeq += 1
+      const phone = `+23320${String(Date.now()).slice(-4)}${String(phoneSeq).padStart(3, '0')}`
+      const response = await app.request('/api/customers', {
+        method: 'POST',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ name: `${name} ${suffix}`, phone, branchId: defaultBranchId }),
+      })
+      expect(response.status, await response.clone().text()).toBe(201)
+      const body = await readJson<{ customer: { id: string } }>(response)
+      createdCustomerIds.push(body.customer.id)
+      return body.customer.id
+    }
+
+    await setDefault(25_000)
+    const first = await register('Default first')
+
+    const firstProfile = await findProfile(first, defaultBranchId)
+    expect(firstProfile?.limitMinor).toBe(25_000)
+
+    // A granted line is attributable: the value and its source are in the trail.
+    const created = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.action, 'credit.profile_created'),
+          eq(auditLog.entityId, firstProfile?.id ?? ''),
+        ),
+      )
+    expect(created).toHaveLength(1)
+    expect((created[0]?.after as Record<string, unknown>).limitMinor).toBe(25_000)
+    expect((created[0]?.after as Record<string, unknown>).limitSource).toBe('default')
+
+    // Raising the policy applies to the next registration, never backwards.
+    await setDefault(50_000)
+    const second = await register('Default second')
+    expect((await findProfile(second, defaultBranchId))?.limitMinor).toBe(50_000)
+    expect((await findProfile(first, defaultBranchId))?.limitMinor).toBe(25_000)
+  })
+
+  it('leaves an existing profile alone, including an explicit zero', async () => {
+    const rows = await db
+      .insert(customer)
+      .values({
+        name: `Explicit zero ${suffix}`,
+        phone: `+23321${String(Date.now()).slice(-7)}`,
+        createdBranchId: defaultBranchId,
+      })
+      .returning({ id: customer.id })
+    const customerId = rows[0]?.id ?? ''
+    createdCustomerIds.push(customerId)
+    // A manager set this to zero on purpose; the branch default is 50 000 here.
+    await db.insert(creditProfile).values({ customerId, branchId: defaultBranchId, limitMinor: 0 })
+
+    const response = await app.request(`/api/credit/profiles/${customerId}`, {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: defaultBranchId, notes: 'kept at zero' }),
+    })
+    expect(response.status, await response.clone().text()).toBe(200)
+
+    expect((await findProfile(customerId, defaultBranchId))?.limitMinor).toBe(0)
+  })
+
+  it('refuses a manager the default credit limit setting', async () => {
+    const response = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ key: 'credit.defaultLimitMinor', value: 50_000 }),
+    })
+    // A manager who could raise the default would bypass CREDIT_LIMIT_CHANGE.
+    expect(response.status).toBe(403)
   })
 })

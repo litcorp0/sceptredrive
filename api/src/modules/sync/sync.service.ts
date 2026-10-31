@@ -74,6 +74,7 @@ export function assertTerminalUsable(session: DeviceSessionRow): void {
 export async function buildConfigSnapshot(branchId: string): Promise<PosConfigSnapshot> {
   const [
     taxMode,
+    vatRegistered,
     earnPointsPerCedi,
     pointsPerCedi,
     expiryMonths,
@@ -87,8 +88,11 @@ export async function buildConfigSnapshot(branchId: string): Promise<PosConfigSn
     receiptFooter,
     receiptHeader,
     salesRequireOpenShift,
+    lowStockThreshold,
+    outOfStockPolicy,
   ] = await Promise.all([
     settingsService.getSettingValue('pricing.taxMode'),
+    settingsService.getSettingValue('pricing.vatRegistered'),
     settingsService.getSettingValue('loyalty.earnPointsPerCedi'),
     settingsService.getSettingValue('loyalty.pointsPerCedi'),
     settingsService.getSettingValue('loyalty.expiryMonths'),
@@ -102,6 +106,8 @@ export async function buildConfigSnapshot(branchId: string): Promise<PosConfigSn
     settingsService.getSettingValue('pos.receiptFooter'),
     settingsService.getSettingValue('receipt.header', { branchId }),
     settingsService.getSettingValue('pos.salesRequireOpenShift'),
+    settingsService.getSettingValue('inventory.defaultLowStockThreshold', { branchId }),
+    settingsService.getSettingValue('pos.outOfStockPolicy', { branchId }),
   ])
 
   const loyalty: PosLoyaltyConfig = {
@@ -119,10 +125,13 @@ export async function buildConfigSnapshot(branchId: string): Promise<PosConfigSn
     syncBatchSize,
     receiptFooter,
     salesRequireOpenShift,
+    lowStockThreshold,
+    outOfStockPolicy,
   }
 
   return {
     taxMode,
+    vatRegistered,
     loyalty,
     pos,
     receiptHeader,

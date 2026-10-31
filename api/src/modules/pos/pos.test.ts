@@ -26,6 +26,7 @@ import { branch } from '../org/branches.schema.ts'
 import { hashDeviceToken } from '../org/enrollment.service.ts'
 import { device, terminal } from '../org/terminals.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
+import { setting } from '../platform/settings.schema.ts'
 import { product, productPrice } from '../products/products.schema.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import { reconcileSales, reconcileShifts } from './pos.reconciliation.ts'
@@ -621,6 +622,8 @@ describe.skipIf(!available)('POS sale application', () => {
     customer?: { id: string; phone: string; name: string }
     occurredAt?: string
     cashierOverrides?: Partial<{ bindingToken: string; bindingId: string; pinVersion: number }>
+    /** Mirrors `pricing.vatRegistered`; omitted means the shop charges tax. */
+    vatRegistered?: boolean
   }): SalePayload {
     const lines = input.lines.map((line) => ({
       productId: line.productId,
@@ -637,6 +640,7 @@ describe.skipIf(!available)('POS sale application', () => {
       })),
       {
         taxMode: 'INCLUSIVE',
+        vatRegistered: input.vatRegistered,
         saleDiscountMinor: input.saleDiscountMinor ?? 0,
         loyaltyDiscountMinor: input.loyalty?.discountMinor ?? 0,
       },
@@ -944,6 +948,123 @@ describe.skipIf(!available)('POS sale application', () => {
     expect(audits.some((row) => row.action === 'pos.sale.applied')).toBe(true)
   })
 
+  /**
+   * 17-03: a product bought once somewhere sells with a cost somewhere else.
+   *
+   * The branch average is the truth when it exists; a product with no level yet
+   * inherits the last receipt cost from `product.cost_price_minor`, which is the
+   * industry-standard "last cost" estimate and stays a derived figure (P11-D13).
+   */
+  describe('the cost of a sale', () => {
+    async function makeProduct(name: string, costPriceMinor: number): Promise<string> {
+      const parent = (
+        await db
+          .select({ categoryId: product.categoryId, uomId: product.uomId })
+          .from(product)
+          .where(eq(product.id, productA))
+      )[0]
+      const rows = await db
+        .insert(product)
+        .values({
+          sku: `T${suffix}-${name.replace(/\W/g, '').slice(0, 8).toUpperCase()}`,
+          name: `${name} ${suffix}`,
+          categoryId: parent?.categoryId ?? '',
+          uomId: parent?.uomId ?? '',
+          basePriceMinor: 10_000,
+          taxCategory: 'STANDARD',
+          costPriceMinor,
+        })
+        .returning({ id: product.id })
+      const id = rows[0]?.id ?? ''
+      createdProductIds.push(id)
+      return id
+    }
+
+    it('falls back to the last receipt cost when the branch has never received it', async () => {
+      const id = await makeProduct('LastCost', 7_500)
+      const ctx = context()
+      const payload = salePayload({
+        receiptNumber: `${suffix}-R-COST1`,
+        lines: [{ productId: id, quantity: 2, unitPriceMinor: 10_000 }],
+        tender: { method: 'CASH', amountMinor: 20_000 },
+      })
+
+      const result = await apply(ctx, payload)
+      const lines = await db.select().from(saleLine).where(eq(saleLine.saleId, result.saleId))
+      expect(lines[0]?.unitCostMinor).toBe(7_500)
+    })
+
+    it('prefers the branch average over the catalogue last cost', async () => {
+      await db.update(product).set({ costPriceMinor: 9_999 }).where(eq(product.id, productB))
+      try {
+        const ctx = context()
+        const payload = salePayload({
+          receiptNumber: `${suffix}-R-COST2`,
+          lines: [{ productId: productB, quantity: 1, unitPriceMinor: 4_500 }],
+          tender: { method: 'CASH', amountMinor: 4_500 },
+        })
+
+        const result = await apply(ctx, payload)
+        const lines = await db.select().from(saleLine).where(eq(saleLine.saleId, result.saleId))
+        expect(lines[0]?.unitCostMinor).toBe(3_000)
+      } finally {
+        await db.update(product).set({ costPriceMinor: 0 }).where(eq(product.id, productB))
+      }
+    })
+
+    it('stores zero only when nobody has ever bought the product', async () => {
+      const id = await makeProduct('NoCost', 0)
+      const ctx = context()
+      const payload = salePayload({
+        receiptNumber: `${suffix}-R-COST3`,
+        lines: [{ productId: id, quantity: 1, unitPriceMinor: 10_000 }],
+        tender: { method: 'CASH', amountMinor: 10_000 },
+      })
+
+      const result = await apply(ctx, payload)
+      const lines = await db.select().from(saleLine).where(eq(saleLine.saleId, result.saleId))
+      // Plan 04 turns this zero into "margin unknown" rather than 100%.
+      expect(lines[0]?.unitCostMinor).toBe(0)
+    })
+  })
+
+  /**
+   * A business that is not VAT-registered charges nothing (2026-10-29). The flag
+   * is read on the server in the same place as the tax mode, and it is
+   * deliberately separate from `flag.evatSubmission`: that one decides what is
+   * reported to GRA, this one decides what the customer is charged.
+   */
+  it('charges no VAT when the business is not VAT-registered', async () => {
+    await db.insert(setting).values({ key: 'pricing.vatRegistered', value: false })
+    try {
+      const ctx = context()
+      const payload = salePayload({
+        receiptNumber: `${suffix}-R-NOVAT`,
+        lines: [{ productId: productA, quantity: 3, unitPriceMinor: 10_000 }],
+        tender: { method: 'CASH', amountMinor: 30_000 },
+        vatRegistered: false,
+      })
+
+      const result = await apply(ctx, payload)
+      expect(result.conflicts).toEqual([])
+
+      const rows = await db.select().from(sale).where(eq(sale.id, result.saleId))
+      const row = rows[0]
+      expect(row?.vatMinor).toBe(0)
+      expect(row?.nhilMinor).toBe(0)
+      expect(row?.getfundMinor).toBe(0)
+      expect(row?.taxTotalMinor).toBe(0)
+      expect(row?.totalMinor).toBe(30_000)
+
+      // The line is stored as exempt: an untaxed supply, not a taxed one at zero.
+      const lines = await db.select().from(saleLine).where(eq(saleLine.saleId, result.saleId))
+      expect(lines[0]?.taxCategory).toBe('EXEMPT')
+    } finally {
+      // The flag is global; the rest of this file expects the taxed default.
+      await db.delete(setting).where(eq(setting.key, 'pricing.vatRegistered'))
+    }
+  })
+
   it('applies a credit sale and moves the credit ledger', async () => {
     const customerRecord = await createCustomer(50_000)
     const ctx = context()
@@ -1032,6 +1153,55 @@ describe.skipIf(!available)('POS sale application', () => {
       .from(creditLedgerEntry)
       .where(eq(creditLedgerEntry.customerId, customerRecord.id))
     expect(entries[0]?.amountMinor).toBe(payload.totals.totalMinor)
+  })
+
+  /**
+   * The admin's default line, on the path that has no profile yet (2026-10-28).
+   *
+   * A customer registered at the till is a `customer_draft` until the sale
+   * uploads, so there is no synced profile for the credit decision. The profile
+   * is created here, inside the sale's transaction, at the branch default — which
+   * is why a charge inside that default is not an over-limit conflict.
+   */
+  it('gives a draft customer registered at the till the branch default line', async () => {
+    await db.insert(setting).values({ key: 'credit.defaultLimitMinor', value: 50_000, branchId })
+
+    const draftId = crypto.randomUUID()
+    const draftPhone = `+23327${String(Date.now()).slice(-7)}`
+    const ctx = context()
+    const payload = salePayload({
+      receiptNumber: `${suffix}-R-DEFAULT`,
+      lines: [{ productId: productA, quantity: 1, unitPriceMinor: 10_000 }],
+      tender: { method: 'CREDIT' },
+      customer: { id: draftId, phone: draftPhone, name: 'Default Draft' },
+    })
+
+    const result = await apply(ctx, payload)
+    createdCustomerIds.push(draftId)
+
+    const profiles = await db
+      .select()
+      .from(creditProfile)
+      .where(and(eq(creditProfile.customerId, draftId), eq(creditProfile.branchId, branchId)))
+    expect(profiles[0]?.limitMinor).toBe(50_000)
+    expect(result.conflicts.map((conflict) => conflict.type)).not.toContain('CREDIT_OVER_LIMIT')
+
+    // A granted line is attributable: the value and its source are in the trail.
+    const created = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.action, 'credit.profile_created'),
+          eq(auditLog.entityId, profiles[0]?.id ?? ''),
+        ),
+      )
+    expect(created).toHaveLength(1)
+    expect((created[0]?.after as Record<string, unknown>).limitMinor).toBe(50_000)
+    expect((created[0]?.after as Record<string, unknown>).limitSource).toBe('default')
+
+    // The branch's other tests must not inherit the policy.
+    await db.delete(setting).where(eq(setting.branchId, branchId))
   })
 
   it('accepts a validated manager override without the over-limit conflict', async () => {

@@ -7,8 +7,8 @@ import {
   resolutionProblem,
 } from './conflicts.ts'
 
-// The 16 names on the `sync_conflict_type` enum, in schema order. Shared
-// cannot import the API's Drizzle schema, so the vocabulary is asserted here.
+// The names on the `sync_conflict_type` enum, in schema order. Shared cannot
+// import the API's Drizzle schema, so the vocabulary is asserted here.
 const CONFLICT_TYPES = [
   'STOCK_OVERSELL',
   'CREDIT_OVER_LIMIT',
@@ -26,6 +26,7 @@ const CONFLICT_TYPES = [
   'UNKNOWN_PRODUCT',
   'PAYMENT_LATE_SETTLEMENT',
   'PAYMENT_AMOUNT_MISMATCH',
+  'SALE_AFTER_SHIFT_CLOSE',
 ] as const
 
 describe('conflict vocabulary', () => {
@@ -43,9 +44,9 @@ describe('conflict vocabulary', () => {
     }
   })
 
-  it('labels all 16 sync conflict types', () => {
-    expect(CONFLICT_TYPES).toHaveLength(16)
-    expect(Object.keys(CONFLICT_TYPE_LABELS)).toHaveLength(16)
+  it('labels all 17 sync conflict types', () => {
+    expect(CONFLICT_TYPES).toHaveLength(17)
+    expect(Object.keys(CONFLICT_TYPE_LABELS)).toHaveLength(17)
     for (const type of CONFLICT_TYPES) {
       const label = CONFLICT_TYPE_LABELS[type]
       expect(label?.length).toBeGreaterThan(0)

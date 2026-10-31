@@ -277,23 +277,24 @@ describe.skipIf(!available)('customers service', () => {
       phone: nextPhone('054'),
     })
 
-    await db.insert(creditProfile).values([
-      {
-        customerId: created.id,
-        branchId: branchAId,
+    // Registration already opened branch A's profile at the branch default, so
+    // this test moves it rather than inserting a second row.
+    await db.insert(creditProfile).values({
+      customerId: created.id,
+      branchId: branchBId,
+      limitMinor: 10_000,
+      balanceMinor: 0,
+      createdBy: 'test',
+    })
+    await db
+      .update(creditProfile)
+      .set({
         limitMinor: 50_000,
         paymentTermDays: 14,
         balanceMinor: 12_000,
         createdBy: 'test',
-      },
-      {
-        customerId: created.id,
-        branchId: branchBId,
-        limitMinor: 10_000,
-        balanceMinor: 0,
-        createdBy: 'test',
-      },
-    ])
+      })
+      .where(and(eq(creditProfile.customerId, created.id), eq(creditProfile.branchId, branchAId)))
     await db
       .update(loyaltyAccount)
       .set({ balancePoints: 250 })
@@ -350,12 +351,11 @@ describe.skipIf(!available)('customers service', () => {
     const normalizedPhone = created.phone
     if (!normalizedPhone) throw new Error('expected a normalized phone')
 
-    await db.insert(creditProfile).values({
-      customerId: created.id,
-      branchId: branchAId,
-      balanceMinor: 4_500,
-      createdBy: 'test',
-    })
+    // The profile exists from registration; the balance is what this test sets.
+    await db
+      .update(creditProfile)
+      .set({ balanceMinor: 4_500, createdBy: 'test' })
+      .where(and(eq(creditProfile.customerId, created.id), eq(creditProfile.branchId, branchAId)))
     await db.insert(creditLedgerEntry).values({
       customerId: created.id,
       branchId: branchAId,

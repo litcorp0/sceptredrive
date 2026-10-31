@@ -49,6 +49,7 @@ export const DRAFT_WRITE_DELAY_MS = 150
 export function cartPricingContext(config: PosConfigSnapshot): CartPricingContext {
   return {
     taxMode: config.taxMode,
+    vatRegistered: config.vatRegistered,
     loyalty: {
       pointsPerCedi: config.loyalty.pointsPerCedi,
       earnPointsPerCedi: config.loyalty.earnPointsPerCedi,

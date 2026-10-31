@@ -196,15 +196,21 @@ export function StockPage() {
 											<TableCell className="text-right tabular-nums">
 												{formatGhs(row.valueMinor)}
 											</TableCell>
-											<TableCell className="text-right tabular-nums">
-												{row.threshold ?? "—"}
-											</TableCell>
+											<TableCell className="text-right tabular-nums">{row.threshold}</TableCell>
 											<TableCell>
-												{row.isLow ? (
+												{/* Disjoint buckets: empty is out of stock, not "OK" (18-02/D3). */}
+												{row.quantityOnHand <= 0 ? (
+													<StatusBadge tone="red">Out of stock</StatusBadge>
+												) : row.isLow ? (
 													<StatusBadge tone="amber">Low</StatusBadge>
 												) : (
 													<StatusBadge tone="green">OK</StatusBadge>
 												)}
+												{row.neverStocked ? (
+													<span className="ml-1 text-[11px] text-muted-foreground">
+														never stocked
+													</span>
+												) : null}
 											</TableCell>
 											<TableCell>
 												<Link

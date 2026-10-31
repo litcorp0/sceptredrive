@@ -11,7 +11,8 @@ interface KpiTileProps {
 	label: string
 	/** Already formatted — money through `formatGhs`, counts through `formatCount`. */
 	value: string
-	detail?: string
+	/** A line of context; a link is allowed where the figure is actionable. */
+	detail?: ReactNode
 	delta?: MoneyDelta
 	/** The subject for the delta's screen-reader text. */
 	subject?: string

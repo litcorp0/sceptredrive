@@ -134,6 +134,13 @@
       "when": 1793182519691,
       "tag": "0018_remarkable_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793197464161,
+      "tag": "0019_enum_late_sale",
+      "breakpoints": true
     }
   ]
 }

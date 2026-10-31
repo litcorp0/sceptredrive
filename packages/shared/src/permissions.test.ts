@@ -131,9 +131,20 @@ describe('permissions', () => {
     expect(can('MANAGER', 'pos.refund')).toBe(true)
     expect(can('CASHIER', 'pos.refund')).toBe(false)
 
-    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(66)
-    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(54)
+    // +1 each for `catalog.describe` (17-02): a manager may describe a product,
+    // not redefine it.
+    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(67)
+    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(55)
     expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
+  })
+
+  it('lets a manager describe a product but not redefine it (17-02)', () => {
+    expect(can('MANAGER', 'catalog.describe')).toBe(true)
+    // The identity and commercial fields stay with an administrator.
+    expect(can('MANAGER', 'catalog.update')).toBe(false)
+    expect(can('MANAGER', 'catalog.create')).toBe(false)
+    expect(can('ADMIN', 'catalog.describe')).toBe(true)
+    expect(can('CASHIER', 'catalog.describe')).toBe(false)
   })
 
   it('gives managers oversight, conflict, transfer and E-VAT reading — never E-VAT retry', () => {

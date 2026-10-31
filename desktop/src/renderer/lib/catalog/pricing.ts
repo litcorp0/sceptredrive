@@ -1,4 +1,5 @@
 import { resolveEffectivePrice, type TaxCategory } from '@sceptre/shared'
+import type { OutOfStockPolicy } from '../api/types'
 import type { SellableProduct } from '../cart/types'
 import type { CatalogProductRow } from './search'
 
@@ -56,10 +57,22 @@ export interface StockBadge {
   tone: StockTone
 }
 
-export function stockBadge(available: number): StockBadge {
+/**
+ * Whether adding this line needs authorisation (18-04).
+ *
+ * `ALLOW` is the pre-18 behaviour. `BLOCK` and `WARN` both stop the plain add and
+ * open the manager dialog; `WARN` also offers "sell anyway" without a PIN.
+ */
+export function outOfStockBlocked(policy: OutOfStockPolicy, available: number): boolean {
+  return policy !== 'ALLOW' && available <= 0
+}
+
+export function stockBadge(available: number, threshold = 5): StockBadge {
   if (available < 0) return { label: `${Math.abs(available)} oversold`, tone: 'oversold' }
   if (available === 0) return { label: 'Out of stock', tone: 'out' }
-  if (available <= 5) return { label: `${available} left`, tone: 'low' }
+  // The branch's threshold, not a hard-coded 5: "low" must mean the same thing
+  // on the till as it does on the dashboard (18-04).
+  if (available <= threshold) return { label: `${available} left`, tone: 'low' }
   return { label: `${available} in stock`, tone: 'ok' }
 }
 

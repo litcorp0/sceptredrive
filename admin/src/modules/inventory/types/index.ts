@@ -27,8 +27,11 @@ export interface StockRow {
 	quantityOnHand: number
 	avgCostMinor: number
 	valueMinor: number
-	threshold: number | null
+	/** Effective threshold: the product's row, the branch default, or 5 (18-02). */
+	threshold: number
 	isLow: boolean
+	/** Never held at this branch, as opposed to holding none (18-01). */
+	neverStocked: boolean
 	updatedAt: string
 }
 
@@ -201,6 +204,8 @@ export interface AdjustmentCreateInput {
 	quantityDelta: number
 	reasonCode: AdjustmentReason
 	note?: string
+	/** Opening stock: what the units cost. Only a positive FOUND/CORRECTION. */
+	unitCostMinor?: number
 }
 
 export interface StockThreshold {

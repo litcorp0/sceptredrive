@@ -185,6 +185,28 @@ export interface OverviewContext {
  * every client sees the same comparison. `branchRanking` is empty for a manager: the figure
  * is an organisation-wide comparison and a manager has nothing to compare.
  */
+/**
+ * The margin a window may state (17-04).
+ *
+ * With revenue and no cost at all, the arithmetic answer is 100% — and it is
+ * wrong: nobody has bought the goods yet. `null` is the honest answer, and the
+ * overview carries `uncostedRevenueMinor` beside it so a reader can see how much
+ * of the revenue the figure cannot explain. A mixed window keeps its real margin;
+ * flattening that to `null` would throw away information.
+ *
+ * Pure and exported so the rule is tested without a database.
+ */
+export function marginWhenCosted(input: {
+  revenueBaseMinor: number
+  costMinor: number
+  uncostedRevenueBaseMinor: number
+}): number | null {
+  const revenue = input.revenueBaseMinor
+  if (revenue <= 0) return null
+  if (input.uncostedRevenueBaseMinor >= revenue) return null
+  return ratioBp(revenue - input.costMinor, revenue)
+}
+
 export async function getOverview({ user, query }: OverviewContext): Promise<OverviewResponse> {
   const branchId = resolveBranchFilter(user, query.branchId ?? null)
   const { period, comparison } = resolvePeriod(query)
@@ -252,7 +274,11 @@ export async function getOverview({ user, query }: OverviewContext): Promise<Ove
 
   const grossProfitMinor = lines.revenueBaseMinor - lines.costMinor
   const previousGrossProfitMinor = previousLines.revenueBaseMinor - previousLines.costMinor
-  const marginBp = ratioBp(grossProfitMinor, lines.revenueBaseMinor)
+  const marginBp = marginWhenCosted({
+    revenueBaseMinor: lines.revenueBaseMinor,
+    costMinor: lines.costMinor,
+    uncostedRevenueBaseMinor: lines.uncostedRevenueBaseMinor,
+  })
   const previousMarginBp = ratioBp(previousGrossProfitMinor, previousLines.revenueBaseMinor)
   const avgBasketMinor = averageBasketMinor(header.takeMinor, header.salesCount)
   const previousAvgBasketMinor = averageBasketMinor(
@@ -272,6 +298,8 @@ export async function getOverview({ user, query }: OverviewContext): Promise<Ove
       revenueBaseMinor: lines.revenueBaseMinor,
       grossProfitMinor,
       marginBp,
+      uncostedRevenueMinor: lines.uncostedRevenueBaseMinor,
+      uncostedLines: lines.uncostedLines,
       tax: {
         baseMinor: header.takeMinor - header.taxTotalMinor,
         vatMinor: header.vatMinor,
@@ -470,7 +498,13 @@ export async function getProducts(
       revenueBaseMinor: result.totals.revenueBaseMinor,
       costMinor: result.totals.costMinor,
       grossProfitMinor,
-      marginBp: ratioBp(grossProfitMinor, result.totals.revenueBaseMinor),
+      marginBp: marginWhenCosted({
+        revenueBaseMinor: result.totals.revenueBaseMinor,
+        costMinor: result.totals.costMinor,
+        uncostedRevenueBaseMinor: result.totals.uncostedRevenueBaseMinor,
+      }),
+      uncostedRevenueMinor: result.totals.uncostedRevenueBaseMinor,
+      uncostedLines: result.totals.uncostedLines,
       unitsSold: result.totals.unitsSold,
       distinctProducts: result.totals.distinctProducts,
     },

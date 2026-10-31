@@ -454,12 +454,133 @@ describe.skipIf(!available)('products API', () => {
     })
   })
 
+  /**
+   * 17-01: a catalogue does not get a second row for the same thing by accident.
+   * The exact name inside one category is the unarguable case, and a barcode is
+   * refused with the SKU that already owns it rather than a database error.
+   */
+  describe('duplicate detection', () => {
+    it('refuses the same name in the same category', async () => {
+      const payload = productPayload({ name: `Twin ${suffix}` })
+      const first = await createProductViaApi(payload)
+      expect(first.status).toBe(201)
+
+      const second = await createProductViaApi(payload)
+      expect(second.status).toBe(409)
+      const body = await readJson<{ error: { code: string; message: string } }>(second)
+      expect(body.error.code).toBe('PRODUCT_DUPLICATE')
+      // The message names the product that already exists, so it is actionable.
+      expect(body.error.message).toMatch(/Twin /)
+      expect(body.error.message).toMatch(/already exists/)
+    })
+
+    it('ignores case and surrounding space when comparing names', async () => {
+      await createProductViaApi(productPayload({ name: `Case ${suffix}` }))
+      const response = await createProductViaApi(
+        productPayload({ name: `  case ${suffix.toUpperCase()}  ` }),
+      )
+      expect(response.status).toBe(409)
+      expect((await readJson<{ error: { code: string } }>(response)).error.code).toBe(
+        'PRODUCT_DUPLICATE',
+      )
+    })
+
+    it('allows the same name in a different category', async () => {
+      const name = `Shared ${suffix}`
+      expect((await createProductViaApi(productPayload({ name }))).status).toBe(201)
+      const other = await createProductViaApi(productPayload({ name, categoryId: childCategoryId }))
+      expect(other.status).toBe(201)
+    })
+
+    it('refuses a barcode another product already owns, naming that product', async () => {
+      const code = `BC${sequenceStart}`
+      expect((await createProductViaApi(productPayload({ barcodes: [code] }))).status).toBe(201)
+
+      const response = await createProductViaApi(productPayload({ barcodes: [code] }))
+      expect(response.status).toBe(409)
+      const body = await readJson<{ error: { code: string; message: string } }>(response)
+      expect(body.error.code).toBe('BARCODE_IN_USE')
+      expect(body.error.message).toContain(code)
+    })
+
+    it('stops a manager submitting a product that already exists', async () => {
+      const name = `Proposed ${suffix}`
+      expect((await createProductViaApi(productPayload({ name }))).status).toBe(201)
+
+      const response = await app.request('/api/products/submissions', {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({
+          name,
+          categoryId: activeCategoryId,
+          uomId: activeUomId,
+          proposedBasePriceMinor: 12_000,
+        }),
+      })
+      expect(response.status).toBe(409)
+      expect((await readJson<{ error: { code: string } }>(response)).error.code).toBe(
+        'PRODUCT_DUPLICATE',
+      )
+    })
+  })
+
   describe('update, archive, and barcodes', () => {
     async function createProductAndReturn(overrides: Record<string, unknown> = {}) {
       const response = await createProductViaApi(productPayload(overrides))
       expect(response.status).toBe(201)
       return (await readJson<{ product: ProductRecord }>(response)).product
     }
+
+    /**
+     * 17-02: editing is field-scoped. A manager may fix a description; the fields
+     * that decide what the product is stay with an administrator.
+     */
+    it('lets a manager edit the description and nothing else', async () => {
+      const created = await createProductAndReturn()
+
+      const described = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ description: 'Fits 2019 onward' }),
+      })
+      expect(described.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(described)).product.description).toBe(
+        'Fits 2019 onward',
+      )
+
+      const renamed = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({ name: `Manager renamed ${suffix}` }),
+      })
+      expect(renamed.status).toBe(403)
+      const body = await readJson<{ error: { message: string } }>(renamed)
+      expect(body.error.message).toContain('administrator')
+      expect(body.error.message).toContain('name')
+
+      // The description in the same refused request must not have landed either.
+      const after = (await db.select().from(product).where(eq(product.id, created.id)))[0]
+      expect(after?.name).toBe(created.name)
+      expect(after?.description).toBe('Fits 2019 onward')
+    })
+
+    it('accepts an unchanged protected field from a manager, because the form posts everything', async () => {
+      const created = await createProductAndReturn()
+      const response = await app.request(`/api/products/${created.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({
+          name: created.name,
+          basePriceMinor: created.basePriceMinor,
+          taxCategory: created.taxCategory,
+          description: 'Same fields, better words',
+        }),
+      })
+      expect(response.status).toBe(200)
+      expect((await readJson<{ product: ProductRecord }>(response)).product.description).toBe(
+        'Same fields, better words',
+      )
+    })
 
     it('updates a product with an audit diff', async () => {
       const created = await createProductAndReturn()

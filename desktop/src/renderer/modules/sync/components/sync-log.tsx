@@ -9,9 +9,15 @@ import { navigate } from '@/lib/router'
 /**
  * The outbox table on `/sync` (Plan 08 Task 3).
  *
- * Read-only except for the manager-only Retry on a dead letter. It shows only
- * operational metadata: type, receipt, timestamps, attempts, state, and a short
- * error. No receipt lines, tokens, or customer PII ever reach this table.
+ * Read-only except for Retry on a dead letter, which any staff member signed in
+ * at this till may press. A retry is not an authority: it re-queues the exact
+ * bytes the till already recorded, and the server re-checks the binding, price,
+ * credit, stock and tender arithmetic before it accepts anything. The gate that
+ * matters is on conflict resolution, not here.
+ *
+ * It shows only operational metadata: type, receipt, timestamps, attempts,
+ * state, and a short error. No receipt lines, tokens, or customer PII ever reach
+ * this table.
  */
 
 export interface OutboxLogRow {
@@ -24,6 +30,7 @@ export interface OutboxLogRow {
   last_error_code: string | null
   last_error_message: string | null
   receipt_number: string | null
+  updated_at: string
 }
 
 /* The tint and the dot carry the state; the label stays `text-foreground`. A dead letter is
@@ -44,16 +51,10 @@ const STATE_DOT: Record<string, string> = {
   dead_letter: 'bg-danger',
 }
 
-export function SyncLog({
-  canRetry,
-  onRetry,
-}: {
-  canRetry: boolean
-  onRetry: (id: string) => Promise<void> | void
-}) {
+export function SyncLog({ onRetry }: { onRetry: (id: string) => Promise<void> | void }) {
   const { data, isLoading } = useQuery<OutboxLogRow>(
     `SELECT o.id, o.type, o.status, o.occurred_at, o.attempts, o.next_attempt_at,
-            o.last_error_code, o.last_error_message, s.receipt_number
+            o.last_error_code, o.last_error_message, o.updated_at, s.receipt_number
        FROM outbox o
        LEFT JOIN sale s ON s.id = o.id
       ORDER BY o.created_at DESC, o.id DESC
@@ -139,7 +140,13 @@ export function SyncLog({
                 className="px-3 py-2 font-mono text-xs tabular-nums"
                 title={row.next_attempt_at ? formatDateTime(row.next_attempt_at) : undefined}
               >
-                {row.next_attempt_at ? formatRelative(row.next_attempt_at) : '—'}
+                {/* A dead letter has no next attempt — say when it was last tried
+                    instead, so a row retried twice does not look untouched. */}
+                {row.status === 'dead_letter'
+                  ? `tried ${formatRelative(row.updated_at)}`
+                  : row.next_attempt_at
+                    ? formatRelative(row.next_attempt_at)
+                    : '—'}
               </td>
               <td className="max-w-[18rem] px-3 py-2 text-xs">
                 {row.last_error_code ? (
@@ -152,7 +159,7 @@ export function SyncLog({
                 )}
               </td>
               <td className="px-3 py-2 text-right">
-                {canRetry && row.status === 'dead_letter' ? (
+                {row.status === 'dead_letter' ? (
                   <Button
                     type="button"
                     variant="outline"

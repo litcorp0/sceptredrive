@@ -21,6 +21,7 @@ import { getBranch, listBranches } from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { allocateFromSequence } from '../platform/settings.service.ts'
+import { ensureCreditProfile } from './credit.profile.ts'
 import {
   countEntryRows,
   countOverLimitProfiles,
@@ -34,7 +35,6 @@ import {
   listProfilesByCustomer,
   listSettlementEntries,
   listSettlementEntriesByBranch,
-  lockOrCreateProfile,
   lockProfileById,
   sumEntriesBefore,
   sumForCustomerBranch,
@@ -281,7 +281,12 @@ export async function postEntryInTransaction(
     throw new ConflictError('Archived customers cannot be charged new credit')
   }
 
-  const profile = await lockOrCreateProfile(tx, input.customerId, input.branchId)
+  const { profile } = await ensureCreditProfile({
+    customerId: input.customerId,
+    branchId: input.branchId,
+    actor,
+    executor: tx,
+  })
 
   let overrideReason: CreditOverrideReason | null = null
   if (input.kind === 'CHARGE') {
@@ -475,7 +480,7 @@ export async function updateProfile(
   await requireCustomer(customerId)
 
   return db.transaction(async (tx): Promise<CreditProfileRow> => {
-    const profile = await lockOrCreateProfile(tx, customerId, branchId)
+    const { profile } = await ensureCreditProfile({ customerId, branchId, actor, executor: tx })
 
     const patch: Partial<typeof profile> = {}
     let limitVia: CreditLimitChangeVia | null = null
@@ -558,7 +563,7 @@ export async function requestCreditLimitIncrease(
 
   try {
     return await db.transaction(async (tx): Promise<CreditLimitChangeRequestResult> => {
-      const profile = await lockOrCreateProfile(tx, customerId, branchId)
+      const { profile } = await ensureCreditProfile({ customerId, branchId, actor, executor: tx })
 
       if (input.proposedLimitMinor <= profile.limitMinor) {
         throw new ValidationError(

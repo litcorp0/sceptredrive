@@ -51,6 +51,12 @@ export const adjustmentCreateSchema = z
       .refine((value) => value !== 0, { message: 'Quantity must not be zero' }),
     reasonCode: z.enum(['DAMAGE', 'LOSS', 'FOUND', 'CORRECTION', 'EXPIRED', 'OTHER']),
     note: z.string().trim().min(1).max(300).optional(),
+    /**
+     * Opening stock carries what it cost (17-05). Only a positive FOUND or
+     * CORRECTION may send it; the service refuses the rest rather than silently
+     * revaluing a level.
+     */
+    unitCostMinor: z.number().int().min(0).max(100_000_000_000).optional(),
   })
   .strict()
 
@@ -76,6 +82,10 @@ export const stockListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   q: z.string().trim().min(1).max(120).optional(),
   lowStock: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  outOfStock: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),

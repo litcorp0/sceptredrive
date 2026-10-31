@@ -58,7 +58,9 @@ productsRoutes.get(
 productsRoutes.patch(
   '/api/products/:id',
   requireSession,
-  requirePermission('catalog.update'),
+  // Any role that may describe a product may call this; the service decides which
+  // fields that role may actually move (17-02).
+  requirePermission('catalog.describe'),
   validateProductIdParam,
   validateProductUpdate,
   (c) => productsController.updateProduct(c, c.req.valid('param').id, c.req.valid('json')),

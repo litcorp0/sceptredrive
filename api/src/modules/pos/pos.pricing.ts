@@ -16,6 +16,12 @@ export interface SaleCatalogLine {
   priceSource: 'BASE' | 'BRANCH_OVERRIDE'
   taxCategory: SaleLinePayload['taxCategory']
   isActive: boolean
+  /**
+   * The last purchase price anywhere in the company (P11-D13 keeps it derived
+   * from receipts). Used only as a costing fallback when this branch has never
+   * received the product — never as the price (17-03).
+   */
+  costPriceMinor: number
 }
 
 export interface SaleCatalog {
@@ -43,6 +49,7 @@ export async function loadSaleCatalog(
       priceSource: hasOverride ? 'BRANCH_OVERRIDE' : 'BASE',
       taxCategory: row.product.taxCategory,
       isActive: row.product.isActive,
+      costPriceMinor: row.product.costPriceMinor,
     })
   }
 

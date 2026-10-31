@@ -248,8 +248,12 @@ describe.skipIf(!available)('POS conflict queue', () => {
     number: string
     status?: 'OPEN' | 'CLOSED'
     openingFloatMinor?: number
+    openedAt?: Date
+    closedAt?: Date
   }): Promise<string> {
     const status = input.status ?? 'OPEN'
+    const closedAt =
+      status === 'CLOSED' ? (input.closedAt ?? new Date('2026-10-27T18:00:00Z')) : null
     const rows = await db
       .insert(shift)
       .values({
@@ -260,8 +264,8 @@ describe.skipIf(!available)('POS conflict queue', () => {
         cashierUserId,
         cashierStaffId,
         status,
-        openedAt: new Date('2026-10-27T08:00:00Z'),
-        closedAt: status === 'CLOSED' ? new Date('2026-10-27T18:00:00Z') : null,
+        openedAt: input.openedAt ?? new Date('2026-10-27T08:00:00Z'),
+        closedAt,
         openingFloatMinor: input.openingFloatMinor ?? 50_000,
         openedBy: cashierStaffId,
         closedBy: status === 'CLOSED' ? cashierStaffId : null,
@@ -280,6 +284,8 @@ describe.skipIf(!available)('POS conflict queue', () => {
     customer?: { id: string; phone: string; name: string }
     /** Minutes between the till's clock and the server's, for `CLOCK_SKEW`. */
     skewMinutes?: number
+    /** The till's own time for the sale; defaults to `now − skewMinutes`. */
+    occurredAt?: Date
   }
 
   async function createSale(spec: SaleSpec): Promise<{
@@ -308,7 +314,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
     ])
     expect(tenders.problem).toBeNull()
 
-    const occurredAt = new Date(Date.now() - (spec.skewMinutes ?? 0) * 60_000)
+    const occurredAt = spec.occurredAt ?? new Date(Date.now() - (spec.skewMinutes ?? 0) * 60_000)
     const payload: SalePayload = {
       receiptNumber,
       shiftId: spec.shiftId,
@@ -1234,5 +1240,105 @@ describe.skipIf(!available)('POS conflict queue', () => {
     expect(paymentAfter?.orphaned).toBe(true)
     expect(paymentAfter?.paidAt?.toISOString()).toBe(paymentBefore?.paidAt?.toISOString())
     expect(paymentAfter?.providerTransactionId).toBe(paymentBefore?.providerTransactionId)
+  })
+
+  /**
+   * A till finishes its shift before its queue drains. The drawer is counted, the
+   * `SHIFT_CLOSE` uploads, and only then does the sale ahead of it reach the
+   * server — which is exactly what happened on 2026-10-28 at TEM-MNZ-T01, where a
+   * dead-lettered sale was parked behind a closed shift and the server would have
+   * refused it forever.
+   *
+   * The sale is money that was taken, so it is applied; the closed shift's stored
+   * expected cash is a snapshot of what the server knew at the close and is not
+   * rewritten. A manager gets a HIGH conflict carrying both figures instead.
+   */
+  it('applies a sale whose shift closed before it uploaded, and flags the drawer', async () => {
+    // The shape of the real incident: the sale was taken yesterday afternoon, its
+    // upload was refused, and the retry happens after the drawer was counted and
+    // after the queue sat overnight.
+    const closedAt = new Date(Date.now() - 25 * 60 * 60_000)
+    const shiftId = await insertShift({
+      counter: home,
+      number: 'CQS-LATE',
+      status: 'CLOSED',
+      openingFloatMinor: 0,
+      openedAt: new Date(Date.now() - 33 * 60 * 60_000),
+      closedAt,
+    })
+
+    const lateSale = await createSale({
+      counter: home,
+      shiftId,
+      occurredAt: new Date(Date.now() - 26 * 60 * 60_000),
+      lines: [{ productId: productB, quantity: 1, unitPriceMinor: 4_500 }],
+      tender: 'CASH',
+    })
+
+    expect(lateSale.conflicts).toContain('SALE_AFTER_SHIFT_CLOSE')
+    // One incident, one conflict: 26 hours between the sale and the retry is the
+    // queue's age, not a wrong clock, so no CLOCK_SKEW is raised as well.
+    expect(lateSale.conflicts).not.toContain('CLOCK_SKEW')
+
+    // The sale is a fact, with its stock movement behind it.
+    const saleRow = (await db.select().from(sale).where(eq(sale.id, lateSale.saleId)))[0]
+    expect(saleRow?.shiftId).toBe(shiftId)
+    expect(saleRow?.totalMinor).toBe(lateSale.totalMinor)
+    const movements = await db
+      .select({ quantityDelta: stockMovement.quantityDelta })
+      .from(stockMovement)
+      .where(and(eq(stockMovement.referenceId, lateSale.saleId), eq(stockMovement.type, 'SALE')))
+    expect(movements).toHaveLength(1)
+    expect(movements[0]?.quantityDelta).toBe(-1)
+
+    const conflict = (
+      await db
+        .select()
+        .from(syncConflict)
+        .where(
+          and(
+            eq(syncConflict.saleId, lateSale.saleId),
+            eq(syncConflict.type, 'SALE_AFTER_SHIFT_CLOSE'),
+          ),
+        )
+    )[0]
+    expect(conflict?.severity).toBe('HIGH')
+    expect(conflict?.status).toBe('OPEN')
+    expect(conflict?.shiftId).toBe(shiftId)
+    const details = conflict?.details as Record<string, unknown>
+    // Both figures a manager needs: what the drawer was closed against, and what
+    // the sale actually took.
+    expect(details.shiftClosedAt).toBe(closedAt.toISOString())
+    expect(details.saleTotalMinor).toBe(lateSale.totalMinor)
+    expect(details.cashTenderedMinor).toBe(lateSale.totalMinor)
+    expect(details.changeMinor).toBe(0)
+
+    // The closed shift keeps the figures its own close computed. The variance
+    // review is where the late sale is reconciled, not a silent rewrite.
+    const shiftRow = (await db.select().from(shift).where(eq(shift.id, shiftId)))[0]
+    expect(shiftRow?.serverExpectedCashMinor).toBeNull()
+  })
+
+  it('still refuses a sale dated after its shift closed', async () => {
+    const shiftId = await insertShift({
+      counter: home,
+      number: 'CQS-AFTER',
+      status: 'CLOSED',
+      openingFloatMinor: 0,
+      openedAt: new Date(Date.now() - 4 * 60 * 60_000),
+      closedAt: new Date(Date.now() - 60 * 60_000),
+    })
+
+    // Taken after the drawer was counted: it cannot belong to that shift, so it
+    // is a client defect rather than a late arrival.
+    await expect(
+      createSale({
+        counter: home,
+        shiftId,
+        occurredAt: new Date(Date.now() - 30 * 60_000),
+        lines: [{ productId: productB, quantity: 1, unitPriceMinor: 4_500 }],
+        tender: 'CASH',
+      }),
+    ).rejects.toMatchObject({ code: 'SHIFT_CLOSED' })
   })
 })

@@ -86,6 +86,22 @@ function validateInput(input: MovementInput): void {
     }
   }
 
+  // A cost is meaningful only when stock is being added: removing units at a new
+  // cost would silently revalue what is left (17-05).
+  if (input.type === 'ADJUSTMENT' && input.unitCostMinor !== undefined) {
+    if (input.quantityDelta <= 0) {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'Only a positive adjustment may carry a unit cost',
+      )
+    }
+    assertSafeInteger(input.unitCostMinor, 'Unit cost')
+    if (input.unitCostMinor < 0) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Unit cost must not be negative')
+    }
+  }
+
   if (input.type === 'TRANSFER_OUT' && input.quantityDelta > 0) {
     throw new AppError(
       400,
@@ -145,12 +161,21 @@ export async function postMovements(
       if (!level) throw new AppError(500, 'INTERNAL', 'Failed to lock the stock level')
 
       const inbound = input.type === 'RECEIPT' || input.type === 'TRANSFER_IN'
+      // 17-05: opening stock carries a cost the way a receipt does. An adjustment
+      // that states what the goods cost values them into the branch average; one
+      // without a cost moves quantity only, exactly as before.
+      const valuedInbound =
+        inbound ||
+        (input.type === 'ADJUSTMENT' &&
+          input.quantityDelta > 0 &&
+          input.unitCostMinor !== undefined)
+
       const quantityOnHand = level.quantityOnHand + input.quantityDelta
       if (quantityOnHand < 0 && !options.allowNegative) {
         throw new ConflictError(insufficientStockMessage(input, level))
       }
 
-      const avgCostMinor = inbound
+      const avgCostMinor = valuedInbound
         ? averageCostAfterReceipt(
             level.avgCostMinor,
             level.quantityOnHand,
@@ -158,7 +183,7 @@ export async function postMovements(
             input.quantityDelta,
           )
         : level.avgCostMinor
-      const unitCostMinor = inbound
+      const unitCostMinor = valuedInbound
         ? (input.unitCostMinor as number)
         : (input.unitCostMinor ?? level.avgCostMinor)
 
@@ -473,6 +498,20 @@ export async function createAdjustment(
     )
   }
 
+  // Opening stock is a `FOUND` or a `CORRECTION`, and it is the only way a shop
+  // that already owns goods can give them a cost without a supplier receipt
+  // (17-05). Any other reason carrying a cost is a mistake worth refusing.
+  if (
+    input.unitCostMinor !== undefined &&
+    input.quantityDelta > 0 &&
+    input.reasonCode !== 'FOUND' &&
+    input.reasonCode !== 'CORRECTION'
+  ) {
+    throw new ValidationError(
+      'Only a FOUND or CORRECTION adjustment may carry a unit cost. Use a receipt for purchased stock.',
+    )
+  }
+
   return db.transaction(async (tx) => {
     const before = await findLevel(input.productId, input.branchId, tx)
     const posted = await postMovements(
@@ -486,6 +525,7 @@ export async function createAdjustment(
           referenceType: 'ADJUSTMENT',
           reasonCode: input.reasonCode,
           note: input.note ?? null,
+          ...(input.unitCostMinor !== undefined ? { unitCostMinor: input.unitCostMinor } : {}),
         },
       ],
       { executor: tx },
@@ -552,13 +592,15 @@ function toStockRow(row: {
   branchName: string
   quantityOnHand: number
   avgCostMinor: number
-  threshold: number | null
+  threshold: number
+  neverStocked: boolean
   updatedAt: Date
 }): StockRow {
   return {
     ...row,
     valueMinor: row.quantityOnHand * row.avgCostMinor,
-    isLow: row.threshold !== null && row.quantityOnHand <= row.threshold,
+    // Disjoint buckets (18-02/D3): empty is out of stock, not "low".
+    isLow: row.quantityOnHand >= 1 && row.quantityOnHand <= row.threshold,
   }
 }
 
@@ -585,6 +627,7 @@ async function queryStock(
     branchId,
     q: query.q,
     lowStock: forceLowStock || query.lowStock === true,
+    outOfStock: query.outOfStock === true,
     limit: query.limit,
     offset: query.offset,
   }

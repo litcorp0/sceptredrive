@@ -20,9 +20,11 @@ import { SyncLog } from '../components/sync-log'
 /**
  * `/sync` — the honest, non-blocking sync screen (Plan 08 Task 3).
  *
- * Cashiers may open it to see whether their sales reached the server; managers
- * additionally get Retry on a dead letter. Resolution itself is Phase 8. Nothing
- * on this page can stop the till, and no payload, token, or PII is rendered.
+ * Anyone signed in at this till may open it to see whether their sales reached
+ * the server, and may retry a dead letter: a retry re-sends a fact the till
+ * already recorded, and the server revalidates it. Deciding an exception is the
+ * manager's job and lives with conflict resolution, not here. Nothing on this
+ * page can stop the till, and no payload, token, or PII is rendered.
  */
 
 function stamp(iso: string | null): string {
@@ -88,7 +90,6 @@ export function SyncScreen({
   )
   const highOpen = high.data?.[0]?.high ?? 0
   const openConflicts = high.data?.[0]?.open ?? 0
-  const canRetry = staff.role === 'MANAGER' || staff.role === 'ADMIN'
 
   async function pullConflicts(): Promise<void> {
     if (!db || !session) return
@@ -228,7 +229,14 @@ export function SyncScreen({
               Newest first. Acknowledged rows are pruned after 30 days.
             </p>
           </div>
-          {db ? <SyncLog canRetry={canRetry} onRetry={retry} /> : null}
+          {/* Anyone at this till may retry: it re-sends what was already sold, and
+              the server checks it again. Refusing a sale is not something a retry
+              can decide — resolving a conflict below is. */}
+          <p className="mb-2 text-xs text-muted-foreground">
+            A refused row comes back here with the server’s reason. Retrying does not change what
+            was sold; the server rechecks it and either accepts it or refuses it again.
+          </p>
+          {db ? <SyncLog onRetry={retry} /> : null}
         </section>
 
         <section className="mt-6">

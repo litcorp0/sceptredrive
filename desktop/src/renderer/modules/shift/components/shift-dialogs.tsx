@@ -12,6 +12,13 @@ import {
 import { formatGhs, formatMinorPlain, parseGhsToMinor } from '@/lib/format'
 import type { HeldCartSummary } from '@/lib/hold/hold-service'
 import { computeVariance } from '@/lib/shift/shift-service'
+import {
+  NO_UNSYNCED_SALES,
+  needsUnsyncedAcknowledgement,
+  type UnsyncedSales,
+  unsyncedSalesAcknowledgement,
+  unsyncedSalesWarning,
+} from '@/lib/sync/outbox-summary'
 import { amountProblem } from '../utils/amount'
 import type { HoldsDecision } from '../utils/close-shift'
 import { varianceWords } from '../utils/variance'
@@ -269,6 +276,7 @@ export function CloseShiftDialog({
   expectedCashMinor,
   holds,
   otherCashierName = null,
+  unsynced = NO_UNSYNCED_SALES,
   onClose,
   onConfirm,
 }: {
@@ -280,6 +288,12 @@ export function CloseShiftDialog({
    * manager takeover of P14-D12. Null when the closer opened the drawer.
    */
   otherCashierName?: string | null
+  /**
+   * Sales on this till the server does not have yet. The close is never blocked
+   * by them, but it says so before the drawer is counted and asks for one
+   * acknowledgement, because a sale that lands after the close needs a manager.
+   */
+  unsynced?: UnsyncedSales
   onClose: () => void
   onConfirm: (input: {
     countedCashMinor: number
@@ -296,10 +310,15 @@ export function CloseShiftDialog({
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [acknowledged, setAcknowledged] = useState(false)
 
   const counted = parseGhsToMinor(amount)
   const variance = counted === null ? null : computeVariance(counted, expectedCashMinor)
   const holdsValue = holds.reduce((total, hold) => total + hold.totalMinor, 0)
+  const unsyncedWarning = unsyncedSalesWarning(unsynced)
+  const acknowledgement = unsyncedSalesAcknowledgement(unsynced)
+  const readyToClose =
+    amountProblem(amount) === null && (!needsUnsyncedAcknowledgement(unsynced) || acknowledged)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -309,6 +328,10 @@ export function CloseShiftDialog({
     }
     if (holds.length > 0 && !decision) {
       setError('Choose what happens to the held carts')
+      return
+    }
+    if (needsUnsyncedAcknowledgement(unsynced) && !acknowledged) {
+      setError('Acknowledge that this close happens before every sale has synced')
       return
     }
     setBusy(true)
@@ -425,6 +448,23 @@ export function CloseShiftDialog({
             </div>
           ) : (
             <form onSubmit={submit} className="grid gap-4">
+              {unsyncedWarning ? (
+                <div className="grid gap-2 rounded-md border border-warn bg-warn/10 px-3 py-2 text-sm">
+                  <p data-testid="close-unsynced-warning">{unsyncedWarning}</p>
+                  {acknowledgement ? (
+                    <label className="flex items-start gap-2 text-xs font-medium">
+                      <input
+                        type="checkbox"
+                        checked={acknowledged}
+                        onChange={(event) => setAcknowledged(event.target.checked)}
+                        className="mt-0.5 size-4 shrink-0"
+                        data-testid="close-unsynced-acknowledge"
+                      />
+                      <span>{acknowledgement}</span>
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex items-baseline justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                 <span>Expected cash</span>
                 <span className="font-mono font-semibold tabular-nums">
@@ -497,7 +537,7 @@ export function CloseShiftDialog({
                   </Button>
                   <Button
                     type="submit"
-                    disabled={busy || amountProblem(amount) !== null}
+                    disabled={busy || !readyToClose}
                     className="h-14 flex-[2] text-base"
                     data-testid="close-shift-confirm"
                   >
@@ -506,8 +546,8 @@ export function CloseShiftDialog({
                 </div>
               </DialogFooter>
               <p className="text-xs text-muted-foreground">
-                Closing works offline. The server recomputes expected cash when the shift syncs and
-                flags any difference.
+                Closing works offline. The server checks the drawer when the shift syncs and flags
+                any difference for a manager.
               </p>
             </form>
           )}

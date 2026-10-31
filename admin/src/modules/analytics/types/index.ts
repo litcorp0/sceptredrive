@@ -91,6 +91,9 @@ export interface OverviewResponse {
 		revenueBaseMinor: number
 		grossProfitMinor: number
 		marginBp: number | null
+		/** Revenue sold with no cost at all; margin is null when this is everything. */
+		uncostedRevenueMinor: number
+		uncostedLines: number
 		tax: TaxSplit
 		salesCount: number
 		avgBasketMinor: number
@@ -188,6 +191,8 @@ export interface ProductsResponse {
 		costMinor: number
 		grossProfitMinor: number
 		marginBp: number | null
+		uncostedRevenueMinor: number
+		uncostedLines: number
 		unitsSold: number
 		distinctProducts: number
 	}

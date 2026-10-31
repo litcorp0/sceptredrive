@@ -1070,6 +1070,8 @@ interface PendingConflict {
   type: SyncConflictType
   severity: SyncConflictSeverity
   details: Record<string, unknown>
+  /** Set when the conflict is about a shift the sale names (a closed drawer). */
+  shiftId?: string | null
 }
 
 interface OverrideValidation {
@@ -1086,6 +1088,24 @@ function auditActorFor(staff: { userId: string; staffId: string }): AuditActor {
     userAgent: null,
     requestId: null,
   }
+}
+
+/**
+ * What one sold unit cost (17-03).
+ *
+ * The branch's weighted average is the truth when it exists. A product received
+ * somewhere else in the company has a known purchase price and no branch level
+ * yet, and selling it at zero would report a 100% margin on goods that were
+ * paid for — so the last receipt cost stands in until the branch receives it.
+ * Zero only remains when nobody has ever bought the product.
+ *
+ * The figure stays derived from receipts; P11-D13's rule (one writable cost) is
+ * untouched.
+ */
+function costForSale(branchAverageMinor: number, productCostMinor: number): number {
+  if (Number.isSafeInteger(branchAverageMinor) && branchAverageMinor > 0) return branchAverageMinor
+  if (Number.isSafeInteger(productCostMinor) && productCostMinor > 0) return productCostMinor
+  return 0
 }
 
 function saleRejected(code: string, message: string, details?: Record<string, unknown>): AppError {
@@ -1240,7 +1260,12 @@ export async function applySale(
     percent?: number
   }> = []
 
-  // 1. Shift: the sale belongs to an open shift on this terminal.
+  // 1. Shift: the sale belongs to a shift this terminal owned. A shift that has
+  //    already closed is not a reason to lose the sale (SYNC-05: conflicts are
+  //    information, never a rejection): a till finishes its shift before its
+  //    queue drains, so the sale is applied and flagged for a manager instead.
+  //    A sale that claims to have happened *after* the draw closed cannot belong
+  //    to that shift and is still refused.
   const shiftRow = await findShiftByIdForUpdate(payload.shiftId, executor)
   if (!shiftRow) {
     throw saleRejected('SHIFT_MISSING', 'The sale references a shift that does not exist')
@@ -1251,8 +1276,17 @@ export async function applySale(
   if (shiftRow.terminalId !== device.terminalId) {
     throw saleRejected('SHIFT_DEVICE_MISMATCH', 'The shift does not belong to this terminal')
   }
-  if (shiftRow.status !== 'OPEN') {
-    throw saleRejected('SHIFT_CLOSED', 'The sale references a closed shift')
+  let appliedAfterClose: Date | null = null
+  if (shiftRow.status === 'CLOSED' && shiftRow.closedAt) {
+    if (occurredAt.getTime() > shiftRow.closedAt.getTime()) {
+      throw saleRejected(
+        'SHIFT_CLOSED',
+        'The sale is dated after its shift closed, so it does not belong to that drawer',
+      )
+    }
+    appliedAfterClose = shiftRow.closedAt
+  } else if (shiftRow.status !== 'OPEN') {
+    throw saleRejected('SHIFT_CLOSED', 'The sale references a shift that is not open')
   }
 
   const existingSale = await findSaleByReceiptNumber(receiptNumber, executor)
@@ -1357,6 +1391,10 @@ export async function applySale(
   // 5. Pricing with the charged money, server tax mode, and charged loyalty
   //    discount (the printed discount is part of the money).
   const taxMode = (await getSettingValue('pricing.taxMode', {}, executor)) as TaxMode
+  // A shop that is not VAT-registered charges no VAT, NHIL or GETFund, whatever
+  // the catalogue says. Read here, in the same place the tax mode is read, so the
+  // server's arithmetic and the till's cannot disagree.
+  const vatRegistered = await getSettingValue('pricing.vatRegistered', {}, executor)
   const saleDiscountMinor = payload.saleDiscount?.amountMinor ?? 0
   const redeemPoints = payload.loyalty?.redeemPoints ?? 0
   const loyaltyDiscountMinor = redeemPoints > 0 ? payload.totals.loyaltyDiscountMinor : 0
@@ -1374,7 +1412,7 @@ export async function applySale(
         taxCategory: item?.taxCategory ?? line.taxCategory,
       }
     }),
-    { taxMode, saleDiscountMinor, loyaltyDiscountMinor },
+    { taxMode, vatRegistered, saleDiscountMinor, loyaltyDiscountMinor },
   )
 
   const computedTotals = {
@@ -1458,6 +1496,35 @@ export async function applySale(
     throw saleRejected('INVALID_TENDER', 'The change does not match the tendered amount', {
       chargedChangeMinor: payload.totals.changeMinor,
       computedChangeMinor: changeMinor,
+    })
+  }
+
+  // 6c-i. The drawer this sale belongs to was already closed and its stored
+  //       expected cash was computed without this sale. The sale still applies
+  //       (money that was taken must exist), and a manager sees exactly how much
+  //       the closed drawer is short by. Nothing here rewrites the closed shift:
+  //       its Z is a snapshot of what the server knew at the close.
+  if (appliedAfterClose) {
+    const cashTenderedMinor = payload.tenders
+      .filter((tender) => tender.method === 'CASH')
+      .reduce((sum, tender) => sum + tender.amountMinor, 0)
+    pending.push({
+      type: 'SALE_AFTER_SHIFT_CLOSE',
+      severity: 'HIGH',
+      // The manager reviews the drawer, so the conflict names the shift as well
+      // as the sale.
+      shiftId: payload.shiftId,
+      details: {
+        shiftClosedAt: appliedAfterClose.toISOString(),
+        saleOccurredAt: occurredAt.toISOString(),
+        lagMinutes: Math.max(
+          0,
+          Math.round((appliedAfterClose.getTime() - occurredAt.getTime()) / 60_000),
+        ),
+        saleTotalMinor: totalMinor,
+        cashTenderedMinor,
+        changeMinor,
+      },
     })
   }
 
@@ -1741,9 +1808,12 @@ export async function applySale(
     }
   }
 
-  // 11. Clock skew: keep both facts, flag the difference.
+  // 11. Clock skew: keep both facts, flag the difference. A sale that arrived
+  //     after its shift closed is not a clock problem — the queue is why it is
+  //     old, and `SALE_AFTER_SHIFT_CLOSE` already carries the lag. Reporting
+  //     both would make one incident look like two.
   const skewMs = Math.abs(context.receivedAt.getTime() - occurredAt.getTime())
-  if (skewMs > context.clockSkewToleranceMinutes * 60_000) {
+  if (!appliedAfterClose && skewMs > context.clockSkewToleranceMinutes * 60_000) {
     pending.push({
       type: 'CLOCK_SKEW',
       severity: 'LOW',
@@ -1816,7 +1886,10 @@ export async function applySale(
         taxTotalMinor: line.taxTotalMinor,
         totalMinor: line.totalMinor,
         taxCategory: line.taxCategory,
-        unitCostMinor: posted.levels.get(line.productId)?.avgCostMinor ?? 0,
+        unitCostMinor: costForSale(
+          posted.levels.get(line.productId)?.avgCostMinor ?? 0,
+          item?.costPriceMinor ?? 0,
+        ),
         priceSource: item?.priceSource === 'BRANCH_OVERRIDE' ? 'OVERRIDE' : 'BASE',
       }
     }),
@@ -1839,7 +1912,11 @@ export async function applySale(
 
   // 13. Conflicts, then the audit trail.
   for (const conflict of pending) {
-    const created = await addConflict(executor, { device, saleId }, conflict)
+    const created = await addConflict(
+      executor,
+      { device, saleId, shiftId: conflict.shiftId ?? null },
+      conflict,
+    )
     applied.push(created)
     await writeAudit(
       {

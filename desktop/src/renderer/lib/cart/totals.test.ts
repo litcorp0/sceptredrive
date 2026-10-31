@@ -96,6 +96,22 @@ describe('computeCartTotals', () => {
     expect(totals.discountPercent).toBe(0)
   })
 
+  it('charges nothing when the shop is not VAT-registered', () => {
+    const totals = computeCartTotals(cartWith([['p1', 10_000, 1]]), {
+      ...CONTEXT,
+      vatRegistered: false,
+    })
+
+    // The same GHS 100 now buys the same goods with no levies on top of it, and
+    // the whole amount is the untaxed base.
+    expect(totals.priced.totalMinor).toBe(10_000)
+    expect(totals.priced.baseMinor).toBe(10_000)
+    expect(totals.priced.vatMinor).toBe(0)
+    expect(totals.priced.nhilMinor).toBe(0)
+    expect(totals.priced.getfundMinor).toBe(0)
+    expect(totals.priced.taxTotalMinor).toBe(0)
+  })
+
   it('sums quantities for the item count', () => {
     const totals = computeCartTotals(
       cartWith([

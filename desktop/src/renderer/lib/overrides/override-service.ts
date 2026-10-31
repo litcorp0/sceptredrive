@@ -24,8 +24,11 @@ import { CREDIT_REASON_CODES, DISCOUNT_REASON_CODES } from '../cart/types'
 
 export type OverridePermission = Extract<
   Permission,
-  'credit.override' | 'pos.discount' | 'pos.refund'
+  'credit.override' | 'pos.discount' | 'pos.refund' | 'inventory.adjust'
 >
+
+/** The reason a manager gives for selling stock the record does not have (18-04). */
+export const STOCK_OVERRIDE_REASON = 'STOCK_DISCREPANCY'
 
 export type OverrideErrorCode = 'NOT_FOUND' | 'NOT_AUTHORIZED' | 'INVALID_REASON'
 
@@ -44,6 +47,7 @@ export function reasonCodesFor(permission: OverridePermission): readonly string[
   // A refund's authority is recorded against the same vocabulary the refund
   // itself uses, so the proof and the document cannot name different reasons.
   if (permission === 'pos.refund') return REFUND_REASONS
+  if (permission === 'inventory.adjust') return [STOCK_OVERRIDE_REASON]
   return DISCOUNT_REASON_CODES
 }
 

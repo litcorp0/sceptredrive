@@ -68,6 +68,7 @@ interface MovementResponse {
   quantityDelta: number
   referenceNumber: string | null
   reasonCode: string | null
+  unitCostMinor?: number
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -655,5 +656,217 @@ describe.skipIf(!available)('inventory API', () => {
     expect(managerList.status).toBe(200)
     const managerBody = await readJson<{ receipts: ReceiptResponse[] }>(managerList)
     expect(managerBody.receipts.every((item) => item.branchId === branchAId)).toBe(true)
+  })
+
+  /**
+   * 18-01/18-02: a product with no stock row is zero on hand, not missing.
+   *
+   * The bug this pins: the list started `FROM stock_level`, so a product that had
+   * never been received could not be seen — while the analytics out-of-stock count
+   * read 0 and the till still sold it.
+   */
+  it('lists a never-stocked product at zero, with the default threshold of five', async () => {
+    const rows = await db
+      .insert(product)
+      .values({
+        sku: `IAPI-${suffix}-NEVER`,
+        name: `Never Stocked ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 5_000,
+      })
+      .returning({ id: product.id })
+    const productId = rows[0]?.id ?? ''
+    createdProductIds.push(productId)
+
+    const q = encodeURIComponent(`Never Stocked ${suffix}`)
+    const list = await app.request(`/api/inventory/stock?branchId=${branchAId}&q=${q}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(list.status).toBe(200)
+    const body = await readJson<{
+      stock: Array<{
+        productId: string
+        quantityOnHand: number
+        neverStocked: boolean
+        threshold: number
+        isLow: boolean
+      }>
+    }>(list)
+    const row = body.stock.find((item) => item.productId === productId)
+    expect(row).toMatchObject({
+      quantityOnHand: 0,
+      neverStocked: true,
+      threshold: 5,
+      // Zero is out of stock, not "low" (18-02/D3).
+      isLow: false,
+    })
+
+    const out = await app.request(
+      `/api/inventory/stock?branchId=${branchAId}&outOfStock=true&q=${q}`,
+      { headers: authedHeaders(adminCookie) },
+    )
+    const outBody = await readJson<{ stock: Array<{ productId: string }> }>(out)
+    expect(outBody.stock.some((item) => item.productId === productId)).toBe(true)
+  })
+
+  it('lets an explicit threshold override the default, and keeps the buckets disjoint', async () => {
+    const rows = await db
+      .insert(product)
+      .values({
+        sku: `IAPI-${suffix}-THRESH`,
+        name: `Threshold Product ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 5_000,
+      })
+      .returning({ id: product.id })
+    const productId = rows[0]?.id ?? ''
+    createdProductIds.push(productId)
+
+    // Two units on hand, then a threshold of 1: two is comfortably above it.
+    const opening = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId,
+        quantityDelta: 2,
+        reasonCode: 'FOUND',
+        unitCostMinor: 2_000,
+      }),
+    })
+    expect(opening.status).toBe(201)
+
+    const setThreshold = await app.request('/api/inventory/thresholds', {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, productId, threshold: 1 }),
+    })
+    expect(setThreshold.status).toBe(200)
+
+    const q = encodeURIComponent(`Threshold Product ${suffix}`)
+    const atOne = await app.request(`/api/inventory/stock?branchId=${branchAId}&q=${q}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    const atOneRow = (
+      await readJson<{ stock: Array<{ threshold: number; isLow: boolean }> }>(atOne)
+    ).stock[0]
+    expect(atOneRow).toMatchObject({ threshold: 1, isLow: false })
+
+    // Raise it to 3 and the same two units are now low.
+    await app.request('/api/inventory/thresholds', {
+      method: 'PUT',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({ branchId: branchAId, productId, threshold: 3 }),
+    })
+    const atThree = await app.request(`/api/inventory/stock?branchId=${branchAId}&q=${q}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    const atThreeRow = (
+      await readJson<{ stock: Array<{ threshold: number; isLow: boolean }> }>(atThree)
+    ).stock[0]
+    expect(atThreeRow).toMatchObject({ threshold: 3, isLow: true })
+  })
+
+  /**
+   * 17-05: stock the business already owns can enter the ledger with a cost.
+   * Before this, the only door was a supplier receipt, so a shop opening with
+   * goods on the shelf had to fake one.
+   */
+  it('opens stock with a cost and seeds the weighted average', async () => {
+    const rows = await db
+      .insert(product)
+      .values({
+        sku: `IAPI-${suffix}-OPEN`,
+        name: `Opening Stock ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 9_000,
+      })
+      .returning({ id: product.id })
+    const productId = rows[0]?.id ?? ''
+    createdProductIds.push(productId)
+
+    const open = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId,
+        quantityDelta: 10,
+        reasonCode: 'FOUND',
+        unitCostMinor: 5_000,
+        note: 'Stock on hand at opening',
+      }),
+    })
+    expect(open.status).toBe(201)
+    const opened = await readJson<{
+      movement: MovementResponse
+      level: { quantityOnHand: number; avgCostMinor: number }
+    }>(open)
+    expect(opened.level.quantityOnHand).toBe(10)
+    expect(opened.level.avgCostMinor).toBe(5_000)
+    expect(opened.movement.unitCostMinor).toBe(5_000)
+
+    // A second opening batch blends exactly like a receipt.
+    const second = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId,
+        quantityDelta: 10,
+        reasonCode: 'CORRECTION',
+        unitCostMinor: 7_000,
+      }),
+    })
+    expect(second.status).toBe(201)
+    expect((await readJson<{ level: { avgCostMinor: number } }>(second)).level.avgCostMinor).toBe(
+      6_000,
+    )
+
+    // Removing stock at a stated cost would revalue what is left.
+    const negativeCost = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId,
+        quantityDelta: -2,
+        reasonCode: 'DAMAGE',
+        unitCostMinor: 6_000,
+      }),
+    })
+    expect(negativeCost.status).toBe(400)
+
+    const negative = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        productId,
+        quantityDelta: -2,
+        reasonCode: 'DAMAGE',
+        note: 'Broken during handling',
+      }),
+    })
+    expect(negative.status).toBe(201)
+    const shrunk = await readJson<{ level: { quantityOnHand: number; avgCostMinor: number } }>(
+      negative,
+    )
+    expect(shrunk.level.quantityOnHand).toBe(18)
+    // The average is untouched: an issue takes the cost that is already there.
+    expect(shrunk.level.avgCostMinor).toBe(6_000)
+
+    // Opening stock is a branch fact, not a purchase price: the catalogue's last
+    // receipt cost stays where it was (P11-D13).
+    const catalogue = (
+      await db
+        .select({ costPriceMinor: product.costPriceMinor })
+        .from(product)
+        .where(eq(product.id, productId))
+    )[0]
+    expect(catalogue?.costPriceMinor).toBe(0)
   })
 })

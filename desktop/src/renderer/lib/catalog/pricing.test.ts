@@ -4,6 +4,7 @@ import {
   displayPriceMinor,
   indexByProduct,
   isTaxCategory,
+  outOfStockBlocked,
   stockBadge,
   toSellableProduct,
 } from './pricing'
@@ -72,6 +73,21 @@ describe('stock', () => {
     expect(availableQuantity(10, -3)).toBe(7)
     expect(availableQuantity(0, 0)).toBe(0)
     expect(availableQuantity(Number.NaN, 2)).toBe(2)
+  })
+
+  it('uses the branch threshold for "low", not a hard-coded five', () => {
+    expect(stockBadge(3, 2)).toEqual({ label: '3 in stock', tone: 'ok' })
+    expect(stockBadge(2, 2)).toEqual({ label: '2 left', tone: 'low' })
+    expect(stockBadge(9, 10)).toEqual({ label: '9 left', tone: 'low' })
+  })
+
+  it('decides when an out-of-stock add needs authorisation', () => {
+    // Pre-18 behaviour: badge only.
+    expect(outOfStockBlocked('ALLOW', 0)).toBe(false)
+    expect(outOfStockBlocked('BLOCK', 0)).toBe(true)
+    // Anything on hand is addable; an oversold level is still a blocked add.
+    expect(outOfStockBlocked('BLOCK', 1)).toBe(false)
+    expect(outOfStockBlocked('BLOCK', -2)).toBe(true)
   })
 
   it('labels oversold, out, low, and healthy stock', () => {

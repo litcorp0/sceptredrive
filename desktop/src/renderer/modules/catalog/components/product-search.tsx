@@ -1,5 +1,6 @@
 import { useQuery } from '@powersync/react'
 import { type RefObject, useMemo, useState } from 'react'
+import { ManagerOverrideDialog } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import type { SellableProduct } from '@/lib/cart/types'
 import { availableQuantity, indexByProduct, toSellableProduct } from '@/lib/catalog/pricing'
@@ -11,6 +12,8 @@ import {
   SEARCH_LIMIT,
 } from '@/lib/catalog/search'
 import { useDebouncedValue } from '@/lib/hooks'
+import { lockoutPolicyFor } from '@/lib/pos-config'
+import { usePos } from '@/lib/powersync/provider'
 import { ProductGrid } from './product-grid'
 
 /**
@@ -50,7 +53,15 @@ export function ProductSearch({
   onAdd: (product: SellableProduct) => void
   onUnknown: (code: string) => void
 }) {
+  const { session } = usePos()
+  const config = session?.config ?? null
+  // The branch's own threshold and policy, so the till agrees with the dashboard
+  // and the shop chooses whether stock may be sold at zero (18-04).
+  const threshold = config?.pos.lowStockThreshold ?? 5
+  const policy = config?.pos.outOfStockPolicy ?? 'ALLOW'
+
   const [term, setTerm] = useState('')
+  const [blocked, setBlocked] = useState<SellableProduct | null>(null)
   const debouncedTerm = useDebouncedValue(term, SEARCH_DEBOUNCE_MS)
 
   const query = useMemo(
@@ -106,6 +117,14 @@ export function ProductSearch({
     }
     onAdd(product)
     setTerm('')
+    focusRef.current?.focus()
+  }
+
+  /** A blocked add: a manager authorises it, then the line lands (18-04). */
+  function addBlocked(product: SellableProduct) {
+    onAdd(product)
+    setTerm('')
+    setBlocked(null)
     focusRef.current?.focus()
   }
 
@@ -171,30 +190,54 @@ export function ProductSearch({
         ) : null}
       </div>
 
-      <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span data-testid="product-count">
-          {searching ? `${shown} match${shown === 1 ? '' : 'es'}` : `${shown} products`}
-        </span>
-        {shown >= (searching ? SEARCH_LIMIT : BROWSE_LIMIT) ? (
-          <span>
-            Showing the first {searching ? SEARCH_LIMIT : BROWSE_LIMIT} — refine the search
-          </span>
-        ) : null}
-      </div>
+      {searching ? (
+        <>
+          <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span data-testid="product-count">{`${shown} match${shown === 1 ? '' : 'es'}`}</span>
+            {shown >= SEARCH_LIMIT ? (
+              <span>Showing the first {SEARCH_LIMIT} — refine the search</span>
+            ) : null}
+          </div>
 
-      <div className="min-h-0 flex-1">
-        <ProductGrid
-          rows={products.data ?? []}
-          priceOverrides={priceOverrides}
-          available={available}
-          onAdd={onAdd}
-          empty={
-            searching
-              ? `Nothing matches “${term.trim()}”. Check the spelling, or use the barcode.`
-              : 'No products have synced to this terminal yet.'
-          }
+          <div className="min-h-0 flex-1">
+            <ProductGrid
+              rows={products.data ?? []}
+              priceOverrides={priceOverrides}
+              available={available}
+              threshold={threshold}
+              policy={policy}
+              onAdd={onAdd}
+              onBlocked={setBlocked}
+              empty={`Nothing matches “${term.trim()}”. Check the spelling, or use the barcode.`}
+            />
+          </div>
+        </>
+      ) : (
+        // No cards until something is typed or scanned: a shop with thousands of
+        // SKUs is searched, not browsed (18-04).
+        <div
+          className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/40 p-8 text-center"
+          data-testid="catalogue-idle"
+        >
+          <p className="text-sm font-medium">Scan a barcode, or search by name or SKU.</p>
+          <p className="mt-1 max-w-md text-xs text-muted-foreground">
+            The catalogue is searchable only, so a long product list never hides the item in front
+            of you.
+          </p>
+        </div>
+      )}
+
+      {blocked ? (
+        <ManagerOverrideDialog
+          title="Out of stock"
+          description={`“${blocked.name}” has nothing on hand at this branch. A manager may authorise selling it; the sale records the stock conflict.`}
+          permission="inventory.adjust"
+          policy={lockoutPolicyFor(config)}
+          onClose={() => setBlocked(null)}
+          onApproved={() => addBlocked(blocked)}
+          {...(policy === 'WARN' ? { onBypass: () => addBlocked(blocked) } : {})}
         />
-      </div>
+      ) : null}
     </div>
   )
 }

@@ -46,6 +46,7 @@ export const CONFLICT_TYPE_LABELS: Record<string, string> = {
   UNKNOWN_PRODUCT: 'Unknown product',
   PAYMENT_LATE_SETTLEMENT: 'Payment settled late',
   PAYMENT_AMOUNT_MISMATCH: 'Payment amount mismatch',
+  SALE_AFTER_SHIFT_CLOSE: 'Sale reached the server after its shift closed',
 }
 
 export const CONFLICT_SEVERITY_LABELS: Record<'LOW' | 'MEDIUM' | 'HIGH', string> = {

@@ -79,7 +79,7 @@ export function ProductSubmissionPage() {
 
 	if (isAdmin) {
 		return (
-			<section className="mx-auto max-w-3xl">
+			<section className="mx-auto">
 				<BackLink />
 				<h2 className="text-lg font-semibold tracking-tight">Submit a product</h2>
 				<p className="mt-1 text-sm text-muted-foreground">
@@ -95,7 +95,7 @@ export function ProductSubmissionPage() {
 
 	if (!canSubmit) {
 		return (
-			<section className="mx-auto max-w-3xl">
+			<section className="mx-auto">
 				<BackLink />
 				<p className="text-sm text-muted-foreground">
 					You don't have permission to submit products.
@@ -158,7 +158,7 @@ export function ProductSubmissionPage() {
 	const busy = submitMutation.isPending
 
 	return (
-		<section className="mx-auto max-w-3xl">
+		<section className="mx-auto">
 			<BackLink />
 			<h2 className="text-lg font-semibold tracking-tight">Submit a product</h2>
 			<p className="mt-1 text-sm text-muted-foreground">
@@ -299,8 +299,9 @@ export function ProductSubmissionPage() {
 					<CardHeader>
 						<CardTitle>Proposal</CardTitle>
 						<CardDescription>
-							The selling price is the figure the administrator is deciding. Costs come from goods
-							receipts, never from this form.
+							The selling price is the figure the administrator is deciding. Cost comes from a goods
+							receipt or an opening-stock adjustment, never from this form — and until one exists,
+							sales of this product report no margin rather than a guess.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4">

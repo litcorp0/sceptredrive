@@ -33,8 +33,10 @@ import {
   deleteBarcodeRow,
   deleteProductPriceRow,
   findBarcodeForProduct,
+  findBarcodeOwner,
   findPriceContext,
   findProductById,
+  findProductNameConflict,
   insertBarcode,
   insertProduct,
   insertProductPriceRow,
@@ -142,6 +144,42 @@ function normalizeBarcodes(codes: readonly string[] | undefined): string[] {
   return normalized
 }
 
+/**
+ * The two duplicate checks a new product must pass (17-01).
+ *
+ * Same name in the same category is refused outright — that is the unarguable
+ * case, and it is exactly how a catalogue ends up with three spellings of one
+ * product, three stock levels and three cost histories. A barcode is refused
+ * when another product already owns it, with a sentence instead of a unique
+ * violation. Both run before anything is written, on the direct create path and
+ * on a manager's submission, through this one function so they cannot drift.
+ */
+async function assertNotDuplicate(
+  executor: DbExecutor,
+  input: { name: string; categoryId: string; barcodes?: readonly string[] | undefined },
+): Promise<void> {
+  const nameConflict = await findProductNameConflict(input.name, input.categoryId, executor)
+  if (nameConflict) {
+    throw new AppError(
+      409,
+      'PRODUCT_DUPLICATE',
+      `"${input.name.trim()}" already exists in this category as ${nameConflict.sku}`,
+      { productId: nameConflict.id, sku: nameConflict.sku },
+    )
+  }
+
+  for (const code of normalizeBarcodes(input.barcodes)) {
+    const owner = await findBarcodeOwner(code, executor)
+    if (owner) {
+      throw new AppError(409, 'BARCODE_IN_USE', `Barcode ${code} already belongs to ${owner.sku}`, {
+        productId: owner.productId,
+        sku: owner.sku,
+        barcode: code,
+      })
+    }
+  }
+}
+
 /** Peeks the next SKU without consuming the sequence. */
 export async function suggestSku(): Promise<{ sku: string }> {
   return { sku: await peekSequenceValue('catalog.skuSequence') }
@@ -162,6 +200,12 @@ export async function createProduct(
       const categoryId = await validateCategoryRef(input.categoryId, tx)
       const brandId = await validateBrandRef(input.brandId, tx)
       const uomId = await validateUomRef(input.uomId, tx)
+
+      await assertNotDuplicate(tx, {
+        name: input.name,
+        categoryId,
+        barcodes: input.barcodes,
+      })
 
       const created = await insertProduct(
         {
@@ -237,8 +281,40 @@ export async function getProductDetail(user: SessionUser, id: string): Promise<P
   return { ...found, barcodes, overrides }
 }
 
+/**
+ * The fields a branch manager may not move on an existing product (17-02).
+ *
+ * Only a value that actually **changed** counts: the console posts the whole form,
+ * so an untouched protected field is not an attempt to edit it. The list is
+ * deliberately the identity and commercial fields — the ones that decide what the
+ * product is and what it costs — and excludes `description`.
+ */
+function protectedProductFields(
+  existing: ProductRow,
+  input: ProductUpdateInput,
+): readonly string[] {
+  const moved: string[] = []
+  if (input.sku !== undefined && input.sku !== existing.sku) moved.push('the SKU')
+  if (input.name !== undefined && input.name !== existing.name) moved.push('the name')
+  if (input.categoryId !== undefined && input.categoryId !== existing.categoryId) {
+    moved.push('the category')
+  }
+  if (input.uomId !== undefined && input.uomId !== existing.uomId) moved.push('the unit')
+  if (input.brandId !== undefined && (input.brandId ?? null) !== existing.brandId) {
+    moved.push('the brand')
+  }
+  if (input.basePriceMinor !== undefined && input.basePriceMinor !== existing.basePriceMinor) {
+    moved.push('the base price')
+  }
+  if (input.taxCategory !== undefined && input.taxCategory !== existing.taxCategory) {
+    moved.push('the tax category')
+  }
+  return moved
+}
+
 export async function updateProduct(
   actor: AuditActor,
+  user: SessionUser,
   id: string,
   input: ProductUpdateInput,
 ): Promise<ProductRow> {
@@ -246,6 +322,19 @@ export async function updateProduct(
     return await db.transaction(async (tx) => {
       const existing = await findProductById(id, tx)
       if (!existing) throw new NotFoundError('Product not found')
+
+      // 17-02: editing is field-scoped. A manager may fix a description; what the
+      // product *is* (name, category, unit, tax class, price, SKU) stays with an
+      // administrator, and a client that sends the field anyway is refused here
+      // rather than merely in the console (OWASP A01).
+      if (roleOf(user) !== 'ADMIN') {
+        const moved = protectedProductFields(existing, input)
+        if (moved.length > 0) {
+          throw new ForbiddenError(
+            `Only an administrator can change ${moved.join(', ')}. A branch manager may edit the description.`,
+          )
+        }
+      }
 
       const patch: Partial<typeof product.$inferInsert> = {}
 
@@ -746,10 +835,18 @@ export async function submitProduct(
 
   // Fail at submit, not at the decision: a proposal that names an archived
   // category is a mistake the manager can fix in a minute.
-  await validateCategoryRef(input.categoryId, db)
+  const categoryId = await validateCategoryRef(input.categoryId, db)
   await validateUomRef(input.uomId, db)
   await validateBrandRef(input.brandId ?? null, db)
   if (input.supplierId) await suppliersService.requireSupplier(input.supplierId)
+
+  // The manager learns about a duplicate now, not after an admin has read the
+  // request (17-01).
+  await assertNotDuplicate(db, {
+    name: input.name,
+    categoryId,
+    barcodes: input.barcode ? [input.barcode] : undefined,
+  })
 
   const approval = await db.transaction(async (tx) =>
     approvalsService.requestApproval(

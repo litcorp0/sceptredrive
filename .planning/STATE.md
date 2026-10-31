@@ -11,6 +11,181 @@
 > `two_factor` table and `user.two_factor_enabled`. The console no longer has a
 > setup page, an auth-policy endpoint, or an `auth.requireTwoFactor` setting.
 
+> **2026-10-28 (evening, live-sale incident):** A sale rung at `TEM-MNZ-T01` never
+> reached the server. Two defects, found from the till's own evidence (the receipt
+> and the Z said expected cash **165 000** while `shift.server_expected_cash_minor`
+> was **0**):
+>
+> 1. **The cause.** The till echoed `providerReference` on every tender and the
+>    server's strict upload schema refused the unknown key, so the whole batch was
+>    a `400` and the client **dead-lettered the sale** (`unrecognized key
+>    providerReference`). Fixed in `1b8ffad` (the server accepts and ignores the
+>    legacy field; the till stopped sending it). The API was already running that
+>    fix; the row simply had never been retried.
+> 2. **The trap behind it.** `applySale` refused any sale whose shift was no longer
+>    `OPEN`, and a shift closes 77 minutes after its last sale in the ordinary
+>    course of a day. A retry would have been refused `SHIFT_CLOSED` and would have
+>    written a permanent `REJECTED` reservation under that `client_transaction_id`,
+>    making the sale unrecoverable forever.
+>
+> **What changed.** `SALE_AFTER_SHIFT_CLOSE` (migration `0019`, 17 conflict types):
+> a sale dated at or before its shift's `closed_at` is **applied** — stock, credit,
+> loyalty, E-VAT queue and audit — and raises a HIGH conflict carrying the shift,
+> the sale's time, the lag, the total, the cash tendered and the change. A sale
+> dated *after* the close is still `SHIFT_CLOSED`, and a late arrival no longer
+> also raises `CLOCK_SKEW` (one incident, one conflict). The closed shift's stored
+> Z figures are deliberately **not** rewritten: the close is a snapshot of what the
+> server knew, and the variance review is where a person reconciles it.
+> The close dialog now states how many sales are waiting or stuck and asks for one
+> acknowledgement (it still never blocks). **Retry on a dead letter is no longer
+> manager-only** — it re-sends an immutable fact the server revalidates, and the
+> authority that matters (resolving a conflict) stays manager-only and
+> server-enforced by `conflict.resolve`.
+>
+> **Gates.** `check-types` 6/6, `lint` exit 0 (19 pre-existing warnings), shared
+> **348**, API **837** (+15: the late-sale rule, the after-close refusal, the
+> one-conflict rule), desktop **615** (+5). Two API tests pin the behaviour.
+> **Carried:** the console has no list of refused uploads (a refused retry is
+> visible only on the till), `test:counter` was not re-run, and the retry gate is
+> UI-only — it has no unit test.
+
+> **2026-10-28 (evening, default credit line):** The admin can now grant the credit
+> policy once instead of approving each customer's first limit.
+> `credit.defaultLimitMinor` (integer pesewas, branch-overridable, **admin-only**,
+> default **0** = off) is the line a brand-new branch profile is born with.
+> `ensureCreditProfile` (`api/src/modules/credit/credit.profile.ts`) is the one
+> place a profile is created — profile edit, limit request, manual adjustment, the
+> credit charge on a sale, the console's customer create and the POS draft-customer
+> upload all pass through it — and it writes `credit.profile_created` with the
+> value and `limitSource: 'default'`, so a granted line is always attributable.
+> **Birth only:** an existing profile is never rewritten, so turning the default on
+> does not hand credit to yesterday's customers and an explicit `0` stays `0`.
+> Managers keep the safe direction (lower, hold, terms) and any increase is still a
+> `CREDIT_LIMIT_CHANGE` request — which is why the setting is admin-only: a manager
+> who could raise it would bypass that approval.
+> Taken on the operator's "implement please" without the three answers, so the
+> conservative reading of each: **0** by default, **no** backfill of existing
+> customers, and **no** POS config-snapshot change — a customer registered offline
+> still needs one manager approval on the first credit sale, until the profile
+> syncs down. Turning the default on is a decision about unsecured exposure: a
+> phone number then buys up to the default with no manager in the loop.
+> **Gates:** `check-types` 6/6, `lint` exit 0 (19 warnings), API **841** (+4),
+> shared **348**, desktop **615**. Tests: the branch default at registration, the
+> next default applying only to new profiles, an explicit zero surviving, a manager
+> refused the setting (403), and a POS draft customer created at the default with
+> no `CREDIT_OVER_LIMIT`. The `customers.test.ts` fixtures that inserted a profile
+> by hand now update the one registration opened.
+
+> **2026-10-29 (pre-registration trading):** The business is not VAT-registered yet,
+> so the till must not charge the 20% stack. Two switches, deliberately separate:
+> `flag.evatSubmission` (does a sale get *reported* to GRA) is now **false** in the
+> dev database, and a new `pricing.vatRegistered` (does the customer get *charged*)
+> is **false**, defaulting to **true** in code so an existing deployment cannot stop
+> collecting tax because a setting was never written.
+> `priceCart` prices every line as `EXEMPT` when the flag is false and the line is
+> **stored** exempt — an untaxed supply, not a taxed one at zero. The value travels
+> to the till in `PosConfigSnapshot` (so offline pricing cannot disagree with the
+> server) and through `heldPricingContext` for recalled carts, where a missing field
+> means taxable. The admin console has the label under Pricing and says plainly that
+> it is not the GRA switch. Tests: shared `priceCart` (+2), desktop `computeCartTotals`
+> (+1), and an API sale that stores zero VAT and an `EXEMPT` line. `check-types` 6/6.
+> Turning it on when the VAT certificate lands is one setting; historic lines keep
+> `EXEMPT`, which is what they were.
+> Also: a new untracked `web/` project (its own Biome root) broke `bun run lint`; it
+> is excluded in the root `biome.json` rather than edited, and is not a workspace so
+> `check-types` and `test` never see it. It has no relation to this repository's
+> gates and should be wired deliberately if it is meant to join the monorepo.
+
+> **2026-10-29 (post-v1 web presence — complete):** Phase 16 shipped the supplied logo as a
+> transparent master in `packages/brand/assets` (plus an inverse for charcoal surfaces and a
+> padded icon), copied to `admin`, `desktop` and the new `web` workspace. The site is a
+> TanStack Start app whose copy, contact details, shop status and per-branch hours are
+> `web.*` settings edited in **Admin → Settings → Website** and read through a whitelisted
+> `GET /api/public/site`; the site renders from a bundled fallback when the API is down.
+> The operator scaffolded `web/` with the TanStack CLI on 2026-10-29; it is adopted, pinned
+> to the console's React/TanStack versions, and added to the workspace and the token gate.
+> **It is not a shop:** no cart, checkout, prices, stock or customer accounts, and `/shop`
+> is an explicit coming-soon seam asserted by the walkthrough. Gates: `check-types` 7/7,
+> `lint` exit 0 with **0 warnings**, shared **354** (+6), API **850** (+9),
+> desktop **616** (+1), web **26** (new), `brand:check` 1 269 files, `tokens:check` OK,
+> `bun run build` green including the packaged POS, and the website walkthrough 38 PASS /
+> 0 FAIL. Verification: `phases/16-web-presence/05-VERIFICATION.md`.
+
+> **2026-10-29 (site content correction):** the site now lists exactly the ranges the
+> business deals in — **lubricants, batteries, belts, filters, spark plugs and light
+> bulbs**. Every "ask the counter" / part-enquiry action was removed: the site is an online
+> presence for Paystack onboarding and for customers to see the ranges and find a branch,
+> not an online shop. `/shop` states plainly that there is no online ordering, basket,
+> checkout or payment; the API defaults and the bundled fallback carry the same copy. The
+> external walkthrough asserts no selling control on any route.
+
+> **2026-10-29 (PowerSync local sync):** `bun run sync:up` now force-recreates the
+> PowerSync container. A running container keeps the config it booted with, so after the
+> script inlined the API's public JWKS the old process still fetched
+> `host.docker.internal:4000` and failed with `PSYNC_S2204` (the API is unreachable from
+> inside the container on this host). Recreating loads the inline key; the POS reconnects
+> and the service logs `Sync stream started` / `checkpoint_complete` with its seven buckets.
+
+> **2026-10-30 (Phase 17 — catalogue governance and costing):** Two operator decisions
+> from 2026-10-29 implemented as `.planning/phases/17-catalogue-and-costing/` (five plans,
+> plans + research + summary committed with the code).
+>
+> **Catalogue.** The item master stays central: managers keep proposing and admins keep
+> deciding. What changed is that editing is now **field-scoped** — a new
+> `catalog.describe` permission (manager + admin) lets a manager fix a description and is
+> refused any real change to name, category, unit, brand, base price, tax category or SKU
+> **in the service**, not merely in the console. Unchanged protected values are tolerated
+> because the form posts everything. Duplicate detection runs at create *and* at submit:
+> the same trimmed, case-insensitive name inside one category is `409 PRODUCT_DUPLICATE`
+> naming the existing SKU, and a barcode another product owns is `409 BARCODE_IN_USE`
+> instead of a unique violation surfacing as a 500.
+>
+> **Costing.** A sale now costs the branch average, else the product's **last receipt
+> cost** (`product.cost_price_minor`, already derived from receipts — P11-D13 untouched),
+> else zero. This is the industry-standard last-cost estimate and removes the absurd
+> "100% margin on goods never bought" for any product bought anywhere in the company.
+> Where even that is zero, the truth is stated instead of flattered: `marginBp` is `null`
+> when every sold unit was uncosted, and the overview and products report carry
+> `uncostedRevenueMinor` / `uncostedLines` so the console can say "No cost known — GH₵ X
+> sold without one". Opening stock can finally carry a cost: a positive `FOUND` or
+> `CORRECTION` adjustment may send `unitCostMinor`, seeds the weighted average like a
+> receipt, and stores the cost on the movement; a negative adjustment carrying a cost is
+> refused, and the catalogue's last receipt cost is never rewritten by an adjustment.
+>
+> **Numbers.** shared **355** (+5), desktop **616**, api **865/62 files** (full suite),
+> `check-types` **7/7**, `lint` exit 0, brand gate 1 270 files. `test:counter` not run.
+> **Deliberately carried:** cost variance for sales made before the first receipt (needs
+> its own append-only document), near-duplicate scoring, branch-local products, and a
+> second user-typed cost field (refused: P11-D13).
+> **Housekeeping:** `web/` is a workspace with its own Biome root, so the repository
+> `bun lint` excludes it and its own script covers it; unifying the two means setting
+> `"root": false` in `web/biome.json`.
+
+> **2026-10-31 (Phase 18 — stock truth and till discipline):** Six symptoms, one cause.
+> `stock_level` rows are created lazily, and every inventory read started `FROM stock_level`,
+> so a product that had never been stocked was invisible — the stock list hid it, the analytics
+> inventory tab counted it in neither `distinct_products` nor `out_of_stock`, and
+> `LOW_STOCK_SQL` required a `stock_threshold` row nobody had created. Reads now start from
+> `product`: every active product appears at a branch with `quantity 0` and a `neverStocked`
+> flag, and the counts follow.
+>
+> **Thresholds.** `inventory.defaultLowStockThreshold` (5, branch-scoped, manager-writable) with
+> the product's own row winning over it, expressed once in `stock-threshold.sql.ts` and read by
+> the stock list, the inventory totals and the attention counts. The buckets are disjoint:
+> `1…threshold` is low, `≤ 0` is out of stock. The dashboard gained **Out of stock** and
+> **Low stock** tiles.
+>
+> **The till.** Search-only catalogue (no cards until something is typed or scanned), and an
+> out-of-stock hit is dimmed with `aria-disabled` and needs a manager PIN
+> (`pos.outOfStockPolicy`: `BLOCK` default, `WARN`, `ALLOW`). The authorised sale still records
+> `STOCK_OVERSELL`; **AGENTS.md was amended** so the invariant is "never lose a sale, and never
+> sell silently what the record says is not there" rather than "never block".
+>
+> **Numbers.** desktop **618** (+2), API **869 / 63 files** (full suite),
+> `check-types` 7/7, `lint` exit 0, no migration. **Carried:** pre-filtered dashboard links, the
+> prefilled opening-stock dialog from an approval, a branch assortment (a branch's out-of-stock
+> count is the whole catalogue, which is true but noisy at scale), and a computed reorder point.
+
 **Status:** **Phase 14 (Admin Operations & E-VAT) is complete and verified — 13/13 plans.**
 Every gate is green: `check-types` 6/6, `lint` exit 0 with 19 pre-existing warnings,
 `modules:check:strict` **21/21 admin and 16/16 POS**, brand gate over **1 201** files, shared
@@ -56,6 +231,9 @@ added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & A
 | 13 | POS Payments, Returns & Shifts | ✅ Complete (13/13 plans, verified) |
 | 14 | Admin Operations & E-VAT | ✅ Complete (13/13 plans, verified) |
 | 15 | Production Hardening & Launch | ⏸ Context deferred — blocked on deployment inputs |
+| 16 | Web Presence & Console-Managed Site Content | ✅ Complete (4/4 plans, verified, post-v1) |
+| 17 | Catalogue Governance & Costing | ✅ Complete (5/5 plans, summary written) |
+| 18 | Stock Truth & Till Discipline | ✅ Complete (5/5 plans, summary written) |
 
 ### Phase 14 execution notes (2026-10-28)
 

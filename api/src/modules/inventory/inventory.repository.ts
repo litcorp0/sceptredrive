@@ -1,5 +1,5 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, count, desc, eq, gte, ilike, isNotNull, lte, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import { category } from '../catalog/catalog.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { product } from '../products/products.schema.ts'
@@ -22,6 +22,7 @@ import type {
   StockReceiptRow,
   ThresholdRow,
 } from './inventory.types.ts'
+import { effectiveThresholdSql } from './stock-threshold.sql.ts'
 
 export interface MovementInsert {
   productId: string
@@ -357,24 +358,30 @@ export async function countMovements(
 
 function stockConditions(filters: StockListFilters) {
   const conditions = [eq(product.isActive, true)]
-  // An admin who has chosen no branch reads the low-stock picture across every
-  // branch; each row carries its own branch so the console never guesses.
-  if (filters.branchId) conditions.push(eq(stockLevel.branchId, filters.branchId))
+  // The branch join already applies the scope; a product with no level at that
+  // branch is a row with a null level, not a missing row (18-01).
   if (filters.q) {
     const pattern = `%${filters.q}%`
     const prefix = `${filters.q}%`
     const search = or(ilike(product.name, pattern), ilike(product.sku, prefix))
     if (search) conditions.push(search)
   }
+  const onHand = sql`coalesce(${stockLevel.quantityOnHand}, 0)`
+  const threshold = effectiveThresholdSql(sql`${branch.id}`, sql`${stockThreshold.threshold}`)
   if (filters.lowStock) {
-    const low = and(
-      isNotNull(stockThreshold.threshold),
-      lte(stockLevel.quantityOnHand, stockThreshold.threshold),
-    )
-    if (low) conditions.push(low)
+    conditions.push(sql`${onHand} between 1 and ${threshold}`)
+  }
+  if (filters.outOfStock) {
+    conditions.push(sql`${onHand} <= 0`)
   }
   return conditions
 }
+
+/** One active product at this branch, whether or not it has a stock level. */
+const branchScope = (filters: StockListFilters) =>
+  filters.branchId
+    ? and(eq(branch.isActive, true), eq(branch.id, filters.branchId))
+    : eq(branch.isActive, true)
 
 export async function selectStockPage(
   filters: StockListFilters,
@@ -390,34 +397,40 @@ export async function selectStockPage(
     branchName: string
     quantityOnHand: number
     avgCostMinor: number
-    threshold: number | null
+    threshold: number
+    neverStocked: boolean
     updatedAt: Date
   }[]
 > {
+  const scope = branchScope(filters)
+  if (!scope) throw new Error('Unreachable: branch scope has no condition')
   return executor
     .select({
-      productId: stockLevel.productId,
+      productId: product.id,
       sku: product.sku,
       productName: product.name,
       categoryName: category.name,
-      branchId: stockLevel.branchId,
+      branchId: branch.id,
       branchCode: branch.code,
       branchName: branch.name,
-      quantityOnHand: stockLevel.quantityOnHand,
-      avgCostMinor: stockLevel.avgCostMinor,
-      threshold: stockThreshold.threshold,
-      updatedAt: stockLevel.updatedAt,
+      quantityOnHand: sql<number>`coalesce(${stockLevel.quantityOnHand}, 0)`.mapWith(Number),
+      avgCostMinor: sql<number>`coalesce(${stockLevel.avgCostMinor}, 0)`.mapWith(Number),
+      threshold: effectiveThresholdSql(sql`${branch.id}`, sql`${stockThreshold.threshold}`).mapWith(
+        Number,
+      ),
+      neverStocked: sql<boolean>`${stockLevel.id} is null`,
+      updatedAt: sql<Date>`coalesce(${stockLevel.updatedAt}, ${product.updatedAt})`,
     })
-    .from(stockLevel)
-    .innerJoin(product, eq(product.id, stockLevel.productId))
+    .from(product)
+    .innerJoin(branch, scope)
     .innerJoin(category, eq(category.id, product.categoryId))
-    .innerJoin(branch, eq(branch.id, stockLevel.branchId))
+    .leftJoin(
+      stockLevel,
+      and(eq(stockLevel.productId, product.id), eq(stockLevel.branchId, branch.id)),
+    )
     .leftJoin(
       stockThreshold,
-      and(
-        eq(stockThreshold.productId, stockLevel.productId),
-        eq(stockThreshold.branchId, stockLevel.branchId),
-      ),
+      and(eq(stockThreshold.productId, product.id), eq(stockThreshold.branchId, branch.id)),
     )
     .where(and(...stockConditions(filters)))
     .orderBy(product.name)
@@ -429,16 +442,19 @@ export async function countStockRows(
   filters: StockListFilters,
   executor: DbExecutor = db,
 ): Promise<number> {
+  const scope = branchScope(filters)
+  if (!scope) throw new Error('Unreachable: branch scope has no condition')
   const rows = await executor
     .select({ total: count() })
-    .from(stockLevel)
-    .innerJoin(product, eq(product.id, stockLevel.productId))
+    .from(product)
+    .innerJoin(branch, scope)
+    .leftJoin(
+      stockLevel,
+      and(eq(stockLevel.productId, product.id), eq(stockLevel.branchId, branch.id)),
+    )
     .leftJoin(
       stockThreshold,
-      and(
-        eq(stockThreshold.productId, stockLevel.productId),
-        eq(stockThreshold.branchId, stockLevel.branchId),
-      ),
+      and(eq(stockThreshold.productId, product.id), eq(stockThreshold.branchId, branch.id)),
     )
     .where(and(...stockConditions(filters)))
   return rows[0]?.total ?? 0

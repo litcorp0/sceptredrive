@@ -66,6 +66,7 @@ export function ProductForm({
 	brands,
 	units,
 	readOnly = false,
+	descriptionEditable = false,
 	barcodeEditor,
 	createBarcodes,
 	onSaved,
@@ -76,6 +77,11 @@ export function ProductForm({
 	brands: Brand[]
 	units: Uom[]
 	readOnly?: boolean
+	/**
+	 * 17-02: a branch manager may fix a description even though the identity and
+	 * commercial fields stay read-only. The API enforces the same split.
+	 */
+	descriptionEditable?: boolean
 	barcodeEditor?: ReactNode
 	/** Barcodes submitted with a create (the API takes them in one call). */
 	createBarcodes?: string[]
@@ -190,6 +196,8 @@ export function ProductForm({
 
 	const basePriceMinor = parseGhsToMinor(values.basePrice)
 	const disabled = readOnly || saveMutation.isPending
+	// Only the description survives a read-only form for a manager.
+	const descriptionDisabled = saveMutation.isPending || (readOnly && !descriptionEditable)
 
 	const categoryOptions = categories.flatMap((parent) => [
 		{ id: parent.id, label: parent.name, active: parent.isActive },
@@ -334,7 +342,8 @@ export function ProductForm({
 					</div>
 
 					{/*
-					 * No cost field: the catalogue cost follows the latest goods receipt (P11-D13).
+					 * No cost field: the catalogue cost follows the latest goods receipt (P11-D13), and a
+					 * branch average can also come from an opening-stock adjustment (17-05).
 					 * The read-only line lives on the product detail page, beside the price history;
 					 * a form field here would be a second, editable source of truth and the API
 					 * rejects it (`productUpdateSchema` is strict).
@@ -370,7 +379,7 @@ export function ProductForm({
 							rows={2}
 							maxLength={500}
 							value={values.description}
-							disabled={disabled}
+							disabled={descriptionDisabled}
 							onChange={(event) => update("description", event.target.value)}
 						/>
 					</div>
@@ -383,13 +392,13 @@ export function ProductForm({
 						</p>
 					) : null}
 
-					{readOnly ? (
+					{readOnly && !descriptionEditable ? (
 						<p className="text-sm text-muted-foreground">
-							This product is archived. Reactivate it to make changes.
+							This product is archived, or you may not edit it. Reactivate it to make changes.
 						</p>
 					) : (
 						<div className="flex justify-end">
-							<Button type="submit" disabled={disabled}>
+							<Button type="submit" disabled={disabled && !descriptionEditable}>
 								{saveMutation.isPending ? "Saving…" : isEdit ? "Save changes" : "Create product"}
 							</Button>
 						</div>

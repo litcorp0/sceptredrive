@@ -14,6 +14,16 @@ export interface CartPricingOptions {
   taxMode: TaxMode
   saleDiscountMinor?: number
   loyaltyDiscountMinor?: number
+  /**
+   * Whether the business is VAT-registered at all. `false` prices every line as
+   * `EXEMPT` — no VAT, no NHIL, no GETFund — whatever the catalogue says about
+   * the product. A business that is not registered must not charge the levies,
+   * and marking five thousand products by hand is how one gets missed.
+   *
+   * Omitted means `true`: every existing caller keeps the old arithmetic, and a
+   * caller that forgets it cannot silently stop collecting tax.
+   */
+  vatRegistered?: boolean
 }
 
 export interface PricedLine {
@@ -191,7 +201,11 @@ export function priceCart(
     const netAfterSaleLine = netAfterSale[index] ?? 0
     const loyaltyShare = loyaltyShares[index] ?? 0
     const taxableMinor = netAfterSaleLine - loyaltyShare
-    const breakdown: TaxBreakdown = taxBreakdown(taxableMinor, line.taxCategory, options.taxMode)
+    // A business that is not VAT-registered charges no levies at all. The stored
+    // line says `EXEMPT` because that is what the money is: an untaxed supply,
+    // not a standard-rated one that happened to be zero.
+    const taxCategory = options.vatRegistered === false ? 'EXEMPT' : line.taxCategory
+    const breakdown: TaxBreakdown = taxBreakdown(taxableMinor, taxCategory, options.taxMode)
 
     return {
       productId: line.productId,
@@ -199,7 +213,7 @@ export function priceCart(
       sku: line.sku,
       quantity: line.quantity,
       unitPriceMinor: line.unitPriceMinor,
-      taxCategory: line.taxCategory,
+      taxCategory,
       grossMinor: grossByLine[index] ?? 0,
       lineDiscountMinor: line.lineDiscountMinor ?? 0,
       saleDiscountMinor: saleShares[index] ?? 0,

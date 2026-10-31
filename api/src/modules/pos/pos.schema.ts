@@ -75,6 +75,8 @@ export const syncConflictTypeEnum = pgEnum('sync_conflict_type', [
   // list, in order, by the phase 13 schema test, so the two move together.
   'PAYMENT_LATE_SETTLEMENT',
   'PAYMENT_AMOUNT_MISMATCH',
+  // A sale applied after its shift closed: a conflict, never a rejection.
+  'SALE_AFTER_SHIFT_CLOSE',
 ])
 
 export const syncConflictSeverityEnum = pgEnum('sync_conflict_severity', ['LOW', 'MEDIUM', 'HIGH'])

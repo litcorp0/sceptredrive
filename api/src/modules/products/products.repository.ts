@@ -27,6 +27,46 @@ export async function findProductById(
   return rows[0] ?? null
 }
 
+/**
+ * The product that already owns this name inside this category (17-01).
+ *
+ * Comparison is in SQL on `lower(trim(name))` so two clients looking at the same
+ * rows cannot disagree about what "the same name" means. An archived product
+ * still counts: reactivating it is better than creating a twin beside it.
+ */
+export async function findProductNameConflict(
+  name: string,
+  categoryId: string,
+  executor: DbExecutor = db,
+  excludeProductId?: string,
+): Promise<{ id: string; sku: string } | null> {
+  const conditions = [
+    sql`lower(trim(${product.name})) = lower(trim(${name}))`,
+    eq(product.categoryId, categoryId),
+  ]
+  if (excludeProductId) conditions.push(sql`${product.id} <> ${excludeProductId}`)
+  const rows = await executor
+    .select({ id: product.id, sku: product.sku })
+    .from(product)
+    .where(and(...conditions))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+/** The product that already owns this barcode, if any (17-01). */
+export async function findBarcodeOwner(
+  code: string,
+  executor: DbExecutor = db,
+): Promise<{ productId: string; sku: string } | null> {
+  const rows = await executor
+    .select({ productId: barcode.productId, sku: product.sku })
+    .from(barcode)
+    .innerJoin(product, eq(product.id, barcode.productId))
+    .where(eq(barcode.code, code))
+    .limit(1)
+  return rows[0] ?? null
+}
+
 export async function updateProductRow(
   id: string,
   patch: Partial<typeof product.$inferInsert>,

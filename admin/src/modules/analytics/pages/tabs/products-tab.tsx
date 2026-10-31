@@ -107,7 +107,11 @@ export function ProductsTab() {
 				<KpiTile
 					label="Gross margin"
 					value={formatBasisPoints(data.totals.marginBp)}
-					detail="Tax-exclusive revenue minus frozen cost"
+					detail={
+						data.totals.marginBp === null && data.totals.uncostedRevenueMinor > 0
+							? `No cost known — ${formatGhs(data.totals.uncostedRevenueMinor)} sold without one`
+							: "Tax-exclusive revenue minus frozen cost"
+					}
 				/>
 				<KpiTile label="Units sold" value={formatCount(data.totals.unitsSold)} />
 			</KpiRow>
@@ -238,7 +242,10 @@ export function ProductsTab() {
 									<TableCell className="text-right font-mono tabular-nums">
 										{formatGhs(row.grossProfitMinor)}
 									</TableCell>
-									<TableCell className="text-right font-mono tabular-nums">
+									<TableCell
+										className="text-right font-mono tabular-nums"
+										title={row.marginBp === null ? "No cost recorded for these sales" : undefined}
+									>
 										{formatBasisPoints(row.marginBp)}
 									</TableCell>
 								</TableRow>

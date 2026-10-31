@@ -23,6 +23,10 @@ export interface PosRuntimeConfig {
   syncBatchSize: number
   receiptFooter: string
   salesRequireOpenShift: boolean
+  /** Effective low-stock threshold, so the till's badge matches the dashboard (18-04). */
+  lowStockThreshold: number
+  /** What the till may do with an item that has nothing on hand (18-04). */
+  outOfStockPolicy: 'BLOCK' | 'WARN' | 'ALLOW'
 }
 
 /**
@@ -32,6 +36,12 @@ export interface PosRuntimeConfig {
  */
 export interface PosConfigSnapshot {
   taxMode: TaxMode
+  /**
+   * Whether the business charges VAT at all. `false` makes the till price every
+   * line exempt, so a shop that is not registered yet does not collect levies it
+   * would have to refund.
+   */
+  vatRegistered: boolean
   loyalty: PosLoyaltyConfig
   pos: PosRuntimeConfig
   receiptHeader: string

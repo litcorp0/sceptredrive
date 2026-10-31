@@ -162,6 +162,32 @@ export const SETTING_DEFINITIONS = {
     branchScoped: false,
     writableBy: 'admin',
   },
+  /**
+   * What counts as "low" when a product has no threshold of its own (18-02).
+   * Five is a starting number, not a forecast: a fast mover wants more, a slow
+   * one less, which is why the branch manager may change it and a product row
+   * still wins over the default.
+   */
+  'inventory.defaultLowStockThreshold': {
+    schema: z.number().int().min(0).max(10_000),
+    defaultValue: 5,
+    branchScoped: true,
+    writableBy: 'manager',
+  },
+  /**
+   * What the till does with an item that has nothing on hand (18-04).
+   *
+   * `BLOCK` refuses the add unless a manager authorises it; `WARN` adds it with a
+   * confirmation; `ALLOW` is the pre-18 behaviour. A blocked sale is still only a
+   * *silent* block: the override path and the server's `STOCK_OVERSELL` conflict
+   * mean an authorised oversell is recorded, never lost.
+   */
+  'pos.outOfStockPolicy': {
+    schema: z.enum(['BLOCK', 'WARN', 'ALLOW']),
+    defaultValue: 'BLOCK',
+    branchScoped: true,
+    writableBy: 'manager',
+  },
   'inventory.receiptPrefix': {
     schema: z
       .string()

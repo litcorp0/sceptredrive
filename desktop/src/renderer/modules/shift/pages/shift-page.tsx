@@ -24,6 +24,7 @@ import {
   recordCashMovement,
   type ShiftState,
 } from '@/lib/shift/shift-service'
+import { useUnsyncedSales } from '@/lib/sync/outbox-summary'
 import type { ReportDocument } from '../../../../shared/printing'
 import { ReportPreview } from '../components/report-preview'
 import { CashMovementDialog, CloseShiftDialog, OpenShiftDialog } from '../components/shift-dialogs'
@@ -83,6 +84,7 @@ function TenderRow({ label, value }: { label: string; value: string }) {
 export function ShiftRoute() {
   const { db, session } = usePos()
   const staff = useStaffSession()
+  const unsyncedSales = useUnsyncedSales()
   const [state, setState] = useState<ShiftState | null>(null)
   const [holds, setHolds] = useState<HeldCartSummary[]>([])
   /** The open drawer's cashier, from the device's own binding rows. */
@@ -523,6 +525,7 @@ export function ShiftRoute() {
           expectedCashMinor={expected}
           holds={holds}
           otherCashierName={closingForOther ? drawerCashier : null}
+          unsynced={unsyncedSales}
           onClose={() => setDialog(null)}
           onConfirm={handleClose}
         />

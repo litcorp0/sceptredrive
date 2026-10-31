@@ -101,6 +101,22 @@ export const SETTING_META: SettingMetaMap = {
 	},
 
 	// --- Inventory ------------------------------------------------------------
+	"inventory.defaultLowStockThreshold": {
+		label: "Default low-stock threshold",
+		description:
+			"Units at or below this are low stock when a product has no threshold of its own. 0 means only an empty shelf counts. A product's own threshold always wins.",
+	},
+	"pos.outOfStockPolicy": {
+		label: "Selling an out-of-stock item",
+		description:
+			"Block: a manager PIN is needed to add it. Warn: the cashier may sell anyway after a confirmation. Allow: add it with no prompt. The sale always records the stock conflict.",
+		control: "select",
+		options: [
+			{ value: "BLOCK", label: "Block (manager override)" },
+			{ value: "WARN", label: "Warn, then allow" },
+			{ value: "ALLOW", label: "Allow silently" },
+		],
+	},
 	"inventory.receiptPrefix": {
 		label: "Goods receipt prefix",
 		description: "Prefix for goods receipt numbers, e.g. GRN-00001. 1–8 letters or digits.",

@@ -148,6 +148,8 @@ export interface AdjustmentCreateInput {
   quantityDelta: number
   reasonCode: StockAdjustmentReason
   note?: string
+  /** Opening stock: what the units on the shelf cost (17-05). */
+  unitCostMinor?: number
 }
 
 export interface MovementListQuery {
@@ -182,6 +184,7 @@ export interface StockListQuery {
   lowStock?: boolean
   limit: number
   offset: number
+  outOfStock?: boolean
 }
 
 export interface StockListFilters {
@@ -189,6 +192,8 @@ export interface StockListFilters {
   branchId: string | null
   q?: string | undefined
   lowStock: boolean
+  /** Only rows with nothing on hand (18-01). Mutually exclusive with lowStock in the UI. */
+  outOfStock: boolean
   limit: number
   offset: number
 }
@@ -205,8 +210,11 @@ export interface StockRow {
   quantityOnHand: number
   avgCostMinor: number
   valueMinor: number
-  threshold: number | null
+  /** The effective threshold: the product's row, the branch default, or 5 (18-02). */
+  threshold: number
   isLow: boolean
+  /** True when this branch has never held the product, as opposed to holding none. */
+  neverStocked: boolean
   updatedAt: Date
 }
 

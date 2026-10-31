@@ -22,6 +22,7 @@ import {
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
+import { parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import { createAdjustment } from "../api/inventory"
 import { inventoryKeys } from "../api/keys"
@@ -52,6 +53,7 @@ export function AdjustDialog({
 	const [direction, setDirection] = useState<"in" | "out">("out")
 	const [quantity, setQuantity] = useState("")
 	const [reasonCode, setReasonCode] = useState<AdjustmentReason>("CORRECTION")
+	const [unitCost, setUnitCost] = useState("")
 	const [note, setNote] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 
@@ -61,9 +63,14 @@ export function AdjustDialog({
 		setDirection("out")
 		setQuantity("")
 		setReasonCode("CORRECTION")
+		setUnitCost("")
 		setNote("")
 		setFormError(null)
 	}, [open])
+
+	// Opening stock: stock the shop already owns, which a receipt cannot describe.
+	const openingStock = direction === "in" && (reasonCode === "FOUND" || reasonCode === "CORRECTION")
+	const parsedCost = openingStock ? parseGhsToMinor(unitCost) : null
 
 	const createMutation = useMutation({
 		mutationFn: (delta: number) =>
@@ -73,6 +80,9 @@ export function AdjustDialog({
 				quantityDelta: delta,
 				reasonCode,
 				...(note.trim() ? { note: note.trim() } : {}),
+				// Only a positive opening batch carries a cost; the field is not
+				// even shown for an issue (17-05).
+				...(openingStock && parsedCost !== null ? { unitCostMinor: parsedCost } : {}),
 			}),
 		onSuccess: async () => {
 			toast.success("Stock adjusted")
@@ -189,6 +199,23 @@ export function AdjustDialog({
 							rows={2}
 						/>
 					</div>
+
+					{openingStock ? (
+						<div className="grid gap-1.5">
+							<Label htmlFor="adjust-unit-cost">Unit cost (optional, GH₵)</Label>
+							<Input
+								id="adjust-unit-cost"
+								inputMode="decimal"
+								placeholder="12.50"
+								value={unitCost}
+								onChange={(event) => setUnitCost(event.target.value)}
+							/>
+							<p className="text-xs text-muted-foreground">
+								What these units cost you. Without it the branch average stays as it is, and sales
+								of this stock report no margin.
+							</p>
+						</div>
+					) : null}
 
 					{formError ? (
 						<p role="alert" className="text-sm text-destructive">

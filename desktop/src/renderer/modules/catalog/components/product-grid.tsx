@@ -2,9 +2,11 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import type { OutOfStockPolicy } from '@/lib/api/types'
 import type { SellableProduct } from '@/lib/cart/types'
 import {
   displayPriceMinor,
+  outOfStockBlocked,
   type StockBadge,
   stockBadge,
   toSellableProduct,
@@ -106,28 +108,45 @@ function ProductCard({
   row,
   overrideMinor,
   available,
+  threshold,
+  policy,
   onAdd,
+  onBlocked,
 }: {
   row: CatalogProductRow
   overrideMinor: number | null
   available: number
+  threshold: number
+  policy: OutOfStockPolicy
   onAdd: (product: SellableProduct) => void
+  /** A blocked add: ask a manager, rather than silently refusing (18-04). */
+  onBlocked: (product: SellableProduct) => void
 }) {
   const product = toSellableProduct(row, overrideMinor)
   const price = displayPriceMinor(row, overrideMinor)
-  const badge = stockBadge(available)
+  const badge = stockBadge(available, threshold)
   const dot = TONE_DOT[badge.tone]
+  // Blocked: dimmed, announced as disabled, and the click asks for a manager
+  // instead of adding. `ALLOW` is the pre-18 behaviour (badge only).
+  const blocked = outOfStockBlocked(policy, available)
 
   return (
     <button
       type="button"
       data-testid="product-card"
       data-sku={row.sku}
+      data-blocked={blocked ? 'true' : undefined}
+      aria-disabled={blocked || !product ? true : undefined}
       disabled={!product}
       onClick={() => {
-        if (product) onAdd(product)
+        if (!product) return
+        if (blocked) {
+          onBlocked(product)
+          return
+        }
+        onAdd(product)
       }}
-      className="grid h-[var(--product-card-height)] w-full grid-rows-[minmax(0,1fr)_auto] gap-1 overflow-hidden rounded-lg border border-border bg-card p-2 text-left transition-colors hover:border-line-strong hover:bg-muted/40 disabled:opacity-50"
+      className="grid h-[var(--product-card-height)] w-full grid-rows-[minmax(0,1fr)_auto] gap-1 overflow-hidden rounded-lg border border-border bg-card p-2 text-left transition-colors hover:border-line-strong hover:bg-muted/40 disabled:opacity-50 data-[blocked=true]:opacity-50 data-[blocked=true]:grayscale"
     >
       <div className="flex min-h-0 flex-wrap items-start justify-between gap-x-2 gap-y-0.5">
         <span
@@ -169,13 +188,19 @@ export function ProductGrid({
   rows,
   priceOverrides,
   available,
+  threshold,
+  policy,
   onAdd,
+  onBlocked,
   empty,
 }: {
   rows: readonly CatalogProductRow[]
   priceOverrides: Map<string, number>
   available: Map<string, number>
+  threshold: number
+  policy: OutOfStockPolicy
   onAdd: (product: SellableProduct) => void
+  onBlocked: (product: SellableProduct) => void
   empty: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -231,7 +256,10 @@ export function ProductGrid({
                   row={card}
                   overrideMinor={priceOverrides.get(card.id) ?? null}
                   available={available.get(card.id) ?? 0}
+                  threshold={threshold}
+                  policy={policy}
                   onAdd={onAdd}
+                  onBlocked={onBlocked}
                 />
               ))}
             </div>

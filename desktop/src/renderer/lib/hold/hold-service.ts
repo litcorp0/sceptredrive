@@ -388,11 +388,16 @@ export function heldPricingContext(row: {
 }): CartPricingContext {
   let pointsPerCedi = DEFAULT_POINTS_PER_CEDI
   let earnPointsPerCedi = 1
+  // A hold taken before the flag existed priced with tax, so an absent value is
+  // `true` rather than `false`: a missing field must never silently untax a cart.
+  let vatRegistered = true
   if (row.config_json) {
     try {
       const parsed = JSON.parse(row.config_json) as {
+        vatRegistered?: boolean
         loyalty?: { pointsPerCedi?: number; earnPointsPerCedi?: number }
       }
+      if (typeof parsed.vatRegistered === 'boolean') vatRegistered = parsed.vatRegistered
       const configuredPoints = parsed.loyalty?.pointsPerCedi
       const configuredEarn = parsed.loyalty?.earnPointsPerCedi
       if (typeof configuredPoints === 'number' && Number.isSafeInteger(configuredPoints)) {
@@ -408,6 +413,7 @@ export function heldPricingContext(row: {
   }
   return {
     taxMode: row.tax_mode === 'EXCLUSIVE' ? 'EXCLUSIVE' : 'INCLUSIVE',
+    vatRegistered,
     loyalty: { pointsPerCedi, earnPointsPerCedi },
   }
 }
@@ -576,6 +582,7 @@ export async function recallHeldCart(
       loyaltyPointsRequested: hold.loyalty_redeem_points,
       pricing: {
         taxMode: pricing.taxMode,
+        vatRegistered: pricing.vatRegistered,
         saleDiscountMinor: hold.sale_discount_minor,
         loyaltyDiscountMinor: requestedValue,
       },
@@ -620,6 +627,7 @@ export async function recallHeldCart(
       })),
       {
         taxMode: pricing.taxMode,
+        vatRegistered: pricing.vatRegistered,
         saleDiscountMinor: hold.sale_discount_minor,
         loyaltyDiscountMinor: requestedValue,
       },

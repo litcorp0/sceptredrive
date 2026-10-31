@@ -36,6 +36,8 @@ export function ProductDetailPage() {
 	const { branches } = useBranch()
 	const queryClient = useQueryClient()
 	const canUpdate = hasPermission(session.user.role, "catalog.update")
+	// A manager may describe a product but not redefine it (17-02).
+	const canDescribe = hasPermission(session.user.role, "catalog.describe")
 	const canArchive = hasPermission(session.user.role, "catalog.archive")
 	const canOverride = hasPermission(session.user.role, "price.override")
 	const isAdmin = session.user.role === "ADMIN"
@@ -157,7 +159,8 @@ export function ProductDetailPage() {
 					</>
 				) : (
 					<span className="text-muted-foreground">
-						No receipt yet — the cost is set by the first goods receipt.
+						No purchase yet. Sales cost at this branch's average, which a goods receipt or an
+						opening-stock adjustment sets; until then they report no margin.
 					</span>
 				)}
 			</div>
@@ -169,6 +172,7 @@ export function ProductDetailPage() {
 				brands={brandsQuery.data?.brands ?? []}
 				units={unitsQuery.data?.uoms ?? []}
 				readOnly={readOnly}
+				descriptionEditable={!canUpdate && canDescribe && product.isActive}
 				barcodeEditor={
 					<BarcodeEditor
 						items={product.barcodes.map((barcode) => ({ id: barcode.id, code: barcode.code }))}

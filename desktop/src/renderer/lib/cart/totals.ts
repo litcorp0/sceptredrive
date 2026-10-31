@@ -11,6 +11,13 @@ import type { CartState } from './types'
 
 export interface CartPricingContext {
   taxMode: TaxMode
+  /**
+   * False prices every line exempt: no VAT, NHIL or GETFund. Omitted means
+   * taxable — the safe default, so a caller that forgets the field cannot stop
+   * collecting tax by accident. The till always passes it from the config
+   * snapshot.
+   */
+  vatRegistered?: boolean
   loyalty: {
     /** Loyalty points per GHS 1 of redemption value (100 = 100 points per cedi). */
     pointsPerCedi: number
@@ -81,6 +88,7 @@ export function computeCartTotals(state: CartState, context: CartPricingContext)
     })),
     {
       taxMode: context.taxMode,
+      vatRegistered: context.vatRegistered,
       saleDiscountMinor: state.saleDiscount?.amountMinor ?? 0,
       loyaltyDiscountMinor: requestedValueMinor,
     },

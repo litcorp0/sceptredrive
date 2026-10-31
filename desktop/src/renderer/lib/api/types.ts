@@ -13,6 +13,9 @@ export interface PosLoyaltyConfig {
   minimumRedeemPoints: number
 }
 
+/** What the till may do with an item that has nothing on hand (18-04). */
+export type OutOfStockPolicy = 'BLOCK' | 'WARN' | 'ALLOW'
+
 export interface PosRuntimeSettings {
   maxCashierDiscountPercent: number
   maxManagerDiscountPercent: number
@@ -22,10 +25,16 @@ export interface PosRuntimeSettings {
   syncBatchSize: number
   receiptFooter: string
   salesRequireOpenShift: boolean
+  /** Effective low-stock threshold for the badge (18-04). */
+  lowStockThreshold: number
+  /** BLOCK refuses an out-of-stock add unless a manager authorises it (18-04). */
+  outOfStockPolicy: OutOfStockPolicy
 }
 
 export interface PosConfigSnapshot {
   taxMode: TaxMode
+  /** False means the shop charges no VAT/NHIL/GETFund: every line prices exempt. */
+  vatRegistered: boolean
   loyalty: PosLoyaltyConfig
   pos: PosRuntimeSettings
   receiptHeader: string

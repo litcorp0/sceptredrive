@@ -16,16 +16,24 @@ import type {
  * Phase 3 D16 pattern: insert-or-ignore, then lock the row `FOR UPDATE`.
  * Every credit write path locks the profile first, so balance updates
  * serialize per customer+branch without deadlocks.
+ *
+ * `limitMinor` is only spent when the insert actually happens: an existing
+ * profile keeps its own limit, because a default is a birth value and not a
+ * policy that rewrites yesterday's decisions. `created` is returned so the
+ * caller can audit the grant — a limit that appeared without a person in the
+ * trail is worse than no limit at all.
  */
 export async function lockOrCreateProfile(
   executor: DbExecutor,
   customerId: string,
   branchId: string,
-): Promise<CreditProfileRow> {
-  await executor
+  limitMinor = 0,
+): Promise<{ profile: CreditProfileRow; created: boolean }> {
+  const inserted = await executor
     .insert(creditProfile)
-    .values({ customerId, branchId })
+    .values({ customerId, branchId, limitMinor })
     .onConflictDoNothing({ target: [creditProfile.customerId, creditProfile.branchId] })
+    .returning({ id: creditProfile.id })
 
   const rows = await executor
     .select()
@@ -36,7 +44,7 @@ export async function lockOrCreateProfile(
 
   const row = rows[0]
   if (!row) throw new Error('Failed to lock the credit profile')
-  return row
+  return { profile: row, created: inserted.length > 0 }
 }
 
 export async function findProfile(
