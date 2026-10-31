@@ -8,6 +8,7 @@ import {
   readAllowLocalApiFlag,
 } from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import { APP_USER_MODEL_ID } from './identity'
 import { createKeychain } from './ipc/keychain'
 import { registerIpcHandlers } from './ipc/register'
 import { createPrinterRuntime } from './printing/printer'
@@ -19,6 +20,15 @@ import { createMainWindow, getMainWindow, navigationOrigins, preloadPathFor } fr
 // quit here keeps those runs from opening a window.
 if (started) {
   app.quit()
+}
+
+/**
+ * Windows groups taskbar buttons and routes notifications by App User Model ID.
+ * It must match the one Squirrel stamped on the installed shortcut, so set it as
+ * early as possible and only where it exists. See `identity.ts`.
+ */
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID)
 }
 
 // Must run before the app is ready so the scheme can be registered as privileged.

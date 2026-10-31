@@ -8,6 +8,7 @@ import {
   quoteIdentifier,
   selectTruncateTargets,
 } from '../src/seed/truncate.ts'
+import { describeError } from './cli-error.ts'
 
 /**
  * Wipe every application table while keeping the migrated schema.
@@ -132,7 +133,7 @@ async function main(): Promise<void> {
 
 main()
   .catch((error: unknown) => {
-    console.error(`[db:truncate] ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[db:truncate] ${describeError(error)}`)
     process.exitCode = 1
   })
   .finally(async () => {

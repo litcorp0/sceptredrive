@@ -1,6 +1,7 @@
 import { closeDb } from '@sceptre/db'
 import '../src/config/env.ts'
 import { seedAdmin } from '../src/seed/admin.ts'
+import { describeError } from './cli-error.ts'
 
 /**
  * Create the bootstrap administrator without the demo dataset.
@@ -59,14 +60,14 @@ async function main(): Promise<void> {
   const email = (option('--email') ?? process.env.ADMIN_EMAIL)?.trim().toLowerCase()
   console.log(
     result === 'created'
-      ? `[seed:admin] admin created: ${email}. Sign in and set up two-factor authentication.`
+      ? `[seed:admin] admin created: ${email}`
       : `[seed:admin] admin already present: ${email}. Nothing changed.`,
   )
 }
 
 main()
   .catch((error: unknown) => {
-    console.error(`[seed:admin] ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[seed:admin] ${describeError(error)}`)
     process.exitCode = 1
   })
   .finally(async () => {

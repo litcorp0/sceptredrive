@@ -8,10 +8,41 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses'
 import { VitePlugin } from '@electron-forge/plugin-vite'
 import type { ForgeConfig } from '@electron-forge/shared-types'
 
+/**
+ * The NuGet package id Squirrel installs under, and the packaged executable name.
+ *
+ * Both are deliberately one camel-case word. Squirrel stamps the Start Menu
+ * shortcut with `com.squirrel.<package id>.<exe name minus .exe>`, and NuGet ids
+ * cannot contain spaces; a space anywhere in that chain gives Windows a second
+ * taskbar group for the same app. Kept identical in `src/main/identity.ts`, which
+ * is what the running app announces.
+ */
+const SQUIRREL_PACKAGE_ID = 'SceptreDrivePOS'
+
+/**
+ * Icon base path, without an extension: @electron/packager appends `.ico` on
+ * Windows and `.png` on Linux from this one value. Generated from
+ * `packages/brand/assets/logo-icon.png` (512×512) — see `desktop/README.md`.
+ */
+const ICON_BASE = path.join(import.meta.dirname, 'icons', 'icon')
+
+if (!existsSync(`${ICON_BASE}.ico`)) {
+  throw new Error(
+    `Missing ${ICON_BASE}.ico. Regenerate it from the brand master (desktop/README.md).`,
+  )
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     name: 'Sceptre Drive POS',
+    executableName: SQUIRREL_PACKAGE_ID,
+    /**
+     * Windows embeds the icon in the `.exe`; Linux ignores this option and uses
+     * the `BrowserWindow` icon instead. macOS needs a `.icns` before `make` is
+     * attempted there, so it is left unset rather than failing the build.
+     */
+    ...(process.platform === 'darwin' ? {} : { icon: ICON_BASE }),
   },
   hooks: {
     /**
@@ -48,7 +79,13 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     // Unsigned Windows installer (Phase 6). Signing and auto-update are Phase 9.
-    new MakerSquirrel({ name: 'sceptre_drive_pos' }),
+    new MakerSquirrel({
+      name: SQUIRREL_PACKAGE_ID,
+      // Icon for Setup.exe itself. The app icon inside the package comes from
+      // `packagerConfig.icon` above; `iconUrl` (the Control Panel icon) needs a
+      // public HTTPS URL, so it lands with the production domain in Phase 15.
+      setupIcon: `${ICON_BASE}.ico`,
+    }),
     new MakerZIP({}, ['linux', 'darwin']),
   ],
   plugins: [

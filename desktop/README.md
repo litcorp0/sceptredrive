@@ -225,3 +225,32 @@ development builds. Squirrel cannot be built on Linux (no Wine path), so
 `workflow_dispatch` only until the repository has a remote; see the open items in
 `.planning/STATE.md`. **The installer is unsigned** — SmartScreen will warn until Phase 9
 adds code signing and auto-update.
+
+### Windows identity and icon
+
+| What the user sees | Where it comes from |
+|---|---|
+| Start Menu / Apps list entry | `productName` (`Sceptre Drive POS`) |
+| Installer file | `Sceptre Drive POS-<version> Setup.exe` |
+| Install folder | `%LOCALAPPDATA%\SceptreDrivePOS\` (Squirrel `name`) |
+| Running executable | `SceptreDrivePOS.exe` (`packagerConfig.executableName`) |
+| Taskbar group / notifications | `com.squirrel.SceptreDrivePOS.SceptreDrivePOS` |
+| Icon (exe, installer, shortcut, window) | `desktop/icons/icon.ico` |
+
+The package id and executable name are one camel-case word on purpose: Squirrel stamps the
+shortcut with `com.squirrel.<package id>.<exe name>`, and a space in either half gives
+Windows a second taskbar group for the same app. `src/main/identity.ts` announces the same
+id at startup, and `identity.test.ts` fails if `forge.config.mts` drifts from it.
+
+`desktop/icons/icon.ico` is committed (a build must not need ImageMagick). It is generated
+from the brand master, which stays the single source of truth:
+
+```bash
+magick packages/brand/assets/logo-icon.png -background none \
+  -define icon:auto-resize=256,128,64,48,32,24,16 desktop/icons/icon.ico
+```
+
+`MakerSquirrel.iconUrl` (the icon in *Programs and Features*) is still unset: it is fetched
+from a public HTTPS URL at install time, so it waits for the production domain. macOS needs
+an `.icns` before `make` is attempted there.
+

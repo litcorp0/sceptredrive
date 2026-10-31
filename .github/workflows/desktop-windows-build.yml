@@ -1,0 +1,54 @@
+name: Desktop (Windows build)
+
+# Every push to `dev` that could change the till builds a Windows installer and attaches
+# it to the run as a downloadable artefact. It does NOT create a release: that is what
+# tags are for. This answers "does my change still build and install on Windows?" without
+# spending a version number.
+#
+# The full gate suite (lint, typecheck, unit, e2e, counter audit) is the `Desktop`
+# workflow; this one is deliberately build-only so a push stays cheap.
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'desktop/**'
+      - 'packages/**'
+      - 'bun.lock'
+      - 'tsconfig.base.json'
+      - '.github/workflows/desktop-windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Windows installer (unsigned)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Squirrel installer
+        run: bun run make:pos -- --platform win32 --arch x64
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: pos-windows-${{ github.sha }}
+          path: |
+            desktop/out/make/**/*.exe
+            desktop/out/make/**/*.nupkg
+            desktop/out/make/**/RELEASES
+          if-no-files-found: error
+          retention-days: 14

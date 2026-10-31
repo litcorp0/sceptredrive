@@ -1,0 +1,150 @@
+name: Release
+
+# Publish the Windows installer to GitHub Releases, so a till can be installed from a
+# download link instead of a local build. Linux is not published: the till fleet is
+# Windows, and every extra artefact is another thing to keep working.
+#
+# Two ways to cut a release:
+#   1. Push a tag:            git tag v0.1.0 && git push origin v0.1.0
+#   2. Actions → Release → Run workflow, with a tag such as v0.1.0 (created if absent)
+#
+# This is NOT triggered by ordinary pushes. A push to `dev` that touches the desktop
+# builds an installer as a downloadable workflow artefact (desktop-windows-build.yml),
+# but it does not create a release: a version number should be a decision.
+#
+# Build gates (lint, typecheck, unit tests, e2e, counter audit) live in `Desktop`
+# (.github/workflows/desktop.yml). Run that when the code changed; this workflow only
+# builds and publishes.
+#
+# The installer is UNSIGNED until the code-signing certificate lands (Phase 15), and
+# there is no auto-update yet.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v0.1.0 (created if it does not exist)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Squirrel requires a Windows host; Wine on Linux is not supported for this maker.
+      - name: Build Squirrel installer
+        run: bun run make:pos -- --platform win32 --arch x64
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: |
+            desktop/out/make/**/*.exe
+            desktop/out/make/**/*.nupkg
+            desktop/out/make/**/RELEASES
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) TAG="v$TAG" ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
+
+      - name: Checksums
+        shell: bash
+        run: |
+          cd release-assets
+          ls -la
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > NOTES.md <<'EOF'
+          The Windows till installer, unsigned while the signing certificate is pending.
+
+          ## Install
+
+          1. Download `Sceptre Drive POS-<version> Setup.exe` (the only `.exe` asset).
+          2. Windows SmartScreen will warn because the installer is unsigned —
+             **More info → Run anyway**.
+          3. Before the first launch, put `config.json` in `%APPDATA%\Sceptre Drive POS\`.
+          4. Enrol from the console (terminals → enrolment code) and set a staff PIN.
+
+          ## config.json
+
+          ```json
+          {
+            "apiBaseUrl": "https://<your-api>.onrender.com",
+            "powersyncUrl": "https://<your-instance>.powersync.journeyapps.com"
+          }
+          ```
+
+          A packaged build refuses `localhost` unless `SCEPTRE_ALLOW_LOCAL_API=1`, so a wrong
+          URL fails loudly rather than selling into a development API.
+
+          `SHA256SUMS.txt` lists the checksums of every asset.
+
+          Unsigned, no auto-update. Signing, auto-update and the production cut are Phase 15.
+          EOF
+
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; re-uploading assets."
+            gh release upload "$TAG" release-assets/* --clobber
+            gh release edit "$TAG" --notes-file NOTES.md
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "Sceptre Drive POS $TAG" \
+              --notes-file NOTES.md
+          fi

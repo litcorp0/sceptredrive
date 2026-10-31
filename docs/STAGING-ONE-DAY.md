@@ -129,7 +129,7 @@ neon projects update <project-id> --enable-logical-replication --yes
 Connect with `psql "<direct-url>"` and run:
 
 ```sql
-CREATE ROLE powersync_role WITH REPLICATION BYPASSRLS LOGIN PASSWORD '<strong-password>';
+CREATE ROLE powersync_role WITH REPLICATION BYPASSRLS LOGIN PASSWORD 'SceptreDrive0808@gmail.com';
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role;
 
@@ -201,7 +201,7 @@ Add these on the Render service (Environment tab). Nothing else is required toda
 | `BETTER_AUTH_URL` | `https://<api>.onrender.com` |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | `https://<admin>.vercel.app,https://<web>.vercel.app` |
 | `ADMIN_URL` | `https://<admin>.vercel.app` |
-| `CORS_ORIGINS` | `https://<admin>.vercel.app,https://<web>.vercel.app` |
+| `CORS_ORIGINS` | `https://<admin>.vercel.app,https://<web>.vercel.app,app://sceptre-drive` |
 | `POS_JWT_PRIVATE_KEY` | §4 |
 | `POS_JWT_KEY_ID` | `pos-v1` |
 | `POWERSYNC_URL` | `https://<instance>.powersync.journeyapps.com` |
@@ -210,6 +210,11 @@ Add these on the Render service (Environment tab). Nothing else is required toda
 | `LOG_LEVEL` | `info` |
 | `PAYSTACK_MODE` | `mock` |
 | `EVAT_PROVIDER` | `mock` |
+
+`app://sceptre-drive` is the **packaged till's** origin. In development the API adds it (and
+localhost) automatically, but in production `CORS_ORIGINS` is the whole list — leave it out and
+every POS request fails the preflight with a generic network error while the console works
+perfectly. It is not a browser website, so it is easy to forget.
 
 **The API exits at boot if any of these is missing in production** — `BETTER_AUTH_SECRET`
 (32+ chars, not starting `replace-`), `CORS_ORIGINS` (non-empty) and `POS_JWT_PRIVATE_KEY`.
@@ -323,14 +328,30 @@ the build fails with a module-not-found that sends people hunting for a phantom 
 
 ### 8.2 Environment variables
 
-| Project | Variable | Value | When it is read |
-|---|---|---|---|
-| `web` | `WEB_API_URL` | `https://<api>.onrender.com` | **server-side**, at request time, by `site.functions.ts` |
-| `admin` | `VITE_API_URL` | `https://<api>.onrender.com` | **build time** — Vite inlines it |
+**Two required variables, both public, neither a secret.**
+
+| Project | Variable | Value | Required? | When it is read |
+|---|---|---|---|---|
+| `web` | `WEB_API_URL` | `https://<api>.onrender.com` | **required** | **server-side**, at request time, by `site.functions.ts` |
+| `admin` | `VITE_API_URL` | `https://<api>.onrender.com` | **required** | **build time** — Vite inlines it into the bundle |
+| `web` | `VITE_SITE_URL` | `https://<web>.vercel.app` | optional | **build time** — canonical links, `robots.txt`, JSON-LD |
+| `admin` | `VITE_APP_TITLE` | `Sceptre Drive` | optional | build time — page title fallback |
+
+Only these. Neither project touches the database, Paystack, the POS JWT key, or Better Auth
+secrets — both reach the API over HTTPS, and the API holds every secret. **Do not copy the
+Render environment into Vercel**; the private key must not exist on a public host. A `BETTER_AUTH_SECRET`
+or `POS_JWT_PRIVATE_KEY` in a Vercel project is a leak with no benefit.
+
+`WEB_API_URL` is read on the server at request time, so it works whether or not Vercel rebuilds;
+`VITE_*` values are inlined, so changing one needs a **redeploy**, not just a variable edit.
 
 `admin/src/env.ts` validates `VITE_API_URL` as a URL, so a missing value fails the **build**
 rather than producing a console that cannot reach anything. That failure is a feature: set the
 variable before the first deploy, not after.
+
+If `VITE_SITE_URL` is left unset, `siteUrl()` falls back to `http://localhost:3004`, so the
+sitemap, `robots.txt` and the JSON-LD `@id` point at a host nobody can reach. The site still
+renders; only the SEO surface is wrong, which is why it is optional for a one-day test.
 
 The public site fetches `GET /api/public/site` and renders the branch/contact content from the
 database, so if the homepage is empty the cause is almost always `WEB_API_URL` missing (or set
@@ -391,6 +412,113 @@ No rebuild is needed: the renderer's CSP already permits `https://*.powersync.jo
 and the configured API origin. A **packaged** build refuses `localhost` unless
 `SCEPTRE_ALLOW_LOCAL_API=1`, which is exactly why the staging URLs must be real HTTPS hosts.
 
+### 9.1 Building the till — Linux and Windows
+
+The POS is **not part of the deployed stack**: it is a desktop binary. Render, Vercel,
+Neon and PowerSync host the server side; the till is built locally (or in CI) and installed on
+the machine. "Staging" for it means one file: `config.json` above.
+
+**Linux — build here**
+
+```bash
+bun run make:pos
+```
+
+Output (MakerZIP, since the Forge config only makes a Squirrel installer for Windows):
+
+```
+desktop/out/make/zip/linux/x64/Sceptre Drive POS-linux-x64-<version>.zip
+```
+
+Unzip it anywhere and run the binary inside.
+
+> `make:pos` needs the **`zip` binary**, which some Linux installs lack. Without it the run
+> packages the app and then fails with `spawn zip ENOENT`. Install it once:
+> `sudo apt install zip` (or `sudo dnf install zip`).
+
+For a faster loop, `bun run package:pos` skips the archive entirely and leaves a runnable
+directory at `desktop/out/Sceptre Drive POS-linux-x64/`:
+
+```bash
+"desktop/out/Sceptre Drive POS-linux-x64/SceptreDrivePOS"
+```
+
+
+**Windows — build on Windows, not from Linux**
+
+Squirrel installers require a Windows host; Wine is not supported for this maker. The
+repository already contains the job for it (`.github/workflows/desktop.yml`):
+
+1. Push the branch, then GitHub → **Actions → Desktop → Run workflow** (`workflow_dispatch`).
+2. It lints, typechecks, runs the desktop unit tests, then
+   `bun run make:pos -- --platform win32 --arch x64`.
+3. Download the **`sceptre-pos-windows-installer`** artifact: `Sceptre Drive POS-<version> Setup.exe`,
+   the `.nupkg` and `RELEASES`.
+
+With no signing certificate the installer is **unsigned** — Windows SmartScreen will warn;
+"More info → Run anyway" is expected for a test. Signing is Phase 15.
+
+If the repository is not on GitHub yet, the same command on any Windows machine with Bun and
+Node installed produces the installer:
+
+```powershell
+bun install --frozen-lockfile
+bun run make:pos
+```
+
+**On each machine, before the first launch**, write `config.json` into the user-data directory
+(`~/.config/Sceptre Drive POS/` on Linux, `%APPDATA%\Sceptre Drive POS\` on Windows) — a
+**packaged** build refuses `localhost` unless `SCEPTRE_ALLOW_LOCAL_API=1`, so a wrong URL fails
+loudly rather than quietly selling to a development API.
+
+**Two installs mean two devices.** Each machine enrols separately (console → terminal →
+enrolment code), and a device token belongs to one machine. That is the check worth doing:
+enrol Linux, enrol Windows, sell offline on each, and watch both sales land in Neon.
+
+> The packaged build is also where CSP and keychain behaviour differ from the dev server. If a
+> sale prints, uploads and survives a restart on both OSes, the till is verified; a `bun run dev`
+> window is not the same test.
+
+### 9.2 Publishing the Windows installer as a GitHub Release
+
+Windows only: the till fleet is Windows, and every extra artefact is another thing to keep
+working. Two workflows handle it.
+
+| Workflow | Runs when | Produces |
+|---|---|---|
+| **Desktop (Windows build)** | every push to `dev` touching `desktop/**`, `packages/**`, `bun.lock` (or manual) | an installer attached to the **Actions run** as `pos-windows-<sha>`, 14-day retention, **no release** |
+| **Release** | a tag matching `v*`, or manual with a tag | the installer on the **Releases** page, plus `SHA256SUMS.txt` and install notes |
+| **CI** (pre-existing) | every push to `dev`/`staging` and every PR | lint, typecheck, tests, build |
+| **Desktop** (pre-existing) | manual | the full gates: lint, types, unit, e2e, spike, schema, print, outbox |
+
+So: **ordinary pushes do not create releases.** They produce a downloadable installer, which is
+the thing you want while iterating — "does my change still build and install on Windows?" A
+release is a deliberate act, because it carries a version number people keep.
+
+**Cut a release:**
+
+```bash
+# 1. bump the version the installer is named after
+#    desktop/package.json → "version"
+# 2. commit, then tag and push
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Or Actions → **Release** → Run workflow with `v0.1.0` (created if absent). Bump the version
+first: a `v0.2.0` tag over an unchanged `0.1.0` ships binaries called `0.1.0`.
+
+**Take a dev build:** Actions → **Desktop (Windows build)** → the run for your commit →
+Artifacts → `pos-windows-<sha>`.
+
+> **If the publish step fails with 403:** the repository must allow the workflow token to
+> write. Settings → Actions → General → Workflow permissions → **Read and write**, then re-run.
+> The workflow already asks for `contents: write`; the repository setting can still refuse it.
+
+**Deliberately absent:** signing (Phase 15 needs the certificate) and auto-update (there is no
+feed; a new version means a new download). Re-running the same tag re-uploads the assets in
+place rather than failing.
+
 Then, because the staging database is **new**:
 
 1. In the console, create the branch (if the seed did not), a terminal, and enrol it → note the
@@ -443,8 +571,11 @@ happened and the outbox is holding it — check the POS sync screen before anyth
 | PowerSync active, no rows for the branch | the token's `branch_id` is not the seeded branch | create the terminal under the seeded branch |
 | Console: `MISSING_OR_NULL_ORIGIN` on sign-in | origin not trusted | add the Vercel origin to `BETTER_AUTH_TRUSTED_ORIGINS` |
 | Console: preflight 403 | origin not in `CORS_ORIGINS` | add it; redeploy |
+| POS: every API call fails with a network error, console is fine | `app://sceptre-drive` missing from `CORS_ORIGINS` (production does not add dev origins) | add it, redeploy, relaunch the till |
 | Console: login works, reload logs out | cross-site cookie | `SameSite=None; Secure`, `BETTER_AUTH_URL` = API origin; fallback in §8.3 |
-| Admin build fails: invalid environment | `VITE_API_URL` missing | add it to the Vercel project (Production **and** Preview) |
+| Admin build fails: invalid environment | `VITE_API_URL` missing | add it to the Vercel project (Production **and** Preview), then redeploy |
+| Homepage renders but empty | `WEB_API_URL` missing, or set as `VITE_API_URL` (server function cannot see a `VITE_` name) | set `WEB_API_URL`, redeploy |
+| Sitemap/robots point at `localhost:3004` | `VITE_SITE_URL` unset | set it, redeploy |
 | Public site renders an empty shell | `WEB_API_URL` missing or set as `VITE_` | set the server-side variable, redeploy |
 | POS: "request timed out" on upload | Render cold start | retry; the outbox keeps the sale |
 | POS: cannot reach the API | `config.json` wrong, or a packaged build with a localhost URL | fix the file; never localhost in a packaged build |
@@ -496,7 +627,7 @@ do that in an afternoon.
 | `BETTER_AUTH_URL` | Render | no | `https://<api>.onrender.com` |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | Render | no | `https://<admin>.vercel.app,https://<web>.vercel.app` |
 | `ADMIN_URL` | Render | no | `https://<admin>.vercel.app` |
-| `CORS_ORIGINS` | Render | no | same two origins |
+| `CORS_ORIGINS` | Render | no | the two Vercel origins **plus `app://sceptre-drive`** |
 | `POS_JWT_PRIVATE_KEY` | Render | **yes** | base64url PKCS8 Ed25519 |
 | `POS_JWT_KEY_ID` | Render | no | `pos-v1` |
 | `POWERSYNC_URL` | Render + POS config | no | `https://<instance>.powersync.journeyapps.com` |
@@ -506,6 +637,7 @@ do that in an afternoon.
 | `EVAT_PROVIDER` | Render | no | `mock` |
 | `WEB_API_URL` | Vercel (`web`) | no | `https://<api>.onrender.com` |
 | `VITE_API_URL` | Vercel (`admin`) | no | `https://<api>.onrender.com` |
+| `VITE_SITE_URL` | Vercel (`web`) | yes for correct SEO | `https://<web>.vercel.app` |
 | `powersync_role` password | PowerSync | **yes** | set in §5.3 |
 
 ## Appendix B — Command sheet
