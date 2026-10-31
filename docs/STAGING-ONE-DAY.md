@@ -216,6 +216,10 @@ localhost) automatically, but in production `CORS_ORIGINS` is the whole list —
 every POS request fails the preflight with a generic network error while the console works
 perfectly. It is not a browser website, so it is easy to forget.
 
+`https://<admin>.vercel.app` stays in both lists even though the console reaches the API through
+its own `/api` proxy (§8.3): the proxied request still carries `Origin: https://<admin>.vercel.app`,
+and Better Auth checks it against `BETTER_AUTH_TRUSTED_ORIGINS`.
+
 **The API exits at boot if any of these is missing in production** — `BETTER_AUTH_SECRET`
 (32+ chars, not starting `replace-`), `CORS_ORIGINS` (non-empty) and `POS_JWT_PRIVATE_KEY`.
 The deploy log names the variable, so read it rather than guessing.
@@ -333,7 +337,8 @@ the build fails with a module-not-found that sends people hunting for a phantom 
 | Project | Variable | Value | Required? | When it is read |
 |---|---|---|---|---|
 | `web` | `WEB_API_URL` | `https://<api>.onrender.com` | **required** | **server-side**, at request time, by `site.functions.ts` |
-| `admin` | `VITE_API_URL` | `https://<api>.onrender.com` | **required** | **build time** — Vite inlines it into the bundle |
+| `admin` | `VITE_API_URL` | `https://<admin>.vercel.app` — the console's **own** origin | **required** | **build time** — Vite inlines it into the bundle |
+| `admin` | `API_URL` | `https://<api>.onrender.com` | **required** in a deployment | **server-side** — the `/api/*` proxy target and the guards' API origin |
 | `web` | `VITE_SITE_URL` | `https://<web>.vercel.app` | optional | **build time** — canonical links, `robots.txt`, JSON-LD |
 | `admin` | `VITE_APP_TITLE` | `Sceptre Drive` | optional | build time — page title fallback |
 
@@ -357,36 +362,65 @@ The public site fetches `GET /api/public/site` and renders the branch/contact co
 database, so if the homepage is empty the cause is almost always `WEB_API_URL` missing (or set
 as a `VITE_` variable, which the server function cannot see).
 
-### 8.3 Cross-site auth — the part that costs a day if you let it
+### 8.3 The console's session cookie — why the API sits behind `/api`
 
-The console runs on `*.vercel.app` and calls an API on `*.onrender.com`. That is a genuine
-cross-site request, so all four of these must agree:
+The console does not trust the browser for authentication. `session.functions.ts`
+reads the session **on the server**, by forwarding the browser's `Cookie` header to the
+API, and the route guards (`routes/login.tsx`, `routes/_authenticated/route.tsx`) act on
+that answer.
 
-1. `CORS_ORIGINS` on Render lists `https://<admin>.vercel.app` (§6.2).
-2. `BETTER_AUTH_TRUSTED_ORIGINS` lists it too.
-3. `BETTER_AUTH_URL` is the **API** origin, not the console's.
-4. The session cookie is `SameSite=None; Secure` (HTTPS both sides).
+That means the only cookie the console can ever see is the one the browser sent **to the
+console**. A host-only cookie set by `api.onrender.com` is never sent to
+`admin.vercel.app`, so a cross-origin console signs in, receives a token, and then every
+guard still sees an anonymous visitor — you are bounced back to `/login` with a valid
+session sitting in the API's own cookie jar. `SameSite=None` does not help: it only lets
+the *browser* attach a cross-site cookie, and a cookie scoped to the API host is still
+never sent to the console host.
 
-Test in this order:
+So the console serves `/api/*` itself:
 
-```bash
-# 1. the preflight answers (§6.3)
-# 2. sign in, then reload the whole page — the session must survive
-# 3. DevTools → Application → Cookies → the API origin: look for SameSite=None; Secure
+| Who | Talks to | Why |
+|---|---|---|
+| Browser (`authClient`, `apiRequest`) | `VITE_API_URL` = the console's own origin | one origin, so the cookie is first-party |
+| Console server (`getSession`) | `API_URL` = the API's origin | no self-call through its own public host |
+| Console server's `/api/*` route rule | `API_URL` | proxies whatever the browser sends |
+
+Set on the `admin` Vercel project, then **redeploy** (both are read at build time):
+
+```
+VITE_API_URL = https://<admin>.vercel.app
+API_URL      = https://<api>.onrender.com
 ```
 
-If the console refuses to keep a session and you have spent more than 30 minutes on it: **point
-the local console at the deployed API** instead.
+`API_URL` is deliberately *not* a `VITE_` name: it is server-only and must never enter the
+browser bundle.
 
-```bash
-cd admin && VITE_API_URL=https://<api>.onrender.com bun run dev
+Verify in this order:
+
+1. Open `https://<admin>.vercel.app/api/auth/get-session` in the browser. It must answer
+   `null` (JSON), not 404 or a CORS error — that proves the proxy exists.
+2. Sign in.
+3. DevTools → Application → Cookies → **the console's origin**: `better-auth.session_token`
+   must be there. Not on the API's origin — the browser never talks to that host directly.
+4. Reload the whole page. The console must stay signed in.
+
+On the VPS the same rule applies, and Caddy does the proxying instead of Nitro. Note it is
+`handle`, not `handle_path`: the API expects the `/api` prefix, so it must not be stripped.
+
+```caddyfile
+console.example.com {
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:3000
+	}
+}
 ```
 
-That still proves the deployed API, the Neon database, PowerSync and the whole POS path — which
-is the point of the day. Note the `Origin` you are now sending (`http://localhost:3000`) is in
-the API's development allowlist only when `NODE_ENV` is not production; on Render it is
-production, so add `http://localhost:3000` to `CORS_ORIGINS` and `BETTER_AUTH_TRUSTED_ORIGINS`
-for the test, then remove it.
+with `VITE_API_URL=https://console.example.com` and `API_URL=http://api:4000`. Here Caddy
+answers `/api/*` before it ever reaches the console process, so the Nitro route rule is unused
+and `API_URL` exists only to spare `getSession` a call through the public host.
 
 ---
 
@@ -572,7 +606,7 @@ happened and the outbox is holding it — check the POS sync screen before anyth
 | Console: `MISSING_OR_NULL_ORIGIN` on sign-in | origin not trusted | add the Vercel origin to `BETTER_AUTH_TRUSTED_ORIGINS` |
 | Console: preflight 403 | origin not in `CORS_ORIGINS` | add it; redeploy |
 | POS: every API call fails with a network error, console is fine | `app://sceptre-drive` missing from `CORS_ORIGINS` (production does not add dev origins) | add it, redeploy, relaunch the till |
-| Console: login works, reload logs out | cross-site cookie | `SameSite=None; Secure`, `BETTER_AUTH_URL` = API origin; fallback in §8.3 |
+| Console: sign-in returns JSON / token but you land back on `/login` | the API cookie is host-only for the API host, so the console's server-side guard never sees it | set `VITE_API_URL` to the console's own origin and `API_URL` to the API, then redeploy — §8.3 |
 | Admin build fails: invalid environment | `VITE_API_URL` missing | add it to the Vercel project (Production **and** Preview), then redeploy |
 | Homepage renders but empty | `WEB_API_URL` missing, or set as `VITE_API_URL` (server function cannot see a `VITE_` name) | set `WEB_API_URL`, redeploy |
 | Sitemap/robots point at `localhost:3004` | `VITE_SITE_URL` unset | set it, redeploy |

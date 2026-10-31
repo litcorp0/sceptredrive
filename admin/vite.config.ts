@@ -6,6 +6,27 @@ import viteReact from "@vitejs/plugin-react"
 import { nitro } from "nitro/vite"
 import { defineConfig } from "vite"
 
+/**
+ * The API's real origin, for the console's own server.
+ *
+ * The console reads the session cookie **on the server**: `session.functions.ts`
+ * forwards the browser's `Cookie` header to the API. That only works when the API's
+ * cookie is scoped to the console's origin, and a host-only cookie set by
+ * `api.example.com` is never sent to `console.example.com`. So a deployed console
+ * serves `/api/*` itself and proxies it here: one origin for the browser, a
+ * first-party cookie, and no CORS.
+ *
+ * Server-side only — deliberately not a `VITE_` name, so it never enters the bundle.
+ * Unset locally, where both apps share `localhost` and the cookie already travels.
+ */
+const apiOrigin = process.env.API_URL?.trim().replace(/\/+$/, "")
+
+const apiProxyRules: Record<string, { proxy: string }> = apiOrigin
+	? {
+			"/api/**": { proxy: `${apiOrigin}/api/**` },
+		}
+	: {}
+
 const config = defineConfig({
 	// Load VITE_* variables from the repository-root .env (single source of truth).
 	envDir: "..",
@@ -37,7 +58,11 @@ const config = defineConfig({
 	},
 	plugins: [
 		devtools(),
-		nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+		nitro({
+			// Only present when this console is deployed away from the API (see `apiOrigin`).
+			routeRules: apiProxyRules,
+			rollupConfig: { external: [/^@sentry\//] },
+		}),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),

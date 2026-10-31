@@ -9,7 +9,13 @@ export const env = createEnv({
 	clientPrefix: "VITE_",
 
 	client: {
-		/** Base URL of the Sceptre Drive API, e.g. http://localhost:4000. */
+		/**
+		 * The API origin the **browser** calls, e.g. `http://localhost:4000`.
+		 *
+		 * A deployed console points this at its own origin and proxies `/api/*` to
+		 * the API (`API_URL`, see `vite.config.ts`), so the session cookie is
+		 * first-party and the server-side guard can read it. Inlined at build time.
+		 */
 		VITE_API_URL: z.url(),
 		VITE_APP_TITLE: z.string().min(1).optional(),
 	},
