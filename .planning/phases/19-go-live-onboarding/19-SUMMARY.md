@@ -35,7 +35,7 @@
 
 - shared **355 → 368** (+13): opening arithmetic, CSV parsing, permission.
 - API **869 → 876 / 64 files** (+7): the opening API and proposal cases.
-- desktop **618** (unchanged).
+- desktop **620** (unchanged by this phase; the current gate).
 - `check-types` **7/7**, `lint` exit 0, `build` green, `modules:check:strict` 21/21 admin and
   16/16 POS, brand gate **1 282** files.
 - No `stock_level` schema change, no new synced table, `powersync/sync-config.yaml` empty diff.
