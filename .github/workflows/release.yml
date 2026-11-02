@@ -69,6 +69,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # `gh` resolves the repository through the local git remote and exits with
+      # "fatal: not a git repository" without a checkout. The code is already built, but
+      # the checkout also anchors a tag that `gh release create` has to make for a
+      # workflow_dispatch run: without it the tag would land on the wrong commit.
+      - uses: actions/checkout@v7
+
       # The upload keeps the Squirrel layout (`squirrel.windows/x64/...`), so the
       # downloaded tree is nested. Flatten it into `dist/` first: a release asset list
       # must be files, and `sha256sum`/`gh release upload` fail on directories.
@@ -168,6 +174,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
