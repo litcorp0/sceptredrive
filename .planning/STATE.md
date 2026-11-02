@@ -186,6 +186,19 @@
 > prefilled opening-stock dialog from an approval, a branch assortment (a branch's out-of-stock
 > count is the whole catalogue, which is true but noisy at scale), and a computed reorder point.
 
+> **2026-11-02 (Paystack staging):** The staging path is ready for a real test key.
+> `env.ts` now refuses a key whose prefix contradicts `PAYSTACK_MODE` (`sk_test_` with
+> `test`, `sk_live_` with `live` in production), refuses a `PAYSTACK_WEBHOOK_SECRET` that is
+> not the secret key (Paystack signs with the secret key), and refuses the `.example` email
+> placeholder in live mode. An empty `PAYSTACK_MODE` now means `mock` instead of failing the
+> enum. `bun run paystack:smoke` checks `/balance`, initialises a GHS 1.00 transaction and
+> verifies it without printing a secret; `--momo` exercises the Ghana test number and
+> `--live --amount` is the explicit live path. The dashboard, test cards/MoMo, webhook,
+> transfer/OTP and live checklist are in `docs/PAYSTACK-STAGING.md`; the one-day staging
+> guide now sets `PAYSTACK_MODE=test`. No key was added to the repository.
+> **Gates:** `check-types` 7/7, lint exit 0, env cases **19**, payments + transfer suites
+> **45**. The full suite was not re-run for this config-only change.
+
 > **2026-11-02 (Phase 19 — go-live onboarding):** A branch that is already trading can now
 > load its existing catalogue and counted stock in one valued document. `stock_opening` +
 > `stock_opening_line` hold a **counted** quantity; posting computes the delta against the

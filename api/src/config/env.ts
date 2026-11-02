@@ -54,13 +54,19 @@ const baseEnvSchema = z.object({
   // --- Paystack (Ghana) ---
   // `mock` needs no credentials; `test` and `live` select the real provider
   // (P13-D10). The refinements below refuse to boot when a non-mock mode is
-  // missing the credential it needs.
-  PAYSTACK_MODE: z.enum(['mock', 'test', 'live']).default('mock'),
+  // missing the credential it needs, or when the key prefix contradicts the
+  // mode. Paystack decides test/live from the key, not from a URL: an `sk_live_`
+  // key in a staging process would charge real cards, so the prefix is checked.
+  PAYSTACK_MODE: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.enum(['mock', 'test', 'live']).default('mock'),
+  ),
   PAYSTACK_SECRET_KEY: optionalNonEmpty(z.string().min(8)),
   PAYSTACK_WEBHOOK_SECRET: optionalNonEmpty(z.string().min(8)),
   PAYSTACK_BASE_URL: z.string().url().default('https://api.paystack.co'),
   // Routing label for the provider's mandatory email field, never a contact
-  // channel (P13-D7). Phase 15 points this at a domain the business owns.
+  // channel (P13-D7). Live mode refuses the `.example` placeholder because
+  // Paystack validates deliverability.
   PAYSTACK_EMAIL_DOMAIN: z.string().min(3).default('sceptre-drive.example'),
   // --- GRA E-VAT (P14-D33) ---
   // `mock` certifies deterministically and needs nothing. `gra` names the
@@ -86,6 +92,42 @@ const envSchema = baseEnvSchema.superRefine((value, ctx) => {
       path: ['PAYSTACK_SECRET_KEY'],
       message: `PAYSTACK_SECRET_KEY is required when PAYSTACK_MODE is '${value.PAYSTACK_MODE}'`,
     })
+  }
+  if (value.PAYSTACK_MODE !== 'mock' && value.PAYSTACK_SECRET_KEY) {
+    const expectedPrefix = value.PAYSTACK_MODE === 'test' ? 'sk_test_' : 'sk_live_'
+    if (!value.PAYSTACK_SECRET_KEY.startsWith(expectedPrefix)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYSTACK_SECRET_KEY'],
+        message: `PAYSTACK_SECRET_KEY must start with '${expectedPrefix}' when PAYSTACK_MODE is '${value.PAYSTACK_MODE}'; Paystack decides test/live from the key, not the URL`,
+      })
+    }
+    if (
+      value.PAYSTACK_WEBHOOK_SECRET &&
+      value.PAYSTACK_WEBHOOK_SECRET !== value.PAYSTACK_SECRET_KEY
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYSTACK_WEBHOOK_SECRET'],
+        message:
+          'Paystack signs webhooks with the secret key. Leave PAYSTACK_WEBHOOK_SECRET empty, or set it to the same value as PAYSTACK_SECRET_KEY',
+      })
+    }
+  }
+  if (value.PAYSTACK_MODE === 'live') {
+    const domain = value.PAYSTACK_EMAIL_DOMAIN.toLowerCase()
+    if (
+      domain.endsWith('.example') ||
+      domain === 'example.com' ||
+      domain.endsWith('.example.com')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYSTACK_EMAIL_DOMAIN'],
+        message:
+          'PAYSTACK_EMAIL_DOMAIN must be a domain the business owns in live mode (the .example placeholder will not pass Paystack)',
+      })
+    }
   }
   if (value.PAYSTACK_MODE === 'live' && value.NODE_ENV !== 'production') {
     ctx.addIssue({

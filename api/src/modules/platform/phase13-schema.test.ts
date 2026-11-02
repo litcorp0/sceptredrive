@@ -73,16 +73,80 @@ describe('payment environment', () => {
     ).toThrow(/PAYSTACK_MODE/)
   })
 
-  it('accepts live mode in production with a key', () => {
+  it('accepts live mode in production with a live key and an owned email domain', () => {
     const parsed = parseEnv({
       ...baseEnv,
       NODE_ENV: 'production',
       PAYSTACK_MODE: 'live',
       PAYSTACK_SECRET_KEY: 'sk_live_test',
-      PAYSTACK_WEBHOOK_SECRET: 'whsec_live_test',
+      PAYSTACK_WEBHOOK_SECRET: 'sk_live_test',
+      PAYSTACK_EMAIL_DOMAIN: 'sceptre-drive.com',
     })
     expect(parsed.PAYSTACK_MODE).toBe('live')
-    expect(parsed.PAYSTACK_WEBHOOK_SECRET).toBe('whsec_live_test')
+    expect(parsed.PAYSTACK_WEBHOOK_SECRET).toBe('sk_live_test')
+  })
+
+  it('accepts test mode with an sk_test key and no webhook secret', () => {
+    const parsed = parseEnv({
+      ...baseEnv,
+      PAYSTACK_MODE: 'test',
+      PAYSTACK_SECRET_KEY: 'sk_test_real_key',
+      PAYSTACK_EMAIL_DOMAIN: 'sceptre-drive.com',
+    })
+    expect(parsed.PAYSTACK_MODE).toBe('test')
+    expect(parsed.PAYSTACK_WEBHOOK_SECRET).toBeUndefined()
+  })
+
+  it('refuses a key whose prefix contradicts the mode', () => {
+    expect(() =>
+      parseEnv({
+        ...baseEnv,
+        PAYSTACK_MODE: 'test',
+        PAYSTACK_SECRET_KEY: 'sk_live_real_key',
+      }),
+    ).toThrow(/must start with 'sk_test_'/)
+    expect(() =>
+      parseEnv({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        PAYSTACK_MODE: 'live',
+        PAYSTACK_SECRET_KEY: 'sk_test_real_key',
+        PAYSTACK_EMAIL_DOMAIN: 'sceptre-drive.com',
+      }),
+    ).toThrow(/must start with 'sk_live_'/)
+  })
+
+  it('refuses a webhook secret that is not the Paystack secret key', () => {
+    expect(() =>
+      parseEnv({
+        ...baseEnv,
+        PAYSTACK_MODE: 'test',
+        PAYSTACK_SECRET_KEY: 'sk_test_real_key',
+        PAYSTACK_WEBHOOK_SECRET: 'whsec_something_else',
+      }),
+    ).toThrow(/PAYSTACK_WEBHOOK_SECRET/)
+  })
+
+  it('accepts an empty webhook secret and an empty mode as the documented defaults', () => {
+    const parsed = parseEnv({
+      ...baseEnv,
+      PAYSTACK_MODE: '',
+      PAYSTACK_SECRET_KEY: 'sk_test_real_key',
+    })
+    expect(parsed.PAYSTACK_MODE).toBe('mock')
+    expect(parsed.PAYSTACK_WEBHOOK_SECRET).toBeUndefined()
+  })
+
+  it('refuses the .example email placeholder in live mode', () => {
+    expect(() =>
+      parseEnv({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        PAYSTACK_MODE: 'live',
+        PAYSTACK_SECRET_KEY: 'sk_live_real_key',
+        PAYSTACK_EMAIL_DOMAIN: 'sceptre-drive.example',
+      }),
+    ).toThrow(/PAYSTACK_EMAIL_DOMAIN/)
   })
 })
 

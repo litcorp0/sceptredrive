@@ -19,11 +19,12 @@
 | 1 | Neon: project, logical replication, role, publication | 15 min | step 0 not needed |
 | 2 | Migrate + seed from your laptop | 10 min | step 1 |
 | 3 | Render: service, env, deploy, CORS preflight | 20 min | steps 0–2 |
+| 3b | Paystack test mode: keys, webhook, smoke test (§6.4) | 10 min | step 3 |
 | 4 | PowerSync Cloud: instance, DB connection, JWKS, sync config | 15 min | steps 1 + 3 (needs the JWKS URL) |
 | 5 | Vercel: two projects, env, deploy | 20 min | step 3 |
 | 6 | Console login across origins | 10 min *or an hour* | steps 3 + 5 |
 | 7 | POS: config, enrol, one offline sale | 15 min | steps 3 + 4 |
-| 8 | Prove the twelve checks (§10) | 15 min | everything |
+| 8 | Prove the fourteen checks (§10) | 15 min | everything |
 | 9 | Takedown (§12) | 10 min | done |
 
 Half a day if the cross-site cookie behaves; a full one if it does not. **Cost for the day:
@@ -208,7 +209,11 @@ Add these on the Render service (Environment tab). Nothing else is required toda
 | `POWERSYNC_AUDIENCE` | the audience you set in PowerSync (§7.3) |
 | `JOBS_ENABLED` | `true` |
 | `LOG_LEVEL` | `info` |
-| `PAYSTACK_MODE` | `mock` |
+| `PAYSTACK_MODE` | `test` (staging only; production uses `live`) |
+| `PAYSTACK_SECRET_KEY` | `sk_test_…` from the Paystack dashboard |
+| `PAYSTACK_WEBHOOK_SECRET` | empty — Paystack signs with the secret key |
+| `PAYSTACK_BASE_URL` | `https://api.paystack.co` |
+| `PAYSTACK_EMAIL_DOMAIN` | a domain you own, e.g. `sceptre-drive.com` |
 | `EVAT_PROVIDER` | `mock` |
 
 `app://sceptre-drive` is the **packaged till's** origin. In development the API adds it (and
@@ -252,6 +257,29 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X OPTIONS \
 `204` (or `200`) with `access-control-allow-origin: https://<admin>.vercel.app` is what you
 want. A bare `403` here is almost always the origin missing from `CORS_ORIGINS` or from
 `BETTER_AUTH_TRUSTED_ORIGINS`.
+
+### 6.4 Paystack test mode (optional, recommended)
+
+Staging must use **test keys**. The API refuses an `sk_live_` key when `PAYSTACK_MODE=test`
+and refuses an `sk_test_` key when `PAYSTACK_MODE=live`, so a wrong pair fails at boot instead
+of charging a real card.
+
+1. Paystack dashboard → switch to **Test mode** → **Developers → API Keys & Webhooks** →
+   copy the test secret key (`sk_test_…`).
+2. Set the **test webhook URL** to `https://<api>.onrender.com/api/payments/webhook/paystack`.
+3. Leave **Callback URL** at the default for the POS (the till polls and closes the checkout
+   window); set a page on your own domain only if you add a web checkout.
+4. Enable **Card**, **Mobile Money** (MTN/Telecel/AT) and **Bank Transfer** for GHS.
+5. Set the Render env rows in §6.2 and redeploy.
+6. From the repo root, with the staging env loaded:
+
+```bash
+bun run paystack:smoke            # GET /balance + initialize + verify, no secret printed
+bun run paystack:smoke -- --momo  # also a test MoMo charge to 0551234987
+```
+
+The full dashboard checklist, test cards, MoMo number, transfer/OTP notes and live checklist
+are in `docs/PAYSTACK-STAGING.md`. Do not put live keys in this disposable environment.
 
 ---
 
@@ -584,6 +612,8 @@ Then, because the staging database is **new**:
 | 10 | Database truth | `psql "$NEON_DIRECT" -c "select count(*) from sale;"` | the sale is there, exactly once |
 | 11 | Stock moved | inventory → the sold product | quantity down by the sold amount |
 | 12 | Public site | open `https://<web>.vercel.app` | content from `/api/public/site`, not a blank shell |
+| 13 | Paystack credential | `bun run paystack:smoke` | `PASS balance`, `PASS initialize`, `PASS verify` |
+| 14 | Card + webhook | a card tender with `4084 0840 8408 4081` | payment `PAID`; dashboard Webhook Events shows `200` |
 
 Step 10 is the one that matters: if the till says "synced" and Neon says `0`, the upload never
 happened and the outbox is holding it — check the POS sync screen before anything else.
@@ -613,6 +643,11 @@ happened and the outbox is holding it — check the POS sync screen before anyth
 | Public site renders an empty shell | `WEB_API_URL` missing or set as `VITE_` | set the server-side variable, redeploy |
 | POS: "request timed out" on upload | Render cold start | retry; the outbox keeps the sale |
 | POS: cannot reach the API | `config.json` wrong, or a packaged build with a localhost URL | fix the file; never localhost in a packaged build |
+| Paystack: `Invalid key` | `PAYSTACK_MODE` and key prefix disagree | `sk_test_` with `test`, `sk_live_` with `live` in production |
+| Paystack: webhook `401` | `PAYSTACK_WEBHOOK_SECRET` is not the secret key | leave it empty or copy the same secret key |
+| Paystack: card window opens but stays blank | callback URL points at your domain, which the Electron window blocks | use the default callback for the POS; the poll settles the payment |
+| Paystack: MoMo stays `pay_offline` | the customer did not approve within 180s | expected; start a new charge |
+| Paystack: payment pending after checkout | webhook late or signature rejected | check Webhook Events; the till's `verify` poll may settle first |
 
 ---
 
@@ -667,7 +702,10 @@ do that in an afternoon.
 | `POWERSYNC_URL` | Render + POS config | no | `https://<instance>.powersync.journeyapps.com` |
 | `POWERSYNC_AUDIENCE` | Render + PowerSync | no | the instance audience |
 | `JOBS_ENABLED` | Render | no | `true` |
-| `PAYSTACK_MODE` | Render | no | `mock` |
+| `PAYSTACK_MODE` | Render | no | `test` (staging) / `live` (production) |
+| `PAYSTACK_SECRET_KEY` | Render | **yes** | `sk_test_…` / `sk_live_…` |
+| `PAYSTACK_WEBHOOK_SECRET` | Render | **yes** if set | empty, or exactly the secret key |
+| `PAYSTACK_EMAIL_DOMAIN` | Render | no | a domain the business owns |
 | `EVAT_PROVIDER` | Render | no | `mock` |
 | `WEB_API_URL` | Vercel (`web`) | no | `https://<api>.onrender.com` |
 | `VITE_API_URL` | Vercel (`admin`) | no | `https://<api>.onrender.com` |
