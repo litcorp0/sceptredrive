@@ -246,9 +246,14 @@ id at startup, and `identity.test.ts` fails if `forge.config.mts` drifts from it
 from the brand master, which stays the single source of truth:
 
 ```bash
-magick packages/brand/assets/logo-icon.png -background none \
+magick packages/brand/assets/logo-icon-solid.png -background none \
   -define icon:auto-resize=256,128,64,48,32,24,16 desktop/icons/icon.ico
 ```
+
+It uses `logo-icon-solid.png`, not the transparent `logo-icon.png`: Windows draws the shortcut,
+Start menu and taskbar icons over the wallpaper, and a charcoal wordmark on a transparent canvas
+disappears on a dark one. `logo-icon.png` stays the favicon master, where the page supplies the
+background.
 
 `MakerSquirrel.iconUrl` (the icon in *Programs and Features*) is still unset: it is fetched
 from a public HTTPS URL at install time, so it waits for the production domain. macOS needs

@@ -9,7 +9,8 @@ header, a login screen and a favicon cannot drift apart.
 | `logo-source.jpg` | The supplied original (1254×1254, light `#F0F0F0` background). Provenance only; never shipped. |
 | `logo.png` | Transparent lockup, charcoal wordmark + orange mark. Light surfaces. |
 | `logo-inverse.png` | Transparent lockup, off-white wordmark + orange mark. Charcoal surfaces. |
-| `logo-icon.png` | Padded 512×512 square for favicons and touch icons. |
+| `logo-icon.png` | Padded 512×512 square for favicons and touch icons. Transparent. |
+| `logo-icon-solid.png` | The same square on the artwork's `#F0F0F0` background, for OS icons. |
 
 ## How they were produced
 
@@ -34,9 +35,15 @@ magick logo.png -fuzz 12% -fill '#F6F6F4' -opaque '#1b1f23' -strip logo-inverse.
 # 3. Fit the lockup into a padded square for icons.
 magick logo.png -resize 430x -background none -gravity center \
   -extent 512x512 -strip logo-icon.png
+
+# 4. The same square with the artwork's background, for OS icons. A desktop icon drawn on a
+#    transparent canvas loses the charcoal wordmark entirely over a dark wallpaper, which is
+#    what the Windows shell and Start menu put it on.
+magick logo-icon.png -background '#F0F0F0' -alpha remove -alpha off -strip logo-icon-solid.png
 ```
 
-Expected: `logo.png` and `logo-inverse.png` are 1159×504 RGBA, `logo-icon.png` is 512×512.
+Expected: `logo.png` and `logo-inverse.png` are 1159×504 RGBA, `logo-icon.png` is 512×512
+transparent, `logo-icon-solid.png` is 512×512 opaque.
 
 ## Rules
 
