@@ -23,7 +23,7 @@
 | 4 | PowerSync Cloud: instance, DB connection, JWKS, sync config | 15 min | steps 1 + 3 (needs the JWKS URL) |
 | 5 | Vercel: two projects, env, deploy | 20 min | step 3 |
 | 6 | Console login across origins | 10 min *or an hour* | steps 3 + 5 |
-| 7 | POS: config, enrol, one offline sale | 15 min | steps 3 + 4 |
+| 7 | POS: config, enrol, one offline sale (§9.1 for Windows) | 15 min | steps 3 + 4 |
 | 8 | Prove the fourteen checks (§10) | 15 min | everything |
 | 9 | Takedown (§12) | 10 min | done |
 
@@ -474,7 +474,52 @@ No rebuild is needed: the renderer's CSP already permits `https://*.powersync.jo
 and the configured API origin. A **packaged** build refuses `localhost` unless
 `SCEPTRE_ALLOW_LOCAL_API=1`, which is exactly why the staging URLs must be real HTTPS hosts.
 
-### 9.1 Building the till — Linux and Windows
+### 9.1 Writing `config.json` on Windows
+
+Windows hides file extensions, and PowerShell's `Set-Content -Encoding utf8` writes a BOM; either
+one produces a `config.json` the app refuses to read. Write it in PowerShell rather than Notepad:
+
+1. Start the app once, then quit it. That creates the folder.
+2. `Win+R` → `%APPDATA%\Sceptre Drive POS` → Enter. That is
+   `C:\Users\<you>\AppData\Roaming\Sceptre Drive POS`.
+3. Paste this into **Windows PowerShell** with the two staging URLs. `New-Item -Force` makes the
+   folder even if the app has not run yet, and `WriteAllText` writes UTF-8 without a BOM:
+
+```powershell
+$dir = Join-Path $env:APPDATA 'Sceptre Drive POS'
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+$json = @'
+{
+  "apiBaseUrl": "https://<api>.onrender.com",
+  "powersyncUrl": "https://<instance>.powersync.journeyapps.com"
+}
+'@
+
+[System.IO.File]::WriteAllText((Join-Path $dir 'config.json'), $json)
+```
+
+4. Check it parses — silence means valid:
+
+```powershell
+Get-Content "$env:APPDATA\Sceptre Drive POS\config.json" -Raw | ConvertFrom-Json
+```
+
+5. Start the app. It should reach sign-in and ask for an enrolment code.
+
+Two failure modes to recognise, because neither says "check your config":
+
+- **No file at all** falls back to `https://api.gikautos.com` and `https://powersync.gikautos.com`
+  (`defaultRuntimeConfig`), which do not exist yet, so the till simply fails to connect.
+- **An unreadable file** (`config.json.txt`, a BOM, a missing key) fails closed with
+  `app.exit(1)`: the window closes as it opens, and `CONFIG_INVALID` is printed to the console.
+
+Both keys are required and each must be a full `http(s)` URL; only their origins feed the CSP.
+The file is read once at startup, so a later edit needs a full quit and restart, not just closing
+the window. The diagnostics screen shows **User data** — the live `app.getPath('userData')` — which
+confirms the folder the app actually reads.
+
+### 9.2 Building the till — Linux and Windows
 
 The POS is **not part of the deployed stack**: it is a desktop binary. Render, Vercel,
 Neon and PowerSync host the server side; the till is built locally (or in CI) and installed on
@@ -529,9 +574,10 @@ bun run make:pos
 ```
 
 **On each machine, before the first launch**, write `config.json` into the user-data directory
-(`~/.config/Sceptre Drive POS/` on Linux, `%APPDATA%\Sceptre Drive POS\` on Windows) — a
-**packaged** build refuses `localhost` unless `SCEPTRE_ALLOW_LOCAL_API=1`, so a wrong URL fails
-loudly rather than quietly selling to a development API.
+(`~/.config/Sceptre Drive POS/` on Linux, `%APPDATA%\Sceptre Drive POS\` on Windows; the Windows
+walkthrough is §9.1) — a **packaged** build refuses `localhost` unless
+`SCEPTRE_ALLOW_LOCAL_API=1`, so a wrong URL fails loudly rather than quietly selling to a
+development API.
 
 **Two installs mean two devices.** Each machine enrols separately (console → terminal →
 enrolment code), and a device token belongs to one machine. That is the check worth doing:
@@ -541,7 +587,7 @@ enrol Linux, enrol Windows, sell offline on each, and watch both sales land in N
 > sale prints, uploads and survives a restart on both OSes, the till is verified; a `bun run dev`
 > window is not the same test.
 
-### 9.2 Publishing the Windows installer as a GitHub Release
+### 9.3 Publishing the Windows installer as a GitHub Release
 
 Windows only: the till fleet is Windows, and every extra artefact is another thing to keep
 working. Two workflows handle it.
