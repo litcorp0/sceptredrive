@@ -36,8 +36,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to ship, for example 0.2.0. The tag becomes v0.2.0 and is created at the built commit.'
-        required: true
+        description: 'Version to ship, for example 0.2.0. Leave blank to bump the patch of the newest tag.'
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -68,20 +69,33 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            raw="$INPUT_VERSION"
-          else
-            # A tag push: `v0.2.0` -> `0.2.0`.
-            raw="${GITHUB_REF_NAME}"
-          fi
-          version="${raw#v}"
-
           # The newest published tag is the real floor: desktop/package.json stops
           # advancing once releases start, because the stamp is build-local.
           latest=$(git ls-remote --tags --refs origin 'refs/tags/v*' \
             | sed -E 's#.*refs/tags/v##' \
             | sort -V \
             | tail -n 1)
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION#v}"
+            version="${version// /}"
+          else
+            # A tag push: `v0.2.0` -> `0.2.0`.
+            version="${GITHUB_REF_NAME#v}"
+          fi
+
+          # A dispatched run may omit the version, in which case the next patch is the
+          # obvious choice: the operator picks "release", not a number, and the decision that
+          # needs a human (minor or major) stays explicit.
+          if [ -z "$version" ]; then
+            if [ -z "$latest" ]; then
+              version="0.1.0"
+            else
+              base="${latest%%-*}"
+              version=$(printf '%s' "$base" | awk -F. '{ printf "%d.%d.%d", $1, $2, $3 + 1 }')
+            fi
+            echo "No version given; bumping the newest tag ($latest) to $version."
+          fi
 
           # Validates the shape and refuses a version lower than the committed one or the
           # newest tag.
@@ -179,8 +193,6 @@ jobs:
 
       - name: Write release notes
         shell: bash
-        env:
-          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -euo pipefail
           # The installer name is read from the built set rather than composed from the
@@ -191,39 +203,8 @@ jobs:
             echo "::error::Expected exactly one .exe asset, found ${#installers[@]}."
             exit 1
           fi
-          INSTALLER=$(basename "${installers[0]}")
+          sed "s|@INSTALLER@|$(basename "${installers[0]}")|g" scripts/release-notes.md > NOTES.md
 
-          cat > NOTES.md <<'EOF'
-          The Windows till installer, unsigned while the signing certificate is pending.
-
-          ## Install
-
-          1. Download `@INSTALLER@` (the only `.exe` asset).
-          2. Windows SmartScreen will warn because the installer is unsigned —
-             **More info → Run anyway**.
-          3. Before the first launch, put `config.json` in `%APPDATA%\Sceptre Drive POS\`.
-          4. Enrol from the console (terminals → enrolment code) and set a staff PIN.
-
-          ## config.json
-
-          ```json
-          {
-            "apiBaseUrl": "https://<your-api>.onrender.com",
-            "powersyncUrl": "https://<your-instance>.powersync.journeyapps.com"
-          }
-          ```
-
-          A packaged build refuses `localhost` unless `SCEPTRE_ALLOW_LOCAL_API=1`, so a wrong
-          URL fails loudly rather than selling into a development API.
-
-          `SHA256SUMS.txt` lists the checksums of every asset.
-
-          Unsigned, no auto-update. Signing, auto-update and the production cut are Phase 15.
-          EOF
-
-          # Only the installer placeholder is substituted; the config example keeps its
-          # `<your-api>` markers.
-          sed -i "s|@INSTALLER@|$INSTALLER|g" NOTES.md
       - name: Publish
         shell: bash
         env:

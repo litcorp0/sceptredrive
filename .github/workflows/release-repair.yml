@@ -1,0 +1,88 @@
+name: Repair release
+
+# Rebuild the parts of an existing release that are derived from its asset list.
+#
+# A tag runs `release.yml` exactly as it existed at that commit, so a release cut before a
+# fix cannot be corrected by re-running it. This reads the assets GitHub already stores and
+# the sha256 digest it computed for each, then rewrites `SHA256SUMS.txt` and the install notes
+# to describe the names actually published. No build, and the binaries are not re-uploaded.
+#
+# It exists because v0.1.0 shipped a checksum file naming `Sceptre Drive POS-0.1.0 Setup.exe`
+# while GitHub had published `Sceptre.Drive.POS-0.1.0.Setup.exe`. Releases made after
+# `scripts/release-assets.sh` normalised names do not need this.
+#
+# Actions → Repair release → Run workflow, with the tag to repair.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to repair, for example v0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Repair release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rewrite checksums and notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Asset names as published, with the digest GitHub computed for each.
+          gh api "repos/$GH_REPO/releases/tags/$TAG" \
+            --jq '.assets[] | [.name, (.digest // "")] | @tsv' > assets.tsv
+          cat assets.tsv
+
+          # One line per asset, named as published. An asset with no digest cannot be
+          # repaired automatically, so say which one rather than writing a partial file.
+          awk -F'\t' '
+            $1 == "SHA256SUMS.txt" { next }
+            $2 !~ /^sha256:/ { printf "::error::GitHub recorded no sha256 digest for %s\n", $1; failed = 1; next }
+            { sub(/^sha256:/, "", $2); printf "%s  %s\n", $2, $1 }
+            END { if (failed) exit 1 }
+          ' assets.tsv | sort -k2 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          # The notes name the installer, so take it from the release, not from a version.
+          installer=$(awk -F'\t' '$1 ~ /\.exe$/ { print $1 }' assets.tsv)
+          if [ "$(printf '%s\n' "$installer" | grep -c .)" -ne 1 ]; then
+            echo "::error::Expected exactly one .exe asset on $TAG."
+            exit 1
+          fi
+          sed "s|@INSTALLER@|$installer|g" scripts/release-notes.md > NOTES.md
+
+          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --notes-file NOTES.md
+
+      # Prove the repair against the published bytes rather than against the file just written.
+      - name: Verify the repair
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          cd verify
+          gh release download "$TAG"
+          ls -la
+          sha256sum -c SHA256SUMS.txt
+          echo "Release $TAG verifies against its published checksums."

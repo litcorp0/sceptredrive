@@ -607,13 +607,20 @@ release is a deliberate act, because it carries a version number people keep.
 **Cut a release (preferred):**
 
 1. Merge to `dev`.
-2. Actions → **Release** → **Run workflow**, branch `dev`, version `0.2.0`.
+2. Actions → **Release** → **Run workflow**, branch `dev`. Leave the version blank to bump the
+   patch of the newest tag (`0.1.0` → `0.1.1`), or type one for a minor or major release.
 
 Nothing is bumped by hand. The run stamps that version into `desktop/package.json` before
-Forge builds, so the installer is named `Sceptre Drive POS-0.2.0 Setup.exe`, then creates the
+Forge builds, so the installer is named `Sceptre-Drive-POS-0.2.0-Setup.exe`, then creates the
 tag `v0.2.0` as its last step, pinned to the commit it built. The committed file keeps its old
 number — the tag is the record of what shipped — so instead the run refuses any version lower
 than the newest published tag. A failed run leaves no tag: fix, push, re-dispatch.
+
+**Repair an existing release** — Actions → **Repair release** → Run workflow with the tag. A tag
+runs `release.yml` as it existed at that commit, so a release cut before a fix cannot be
+corrected by re-running it. This rewrites `SHA256SUMS.txt` and the install notes from the assets
+GitHub already stores and the digests it computed, then downloads everything back to verify. No
+rebuild, and the binaries are untouched.
 
 **Or push a tag by hand** — the version comes from the tag, with the same stamping, but with
 one catch: a tag resolves the workflow file *at the tagged commit*, so a fix sitting on `dev`
