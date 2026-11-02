@@ -63,6 +63,9 @@ import { Route as AuthenticatedCustomersIdStatementRouteImport } from './routes/
 import { Route as AuthenticatedInventoryCountsIndexRouteImport } from './routes/_authenticated/inventory/counts/index'
 import { Route as AuthenticatedInventoryCountsCountIdRouteImport } from './routes/_authenticated/inventory/counts/$countId'
 import { Route as AuthenticatedInventoryCountsNewRouteImport } from './routes/_authenticated/inventory/counts/new'
+import { Route as AuthenticatedInventoryOpeningsIndexRouteImport } from './routes/_authenticated/inventory/openings/index'
+import { Route as AuthenticatedInventoryOpeningsOpeningIdRouteImport } from './routes/_authenticated/inventory/openings/$openingId'
+import { Route as AuthenticatedInventoryOpeningsNewRouteImport } from './routes/_authenticated/inventory/openings/new'
 import { Route as AuthenticatedInventoryReceiptsIndexRouteImport } from './routes/_authenticated/inventory/receipts/index'
 import { Route as AuthenticatedInventoryReceiptsReceiptIdRouteImport } from './routes/_authenticated/inventory/receipts/$receiptId'
 import { Route as AuthenticatedInventoryStockIndexRouteImport } from './routes/_authenticated/inventory/stock/index'
@@ -394,6 +397,24 @@ const AuthenticatedInventoryCountsNewRoute =
     path: '/counts/new',
     getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
+const AuthenticatedInventoryOpeningsIndexRoute =
+  AuthenticatedInventoryOpeningsIndexRouteImport.update({
+    id: '/openings/',
+    path: '/openings/',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryOpeningsOpeningIdRoute =
+  AuthenticatedInventoryOpeningsOpeningIdRouteImport.update({
+    id: '/openings/$openingId',
+    path: '/openings/$openingId',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
+const AuthenticatedInventoryOpeningsNewRoute =
+  AuthenticatedInventoryOpeningsNewRouteImport.update({
+    id: '/openings/new',
+    path: '/openings/new',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
+  } as any)
 const AuthenticatedInventoryReceiptsIndexRoute =
   AuthenticatedInventoryReceiptsIndexRouteImport.update({
     id: '/receipts/',
@@ -584,6 +605,8 @@ export interface FileRoutesByFullPath {
   '/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
+  '/inventory/openings/$openingId': typeof AuthenticatedInventoryOpeningsOpeningIdRoute
+  '/inventory/openings/new': typeof AuthenticatedInventoryOpeningsNewRoute
   '/inventory/receipts/$receiptId': typeof AuthenticatedInventoryReceiptsReceiptIdRoute
   '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
@@ -602,6 +625,7 @@ export interface FileRoutesByFullPath {
   '/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
   '/customers/$id/': typeof AuthenticatedCustomersIdIndexRoute
   '/inventory/counts/': typeof AuthenticatedInventoryCountsIndexRoute
+  '/inventory/openings/': typeof AuthenticatedInventoryOpeningsIndexRoute
   '/inventory/receipts/': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
   '/inventory/transfers/': typeof AuthenticatedInventoryTransfersIndexRoute
@@ -652,6 +676,8 @@ export interface FileRoutesByTo {
   '/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
+  '/inventory/openings/$openingId': typeof AuthenticatedInventoryOpeningsOpeningIdRoute
+  '/inventory/openings/new': typeof AuthenticatedInventoryOpeningsNewRoute
   '/inventory/receipts/$receiptId': typeof AuthenticatedInventoryReceiptsReceiptIdRoute
   '/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
@@ -670,6 +696,7 @@ export interface FileRoutesByTo {
   '/catalog/products': typeof AuthenticatedCatalogProductsIndexRoute
   '/customers/$id': typeof AuthenticatedCustomersIdIndexRoute
   '/inventory/counts': typeof AuthenticatedInventoryCountsIndexRoute
+  '/inventory/openings': typeof AuthenticatedInventoryOpeningsIndexRoute
   '/inventory/receipts': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/inventory/stock': typeof AuthenticatedInventoryStockIndexRoute
   '/inventory/transfers': typeof AuthenticatedInventoryTransfersIndexRoute
@@ -732,6 +759,8 @@ export interface FileRoutesById {
   '/_authenticated/customers/$id/statement': typeof AuthenticatedCustomersIdStatementRoute
   '/_authenticated/inventory/counts/$countId': typeof AuthenticatedInventoryCountsCountIdRoute
   '/_authenticated/inventory/counts/new': typeof AuthenticatedInventoryCountsNewRoute
+  '/_authenticated/inventory/openings/$openingId': typeof AuthenticatedInventoryOpeningsOpeningIdRoute
+  '/_authenticated/inventory/openings/new': typeof AuthenticatedInventoryOpeningsNewRoute
   '/_authenticated/inventory/receipts/$receiptId': typeof AuthenticatedInventoryReceiptsReceiptIdRoute
   '/_authenticated/inventory/stock/$productId': typeof AuthenticatedInventoryStockProductIdRoute
   '/_authenticated/inventory/transfers/$transferId': typeof AuthenticatedInventoryTransfersTransferIdRoute
@@ -750,6 +779,7 @@ export interface FileRoutesById {
   '/_authenticated/catalog/products/': typeof AuthenticatedCatalogProductsIndexRoute
   '/_authenticated/customers/$id/': typeof AuthenticatedCustomersIdIndexRoute
   '/_authenticated/inventory/counts/': typeof AuthenticatedInventoryCountsIndexRoute
+  '/_authenticated/inventory/openings/': typeof AuthenticatedInventoryOpeningsIndexRoute
   '/_authenticated/inventory/receipts/': typeof AuthenticatedInventoryReceiptsIndexRoute
   '/_authenticated/inventory/stock/': typeof AuthenticatedInventoryStockIndexRoute
   '/_authenticated/inventory/transfers/': typeof AuthenticatedInventoryTransfersIndexRoute
@@ -812,6 +842,8 @@ export interface FileRouteTypes {
     | '/customers/$id/statement'
     | '/inventory/counts/$countId'
     | '/inventory/counts/new'
+    | '/inventory/openings/$openingId'
+    | '/inventory/openings/new'
     | '/inventory/receipts/$receiptId'
     | '/inventory/stock/$productId'
     | '/inventory/transfers/$transferId'
@@ -830,6 +862,7 @@ export interface FileRouteTypes {
     | '/catalog/products/'
     | '/customers/$id/'
     | '/inventory/counts/'
+    | '/inventory/openings/'
     | '/inventory/receipts/'
     | '/inventory/stock/'
     | '/inventory/transfers/'
@@ -880,6 +913,8 @@ export interface FileRouteTypes {
     | '/customers/$id/statement'
     | '/inventory/counts/$countId'
     | '/inventory/counts/new'
+    | '/inventory/openings/$openingId'
+    | '/inventory/openings/new'
     | '/inventory/receipts/$receiptId'
     | '/inventory/stock/$productId'
     | '/inventory/transfers/$transferId'
@@ -898,6 +933,7 @@ export interface FileRouteTypes {
     | '/catalog/products'
     | '/customers/$id'
     | '/inventory/counts'
+    | '/inventory/openings'
     | '/inventory/receipts'
     | '/inventory/stock'
     | '/inventory/transfers'
@@ -959,6 +995,8 @@ export interface FileRouteTypes {
     | '/_authenticated/customers/$id/statement'
     | '/_authenticated/inventory/counts/$countId'
     | '/_authenticated/inventory/counts/new'
+    | '/_authenticated/inventory/openings/$openingId'
+    | '/_authenticated/inventory/openings/new'
     | '/_authenticated/inventory/receipts/$receiptId'
     | '/_authenticated/inventory/stock/$productId'
     | '/_authenticated/inventory/transfers/$transferId'
@@ -977,6 +1015,7 @@ export interface FileRouteTypes {
     | '/_authenticated/catalog/products/'
     | '/_authenticated/customers/$id/'
     | '/_authenticated/inventory/counts/'
+    | '/_authenticated/inventory/openings/'
     | '/_authenticated/inventory/receipts/'
     | '/_authenticated/inventory/stock/'
     | '/_authenticated/inventory/transfers/'
@@ -1374,6 +1413,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryCountsNewRouteImport
       parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
+    '/_authenticated/inventory/openings/': {
+      id: '/_authenticated/inventory/openings/'
+      path: '/openings'
+      fullPath: '/inventory/openings/'
+      preLoaderRoute: typeof AuthenticatedInventoryOpeningsIndexRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/openings/$openingId': {
+      id: '/_authenticated/inventory/openings/$openingId'
+      path: '/openings/$openingId'
+      fullPath: '/inventory/openings/$openingId'
+      preLoaderRoute: typeof AuthenticatedInventoryOpeningsOpeningIdRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
+    '/_authenticated/inventory/openings/new': {
+      id: '/_authenticated/inventory/openings/new'
+      path: '/openings/new'
+      fullPath: '/inventory/openings/new'
+      preLoaderRoute: typeof AuthenticatedInventoryOpeningsNewRouteImport
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
+    }
     '/_authenticated/inventory/receipts/': {
       id: '/_authenticated/inventory/receipts/'
       path: '/receipts'
@@ -1659,12 +1719,15 @@ interface AuthenticatedInventoryRouteRouteChildren {
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInventoryCountsCountIdRoute: typeof AuthenticatedInventoryCountsCountIdRoute
   AuthenticatedInventoryCountsNewRoute: typeof AuthenticatedInventoryCountsNewRoute
+  AuthenticatedInventoryOpeningsOpeningIdRoute: typeof AuthenticatedInventoryOpeningsOpeningIdRoute
+  AuthenticatedInventoryOpeningsNewRoute: typeof AuthenticatedInventoryOpeningsNewRoute
   AuthenticatedInventoryReceiptsReceiptIdRoute: typeof AuthenticatedInventoryReceiptsReceiptIdRoute
   AuthenticatedInventoryTransfersTransferIdRoute: typeof AuthenticatedInventoryTransfersTransferIdRoute
   AuthenticatedInventoryTransfersNewRoute: typeof AuthenticatedInventoryTransfersNewRoute
   AuthenticatedInventoryWriteOffsWriteOffIdRoute: typeof AuthenticatedInventoryWriteOffsWriteOffIdRoute
   AuthenticatedInventoryWriteOffsNewRoute: typeof AuthenticatedInventoryWriteOffsNewRoute
   AuthenticatedInventoryCountsIndexRoute: typeof AuthenticatedInventoryCountsIndexRoute
+  AuthenticatedInventoryOpeningsIndexRoute: typeof AuthenticatedInventoryOpeningsIndexRoute
   AuthenticatedInventoryReceiptsIndexRoute: typeof AuthenticatedInventoryReceiptsIndexRoute
   AuthenticatedInventoryTransfersIndexRoute: typeof AuthenticatedInventoryTransfersIndexRoute
   AuthenticatedInventoryWriteOffsIndexRoute: typeof AuthenticatedInventoryWriteOffsIndexRoute
@@ -1678,6 +1741,10 @@ const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRoute
     AuthenticatedInventoryCountsCountIdRoute:
       AuthenticatedInventoryCountsCountIdRoute,
     AuthenticatedInventoryCountsNewRoute: AuthenticatedInventoryCountsNewRoute,
+    AuthenticatedInventoryOpeningsOpeningIdRoute:
+      AuthenticatedInventoryOpeningsOpeningIdRoute,
+    AuthenticatedInventoryOpeningsNewRoute:
+      AuthenticatedInventoryOpeningsNewRoute,
     AuthenticatedInventoryReceiptsReceiptIdRoute:
       AuthenticatedInventoryReceiptsReceiptIdRoute,
     AuthenticatedInventoryTransfersTransferIdRoute:
@@ -1690,6 +1757,8 @@ const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRoute
       AuthenticatedInventoryWriteOffsNewRoute,
     AuthenticatedInventoryCountsIndexRoute:
       AuthenticatedInventoryCountsIndexRoute,
+    AuthenticatedInventoryOpeningsIndexRoute:
+      AuthenticatedInventoryOpeningsIndexRoute,
     AuthenticatedInventoryReceiptsIndexRoute:
       AuthenticatedInventoryReceiptsIndexRoute,
     AuthenticatedInventoryTransfersIndexRoute:

@@ -312,6 +312,8 @@ export interface ProductSubmissionInput {
 	barcode?: string
 	supplierId?: string
 	note?: string
+	openingQuantity?: number
+	openingUnitCostMinor?: number
 }
 
 export interface ProductSubmissionResult {

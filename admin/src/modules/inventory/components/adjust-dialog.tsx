@@ -42,31 +42,36 @@ export function AdjustDialog({
 	onOpenChange,
 	branchId,
 	branchName,
+	initialProduct = null,
 }: {
 	open: boolean
 	onOpenChange: (open: boolean) => void
 	branchId: string | null
 	branchName: string | null
+	/** 18-05/19: open from an approved product with the item already chosen. */
+	initialProduct?: PickedProduct | null
 }) {
 	const queryClient = useQueryClient()
-	const [product, setProduct] = useState<PickedProduct | null>(null)
-	const [direction, setDirection] = useState<"in" | "out">("out")
+	const [product, setProduct] = useState<PickedProduct | null>(initialProduct)
+	const [direction, setDirection] = useState<"in" | "out">(initialProduct ? "in" : "out")
 	const [quantity, setQuantity] = useState("")
-	const [reasonCode, setReasonCode] = useState<AdjustmentReason>("CORRECTION")
+	const [reasonCode, setReasonCode] = useState<AdjustmentReason>(
+		initialProduct ? "FOUND" : "CORRECTION",
+	)
 	const [unitCost, setUnitCost] = useState("")
 	const [note, setNote] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 
 	useEffect(() => {
 		if (!open) return
-		setProduct(null)
-		setDirection("out")
+		setProduct(initialProduct)
+		setDirection(initialProduct ? "in" : "out")
 		setQuantity("")
-		setReasonCode("CORRECTION")
+		setReasonCode(initialProduct ? "FOUND" : "CORRECTION")
 		setUnitCost("")
 		setNote("")
 		setFormError(null)
-	}, [open])
+	}, [open, initialProduct])
 
 	// Opening stock: stock the shop already owns, which a receipt cannot describe.
 	const openingStock = direction === "in" && (reasonCode === "FOUND" || reasonCode === "CORRECTION")
@@ -128,8 +133,8 @@ export function AdjustDialog({
 				<DialogHeader>
 					<DialogTitle>Adjust stock</DialogTitle>
 					<DialogDescription>
-						Post a reason-coded correction{branchName ? ` at ${branchName}` : ""}. Adjustments are
-						audited and never change the average cost.
+						Post a reason-coded correction{branchName ? ` at ${branchName}` : ""}. An increase with
+						a unit cost seeds the branch average like a receipt; a decrease never changes it.
 					</DialogDescription>
 				</DialogHeader>
 

@@ -8,6 +8,7 @@ const TAB_LINKS = {
 	transfers: "/inventory/transfers",
 	writeOffs: "/inventory/write-offs",
 	counts: "/inventory/counts",
+	openings: "/inventory/openings",
 } as const
 
 type InventoryTab = keyof typeof TAB_LINKS
@@ -30,7 +31,7 @@ export function InventoryLayout() {
 		<div className="mx-auto max-w-6xl">
 			<PageHeader
 				title="Inventory"
-				description="Stock levels, goods receipts, adjustments, transfers, write-offs and counts."
+				description="Stock levels, goods receipts, adjustments, transfers, write-offs, counts and go-live opening stock."
 			/>
 
 			<Tabs
@@ -52,6 +53,9 @@ export function InventoryLayout() {
 					</TabsTrigger>
 					<TabsTrigger value="counts" onClick={() => void navigate({ to: TAB_LINKS.counts })}>
 						Counts
+					</TabsTrigger>
+					<TabsTrigger value="openings" onClick={() => void navigate({ to: TAB_LINKS.openings })}>
+						Opening stock
 					</TabsTrigger>
 				</TabsList>
 			</Tabs>

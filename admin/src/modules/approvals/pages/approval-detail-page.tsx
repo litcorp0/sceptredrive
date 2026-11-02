@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { Inbox, ShieldAlert } from "lucide-react"
+import { useMemo, useState } from "react"
 import { EmptyState } from "#/components/common/empty-state"
 import { PageHeader } from "#/components/common/page-header"
 import { StatusNote } from "#/components/common/status-note"
 import { Button } from "#/components/ui/button"
 import { Skeleton } from "#/components/ui/skeleton"
 import { ApiError } from "#/lib/api"
+import { productDetailOptions } from "#/modules/catalog"
+import { AdjustDialog } from "#/modules/inventory"
 import { approvalDetailOptions } from "../api/approvals"
 import { ApprovalDetailPanel } from "../components/approval-detail-panel"
 import { typeLabel } from "../utils/approval"
@@ -17,10 +20,39 @@ const routeApi = getRouteApi("/_authenticated/approvals/$approvalId")
 export function ApprovalDetailPage() {
 	const { approvalId } = routeApi.useParams()
 	const detailQuery = useQuery({ ...approvalDetailOptions(approvalId), retry: false })
+	const [adjustOpen, setAdjustOpen] = useState(false)
 
 	const error = detailQuery.error
 	const denied = error instanceof ApiError && error.status === 403
 	const missing = error instanceof ApiError && error.status === 404
+
+	const approval = detailQuery.data?.approval
+	const approvedProductId =
+		approval?.type === "PRODUCT_CREATE" && approval.status === "APPROVED" ? approval.entityId : null
+	const productQuery = useQuery({
+		...productDetailOptions(approvedProductId ?? ""),
+		enabled: approvedProductId !== null,
+	})
+	const pickedProduct = useMemo(
+		() =>
+			productQuery.data
+				? {
+						id: productQuery.data.product.id,
+						sku: productQuery.data.product.sku,
+						name: productQuery.data.product.name,
+						costPriceMinor: productQuery.data.product.costPriceMinor,
+					}
+				: null,
+		[productQuery.data],
+	)
+
+	const productProposal =
+		detailQuery.data?.subject.kind === "product" ? detailQuery.data.subject.proposal : null
+	const openingQuantity =
+		typeof productProposal === "object" && productProposal !== null
+			? (productProposal as Record<string, unknown>).openingQuantity
+			: undefined
+	const hadOpeningStock = typeof openingQuantity === "number" && openingQuantity > 0
 
 	return (
 		<div className="grid gap-4">
@@ -74,16 +106,33 @@ export function ApprovalDetailPage() {
 					{/* 18-05: approving a product creates a catalogue row, not stock. Say so
 					    where the decision was just made, so the item cannot sit invisible. */}
 					{detailQuery.data.approval.type === "PRODUCT_CREATE" &&
-					detailQuery.data.approval.status === "APPROVED" ? (
+					detailQuery.data.approval.status === "APPROVED" &&
+					!hadOpeningStock ? (
 						<StatusNote tone="info">
 							The product exists but has no stock yet, so the till will treat it as out of stock.{" "}
 							<Link to="/inventory" className="font-medium text-primary hover:underline">
 								Record a receipt or opening stock
 							</Link>{" "}
 							before selling it.
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="ml-2"
+								onClick={() => setAdjustOpen(true)}
+							>
+								Open stock now
+							</Button>
 						</StatusNote>
 					) : null}
 					<ApprovalDetailPanel detail={detailQuery.data} />
+					<AdjustDialog
+						open={adjustOpen}
+						onOpenChange={setAdjustOpen}
+						branchId={detailQuery.data.approval.branchId}
+						branchName={null}
+						initialProduct={pickedProduct}
+					/>
 				</>
 			)}
 		</div>

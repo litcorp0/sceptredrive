@@ -154,6 +154,10 @@ export const SETTING_META: SettingMetaMap = {
 		label: "Write-off serial prefix",
 		description: "Prefix for branch-month write-off serials, e.g. WO-ACC-202610-0001.",
 	},
+	"inventory.openingPrefix": {
+		label: "Opening stock serial prefix",
+		description: "Prefix for branch-month go-live opening serials, e.g. OPEN-ACC-202611-0001.",
+	},
 	"inventory.abcAThresholdBp": {
 		label: "ABC class A share (basis points)",
 		description:

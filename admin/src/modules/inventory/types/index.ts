@@ -18,6 +18,7 @@ export type StockMovementType =
 	| "SUPPLIER_RETURN"
 	| "WRITE_OFF"
 	| "RETURN"
+	| "OPENING"
 
 export interface StockRow {
 	productId: string
@@ -453,4 +454,124 @@ export interface WriteOffDetail {
 	writeOff: WriteOffListRow
 	lines: WriteOffLineDetail[]
 	approval: WriteOffApproval | null
+}
+
+// --- Phase 19: go-live opening stock -----------------------------------------
+
+export type OpeningStatus = "DRAFT" | "POSTED"
+export type OpeningLineStatus = "NEW" | "EXISTING"
+
+/** One row exactly as the file has it; money and quantity stay strings until the API parses them. */
+export interface OpeningLineInput {
+	lineNo?: number
+	sku?: string
+	barcode?: string
+	name: string
+	category: string
+	unit: string
+	brand?: string
+	price: string
+	cost: string
+	quantity: string
+	taxCategory?: "STANDARD" | "ZERO_RATED" | "EXEMPT"
+}
+
+export interface OpeningPreviewRow {
+	lineNo: number
+	status: OpeningLineStatus
+	productId: string | null
+	sku: string | null
+	name: string
+	category: string
+	categoryId: string | null
+	unit: string
+	uomId: string | null
+	brand: string | null
+	brandId: string | null
+	barcode: string | null
+	priceMinor: number | null
+	taxCategory: "STANDARD" | "ZERO_RATED" | "EXEMPT"
+	costMinor: number
+	quantity: number
+	onHand: number
+	delta: number
+	countedValueMinor: number
+	deltaValueMinor: number
+	warnings: string[]
+	errors: string[]
+}
+
+export interface OpeningPreview {
+	branchId: string
+	rows: OpeningPreviewRow[]
+	lineCount: number
+	totalUnits: number
+	countedValueMinor: number
+	deltaValueMinor: number
+	newProductCount: number
+	uncostedLineCount: number
+	canPost: boolean
+}
+
+export interface OpeningListRow {
+	id: string
+	number: string
+	branchId: string
+	branchCode: string
+	branchName: string
+	status: OpeningStatus
+	countedAt: string
+	note: string | null
+	lineCount: number
+	newProductCount: number
+	totalUnits: number
+	countedValueMinor: number
+	postedValueMinor: number
+	uncostedLineCount: number
+	createdBy: string | null
+	createdAt: string
+	updatedAt: string
+	postedBy: string | null
+	postedAt: string | null
+}
+
+export interface OpeningLineDetail {
+	id: string
+	lineNo: number
+	productId: string | null
+	productSku: string | null
+	productName: string | null
+	isNew: boolean
+	name: string
+	categoryId: string | null
+	unit: string | null
+	uomId: string | null
+	brandId: string | null
+	barcode: string | null
+	basePriceMinor: number | null
+	taxCategory: "STANDARD" | "ZERO_RATED" | "EXEMPT" | null
+	quantity: number
+	unitCostMinor: number
+	onHandAtDraft: number
+	deltaAtDraft: number
+	warning: string | null
+	movementId: string | null
+}
+
+export interface OpeningDetail {
+	opening: OpeningListRow
+	lines: OpeningLineDetail[]
+}
+
+export interface OpeningListResult {
+	openings: OpeningListRow[]
+	total: number
+	branchId: string | null
+}
+
+export interface OpeningListQuery {
+	branchId?: string
+	status?: OpeningStatus
+	limit?: number
+	offset?: number
 }

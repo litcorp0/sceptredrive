@@ -1,5 +1,6 @@
 import type {
 	CountListQuery,
+	OpeningListQuery,
 	ReceiptListQuery,
 	StockListQuery,
 	StockReportQuery,
@@ -55,4 +56,10 @@ export const writeOffKeys = {
 	all: ["write-offs"] as const,
 	list: (query: WriteOffListQuery) => [...writeOffKeys.all, "list", query] as const,
 	detail: (id: string) => [...writeOffKeys.all, "detail", id] as const,
+}
+
+export const openingKeys = {
+	all: ["openings"] as const,
+	list: (query: OpeningListQuery) => [...openingKeys.all, "list", query] as const,
+	detail: (id: string) => [...openingKeys.all, "detail", id] as const,
 }

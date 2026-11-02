@@ -41,7 +41,17 @@ export {
 	stockListOptions,
 	thresholdListOptions,
 } from "./api/inventory"
-export { countKeys, inventoryKeys, transferKeys, writeOffKeys } from "./api/keys"
+export { countKeys, inventoryKeys, openingKeys, transferKeys, writeOffKeys } from "./api/keys"
+export {
+	createOpening,
+	deleteOpening,
+	getOpening,
+	listOpenings,
+	openingDetailOptions,
+	openingListOptions,
+	postOpening,
+	previewOpening,
+} from "./api/openings"
 export {
 	cancelTransfer,
 	createTransfer,
@@ -79,6 +89,9 @@ export { CountDetailPage } from "./pages/count-detail-page"
 export { CountNewPage } from "./pages/count-new-page"
 export { CountsPage } from "./pages/counts-page"
 export { InventoryLayout } from "./pages/inventory-layout"
+export { OpeningDetailPage } from "./pages/opening-detail-page"
+export { OpeningNewPage } from "./pages/opening-new-page"
+export { OpeningsPage } from "./pages/openings-page"
 export { ReceiptDetailPage } from "./pages/receipt-detail-page"
 export { ReceiptsPage } from "./pages/receipts-page"
 export { StockDetailPage } from "./pages/stock-detail-page"
@@ -98,6 +111,16 @@ export type {
 	InventoryReceiptLine,
 	MovementListQuery,
 	MovementRow,
+	OpeningDetail,
+	OpeningLineDetail,
+	OpeningLineInput,
+	OpeningLineStatus,
+	OpeningListQuery,
+	OpeningListResult,
+	OpeningListRow,
+	OpeningPreview,
+	OpeningPreviewRow,
+	OpeningStatus,
 	ReceiptCreateInput,
 	ReceiptListQuery,
 	StockCount,

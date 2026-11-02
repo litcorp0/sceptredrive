@@ -20,6 +20,8 @@ export const MOVEMENT_META: Record<
 	WRITE_OFF: { label: "Write-off", tone: "red" },
 	// Phase 13: a resalable refund line put the goods back into sellable stock.
 	RETURN: { label: "Return", tone: "green" },
+	// Phase 19: the go-live count that put the branch's existing stock on the ledger.
+	OPENING: { label: "Opening stock", tone: "green" },
 }
 
 /**

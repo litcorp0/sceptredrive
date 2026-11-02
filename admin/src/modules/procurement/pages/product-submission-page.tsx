@@ -1,3 +1,4 @@
+import { parseQuantity } from "@sceptre/shared"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeftIcon } from "lucide-react"
@@ -54,6 +55,8 @@ export function ProductSubmissionPage() {
 	const [barcode, setBarcode] = useState("")
 	const [supplier, setSupplier] = useState<PickedSupplier | null>(null)
 	const [note, setNote] = useState("")
+	const [openingQuantity, setOpeningQuantity] = useState("")
+	const [openingUnitCost, setOpeningUnitCost] = useState("")
 	const [priceError, setPriceError] = useState<string | null>(null)
 	const [formError, setFormError] = useState<string | null>(null)
 
@@ -142,6 +145,26 @@ export function ProductSubmissionPage() {
 			return
 		}
 
+		let parsedOpeningQuantity: number | undefined
+		let parsedOpeningCost: number | undefined
+		if (openingQuantity.trim() !== "") {
+			const quantity = parseQuantity(openingQuantity)
+			if (quantity === null || quantity <= 0) {
+				setFormError("Opening quantity must be a whole number above zero.")
+				return
+			}
+			const cost = parseGhsToMinor(openingUnitCost)
+			if (cost === null) {
+				setFormError("Enter the unit cost of the opening stock, e.g. 45.00")
+				return
+			}
+			parsedOpeningQuantity = quantity
+			parsedOpeningCost = cost
+		} else if (openingUnitCost.trim() !== "") {
+			setFormError("Enter the opening quantity as well, or clear the cost.")
+			return
+		}
+
 		submitMutation.mutate({
 			name: name.trim(),
 			categoryId,
@@ -152,6 +175,12 @@ export function ProductSubmissionPage() {
 			...(barcode.trim() ? { barcode: barcode.trim() } : {}),
 			...(supplier ? { supplierId: supplier.id } : {}),
 			...(note.trim() ? { note: note.trim() } : {}),
+			...(parsedOpeningQuantity !== undefined && parsedOpeningCost !== undefined
+				? {
+						openingQuantity: parsedOpeningQuantity,
+						openingUnitCostMinor: parsedOpeningCost,
+					}
+				: {}),
 		})
 	}
 
@@ -299,9 +328,9 @@ export function ProductSubmissionPage() {
 					<CardHeader>
 						<CardTitle>Proposal</CardTitle>
 						<CardDescription>
-							The selling price is the figure the administrator is deciding. Cost comes from a goods
-							receipt or an opening-stock adjustment, never from this form — and until one exists,
-							sales of this product report no margin rather than a guess.
+							The selling price is the figure the administrator is deciding. Cost still comes from a
+							goods receipt or an opening-stock adjustment; the optional fields below let you
+							propose the stock you can already see.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4">
@@ -348,6 +377,49 @@ export function ProductSubmissionPage() {
 								onChange={(event) => setNote(event.target.value)}
 							/>
 						</div>
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Opening stock (optional)</CardTitle>
+						<CardDescription>
+							If the shelf already holds this item, propose the count and its unit cost. The
+							administrator approves the product and this stock in one decision; leaving both blank
+							creates the product at zero, as before.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="grid gap-4 sm:grid-cols-2">
+						<div className="grid gap-1.5">
+							<Label htmlFor="submission-opening-quantity">Quantity on the shelf</Label>
+							<Input
+								id="submission-opening-quantity"
+								inputMode="numeric"
+								placeholder="0"
+								value={openingQuantity}
+								disabled={busy}
+								onChange={(event) => setOpeningQuantity(event.target.value)}
+							/>
+						</div>
+						<div className="grid gap-1.5">
+							<Label htmlFor="submission-opening-cost">Unit cost (GHS)</Label>
+							<Input
+								id="submission-opening-cost"
+								inputMode="decimal"
+								placeholder="0.00"
+								value={openingUnitCost}
+								disabled={busy}
+								onChange={(event) => setOpeningUnitCost(event.target.value)}
+							/>
+						</div>
+						{openingQuantity.trim() !== "" && parseGhsToMinor(openingUnitCost) !== null ? (
+							<p className="text-xs text-muted-foreground sm:col-span-2">
+								Opening value:{" "}
+								{formatGhs(
+									(parseQuantity(openingQuantity) ?? 0) * (parseGhsToMinor(openingUnitCost) ?? 0),
+								)}
+							</p>
+						) : null}
 					</CardContent>
 				</Card>
 

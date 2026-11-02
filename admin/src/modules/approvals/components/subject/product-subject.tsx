@@ -15,6 +15,8 @@ export function ProductSubject({ subject }: { subject: ProductSubjectArm }) {
 	const priceMinor =
 		proposalMinor(subject.proposal, "proposedBasePriceMinor") ??
 		proposalMinor(subject.proposal, "proposedPriceMinor")
+	const openingQuantity = proposalMinor(subject.proposal, "openingQuantity")
+	const openingCostMinor = proposalMinor(subject.proposal, "openingUnitCostMinor")
 
 	return (
 		<Card>
@@ -40,6 +42,15 @@ export function ProductSubject({ subject }: { subject: ProductSubjectArm }) {
 						<div className="flex flex-wrap justify-between gap-2">
 							<dt className="text-muted-foreground">Description</dt>
 							<dd className="max-w-96 text-right">{description}</dd>
+						</div>
+					) : null}
+					{openingQuantity !== null && openingCostMinor !== null ? (
+						<div className="flex flex-wrap justify-between gap-2">
+							<dt className="text-muted-foreground">Opening stock</dt>
+							<dd className="text-right tabular-nums">
+								{openingQuantity} × {formatGhs(openingCostMinor)} ={" "}
+								{formatGhs(openingQuantity * openingCostMinor)}
+							</dd>
 						</div>
 					) : null}
 				</dl>
