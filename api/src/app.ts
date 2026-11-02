@@ -22,6 +22,7 @@ import { evatRoutes } from './modules/evat/evat.routes.ts'
 import { staffRoutes } from './modules/identity/staff.routes.ts'
 import { inventoryRoutes } from './modules/inventory/inventory.routes.ts'
 import { loyaltyRoutes } from './modules/loyalty/loyalty.routes.ts'
+import { openingsRoutes } from './modules/openings/openings.routes.ts'
 import { operationsRoutes } from './modules/operations/operations.routes.ts'
 import { branchesRoutes } from './modules/org/branches.routes.ts'
 import { enrollmentRoutes } from './modules/org/enrollment.routes.ts'
@@ -94,6 +95,7 @@ app.route('/', approvalsRoutes)
 app.route('/', catalogRoutes)
 app.route('/', productsRoutes)
 app.route('/', inventoryRoutes)
+app.route('/', openingsRoutes)
 app.route('/', transfersRoutes)
 app.route('/', writeOffsRoutes)
 app.route('/', countsRoutes)

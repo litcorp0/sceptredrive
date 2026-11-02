@@ -72,7 +72,8 @@ function validateInput(input: MovementInput): void {
     throw new AppError(400, 'VALIDATION_ERROR', 'Quantity must not be zero')
   }
 
-  const inbound = input.type === 'RECEIPT' || input.type === 'TRANSFER_IN'
+  const inbound =
+    input.type === 'RECEIPT' || input.type === 'TRANSFER_IN' || input.type === 'OPENING'
   if (inbound) {
     if (input.quantityDelta < 0) {
       throw new AppError(400, 'VALIDATION_ERROR', 'Inbound movements require a positive quantity')
@@ -160,7 +161,8 @@ export async function postMovements(
       const level = await lockOrCreateLevel(input.productId, input.branchId, executor)
       if (!level) throw new AppError(500, 'INTERNAL', 'Failed to lock the stock level')
 
-      const inbound = input.type === 'RECEIPT' || input.type === 'TRANSFER_IN'
+      const inbound =
+        input.type === 'RECEIPT' || input.type === 'TRANSFER_IN' || input.type === 'OPENING'
       // 17-05: opening stock carries a cost the way a receipt does. An adjustment
       // that states what the goods cost values them into the branch average; one
       // without a cost moves quantity only, exactly as before.

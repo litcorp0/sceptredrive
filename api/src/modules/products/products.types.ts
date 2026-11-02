@@ -167,4 +167,7 @@ export interface ProductSubmissionBody {
   barcode?: string
   supplierId?: string
   note?: string
+  /** Phase 19: opening stock the manager can already see on the shelf. */
+  openingQuantity?: number
+  openingUnitCostMinor?: number
 }

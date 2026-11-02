@@ -18,6 +18,7 @@ export type DocumentKind =
   | 'supplier_return'
   | 'supplier_credit_note'
   | 'stock_write_off'
+  | 'stock_opening'
 
 export const DOCUMENT_KINDS: Record<
   DocumentKind,
@@ -27,6 +28,7 @@ export const DOCUMENT_KINDS: Record<
       | 'procurement.returnPrefix'
       | 'procurement.creditNotePrefix'
       | 'inventory.writeOffPrefix'
+      | 'inventory.openingPrefix'
     label: string
     pad: number
   }
@@ -49,6 +51,11 @@ export const DOCUMENT_KINDS: Record<
   stock_write_off: {
     prefixKey: 'inventory.writeOffPrefix',
     label: 'stock write-off number',
+    pad: 4,
+  },
+  stock_opening: {
+    prefixKey: 'inventory.openingPrefix',
+    label: 'opening stock number',
     pad: 4,
   },
 }

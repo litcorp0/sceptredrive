@@ -414,6 +414,18 @@ export const SETTING_DEFINITIONS = {
     branchScoped: false,
     writableBy: 'admin',
   },
+  /** The branch-month serial prefix for a go-live opening: `OPEN-ACC-202611-0001` (19). */
+  'inventory.openingPrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Z]+$/),
+    defaultValue: 'OPEN',
+    branchScoped: false,
+    writableBy: 'admin',
+  },
   /**
    * Cumulative score share at which a product is class A, in basis points
    * (P12-D29). Must stay below `inventory.abcBThresholdBp`; `settings.service`

@@ -27,6 +27,18 @@ export async function findProductById(
   return rows[0] ?? null
 }
 
+export async function findProductBySku(
+  sku: string,
+  executor: DbExecutor = db,
+): Promise<ProductRow | null> {
+  const rows = await executor
+    .select()
+    .from(product)
+    .where(eq(product.sku, sku.trim().toUpperCase()))
+    .limit(1)
+  return rows[0] ?? null
+}
+
 /**
  * The product that already owns this name inside this category (17-01).
  *

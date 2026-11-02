@@ -55,8 +55,21 @@ export const productSubmissionSchema = z
     barcode: barcodeCodeSchema.optional(),
     supplierId: z.uuid().optional(),
     note: z.string().trim().min(1).max(300).optional(),
+    /**
+     * Phase 19: the manager can see the shelf. Both fields travel together and
+     * the admin approves the product and its opening stock in one decision.
+     */
+    openingQuantity: z.number().int().min(1).max(1_000_000).optional(),
+    openingUnitCostMinor: z.number().int().min(0).max(100_000_000_000).optional(),
   })
   .strict()
+  .refine(
+    (value) => (value.openingQuantity === undefined) === (value.openingUnitCostMinor === undefined),
+    {
+      message: 'Opening quantity and opening unit cost must be sent together',
+      path: ['openingQuantity'],
+    },
+  )
 
 export const productUpdateSchema = z
   .object({

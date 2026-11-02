@@ -17,6 +17,7 @@ import {
   listChildCategoryIds,
 } from '../catalog/catalog.repository.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
+import * as openingsService from '../openings/openings.service.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -192,72 +193,75 @@ export async function suggestSku(): Promise<{ sku: string }> {
 export async function createProduct(
   actor: AuditActor,
   input: ProductCreateInput,
+  options: { executor?: DbExecutor } = {},
 ): Promise<ProductWithBarcodes> {
-  try {
-    return await db.transaction(async (tx) => {
-      const sku = input.sku ?? (await allocateFromSequence('catalog.skuSequence', tx))
+  const run = async (tx: DbExecutor): Promise<ProductWithBarcodes> => {
+    const sku = input.sku ?? (await allocateFromSequence('catalog.skuSequence', tx))
 
-      const categoryId = await validateCategoryRef(input.categoryId, tx)
-      const brandId = await validateBrandRef(input.brandId, tx)
-      const uomId = await validateUomRef(input.uomId, tx)
+    const categoryId = await validateCategoryRef(input.categoryId, tx)
+    const brandId = await validateBrandRef(input.brandId, tx)
+    const uomId = await validateUomRef(input.uomId, tx)
 
-      await assertNotDuplicate(tx, {
-        name: input.name,
-        categoryId,
-        barcodes: input.barcodes,
-      })
-
-      const created = await insertProduct(
-        {
-          sku,
-          name: input.name,
-          description: input.description ?? null,
-          categoryId,
-          brandId,
-          uomId,
-          // Derived from the latest receipt and never typed (P11-D13).
-          costPriceMinor: 0,
-          basePriceMinor: input.basePriceMinor,
-          taxCategory: input.taxCategory ?? 'STANDARD',
-          createdBy: actor.actorId,
-        },
-        tx,
-      )
-      if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create product')
-
-      if (input.sku) {
-        await advanceSequencePast('catalog.skuSequence', created.sku, tx)
-      }
-
-      const barcodeRows: BarcodeRow[] = []
-      for (const code of normalizeBarcodes(input.barcodes)) {
-        try {
-          const row = await insertBarcode(
-            { productId: created.id, code, createdBy: actor.actorId },
-            tx,
-          )
-          if (row) barcodeRows.push(row)
-        } catch (error) {
-          if (isUniqueViolation(error)) {
-            throw new ConflictError(`Barcode ${code} is already in use`)
-          }
-          throw error
-        }
-      }
-
-      await writeAudit(
-        {
-          ...actor,
-          action: 'product.created',
-          entity: 'product',
-          entityId: created.id,
-          after: { ...created, barcodes: barcodeRows.map((row) => row.code) },
-        },
-        tx,
-      )
-
-      return { ...created, barcodes: barcodeRows }
+    await assertNotDuplicate(tx, {
+      name: input.name,
+      categoryId,
+      barcodes: input.barcodes,
     })
+
+    const created = await insertProduct(
+      {
+        sku,
+        name: input.name,
+        description: input.description ?? null,
+        categoryId,
+        brandId,
+        uomId,
+        // Derived from the latest receipt and never typed (P11-D13).
+        costPriceMinor: 0,
+        basePriceMinor: input.basePriceMinor,
+        taxCategory: input.taxCategory ?? 'STANDARD',
+        createdBy: actor.actorId,
+      },
+      tx,
+    )
+    if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create product')
+
+    if (input.sku) {
+      await advanceSequencePast('catalog.skuSequence', created.sku, tx)
+    }
+
+    const barcodeRows: BarcodeRow[] = []
+    for (const code of normalizeBarcodes(input.barcodes)) {
+      try {
+        const row = await insertBarcode(
+          { productId: created.id, code, createdBy: actor.actorId },
+          tx,
+        )
+        if (row) barcodeRows.push(row)
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ConflictError(`Barcode ${code} is already in use`)
+        }
+        throw error
+      }
+    }
+
+    await writeAudit(
+      {
+        ...actor,
+        action: 'product.created',
+        entity: 'product',
+        entityId: created.id,
+        after: { ...created, barcodes: barcodeRows.map((row) => row.code) },
+      },
+      tx,
+    )
+
+    return { ...created, barcodes: barcodeRows }
+  }
+
+  try {
+    return options.executor ? await run(options.executor) : await db.transaction(run)
   } catch (error) {
     if (isUniqueViolation(error)) {
       const constraint = uniqueViolationConstraint(error)
@@ -885,6 +889,7 @@ async function createProductFromSubmission(
   actor: AuditActor,
   input: ProductSubmissionBody,
   approvalId: string,
+  branchId: string,
 ): Promise<{ id: string; sku: string }> {
   const sku = await allocateFromSequence('catalog.skuSequence', executor)
   const categoryId = await validateCategoryRef(input.categoryId, executor)
@@ -933,6 +938,18 @@ async function createProductFromSubmission(
     executor,
   )
 
+  // 19-03: the manager proposed the stock they can see; the admin's approval is
+  // the signature on both the catalogue row and its opening value.
+  if (input.openingQuantity !== undefined && input.openingUnitCostMinor !== undefined) {
+    await openingsService.postSubmissionOpening(executor, actor, {
+      branchId,
+      approvalId,
+      product: created,
+      quantity: input.openingQuantity,
+      unitCostMinor: input.openingUnitCostMinor,
+    })
+  }
+
   return { id: created.id, sku: created.sku }
 }
 
@@ -947,7 +964,17 @@ registerDecisionHandler('PRODUCT_CREATE', async (tx, approval, actor, decision) 
     )
   }
 
-  const created = await createProductFromSubmission(tx, actor, parsed.data, approval.id)
+  if (!approval.branchId) {
+    throw new AppError(500, 'INTERNAL', 'A product proposal has no branch')
+  }
+
+  const created = await createProductFromSubmission(
+    tx,
+    actor,
+    parsed.data,
+    approval.id,
+    approval.branchId,
+  )
   return { entityId: created.id }
 })
 
