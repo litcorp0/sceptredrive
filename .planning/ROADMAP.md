@@ -524,6 +524,45 @@ accessibility, performance, tests and verification.
 
 ---
 
+## Phase 19 — Go-Live Onboarding: Catalogue + Opening Stock (post-v1, additive)
+
+**Goal:** A branch that is already trading can load its existing products and counted stock in
+one controlled, valued, audited operation — without a fake supplier receipt — and the
+everyday “manager proposes, admin approves” flow can carry the opening stock with it.
+
+**Status:** ✅ Complete 2026-11-02 — see `phases/19-go-live-onboarding/19-SUMMARY.md`
+**Dependencies:** Phase 3 (inventory and weighted average), Phase 11/12 (catalogue governance
+and approvals), Phase 17 (opening stock may carry a cost), Phase 18 (stock truth at zero)
+**Requirements:** GO-LIVE-01…GO-LIVE-08
+
+**Success Criteria**
+1. A manager previews a 250–1,000-row CSV of existing products and counted stock; the preview
+   classifies each row as new or existing, shows on-hand, delta, value and row errors, and
+   writes nothing.
+2. A clean draft posts as one transaction: missing products are created, one `OPENING`
+   movement per positive delta is appended, the branch average is seeded, and the audit names
+   the actor and the document.
+3. A posted opening is immutable; a draft can be deleted; a negative delta is refused as a
+   count/write-off; an uncosted line needs the admin's explicit acknowledgement.
+4. A manager can draft at their own branch; only an admin can post; a foreign branch is a
+   server-side 403.
+5. Retrying a post or an idempotency key does not double the stock.
+6. A manager's product proposal can carry opening quantity and unit cost; approving it creates
+   the product and posts the opening in the same decision, and rejecting it posts nothing.
+7. Sales after the opening use the seeded branch average; pre-opening sales stay uncosted and
+   are reported as such.
+8. The movement filter and stock report include `OPENING`; every gate is green.
+
+**Scope:** shared contract and migration; the `openings` API module (preview, draft, post,
+delete, audit, idempotency); the product-creation seam; the console go-live wizard and list;
+the proposal fields and approval display; the prefilled “open stock now” action; the runbook;
+verification and evidence.
+
+**Explicitly out of scope:** historical sales, customer/credit/loyalty balances, supplier
+debts, old receipt migration, retroactive cost variance, branch assortment.
+
+---
+
 ## Dependency Graph
 
 ```text

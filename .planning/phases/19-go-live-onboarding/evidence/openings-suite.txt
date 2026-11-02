@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  07:07:30
+   Duration  13.13s (import 69%, tests 20%, transform 10%)
+

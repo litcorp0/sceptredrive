@@ -186,6 +186,25 @@
 > prefilled opening-stock dialog from an approval, a branch assortment (a branch's out-of-stock
 > count is the whole catalogue, which is true but noisy at scale), and a computed reorder point.
 
+> **2026-11-02 (Phase 19 — go-live onboarding):** A branch that is already trading can now
+> load its existing catalogue and counted stock in one valued document. `stock_opening` +
+> `stock_opening_line` hold a **counted** quantity; posting computes the delta against the
+> branch projection, creates any new products the admin approved through the same file, and
+> appends one `OPENING` movement per positive delta. A manager drafts, an admin posts; a
+> posted document is immutable; a negative delta is refused as a count/write-off; an uncosted
+> line needs an explicit acknowledgement. `inventory.opening.draft` is manager + admin,
+> `inventory.opening.post` is admin only. The product proposal can now carry
+> `openingQuantity` + `openingUnitCostMinor`, approved into a one-line posted opening in the
+> same decision. The console has **Inventory → Opening stock** (upload/paste CSV, preview,
+> save draft, post) and the approval detail has a prefilled **Open stock now** adjust dialog.
+> The adjust dialog's false "never changes the average cost" copy is fixed.
+> **Why one combined document:** with system-generated SKUs and 250–1,000 lines, a separate
+> stock file would have no reliable key to match by name. **Not migrated:** historical sales,
+> customer/credit/loyalty balances, supplier debts and old receipts — recorded in the runbook.
+> **Gates:** shared **368** (+13), API **876 / 64 files** (+7, fresh test DB), `check-types`
+> 7/7, `lint` exit 0, `build` green, `modules:check:strict` 21/21 + 16/16, brand gate 1 282
+> files. Evidence and the runbook live in `phases/19-go-live-onboarding/`.
+
 **Status:** **Phase 14 (Admin Operations & E-VAT) is complete and verified — 13/13 plans.**
 Every gate is green: `check-types` 6/6, `lint` exit 0 with 19 pre-existing warnings,
 `modules:check:strict` **21/21 admin and 16/16 POS**, brand gate over **1 201** files, shared
@@ -234,6 +253,7 @@ added Phase 11 (Procurement & Replenishment) and Phase 12 (Branch Operations & A
 | 16 | Web Presence & Console-Managed Site Content | ✅ Complete (4/4 plans, verified, post-v1) |
 | 17 | Catalogue Governance & Costing | ✅ Complete (5/5 plans, summary written) |
 | 18 | Stock Truth & Till Discipline | ✅ Complete (5/5 plans, summary written) |
+| 19 | Go-Live Onboarding: Catalogue + Opening Stock | ✅ Complete (6/6 plans, summary written) |
 
 ### Phase 14 execution notes (2026-10-28)
 

@@ -50,7 +50,7 @@ on reconnect, without double-selling or losing a transaction.
 | Hardware | Windows, ESC/POS receipt printer, keyboard-wedge scanner, cash drawer |
 | Deployment | One VPS, separate staging/prod Docker stacks, Caddy, GitHub Actions, R2 backups |
 | Scale target | 5 branches, 20 terminals, 5k SKUs, 20k customers |
-| Data import | Manual entry only in v1 |
+| Data import | Manual entry in v1; Phase 19 adds a one-off go-live catalogue + opening-stock document |
 
 ## Constraints
 
@@ -114,6 +114,10 @@ for the requirement-to-phase mapping.
 marketing site for the business, with every word and contact detail edited in the admin
 console. It is the seam for the future store, not the store.
 
+**Post-v1 additive:** Phase 19 — Go-Live Onboarding. A branch that is already trading loads
+its products and counted stock through one valued opening document; the manager prepares, the
+admin posts, and the everyday product proposal can carry its own opening stock.
+
 ## Out of Scope (v1)
 
 - Customer mobile app
@@ -125,7 +129,9 @@ console. It is the seam for the future store, not the store.
 - Full double-entry general ledger, financial statements, period close
 - AI features (advisor, forecasting, document AI, anomaly detection)
 - Vehicle fitment make/model/year mapping and VIN decode (schema may add it later)
-- CSV/bulk data import (manual entry only)
+- General CSV/bulk import beyond the Phase 19 go-live catalogue/opening-stock document (manual
+  entry otherwise; historical sales, customer balances and supplier debts are separate
+  onboarding tracks)
 - Multi-company SaaS tenancy (single company; modelled so it can be added)
 - Hardware card reader integration (Paystack hosted/online channels only)
 - Non-Windows desktop builds

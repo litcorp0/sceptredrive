@@ -180,5 +180,5 @@ API's `node --watch` child.
 
 ## Current status
 
-Phases 1–6 are complete and verified. Phase 7 (Identity, Design System & Brand
-Foundation) is in progress; Phases 8–15 are planned. See `.planning/STATE.md`.
+Phases 1–14 and 16–19 are complete and verified. Phase 15 (Production Hardening &
+Launch) is planned but blocked on deployment inputs. See `.planning/STATE.md`.

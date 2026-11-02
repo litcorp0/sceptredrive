@@ -1,0 +1,23 @@
+$ vitest run
+
+ RUN  v5.0.5 /home/litcorp/Projects/Fullstack/gikautos/api
+
+(node:178737) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:179174) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:180163) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:186525) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ Test Files  64 passed (64)
+      Tests  876 passed (876)
+   Start at  06:54:58
+   Duration  687.30s (import 64%, tests 32%, transform 3%)
+
+     Import  336 modules were evaluated 14687 times · 425.98s total, 64% of tracked time
+             ~416.23s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+API_SUITE_FINAL_EXIT=0
