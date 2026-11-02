@@ -4,13 +4,18 @@ name: Release
 # download link instead of a local build. Linux is not published: the till fleet is
 # Windows, and every extra artefact is another thing to keep working.
 #
-# Two ways to cut a release:
-#   1. Push a tag:            git tag v0.1.0 && git push origin v0.1.0
-#   2. Actions → Release → Run workflow, with a tag such as v0.1.0 (created if absent)
+# Prefer Actions → Release → Run workflow with the version you want, for example v0.1.0.
+# That path builds `dev` as it stands, then creates the tag as the last step, so the tag
+# only exists once an installer has actually been published, and it points at the commit
+# that produced it. Fixing a failed run means re-dispatching: there is no tag to move.
 #
-# This is NOT triggered by ordinary pushes. A push to `dev` that touches the desktop
-# builds an installer as a downloadable workflow artefact (desktop-windows-build.yml),
-# but it does not create a release: a version number should be a decision.
+# Pushing a tag by hand still works, but remember that a tag resolves this file at the
+# tagged commit, not on `dev`. A fix to this workflow therefore does not apply to a tag
+# cut before it, which is exactly the trap the dispatch path avoids.
+#
+# A push to `dev` that touches the desktop builds an installer as a downloadable workflow
+# artefact (desktop-windows-build.yml), alongside a dry run of the flatten and checksum
+# steps below, so a broken publish path fails on a push rather than at release time.
 #
 # Build gates (lint, typecheck, unit tests, e2e, counter audit) live in `Desktop`
 # (.github/workflows/desktop.yml). Run that when the code changed; this workflow only
@@ -25,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, for example v0.1.0 (created if it does not exist)'
+        description: 'Release tag, for example v0.1.0. Must match desktop/package.json; created at the built commit if absent.'
         required: true
         type: string
 
@@ -84,31 +89,9 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Flatten release assets
+      - name: Flatten and checksum assets
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          # Two assets with the same basename would silently overwrite one another once
-          # flattened, so refuse the run instead of publishing a partial set.
-          duplicates=$(find release-assets -type f -printf '%f\n' | sort | uniq -d)
-          if [ -n "$duplicates" ]; then
-            echo "::error::Duplicate asset names in the downloaded artifacts: $duplicates"
-            exit 1
-          fi
-
-          while IFS= read -r -d '' file; do
-            cp -- "$file" "dist/$(basename "$file")"
-          done < <(find release-assets -type f -print0)
-
-          count=$(find dist -type f | wc -l)
-          if [ "$count" -eq 0 ]; then
-            echo "::error::No release assets were produced by the Windows build."
-            exit 1
-          fi
-          echo "Flattened $count file(s):"
-          ls -la dist
+        run: bash scripts/release-assets.sh release-assets dist
 
       - name: Resolve tag
         id: tag
@@ -129,15 +112,36 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: $TAG"
 
-      - name: Checksums
+      # Guard the two ways a release can name the wrong code:
+      #   - a version that disagrees with package.json, which would publish a release
+      #     whose installer carries a different number than its tag;
+      #   - an existing tag at another commit, which is what a workflow_dispatch from a
+      #     newer `dev` looks like. Failing here is deliberate: the alternative is a
+      #     release that silently describes one commit and ships the installer of another.
+      - name: Guard tag
         shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          cd dist
-          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\0' \
-            | sort -z \
-            | xargs -0 sha256sum > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          version=$(grep -m1 '"version"' desktop/package.json \
+            | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match desktop/package.json version $version. The installer would be named $version."
+            exit 1
+          fi
+
+          head=$(git rev-parse HEAD)
+          # `^{}` peels an annotated tag to its commit; a lightweight tag has no peeled ref.
+          tagged=$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
+          if [ -z "$tagged" ]; then
+            tagged=$(git ls-remote origin "refs/tags/$TAG" | cut -f1)
+          fi
+          if [ -n "$tagged" ] && [ "$tagged" != "$head" ]; then
+            echo "::error::Tag $TAG already points at $tagged, but this run built $head. Move the tag, or release a new version."
+            exit 1
+          fi
+          echo "Tag $TAG is consistent with $head at version $version."
 
       - name: Write release notes
         shell: bash
@@ -176,6 +180,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ steps.tag.outputs.tag }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -183,7 +188,11 @@ jobs:
             gh release upload "$TAG" dist/* --clobber
             gh release edit "$TAG" --notes-file NOTES.md
           else
+            # --target pins the tag to the commit this run built. Without it, gh creates
+            # a missing tag on the repository's default branch, which is not necessarily
+            # the commit the installer came from.
             gh release create "$TAG" dist/* \
+              --target "$HEAD_SHA" \
               --title "Sceptre Drive POS $TAG" \
               --notes-file NOTES.md
           fi

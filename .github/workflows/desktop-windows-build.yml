@@ -2,8 +2,12 @@ name: Desktop (Windows build)
 
 # Every push to `dev` that could change the till builds a Windows installer and attaches
 # it to the run as a downloadable artefact. It does NOT create a release: that is what
-# tags are for. This answers "does my change still build and install on Windows?" without
-# spending a version number.
+# tags are for (see release.yml). This answers "does my change still build and install on
+# Windows?" without spending a version number.
+#
+# It also dry-runs the release publish path (flatten + checksum, via
+# `scripts/release-assets.sh`), because the release workflow only runs on a tag, where its
+# YAML is frozen at the tagged commit and therefore cannot be tested by editing `dev`.
 #
 # The full gate suite (lint, typecheck, unit, e2e, counter audit) is the `Desktop`
 # workflow; this one is deliberately build-only so a push stays cheap.
@@ -14,6 +18,7 @@ on:
     paths:
       - 'desktop/**'
       - 'packages/**'
+      - 'scripts/release-assets.sh'
       - 'bun.lock'
       - 'tsconfig.base.json'
       - '.github/workflows/desktop-windows-build.yml'
@@ -52,3 +57,35 @@ jobs:
             desktop/out/make/**/RELEASES
           if-no-files-found: error
           retention-days: 14
+
+  # The `Release` workflow only runs on a tag, where its YAML is frozen at the tagged
+  # commit. A broken publish step would otherwise stay invisible until someone cut a
+  # version. This runs the same flatten/checksum script against the installer built above,
+  # so the failure surfaces on a push to `dev`.
+  publish-check:
+    name: Release assets (dry run)
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download installer
+        uses: actions/download-artifact@v7
+        with:
+          name: pos-windows-${{ github.sha }}
+          path: release-assets
+
+      - name: Flatten and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/release-assets.sh release-assets dist
+
+          # The publish step uploads `dist/*`, so prove the set is exactly what the
+          # release notes promise: one installer, one package, one Squirrel feed.
+          test "$(find dist -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 1
+          test "$(find dist -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 1
+          test -f dist/RELEASES
+          test -f dist/SHA256SUMS.txt
+          echo "Release assets are publishable."
