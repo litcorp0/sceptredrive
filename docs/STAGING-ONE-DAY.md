@@ -705,6 +705,22 @@ The **Release** workflow now downloads every asset back after publishing, compar
 byte, and deletes anything on the release that this build did not produce — so a truncated asset
 or a stale renamed one fails the run instead of reaching a till.
 
+**If the release page still will not download**, the asset is served from a different host than
+the rest of GitHub, and some networks and extensions block it. Prove which side is at fault:
+
+```powershell
+Test-NetConnection release-assets.githubusercontent.com -Port 443   # TcpTestSucceeded : True
+curl.exe -L -o "$env:USERPROFILE\Downloads\SceptreDrivePOS-0.1.1.exe" `
+  "https://github.com/litcorp0/sceptredrive/releases/download/v0.1.1/Sceptre-Drive-POS-0.1.1-Setup.exe"
+```
+
+`TcpTestSucceeded : False`, or a `curl` that hangs at 0 bytes, means the network is blocking
+GitHub's asset host — a VPN, a phone hotspot, or the fallback below fixes it.
+
+The same installer is attached to the **Release run** as an artefact, downloaded from different
+infrastructure: Actions → **Release** → the run for that version → **Artifacts** →
+`windows-installer` (a zip holding the `.exe`, the `.nupkg` and `RELEASES`).
+
 **Deliberately absent:** signing (Phase 15 needs the certificate) and auto-update (there is no
 feed; a new version means a new download). Re-running the same tag re-uploads the assets in
 place rather than failing.
