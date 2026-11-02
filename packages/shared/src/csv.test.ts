@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { CSV_DANGEROUS_PREFIX, csvCell, toCsv } from './csv.ts'
+import {
+  CSV_DANGEROUS_PREFIX,
+  csvCell,
+  parseCsv,
+  parseMoneyToMinor,
+  parseQuantity,
+  toCsv,
+} from './csv.ts'
 
 const COLUMNS = [
   { key: 'name' as const, header: 'name' },
@@ -76,5 +83,57 @@ describe('toCsv', () => {
       bom: false,
     })
     expect(csv.split('\r\n')[1]).toBe(`"'=HYPERLINK(""http://evil"")",100`)
+  })
+})
+
+describe('parseCsv', () => {
+  it('reads a BOM, a header row, quoted commas, escaped quotes and CRLF', () => {
+    const parsed = parseCsv('\uFEFFname,note\r\n"Bolt, M8","12"" pipe"\r\n')
+    expect(parsed.headers).toEqual(['name', 'note'])
+    expect(parsed.rows).toEqual([['Bolt, M8', '12" pipe']])
+  })
+
+  it('reads quoted newlines and LF-only files without splitting the cell', () => {
+    const parsed = parseCsv('name,note\nBolt,"line one\nline two"\n')
+    expect(parsed.rows).toEqual([['Bolt', 'line one\nline two']])
+  })
+
+  it('skips blank lines but keeps rows of empty cells', () => {
+    const parsed = parseCsv('a,b\n\n,\n')
+    expect(parsed.rows).toEqual([['', '']])
+  })
+
+  it('refuses an unclosed quote and a file over the row cap', () => {
+    expect(() => parseCsv('a\n"unclosed')).toThrow(SyntaxError)
+    expect(() => parseCsv('a\n1\n2', { maxRows: 1 })).toThrow(RangeError)
+  })
+})
+
+describe('parseMoneyToMinor', () => {
+  it('parses whole and decimal GHS strings into integer pesewas', () => {
+    expect(parseMoneyToMinor('12')).toBe(1_200)
+    expect(parseMoneyToMinor('12.5')).toBe(1_250)
+    expect(parseMoneyToMinor('12.50')).toBe(1_250)
+    expect(parseMoneyToMinor('1,234.56')).toBe(123_456)
+    expect(parseMoneyToMinor('GH₵ 45.00')).toBe(4_500)
+    expect(parseMoneyToMinor('GHS45')).toBe(4_500)
+  })
+
+  it('refuses negatives, floats beyond two decimals and formulas', () => {
+    expect(parseMoneyToMinor('-1')).toBeNull()
+    expect(parseMoneyToMinor('1.234')).toBeNull()
+    expect(parseMoneyToMinor('1.2.3')).toBeNull()
+    expect(parseMoneyToMinor('=1+1')).toBeNull()
+    expect(parseMoneyToMinor('')).toBeNull()
+  })
+})
+
+describe('parseQuantity', () => {
+  it('parses whole non-negative quantities and refuses decimals and signs', () => {
+    expect(parseQuantity('0')).toBe(0)
+    expect(parseQuantity('1,200')).toBe(1_200)
+    expect(parseQuantity('1.5')).toBeNull()
+    expect(parseQuantity('-1')).toBeNull()
+    expect(parseQuantity('')).toBeNull()
   })
 })

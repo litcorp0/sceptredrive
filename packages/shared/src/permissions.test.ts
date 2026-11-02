@@ -58,6 +58,15 @@ describe('permissions', () => {
     expect(can('CASHIER', 'inventory.adjust')).toBe(false)
   })
 
+  it('lets a manager draft an opening but never post its value (19-01)', () => {
+    expect(can('MANAGER', 'inventory.opening.draft')).toBe(true)
+    expect(can('MANAGER', 'inventory.opening.post')).toBe(false)
+    expect(can('ADMIN', 'inventory.opening.draft')).toBe(true)
+    expect(can('ADMIN', 'inventory.opening.post')).toBe(true)
+    expect(can('CASHIER', 'inventory.opening.draft')).toBe(false)
+    expect(can('CASHIER', 'inventory.opening.post')).toBe(false)
+  })
+
   it('lets managers run customer, credit, and loyalty operations', () => {
     expect(can('MANAGER', 'customer.read')).toBe(true)
     expect(can('MANAGER', 'customer.create')).toBe(true)
@@ -133,8 +142,8 @@ describe('permissions', () => {
 
     // +1 each for `catalog.describe` (17-02): a manager may describe a product,
     // not redefine it.
-    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(67)
-    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(55)
+    expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(69)
+    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(56)
     expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
   })
 

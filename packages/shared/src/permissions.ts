@@ -33,6 +33,9 @@ export const PERMISSIONS = [
   'inventory.transfer',
   'inventory.count',
   'inventory.threshold',
+  // Phase 19: a manager prepares a go-live count; only an admin posts its value.
+  'inventory.opening.draft',
+  'inventory.opening.post',
   'audit.read',
   'analytics.read',
   'settings.read',
@@ -107,6 +110,7 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'inventory.transfer',
   'inventory.count',
   'inventory.threshold',
+  'inventory.opening.draft',
   'audit.read',
   'analytics.read',
   'settings.read',
