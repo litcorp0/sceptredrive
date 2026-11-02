@@ -6,6 +6,7 @@ export interface EmailMessage {
 }
 
 export interface EmailProvider {
-  readonly name: 'console' | 'resend' | 'file'
+  /** `disabled` means production booted without a Resend key; every send throws. */
+  readonly name: 'console' | 'resend' | 'file' | 'disabled'
   send(message: EmailMessage): Promise<void>
 }

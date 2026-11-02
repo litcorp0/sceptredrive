@@ -14,6 +14,7 @@
     "seed:admin": "bun run scripts/seed-admin.ts",
     "seed:demo-sales": "bun run src/seed/demo-sales.run.ts",
     "paystack:smoke": "bun run scripts/paystack-smoke.ts",
+    "email:smoke": "bun run scripts/email-smoke.ts",
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",

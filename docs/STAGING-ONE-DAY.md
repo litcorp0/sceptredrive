@@ -214,6 +214,8 @@ Add these on the Render service (Environment tab). Nothing else is required toda
 | `PAYSTACK_WEBHOOK_SECRET` | empty — Paystack signs with the secret key |
 | `PAYSTACK_BASE_URL` | `https://api.paystack.co` |
 | `PAYSTACK_EMAIL_DOMAIN` | a domain you own, e.g. `sceptre-drive.com` |
+| `RESEND_API_KEY` | `re_…` from Resend → **API Keys** |
+| `EMAIL_FROM` | a sender on a domain verified in Resend, e.g. `Sceptre Drive <no-reply@yourdomain.com>` |
 | `EVAT_PROVIDER` | `mock` |
 
 `app://sceptre-drive` is the **packaged till's** origin. In development the API adds it (and
@@ -229,8 +231,40 @@ and Better Auth checks it against `BETTER_AUTH_TRUSTED_ORIGINS`.
 (32+ chars, not starting `replace-`), `CORS_ORIGINS` (non-empty) and `POS_JWT_PRIVATE_KEY`.
 The deploy log names the variable, so read it rather than guessing.
 
+Email is deliberately **not** part of that boot contract: a till and a console that cannot send
+mail still sell. The cost is that a missing `RESEND_API_KEY` shows up only when someone creates
+staff or resets a password, which §6.5 covers.
+
 Leave `ADMIN_EMAIL` / `ADMIN_PASSWORD` off Render: they are for the seeding step you already
 ran on your laptop.
+
+### 6.5 Staff invitation email never arrives
+
+Three causes, in the order they happen:
+
+1. **`RESEND_API_KEY` is not set on the service.** The API has no way to send, and staff creation
+   still succeeds. Before this was tightened it also reported `invitationSent: true`, so the
+   console said the invite "was emailed" while nothing left the process. Now it reports failure
+   and the boot log says `RESEND_API_KEY is not set`.
+2. **`EMAIL_FROM` is still the repository default** (`no-reply@sceptre.local`). Nothing can
+   resolve `.local`, and Resend refuses any address on a domain you have not verified.
+3. **`EMAIL_FROM` is `onboarding@resend.dev`.** Resend's shared sender only delivers to the
+   address that owns the Resend account; every other recipient gets a 403.
+
+Check all three in one command, using the **deployed** environment (Render → service → **Shell**),
+not your laptop's `.env`:
+
+```bash
+bun run --filter api email:smoke -- --to you@example.com
+```
+
+It prints the status Resend returned — `401` bad key, `403` unverified domain or restricted
+sender — and lists the account's domains with their verification state.
+
+Sending to real staff addresses needs a domain you own, added under Resend → **Domains** and
+verified through its SPF and DKIM DNS records, with `EMAIL_FROM` on that domain. Until then
+invitations still work by hand: the credentials dialog shows the temporary password and PIN
+whether or not the email left, and it only claims "were emailed" when the send succeeded.
 
 ### 6.3 Deploy and check it
 

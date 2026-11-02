@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { consoleEmailProvider, redactEmail } from './console.ts'
 import { createFileEmailProvider } from './file.ts'
-import { createEmailProvider } from './index.ts'
+import { createEmailProvider, fromAddressProblem } from './index.ts'
 
 const cleanupDirs: string[] = []
 
@@ -39,6 +39,31 @@ describe('email provider selection', () => {
       nodeEnv: 'development',
     })
     expect(provider.name).toBe('resend')
+  })
+
+  it('fails loudly in production when no key is configured', async () => {
+    const provider = createEmailProvider({
+      emailFrom: 'Sceptre Drive <no-reply@sceptre.local>',
+      nodeEnv: 'production',
+    })
+    expect(provider.name).toBe('disabled')
+    await expect(
+      provider.send({ to: 'cashier@example.com', subject: 'Account', text: 'Hello' }),
+    ).rejects.toThrow(/RESEND_API_KEY is not set/)
+  })
+})
+
+describe('fromAddressProblem', () => {
+  it('accepts an address on a verified domain', () => {
+    expect(fromAddressProblem('Sceptre Drive <no-reply@sceptre-drive.com>')).toBeUndefined()
+  })
+
+  it('rejects the .local default, which no recipient can resolve', () => {
+    expect(fromAddressProblem('Sceptre Drive <no-reply@sceptre.local>')).toMatch(/\.local/)
+  })
+
+  it("rejects Resend's shared sender, which only reaches the account owner", () => {
+    expect(fromAddressProblem('Sceptre Drive <onboarding@resend.dev>')).toMatch(/onboarding/)
   })
 })
 

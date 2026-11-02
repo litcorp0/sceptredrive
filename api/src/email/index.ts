@@ -15,10 +15,24 @@ export interface EmailProviderOptions {
 }
 
 /**
+ * Production with no Resend key.
+ *
+ * The console provider resolves successfully, so a deployment without `RESEND_API_KEY`
+ * reported `invitationSent: true` and the console told an administrator the invite "was
+ * emailed" while nothing left the process. Failing here makes the flag false, so the
+ * credentials are shown for hand-over instead of assumed delivered.
+ */
+export const disabledEmailProvider: EmailProvider = {
+  name: 'disabled',
+  async send(): Promise<void> {
+    throw new Error('Transactional email is disabled: RESEND_API_KEY is not set')
+  },
+}
+
+/**
  * Selects the email provider once at boot: Resend when an API key is present,
- * the local mail folder in development, the console provider otherwise.
- * Emails are never silently dropped in production: the console provider
- * redacts recipients and boot logs an error.
+ * the local mail folder in development, a failing provider in production, and the
+ * console provider otherwise.
  */
 export function createEmailProvider(options: EmailProviderOptions): EmailProvider {
   if (options.resendApiKey) {
@@ -27,7 +41,28 @@ export function createEmailProvider(options: EmailProviderOptions): EmailProvide
   if (options.nodeEnv === 'development') {
     return createFileEmailProvider(options.mailDir)
   }
+  if (options.nodeEnv === 'production') {
+    return disabledEmailProvider
+  }
   return consoleEmailProvider
+}
+
+/**
+ * Why Resend would reject the from address, if it would.
+ *
+ * Two values look configured but cannot deliver: the repository default ends in `.local`,
+ * which no mail system can resolve, and Resend's shared `onboarding@resend.dev` sender only
+ * delivers to the address that owns the Resend account.
+ */
+export function fromAddressProblem(emailFrom: string): string | undefined {
+  const address = emailFrom.toLowerCase()
+  if (address.includes('@resend.dev')) {
+    return 'EMAIL_FROM uses onboarding@resend.dev, which only delivers to the Resend account owner. Verify a domain in Resend and send from an address on it.'
+  }
+  if (/@[^>\s]*\.local/.test(address)) {
+    return 'EMAIL_FROM uses a .local domain that no recipient can resolve. Verify a domain in Resend and send from an address on it.'
+  }
+  return undefined
 }
 
 export const email: EmailProvider = createEmailProvider({
@@ -36,6 +71,13 @@ export const email: EmailProvider = createEmailProvider({
   nodeEnv: env.NODE_ENV,
 })
 
-if (env.NODE_ENV === 'production' && email.name === 'console') {
-  logger.error('RESEND_API_KEY is not set; transactional email is disabled in production')
+if (env.NODE_ENV === 'production' && !env.RESEND_API_KEY) {
+  logger.error(
+    'RESEND_API_KEY is not set: staff invitations and password resets will fail, not send. Set it and EMAIL_FROM in the service environment.',
+  )
+}
+
+const fromProblem = fromAddressProblem(env.EMAIL_FROM)
+if (env.NODE_ENV === 'production' && fromProblem) {
+  logger.error(`EMAIL_FROM cannot deliver: ${fromProblem}`)
 }

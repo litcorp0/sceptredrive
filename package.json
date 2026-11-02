@@ -66,6 +66,7 @@
     "seed:admin": "bun run api/scripts/seed-admin.ts",
     "seed:demo-sales": "bun run --filter api seed:demo-sales",
     "paystack:smoke": "bun run --filter api paystack:smoke",
+    "email:smoke": "bun run --filter api email:smoke",
     "sync:init": "docker compose exec -T postgres psql -U sceptre_drive -d sceptre_drive < powersync/init/powersync.sql",
     "sync:up": "bun run scripts/prepare-powersync-service.mjs && docker compose --profile sync up -d --force-recreate powersync",
     "sync:down": "docker compose stop powersync",
