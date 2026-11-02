@@ -673,7 +673,9 @@ happened and the outbox is holding it — check the POS sync screen before anyth
 
 - **Caddy, TLS termination, Docker, the VPS, R2 backups and the restore drill** — none of these
   exist in this topology.
-- **Paystack live**: `PAYSTACK_MODE=mock`, no webhook secret, no settlement.
+- **Paystack live**: the one-day stack uses test keys and no settlement. Test mode does not
+  prove business activation, settlement, real recipient banks or live transfer limits; the
+  live checklist is `docs/PAYSTACK-STAGING.md` §8.
 - **GRA E-VAT**: `EVAT_PROVIDER=mock`; the real client is unimplemented until onboarding.
 - **A signed Windows installer** and a packaged counter audit (`test:counter`).
 - **Load**: one till, one operator, no concurrency.
