@@ -559,29 +559,23 @@ release is a deliberate act, because it carries a version number people keep.
 
 **Cut a release (preferred):**
 
-1. Bump the version the installer is named after: `desktop/package.json` → `"version"`.
-2. Commit and merge to `dev`.
-3. Actions → **Release** → **Run workflow**, branch `dev`, tag `v0.1.1` — the version you just
-   bumped.
+1. Merge to `dev`.
+2. Actions → **Release** → **Run workflow**, branch `dev`, version `0.2.0`.
 
-The pipeline creates the tag itself as the last step, pinned to the commit it built. So the tag
-only exists once an installer has actually been published, and a failed run leaves no tag behind:
-fix, push, re-dispatch.
+Nothing is bumped by hand. The run stamps that version into `desktop/package.json` before
+Forge builds, so the installer is named `Sceptre Drive POS-0.2.0 Setup.exe`, then creates the
+tag `v0.2.0` as its last step, pinned to the commit it built. The committed file keeps its old
+number — the tag is the record of what shipped — so instead the run refuses any version lower
+than the newest published tag. A failed run leaves no tag: fix, push, re-dispatch.
 
-The run refuses two things: a tag that disagrees with `desktop/package.json`, and a tag that
-already points at a different commit. Both would publish a release whose installer carries a
-different number than its tag.
-
-**Or push a tag by hand** — equivalent, with one catch: a tag resolves the workflow file *at the
-tagged commit*, so a fix sitting on `dev` does not apply to a tag cut before it.
+**Or push a tag by hand** — the version comes from the tag, with the same stamping, but with
+one catch: a tag resolves the workflow file *at the tagged commit*, so a fix sitting on `dev`
+does not apply to a tag cut before it.
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
-
-Bump the version first: the guard fails a `v0.2.0` tag over an unchanged `0.1.0`, because that
-ships binaries called `0.1.0`.
 
 **Take a dev build:** Actions → **Desktop (Windows build)** → the run for your commit →
 Artifacts → `pos-windows-<sha>`.

@@ -4,14 +4,16 @@ name: Release
 # download link instead of a local build. Linux is not published: the till fleet is
 # Windows, and every extra artefact is another thing to keep working.
 #
-# Prefer Actions → Release → Run workflow with the version you want, for example v0.1.0.
-# That path builds `dev` as it stands, then creates the tag as the last step, so the tag
-# only exists once an installer has actually been published, and it points at the commit
-# that produced it. Fixing a failed run means re-dispatching: there is no tag to move.
+# Prefer Actions → Release → Run workflow with the version you want, for example 0.2.0.
+# That path validates the number, stamps it into `desktop/package.json` for the build so
+# the installer carries it, and creates the tag `v0.2.0` as the last step, pinned to the
+# commit it built. Nothing is bumped by hand, and the tag only exists once an installer has
+# actually been published, so fixing a failed run means re-dispatching: there is no tag to move.
 #
-# Pushing a tag by hand still works, but remember that a tag resolves this file at the
-# tagged commit, not on `dev`. A fix to this workflow therefore does not apply to a tag
-# cut before it, which is exactly the trap the dispatch path avoids.
+# Pushing a tag by hand still works (the version comes from the tag), but remember that a
+# tag resolves this file at the tagged commit, not on `dev`. A fix to this workflow
+# therefore does not apply to a tag cut before it, which is exactly the trap the dispatch
+# path avoids.
 #
 # A push to `dev` that touches the desktop builds an installer as a downloadable workflow
 # artefact (desktop-windows-build.yml), alongside a dry run of the flatten and checksum
@@ -29,8 +31,8 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag, for example v0.1.0. Must match desktop/package.json; created at the built commit if absent.'
+      version:
+        description: 'Version to ship, for example 0.2.0. The tag becomes v0.2.0 and is created at the built commit.'
         required: true
         type: string
 
@@ -42,8 +44,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Resolve and validate the version before anything expensive runs, so a typo fails in
+  # seconds instead of after a ten-minute Windows build.
+  prepare:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            raw="$INPUT_VERSION"
+          else
+            # A tag push: `v0.2.0` -> `0.2.0`.
+            raw="${GITHUB_REF_NAME}"
+          fi
+          version="${raw#v}"
+
+          # The newest published tag is the real floor: desktop/package.json stops
+          # advancing once releases start, because the stamp is build-local.
+          latest=$(git ls-remote --tags --refs origin 'refs/tags/v*' \
+            | sed -E 's#.*refs/tags/v##' \
+            | sort -V \
+            | tail -n 1)
+
+          # Validates the shape and refuses a version lower than the committed one or the
+          # newest tag.
+          if [ -n "$latest" ]; then
+            node scripts/set-release-version.mjs "$version" --check --floor "$latest"
+          else
+            node scripts/set-release-version.mjs "$version" --check
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
   windows:
     name: Windows installer
+    needs: [prepare]
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -53,6 +102,15 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # The installer is named from desktop/package.json, so stamp the version the release
+      # asked for before Forge reads it. This is build-local: the committed file is not
+      # touched, and the tag records what shipped.
+      - name: Stamp release version
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/set-release-version.mjs "$VERSION"
 
       # Squirrel requires a Windows host; Wine on Linux is not supported for this maker.
       - name: Build Squirrel installer
@@ -70,7 +128,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [windows]
+    needs: [prepare, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -93,44 +151,16 @@ jobs:
         shell: bash
         run: bash scripts/release-assets.sh release-assets dist
 
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          case "$TAG" in
-            v*) ;;
-            *) TAG="v$TAG" ;;
-          esac
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Resolved tag: $TAG"
-
-      # Guard the two ways a release can name the wrong code:
-      #   - a version that disagrees with package.json, which would publish a release
-      #     whose installer carries a different number than its tag;
-      #   - an existing tag at another commit, which is what a workflow_dispatch from a
-      #     newer `dev` looks like. Failing here is deliberate: the alternative is a
-      #     release that silently describes one commit and ships the installer of another.
+      # The version shape and the no-downgrade rule were already checked by `prepare`, and
+      # the installer was built from the stamped version. The remaining hazard is a tag
+      # that already points at a different commit: publishing then would produce a release
+      # describing one commit and shipping the installer of another.
       - name: Guard tag
         shell: bash
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -euo pipefail
-          version=$(grep -m1 '"version"' desktop/package.json \
-            | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::Tag $TAG does not match desktop/package.json version $version. The installer would be named $version."
-            exit 1
-          fi
-
           head=$(git rev-parse HEAD)
           # `^{}` peels an annotated tag to its commit; a lightweight tag has no peeled ref.
           tagged=$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
@@ -138,13 +168,15 @@ jobs:
             tagged=$(git ls-remote origin "refs/tags/$TAG" | cut -f1)
           fi
           if [ -n "$tagged" ] && [ "$tagged" != "$head" ]; then
-            echo "::error::Tag $TAG already points at $tagged, but this run built $head. Move the tag, or release a new version."
+            echo "::error::Tag $TAG already points at $tagged, but this run built $head. Release a new version."
             exit 1
           fi
-          echo "Tag $TAG is consistent with $head at version $version."
+          echo "Tag $TAG is free, or already at $head."
 
       - name: Write release notes
         shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           cat > NOTES.md <<'EOF'
           The Windows till installer, unsigned while the signing certificate is pending.
@@ -174,12 +206,15 @@ jobs:
           Unsigned, no auto-update. Signing, auto-update and the production cut are Phase 15.
           EOF
 
+          # Only the installer placeholder is substituted; the config example keeps its
+          # `<your-api>` markers.
+          sed -i "s/Sceptre Drive POS-<version> Setup.exe/Sceptre Drive POS-$VERSION Setup.exe/" NOTES.md
       - name: Publish
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
           HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
