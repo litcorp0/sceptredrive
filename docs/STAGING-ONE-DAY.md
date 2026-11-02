@@ -630,6 +630,32 @@ Artifacts → `pos-windows-<sha>`.
 > write. Settings → Actions → General → Workflow permissions → **Read and write**, then re-run.
 > The workflow already asks for `contents: write`; the repository setting can still refuse it.
 
+**If clicking the installer does nothing**, establish which side is broken before changing
+anything. The Releases page uses `browser_download_url`, which on a **private** repository only
+works with a logged-in browser session: the same URL returns 404 to any token-authenticated
+client. So test through the API instead, which the browser never touches:
+
+```powershell
+winget install --id GitHub.cli   # once, if gh is missing
+gh auth login
+gh release download v0.1.0 --repo litcorp0/sceptredrive --dir .\rel
+```
+
+- **It downloads** → the asset is fine and the browser is at fault. Most often an extension or a
+  network blocking the redirect to `objects.githubusercontent.com`, which is where GitHub actually
+  serves asset bytes. Retry in a private window with extensions off, or on another network.
+- **It is empty, or 0 bytes** → the upload was interrupted. GitHub documents that a 502 during
+  upload leaves an empty asset in `state: starter`, still listed on the page but never
+  downloadable. Check and repair:
+
+```powershell
+gh release view v0.1.0 --repo litcorp0/sceptredrive --json assets --jq '.assets[] | [.name, .size, .state] | @tsv'
+gh release upload v0.1.0 ".\rel\Sceptre Drive POS-0.1.0 Setup.exe" --repo litcorp0/sceptredrive --clobber
+```
+
+The **Release** workflow now downloads every asset back after publishing and compares it byte for
+byte, so a truncated or placeholder asset fails the run instead of reaching a till.
+
 **Deliberately absent:** signing (Phase 15 needs the certificate) and auto-update (there is no
 feed; a new version means a new download). Re-running the same tag re-uploads the assets in
 place rather than failing.

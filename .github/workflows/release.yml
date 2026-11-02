@@ -231,3 +231,33 @@ jobs:
               --title "Sceptre Drive POS $TAG" \
               --notes-file NOTES.md
           fi
+
+      # A release can look finished while an asset is unusable. A 502 during upload leaves
+      # an empty placeholder with `state: starter`, which the Releases page still lists but
+      # no browser will download, and nothing in the upload call reports it. So download
+      # the assets back through the API and compare them byte for byte, rather than
+      # trusting that the upload returned success.
+      - name: Verify published assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          gh release download "$TAG" --dir verify
+          ls -la verify
+
+          for file in dist/*; do
+            name=$(basename "$file")
+            if [ ! -f "verify/$name" ]; then
+              echo "::error::$name is listed on the release but cannot be downloaded."
+              exit 1
+            fi
+            if ! cmp --silent "$file" "verify/$name"; then
+              echo "::error::$name does not match what was uploaded (truncated or replaced)."
+              exit 1
+            fi
+          done
+          echo "Every asset downloads back byte for byte."
