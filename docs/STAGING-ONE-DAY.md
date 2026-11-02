@@ -509,8 +509,9 @@ Get-Content "$env:APPDATA\Sceptre Drive POS\config.json" -Raw | ConvertFrom-Json
 
 Two failure modes to recognise, because neither says "check your config":
 
-- **No file at all** falls back to `https://api.gikautos.com` and `https://powersync.gikautos.com`
-  (`defaultRuntimeConfig`), which do not exist yet, so the till simply fails to connect.
+- **No file at all** falls back to the production constants in `desktop/src/main/config.ts`
+  (`PRODUCTION_API_BASE_URL` / `PRODUCTION_POWERSYNC_URL`, both derived from `SCEPTRE_DOMAIN`),
+  which point at a domain that is not registered yet, so the till simply fails to connect.
 - **An unreadable file** (`config.json.txt`, a BOM, a missing key) fails closed with
   `app.exit(1)`: the window closes as it opens, and `CONFIG_INVALID` is printed to the console.
 
@@ -630,31 +631,38 @@ Artifacts → `pos-windows-<sha>`.
 > write. Settings → Actions → General → Workflow permissions → **Read and write**, then re-run.
 > The workflow already asks for `contents: write`; the repository setting can still refuse it.
 
-**If clicking the installer does nothing**, establish which side is broken before changing
-anything. The Releases page uses `browser_download_url`, which on a **private** repository only
-works with a logged-in browser session: the same URL returns 404 to any token-authenticated
-client. So test through the API instead, which the browser never touches:
-
-```powershell
-winget install --id GitHub.cli   # once, if gh is missing
-gh auth login
-gh release download v0.1.0 --repo litcorp0/sceptredrive --dir .\rel
-```
-
-- **It downloads** → the asset is fine and the browser is at fault. Most often an extension or a
-  network blocking the redirect to `objects.githubusercontent.com`, which is where GitHub actually
-  serves asset bytes. Retry in a private window with extensions off, or on another network.
-- **It is empty, or 0 bytes** → the upload was interrupted. GitHub documents that a 502 during
-  upload leaves an empty asset in `state: starter`, still listed on the page but never
-  downloadable. Check and repair:
+**If clicking the installer does nothing**, check the asset metadata before changing anything —
+the page can list a file that is not actually downloadable:
 
 ```powershell
 gh release view v0.1.0 --repo litcorp0/sceptredrive --json assets --jq '.assets[] | [.name, .size, .state] | @tsv'
-gh release upload v0.1.0 ".\rel\Sceptre Drive POS-0.1.0 Setup.exe" --repo litcorp0/sceptredrive --clobber
 ```
 
-The **Release** workflow now downloads every asset back after publishing and compares it byte for
-byte, so a truncated or placeholder asset fails the run instead of reaching a till.
+- **The name is not what the notes said.** GitHub rewrites asset filenames containing spaces or
+  other non-alphanumeric characters: `Sceptre Drive POS-0.1.0 Setup.exe` is published as
+  `Sceptre.Drive.POS-0.1.0.Setup.exe`. Releases cut before this was fixed also ship a
+  `SHA256SUMS.txt` written with the original name, which then matches nothing on the page.
+  `scripts/release-assets.sh` now renames assets before upload
+  (`Sceptre-Drive-POS-0.2.0-Setup.exe`), so asset, notes and checksums agree.
+- **`size` is 0, or `state` is `starter`** → the upload was interrupted. GitHub documents that a
+  502 during upload leaves an empty asset that is listed but never downloads. Re-upload it.
+- **A real `size` (≈160 MB) and `state: uploaded`** → the asset is fine and the browser or network
+  is at fault. GitHub serves asset bytes from `release-assets.githubusercontent.com` after a
+  redirect, and extensions, proxies and some ISPs block that host. Retry in a private window with
+  extensions off, or download it directly:
+
+```powershell
+curl.exe -L -o "$env:USERPROFILE\Downloads\SceptreDrivePOS-Setup.exe" `
+  "https://github.com/litcorp0/sceptredrive/releases/download/v0.1.0/Sceptre.Drive.POS-0.1.0.Setup.exe"
+Get-FileHash "$env:USERPROFILE\Downloads\SceptreDrivePOS-Setup.exe" -Algorithm SHA256
+```
+
+A 154 MB file can also look like "nothing happened" on a slow link: `curl.exe` prints progress,
+whereas the browser shows nothing until the transfer starts.
+
+The **Release** workflow now downloads every asset back after publishing, compares it byte for
+byte, and deletes anything on the release that this build did not produce — so a truncated asset
+or a stale renamed one fails the run instead of reaching a till.
 
 **Deliberately absent:** signing (Phase 15 needs the certificate) and auto-update (there is no
 feed; a new version means a new download). Re-running the same tag re-uploads the assets in

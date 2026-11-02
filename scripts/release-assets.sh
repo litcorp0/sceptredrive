@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Flatten a downloaded release artifact and checksum it, so it is ready to publish.
+# Flatten a downloaded release artifact, checksum it, and give every asset a name GitHub
+# will not rewrite, so it is ready to publish.
 #
 #   scripts/release-assets.sh [downloaded-dir] [asset-dir]
 #
@@ -9,14 +10,20 @@
 # `sha256sum` and `gh release upload` fail when handed a directory, which is how the
 # publish job used to break at release time.
 #
+# Names matter as much as bytes. GitHub rewrites asset filenames containing spaces or other
+# non-alphanumeric characters: `Sceptre Drive POS-0.1.0 Setup.exe` is published as
+# `Sceptre.Drive.POS-0.1.0.Setup.exe`. `SHA256SUMS.txt` and the install notes are written
+# before the upload, so a rewritten name leaves both pointing at a file nobody can find.
+# Normalising here keeps the published name identical to the name we wrote down.
+#
 # This lives in a script rather than inline YAML because the `Release` workflow only runs
 # on a tag, where the workflow file is frozen at the tagged commit. The dev-push
 # `Desktop (Windows build)` workflow runs this same script against its installer, so a
 # broken publish path fails on a normal push instead of when a version number is on the line.
 #
 # Exit status:
-#   0  every asset flattened and checksummed
-#   1  the download was empty, or two assets share a basename and would overwrite
+#   0  every asset flattened, named and checksummed
+#   1  the download was empty, or two assets would collide on one name
 
 set -euo pipefail
 
@@ -34,17 +41,38 @@ if [ -z "$files" ]; then
   exit 1
 fi
 
-# A flat asset directory cannot hold two files with the same name. Refuse the run rather
-# than publish whichever one the copy happened to land last.
-duplicates=$(find "$src" -type f -printf '%f\n' | sort | uniq -d)
-if [ -n "$duplicates" ]; then
-  echo "::error::Duplicate asset names in the downloaded artifacts: $duplicates"
-  exit 1
-fi
+# Replace every run of characters GitHub would touch with a single hyphen. The result only
+# contains characters GitHub keeps as-is.
+normalize_name() {
+  printf '%s' "$1" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^[-.]+//; s/[-.]+$//'
+}
+
+# Plan the names first: two files can collide either because they already share a basename
+# or because normalisation makes them equal. Writing either one would silently drop the
+# other, so refuse the run instead of publishing a partial set.
+declare -A planned=()
+while IFS= read -r -d '' file; do
+  base=$(basename "$file")
+  name=$(normalize_name "$base")
+  if [ -z "$name" ]; then
+    echo "::error::No usable asset name can be derived from '$base'."
+    exit 1
+  fi
+  if [ -n "${planned[$name]:-}" ]; then
+    echo "::error::'$base' and '${planned[$name]}' would both publish as '$name'."
+    exit 1
+  fi
+  planned[$name]=$base
+done < <(find "$src" -type f -print0)
 
 mkdir -p "$dest"
 while IFS= read -r -d '' file; do
-  cp -- "$file" "$dest/$(basename "$file")"
+  base=$(basename "$file")
+  name=$(normalize_name "$base")
+  if [ "$name" != "$base" ]; then
+    echo "Renamed for publishing: $base -> $name"
+  fi
+  cp -- "$file" "$dest/$name"
 done < <(find "$src" -type f -print0)
 
 # Never hash the checksum file into itself: the redirect below creates it before the

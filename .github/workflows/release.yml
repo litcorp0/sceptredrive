@@ -4,6 +4,10 @@ name: Release
 # download link instead of a local build. Linux is not published: the till fleet is
 # Windows, and every extra artefact is another thing to keep working.
 #
+# Asset names are normalised before upload (`scripts/release-assets.sh`): GitHub rewrites
+# filenames containing spaces, which would leave SHA256SUMS.txt and the install notes pointing
+# at a name the Releases page does not list.
+#
 # Prefer Actions → Release → Run workflow with the version you want, for example 0.2.0.
 # That path validates the number, stamps it into `desktop/package.json` for the build so
 # the installer carries it, and creates the tag `v0.2.0` as the last step, pinned to the
@@ -176,14 +180,25 @@ jobs:
       - name: Write release notes
         shell: bash
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
+          set -euo pipefail
+          # The installer name is read from the built set rather than composed from the
+          # version, so the notes cannot drift from the asset that was uploaded.
+          shopt -s nullglob
+          installers=(dist/*.exe)
+          if [ "${#installers[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one .exe asset, found ${#installers[@]}."
+            exit 1
+          fi
+          INSTALLER=$(basename "${installers[0]}")
+
           cat > NOTES.md <<'EOF'
           The Windows till installer, unsigned while the signing certificate is pending.
 
           ## Install
 
-          1. Download `Sceptre Drive POS-<version> Setup.exe` (the only `.exe` asset).
+          1. Download `@INSTALLER@` (the only `.exe` asset).
           2. Windows SmartScreen will warn because the installer is unsigned —
              **More info → Run anyway**.
           3. Before the first launch, put `config.json` in `%APPDATA%\Sceptre Drive POS\`.
@@ -208,7 +223,7 @@ jobs:
 
           # Only the installer placeholder is substituted; the config example keeps its
           # `<your-api>` markers.
-          sed -i "s/Sceptre Drive POS-<version> Setup.exe/Sceptre Drive POS-$VERSION Setup.exe/" NOTES.md
+          sed -i "s|@INSTALLER@|$INSTALLER|g" NOTES.md
       - name: Publish
         shell: bash
         env:
@@ -231,6 +246,21 @@ jobs:
               --title "Sceptre Drive POS $TAG" \
               --notes-file NOTES.md
           fi
+
+          # The release is owned by this workflow, so anything left over from an earlier run
+          # (a name GitHub rewrote, a superseded installer) is removed. Otherwise the page
+          # lists two installers while SHA256SUMS.txt describes only one.
+          keep=" $(find dist -maxdepth 1 -type f -printf '%f\n' | tr '\n' ' ') "
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            case "$keep" in
+              *" $name "*) ;;
+              *)
+                echo "Removing stale asset: $name"
+                gh release delete-asset "$TAG" "$name" --yes
+                ;;
+            esac
+          done < <(gh release view "$TAG" --json assets --jq '.assets[].name')
 
       # A release can look finished while an asset is unusable. A 502 during upload leaves
       # an empty placeholder with `state: starter`, which the Releases page still lists but
