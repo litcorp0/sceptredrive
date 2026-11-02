@@ -15,6 +15,42 @@ dashboard settings, the test credentials, and the live checklist. The code paths
 
 ---
 
+## 0. The five-minute local check
+
+Put the **test** key in the ignored `.env` (or export it in the shell; dotenv does not
+override an existing variable):
+
+```dotenv
+PAYSTACK_MODE="test"
+PAYSTACK_SECRET_KEY="sk_test_…"
+PAYSTACK_WEBHOOK_SECRET=""
+PAYSTACK_EMAIL_DOMAIN="your-real-domain.com"
+```
+
+Then:
+
+```bash
+bun run paystack:smoke
+```
+
+It calls `/balance`, initialises a GHS 1.00 transaction and verifies it. In test mode it
+prints a checkout URL; open it and pay with `4084 0840 8408 4081` (CVV `408`, any future
+expiry). That proves the key and the checkout. For the Ghana mobile-money charge:
+
+```bash
+bun run paystack:smoke -- --momo
+```
+
+The test MTN number is `0551234987` (no PIN/OTP). For a webhook test locally, expose the API
+with a tunnel (`cloudflared tunnel --url http://localhost:4000` or ngrok) and put the tunnel's
+HTTPS URL + `/api/payments/webhook/paystack` in the Paystack **test** webhook setting. The
+tunnel URL changes on restart; update the dashboard each time.
+
+Do not paste the key into a chat, an issue, or a commit. If a key has been exposed, rotate it
+in the dashboard immediately (**Developers → Generate new secret keys → Immediately**).
+
+---
+
 ## 1. What the app already does
 
 | Flow | Endpoint | Provider behaviour |
