@@ -69,11 +69,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The upload keeps the Squirrel layout (`squirrel.windows/x64/...`), so the
+      # downloaded tree is nested. Flatten it into `dist/` first: a release asset list
+      # must be files, and `sha256sum`/`gh release upload` fail on directories.
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Flatten release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          # Two assets with the same basename would silently overwrite one another once
+          # flattened, so refuse the run instead of publishing a partial set.
+          duplicates=$(find release-assets -type f -printf '%f\n' | sort | uniq -d)
+          if [ -n "$duplicates" ]; then
+            echo "::error::Duplicate asset names in the downloaded artifacts: $duplicates"
+            exit 1
+          fi
+
+          while IFS= read -r -d '' file; do
+            cp -- "$file" "dist/$(basename "$file")"
+          done < <(find release-assets -type f -print0)
+
+          count=$(find dist -type f | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No release assets were produced by the Windows build."
+            exit 1
+          fi
+          echo "Flattened $count file(s):"
+          ls -la dist
 
       - name: Resolve tag
         id: tag
@@ -97,9 +126,11 @@ jobs:
       - name: Checksums
         shell: bash
         run: |
-          cd release-assets
-          ls -la
-          sha256sum * > SHA256SUMS.txt
+          set -euo pipefail
+          cd dist
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\0' \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Write release notes
@@ -139,12 +170,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
+          set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists; re-uploading assets."
-            gh release upload "$TAG" release-assets/* --clobber
+            gh release upload "$TAG" dist/* --clobber
             gh release edit "$TAG" --notes-file NOTES.md
           else
-            gh release create "$TAG" release-assets/* \
+            gh release create "$TAG" dist/* \
               --title "Sceptre Drive POS $TAG" \
               --notes-file NOTES.md
           fi
