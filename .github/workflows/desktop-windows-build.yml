@@ -45,6 +45,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build Squirrel installer
+        env:
+          SCEPTRE_API_BASE_URL: ${{ vars.POS_API_BASE_URL }}
+          SCEPTRE_POWERSYNC_URL: ${{ vars.POS_POWERSYNC_URL }}
         run: bun run make:pos -- --platform win32 --arch x64
 
       - name: Upload installer

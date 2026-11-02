@@ -510,8 +510,10 @@ and the configured API origin. A **packaged** build refuses `localhost` unless
 
 ### 9.1 Writing `config.json` on Windows
 
-Windows hides file extensions, and PowerShell's `Set-Content -Encoding utf8` writes a BOM; either
-one produces a `config.json` the app refuses to read. Write it in PowerShell rather than Notepad:
+A build can **bake these URLs in**, in which case there is nothing to write on the machine at all
+— see *Baked configuration* below. Otherwise, Windows hides file extensions, and PowerShell's
+`Set-Content -Encoding utf8` writes a BOM; either one produces a `config.json` the app refuses to
+read. Write it in PowerShell rather than Notepad:
 
 1. Start the app once, then quit it. That creates the folder.
 2. `Win+R` → `%APPDATA%\Sceptre Drive POS` → Enter. That is
@@ -553,6 +555,33 @@ Both keys are required and each must be a full `http(s)` URL; only their origins
 The file is read once at startup, so a later edit needs a full quit and restart, not just closing
 the window. The diagnostics screen shows **User data** — the live `app.getPath('userData')` — which
 confirms the folder the app actually reads.
+
+#### Baked configuration — no per-machine file
+
+Set two repository variables once: **Settings → Secrets and variables → Actions → Variables**.
+
+| Variable | Value |
+|---|---|
+| `POS_API_BASE_URL` | `https://<api>.onrender.com` |
+| `POS_POWERSYNC_URL` | `https://<instance>.powersync.journeyapps.com` |
+
+From then on every **Release** and **Desktop (Windows build)** packages them as
+`resources/runtime-config.json`, and the app prefers that copy over anything in `%APPDATA%`. So
+an installed till starts straight to enrolment. Both variables or neither: a half-set pair fails
+the build instead of shipping one service pointed at staging and the other at production.
+
+A local build bakes them the same way:
+
+```bash
+SCEPTRE_API_BASE_URL=https://<api>.onrender.com \
+SCEPTRE_POWERSYNC_URL=https://<instance>.powersync.journeyapps.com \
+  bun run make:pos
+```
+
+This also removes a failure mode. A malformed `config.json` used to close the app with no
+message at all, because a packaged build has no console. Now a baked build ignores that file
+entirely, and an unbaked one shows a dialog naming the error (`CONFIG_INVALID`, the file path)
+instead of vanishing.
 
 ### 9.2 Building the till — Linux and Windows
 

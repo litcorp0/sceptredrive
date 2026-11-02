@@ -90,6 +90,12 @@ export function readAllowLocalApiFlag(env: Record<string, string | undefined>): 
 
 export const CONFIG_FILE_NAME = 'config.json'
 
+/**
+ * The config file a build can bake beside the app resources (`process.resourcesPath`), written
+ * by `forge.config.mts` from `SCEPTRE_API_BASE_URL` / `SCEPTRE_POWERSYNC_URL` at packaging time.
+ */
+export const BUNDLED_CONFIG_FILE_NAME = 'runtime-config.json'
+
 export class ConfigError extends Error {
   readonly code: string
 
@@ -100,14 +106,10 @@ export class ConfigError extends Error {
   }
 }
 
-/**
- * Reads `userData/config.json`. A missing file means "not configured yet" and
- * falls back to the environment defaults; a malformed file fails closed.
- */
-export function loadRuntimeConfig(userDataDir: string, local: boolean): RuntimeConfig {
-  const filePath = path.join(userDataDir, CONFIG_FILE_NAME)
+/** Reads one config file. Missing means "not configured here"; malformed fails closed. */
+function readConfigFile(filePath: string): RuntimeConfig | undefined {
   if (!fs.existsSync(filePath)) {
-    return defaultRuntimeConfig(local)
+    return undefined
   }
 
   let raw: unknown
@@ -123,4 +125,36 @@ export function loadRuntimeConfig(userDataDir: string, local: boolean): RuntimeC
   }
 
   return parsed.data
+}
+
+/**
+ * Reads `userData/config.json`. A missing file means "not configured yet" and
+ * falls back to the environment defaults; a malformed file fails closed.
+ */
+export function loadRuntimeConfig(userDataDir: string, local: boolean): RuntimeConfig {
+  const fromFile = readConfigFile(path.join(userDataDir, CONFIG_FILE_NAME))
+  return fromFile ?? defaultRuntimeConfig(local)
+}
+
+export interface ResolveRuntimeConfigOptions {
+  userDataDir: string
+  local: boolean
+  /** `process.resourcesPath/runtime-config.json`, when the build baked one in. */
+  bundledConfigPath?: string | undefined
+}
+
+/**
+ * The configuration a packaged app actually uses.
+ *
+ * A baked file wins over `userData/config.json`. The URLs inside the installer are the ones the
+ * build was tested against, and a stale or malformed file in the user profile must not be able to
+ * stop the till from starting — which is exactly what a hand-written `config.json` did. Builds
+ * without a baked file keep the documented per-machine file.
+ */
+export function resolveRuntimeConfig(options: ResolveRuntimeConfigOptions): RuntimeConfig {
+  if (options.bundledConfigPath) {
+    const bundled = readConfigFile(options.bundledConfigPath)
+    if (bundled) return bundled
+  }
+  return loadRuntimeConfig(options.userDataDir, options.local)
 }

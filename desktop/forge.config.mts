@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { FuseV1Options, FuseVersion } from '@electron/fuses'
 import { MakerSquirrel } from '@electron-forge/maker-squirrel'
@@ -32,6 +32,52 @@ if (!existsSync(`${ICON_BASE}.ico`)) {
   )
 }
 
+/**
+ * Bake the API and PowerSync origins into the package.
+ *
+ * A shipped till should not need somebody to hand-write `config.json` in `%APPDATA%` before it
+ * will start, and a malformed file there closed the window with no explanation. When the build
+ * supplies both origins they are written next to the app resources, and the running app prefers
+ * that copy over anything in userData (`src/main/config.ts`).
+ *
+ * Both or neither: a half-configured bake would ship a build that points one service at staging
+ * and the other at production.
+ */
+function bakedRuntimeConfig(): string | undefined {
+  const apiBaseUrl = process.env.SCEPTRE_API_BASE_URL?.trim()
+  const powersyncUrl = process.env.SCEPTRE_POWERSYNC_URL?.trim()
+
+  if (!apiBaseUrl && !powersyncUrl) return undefined
+  if (!apiBaseUrl || !powersyncUrl) {
+    throw new Error(
+      'Set both SCEPTRE_API_BASE_URL and SCEPTRE_POWERSYNC_URL to bake the till configuration, or neither.',
+    )
+  }
+
+  for (const [name, value] of [
+    ['SCEPTRE_API_BASE_URL', apiBaseUrl],
+    ['SCEPTRE_POWERSYNC_URL', powersyncUrl],
+  ] as const) {
+    let parsed: URL
+    try {
+      parsed = new URL(value)
+    } catch {
+      throw new Error(`${name} is not a URL: ${value}`)
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`${name} must be an http(s) URL: ${value}`)
+    }
+  }
+
+  const target = path.join(import.meta.dirname, 'build', 'runtime-config.json')
+  mkdirSync(path.dirname(target), { recursive: true })
+  writeFileSync(target, `${JSON.stringify({ apiBaseUrl, powersyncUrl }, null, 2)}\n`)
+  console.log(`[forge] baked runtime config: ${apiBaseUrl} / ${powersyncUrl}`)
+  return target
+}
+
+const bundledConfig = bakedRuntimeConfig()
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -43,6 +89,8 @@ const config: ForgeConfig = {
      * attempted there, so it is left unset rather than failing the build.
      */
     ...(process.platform === 'darwin' ? {} : { icon: ICON_BASE }),
+    /** Empty when the build did not bake URLs, which keeps the per-machine file working. */
+    extraResource: bundledConfig ? [bundledConfig] : [],
   },
   hooks: {
     /**

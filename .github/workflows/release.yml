@@ -131,7 +131,13 @@ jobs:
         run: node scripts/set-release-version.mjs "$VERSION"
 
       # Squirrel requires a Windows host; Wine on Linux is not supported for this maker.
+      # The two variables bake the till's API and PowerSync origins into the package, so an
+      # installed till never needs a hand-written config.json. Unset them and the build keeps
+      # reading the per-machine file instead.
       - name: Build Squirrel installer
+        env:
+          SCEPTRE_API_BASE_URL: ${{ vars.POS_API_BASE_URL }}
+          SCEPTRE_POWERSYNC_URL: ${{ vars.POS_POWERSYNC_URL }}
         run: bun run make:pos -- --platform win32 --arch x64
 
       - name: Upload Windows artifacts

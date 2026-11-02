@@ -1,11 +1,15 @@
-import { app, BrowserWindow, Menu, safeStorage } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
+import { app, BrowserWindow, dialog, Menu, safeStorage } from 'electron'
 import started from 'electron-squirrel-startup'
 import {
   allowsLocalOrigins,
-  loadRuntimeConfig,
+  BUNDLED_CONFIG_FILE_NAME,
+  CONFIG_FILE_NAME,
   originOf,
   type RuntimeConfig,
   readAllowLocalApiFlag,
+  resolveRuntimeConfig,
 } from './config'
 import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
 import { APP_USER_MODEL_ID } from './identity'
@@ -56,13 +60,38 @@ if (allowLocalApi && app.isPackaged) {
 
 function failClosed(code: string, message: string): never {
   console.error(`[startup] ${code}: ${message}`)
+  // A packaged app has no console, so a bad configuration used to close the window with no
+  // explanation at all. Show it where the person at the till can read it.
+  if (app.isPackaged) {
+    dialog.showErrorBox(
+      'Sceptre Drive POS could not start',
+      `${message}
+
+(${code})`,
+    )
+  }
   app.exit(1)
   throw new Error(message)
 }
 
+/** The config baked into the package, if the build supplied one. */
+const bundledConfigPath = app.isPackaged
+  ? path.join(process.resourcesPath, BUNDLED_CONFIG_FILE_NAME)
+  : undefined
+
 function resolveConfig(): RuntimeConfig {
   try {
-    return loadRuntimeConfig(app.getPath('userData'), allowLocalOrigins)
+    const userConfig = path.join(app.getPath('userData'), CONFIG_FILE_NAME)
+    if (app.isPackaged && fs.existsSync(userConfig)) {
+      console.warn(
+        '[config] this build has the API and PowerSync URLs baked in, so the copy in userData is ignored',
+      )
+    }
+    return resolveRuntimeConfig({
+      userDataDir: app.getPath('userData'),
+      bundledConfigPath,
+      local: allowLocalOrigins,
+    })
   } catch (error) {
     const code = error instanceof Error && 'code' in error ? String(error.code) : 'CONFIG_INVALID'
     return failClosed(code, error instanceof Error ? error.message : 'Invalid configuration')

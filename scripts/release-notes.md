@@ -5,8 +5,11 @@ The Windows till installer, unsigned while the signing certificate is pending.
 1. Download `@INSTALLER@` (the only `.exe` asset).
 2. Windows SmartScreen will warn because the installer is unsigned —
    **More info → Run anyway**.
-3. Before the first launch, put `config.json` in `%APPDATA%\Sceptre Drive POS\`.
-4. Enrol from the console (terminals → enrolment code) and set a staff PIN.
+3. Enrol from the console (terminals → enrolment code) and set a staff PIN.
+
+If this build was not baked with the API and PowerSync URLs, put `config.json` in
+`%APPDATA%\Sceptre Drive POS\` before the first launch — otherwise the till opens with nothing
+to connect to.
 
 ## config.json
 

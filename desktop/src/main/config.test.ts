@@ -8,6 +8,7 @@ import {
   loadRuntimeConfig,
   parseRuntimeConfig,
   readAllowLocalApiFlag,
+  resolveRuntimeConfig,
   SCEPTRE_DOMAIN,
 } from './config'
 
@@ -119,5 +120,92 @@ describe('readAllowLocalApiFlag', () => {
       expect(readAllowLocalApiFlag({ SCEPTRE_ALLOW_LOCAL_API: value })).toBe(false)
     }
     expect(readAllowLocalApiFlag({})).toBe(false)
+  })
+})
+
+describe('resolveRuntimeConfig', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sceptre-drive-baked-'))
+
+  afterAll(() => {
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  function write(file: string, contents: string): string {
+    fs.writeFileSync(file, contents)
+    return file
+  }
+
+  it('uses the baked file without any userData file', () => {
+    const bundled = write(
+      path.join(root, 'baked.json'),
+      JSON.stringify({
+        apiBaseUrl: 'https://api.staging.example',
+        powersyncUrl: 'https://sync.staging.example',
+      }),
+    )
+    expect(
+      resolveRuntimeConfig({
+        userDataDir: path.join(root, 'empty'),
+        local: false,
+        bundledConfigPath: bundled,
+      }),
+    ).toEqual({
+      apiBaseUrl: 'https://api.staging.example',
+      powersyncUrl: 'https://sync.staging.example',
+    })
+  })
+
+  it('prefers the baked file over a userData file, so a stray copy cannot break startup', () => {
+    const userDir = path.join(root, 'user')
+    fs.mkdirSync(userDir, { recursive: true })
+    write(
+      path.join(userDir, 'config.json'),
+      JSON.stringify({
+        apiBaseUrl: 'http://localhost:4000',
+        powersyncUrl: 'http://localhost:8080',
+      }),
+    )
+    const bundled = write(
+      path.join(root, 'baked2.json'),
+      JSON.stringify({
+        apiBaseUrl: 'https://api.staging.example',
+        powersyncUrl: 'https://sync.staging.example',
+      }),
+    )
+    expect(
+      resolveRuntimeConfig({ userDataDir: userDir, local: false, bundledConfigPath: bundled })
+        .apiBaseUrl,
+    ).toBe('https://api.staging.example')
+  })
+
+  it('ignores a malformed userData file when a baked one exists', () => {
+    const userDir = path.join(root, 'broken-user')
+    fs.mkdirSync(userDir, { recursive: true })
+    write(path.join(userDir, 'config.json'), 'not json at all')
+    const bundled = write(
+      path.join(root, 'baked3.json'),
+      JSON.stringify({
+        apiBaseUrl: 'https://api.staging.example',
+        powersyncUrl: 'https://sync.staging.example',
+      }),
+    )
+    expect(() =>
+      resolveRuntimeConfig({ userDataDir: userDir, local: false, bundledConfigPath: bundled }),
+    ).not.toThrow()
+  })
+
+  it('falls back to userData, then to the defaults, when nothing is baked', () => {
+    const userDir = path.join(root, 'plain')
+    fs.mkdirSync(userDir, { recursive: true })
+    write(
+      path.join(userDir, 'config.json'),
+      JSON.stringify({ apiBaseUrl: 'https://api.example', powersyncUrl: 'https://sync.example' }),
+    )
+    expect(resolveRuntimeConfig({ userDataDir: userDir, local: false }).apiBaseUrl).toBe(
+      'https://api.example',
+    )
+    expect(
+      resolveRuntimeConfig({ userDataDir: path.join(root, 'missing'), local: false }).powersyncUrl,
+    ).toContain('powersync')
   })
 })
