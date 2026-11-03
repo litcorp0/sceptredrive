@@ -64,8 +64,16 @@ export const getSession = createServerFn({ method: "GET" }).handler(
 			if (response.status === 401 || response.status === 403) return { status: "anonymous" }
 			if (!response.ok) return { status: "unavailable" }
 
-			const data = (await response.json()) as Session | null
-			return data ? { status: "authenticated", session: data } : { status: "anonymous" }
+			const data = (await response.json()) as Partial<Session> | null
+
+			// A 200 with no usable session is "anonymous"; a 200 whose body is not a session at all
+			// means the API (or a proxy in front of it) answered something we cannot interpret.
+			// Treating that as authenticated read `user` off an empty object and crashed the guard
+			// with "Cannot read properties of undefined (reading 'mustChangePassword')".
+			if (!data) return { status: "anonymous" }
+			if (!data.session || !data.user) return { status: "unavailable" }
+
+			return { status: "authenticated", session: data as Session }
 		} catch {
 			return { status: "unavailable" }
 		}
