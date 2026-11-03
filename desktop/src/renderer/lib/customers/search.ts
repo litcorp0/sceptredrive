@@ -39,24 +39,44 @@ export function phoneMatchDigits(value: string): string {
   return phoneDigits(value).replace(/^0+/, '')
 }
 
+/** Escapes the LIKE wildcards a customer name might legitimately contain (`100%`, `a_b`). */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`)
+}
+
+/**
+ * The name/phone filter shared by synced customers and local drafts.
+ *
+ * The phone clause is guarded by the digit term on purpose. `phoneMatchDigits('ama')` is `''`,
+ * so an unguarded `phone LIKE '%%'` matches every row and the whole OR became true — a name
+ * search returned the unfiltered list, which read as "search does nothing until I type a phone
+ * number". The `? <> ''` guard keeps name terms to name matching.
+ */
+function customerFilter(rawTerm: string): { clause: string; parameters: string[] } {
+  const term = rawTerm.trim()
+  const digits = phoneMatchDigits(term)
+
+  return {
+    clause: `(? = '' OR name LIKE ? ESCAPE '\\' OR (? <> '' AND phone LIKE ? ESCAPE '\\'))`,
+    parameters: [term, `%${escapeLike(term)}%`, digits, `%${digits}%`],
+  }
+}
+
 export function buildCustomerSearchQuery(
   rawQuery: string,
   limit = CUSTOMER_SEARCH_LIMIT,
 ): { sql: string; parameters: Array<string | number> } {
-  const term = rawQuery.trim()
-  const pattern = `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`
-  const digits = phoneMatchDigits(term)
-  const phonePattern = `%${digits}%`
+  const filter = customerFilter(rawQuery)
 
   return {
     sql: `SELECT id, name, phone, created_at
             FROM customer
            WHERE status = 'ACTIVE'
              AND anonymized_at IS NULL
-             AND (? = '' OR name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')
+             AND ${filter.clause}
         ORDER BY name COLLATE NOCASE
            LIMIT ?`,
-    parameters: [term, pattern, phonePattern, limit],
+    parameters: [...filter.parameters, limit],
   }
 }
 
@@ -86,22 +106,18 @@ export async function searchCustomers(
   rawQuery: string,
   limit = CUSTOMER_SEARCH_LIMIT,
 ): Promise<CustomerHit[]> {
-  const term = rawQuery.trim()
-  const query = buildCustomerSearchQuery(term, limit)
+  const query = buildCustomerSearchQuery(rawQuery, limit)
   const synced = await db.getAll<CustomerRow>(query.sql, query.parameters)
 
+  // Same filter for drafts: a local customer must be findable by name before it is uploaded.
+  const filter = customerFilter(rawQuery)
   const draftSql = `SELECT id, name, phone
                       FROM customer_draft
                      WHERE acked_at IS NULL
-                       AND (? = '' OR name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')
+                       AND ${filter.clause}
                   ORDER BY name COLLATE NOCASE
                      LIMIT ?`
-  const drafts = await db.getAll<DraftRow>(draftSql, [
-    term,
-    `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`,
-    `%${phoneMatchDigits(term)}%`,
-    limit,
-  ])
+  const drafts = await db.getAll<DraftRow>(draftSql, [...filter.parameters, limit])
 
   const seenPhones = new Set(synced.map((row) => row.phone))
   const hits: CustomerHit[] = synced.map(toSyncedHit)

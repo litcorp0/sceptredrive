@@ -37,9 +37,15 @@ describe('buildCustomerSearchQuery', () => {
     expect(query.sql).toContain('anonymized_at IS NULL')
   })
 
-  it('searches the phone by digits', () => {
-    const query = buildCustomerSearchQuery('0241234567')
-    expect(query.parameters[2]).toBe('%241234567%')
+  it('searches the phone by digits only when the term has any', () => {
+    const digits = buildCustomerSearchQuery('0241234567')
+    expect(digits.parameters[2]).toBe('241234567')
+    expect(digits.parameters[3]).toBe('%241234567%')
+
+    // A name term must not fall through to `phone LIKE '%%'`, which matches every row.
+    const name = buildCustomerSearchQuery('ama')
+    expect(name.parameters[2]).toBe('')
+    expect(name.sql).toContain("? <> ''")
   })
 
   it('caps the result set', () => {
