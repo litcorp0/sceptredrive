@@ -76,6 +76,29 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
 }
 
 /**
+ * Placeholder for the renderer's meta CSP. It is filled by `serveRenderer` at request time,
+ * not at build time: a meta policy baked into the bundle cannot name origins the running
+ * configuration chose (a staging host, for example), and Chromium enforces the *intersection*
+ * of the header and the meta tag. A narrower meta therefore blocks fetch calls the header
+ * allows — which is exactly how enrolment failed on a packaged till.
+ */
+export const CSP_PLACEHOLDER = '<!--%SCEPTRE_CSP%-->'
+
+/** The same policy as a meta tag, minus `frame-ancestors` (ignored in meta, warned about). */
+export function metaContentSecurityPolicy(policy: string): string {
+  return policy
+    .split('; ')
+    .filter((directive) => !directive.startsWith('frame-ancestors'))
+    .join('; ')
+}
+
+/** Fills `CSP_PLACEHOLDER` in the renderer document with the policy in force. */
+export function injectMetaPolicy(html: string, policy: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${metaContentSecurityPolicy(policy)}" />`
+  return html.replace(CSP_PLACEHOLDER, meta)
+}
+
+/**
  * The policy the Vite dev server sends with the renderer document.
  *
  * Dev is local by definition: the API, PowerSync, and HMR all live on localhost,

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { net, protocol } from 'electron'
+import { injectMetaPolicy } from './csp'
 import { APP_SCHEME, resolveAppAssetPath } from './paths'
 
 /**
@@ -49,6 +50,16 @@ export function serveRenderer(rootDir: string, contentSecurityPolicy: string): v
     headers.set('X-Content-Type-Options', 'nosniff')
     headers.set('Cross-Origin-Opener-Policy', 'same-origin')
     headers.set('Referrer-Policy', 'no-referrer')
+
+    // The document carries a meta policy as well. Fill it from the policy in force: a meta
+    // baked at build time cannot know the configured API origin, and the browser intersects
+    // the two, so a stale copy silently blocks fetch calls the header permits.
+    if (filePath.endsWith('.html')) {
+      return new Response(injectMetaPolicy(await response.text(), contentSecurityPolicy), {
+        status: response.status,
+        headers,
+      })
+    }
 
     return new Response(response.body, { status: response.status, headers })
   })

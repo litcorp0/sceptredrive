@@ -1,51 +1,26 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
-import { buildContentSecurityPolicy, devContentSecurityPolicy } from './src/main/csp.ts'
+import { defineConfig, type UserConfig } from 'vite'
+import { devContentSecurityPolicy } from './src/main/csp.ts'
 
 const rendererRoot = path.resolve(import.meta.dirname, 'src/renderer')
 
 /**
- * Injects the renderer's Content-Security-Policy into `index.html`.
+ * The renderer's Content-Security-Policy is injected at request time, not built in.
  *
- * In a packaged build the protocol handler also *sends* the policy as a header;
- * the meta tag is the fallback for anything that loads the document without it.
- * Both sides use `buildContentSecurityPolicy`, so the two never disagree.
+ * `index.html` keeps a `<!--%SCEPTRE_CSP%-->` placeholder that `serveRenderer`
+ * (`src/main/protocol.ts`) fills from the policy in force. Baking it here cannot work: the
+ * policy depends on the configured API origin, and the browser enforces the *intersection* of
+ * the meta tag and the header, so a build-time copy silently blocked every fetch to a
+ * configured host that was not in the bundle's list.
+ *
+ * In development the Vite server sends the header below and the placeholder stays a comment.
  */
-function cspPlugin(dev: boolean): Plugin {
-  // The meta policy is a *fallback* and must never be narrower than the header
-  // the protocol handler sends: browsers enforce the intersection of both, so a
-  // narrower meta would silently block origins the runtime policy allows (e.g.
-  // a local API in an unpackaged build). The header remains authoritative.
-  const policy = buildContentSecurityPolicy({ dev, allowLocalOrigins: true })
-  // `frame-ancestors` is valid only as a header; browsers ignore it in a meta
-  // tag and log a console warning. Drop it from the fallback rather than emit a
-  // policy Chrome complains about. The header still enforces it.
-  const metaPolicy = policy
-    .split('; ')
-    .filter((directive) => !directive.startsWith('frame-ancestors'))
-    .join('; ')
-  return {
-    name: 'sceptre-csp',
-    // The dev server sends the policy as a header (`server.headers`); the meta
-    // tag exists for the packaged document, which always gets the header too but
-    // must stay safe if it is ever served without it.
-    apply: 'build',
-    transformIndexHtml(html) {
-      return html.replace(
-        '<!--%SCEPTRE_CSP%-->',
-        `<meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`,
-      )
-    },
-  }
-}
 
-export default defineConfig(({ command }) => {
-  const dev = command === 'serve'
-
+export default defineConfig((): UserConfig => {
   return {
-    plugins: [react(), tailwindcss(), cspPlugin(dev)],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': rendererRoot,

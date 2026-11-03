@@ -3,9 +3,11 @@ import { SCEPTRE_DOMAIN } from './config'
 import {
   buildContentSecurityPolicy,
   devContentSecurityPolicy,
+  injectMetaPolicy,
   isAllowedConnectOrigin,
   isLocalConnectOrigin,
   isOriginPermitted,
+  metaContentSecurityPolicy,
 } from './csp'
 
 function directive(policy: string, name: string): string {
@@ -125,6 +127,32 @@ describe('isOriginPermitted', () => {
     expect(
       isOriginPermitted(`https://api.${SCEPTRE_DOMAIN}`, { allowLocal: false, trusted: false }),
     ).toBe(true)
+  })
+})
+
+describe('injectMetaPolicy', () => {
+  const runtimePolicy = buildContentSecurityPolicy({
+    dev: false,
+    apiOrigin: 'https://sceptredrive.onrender.com',
+    powersyncOrigin: 'https://abc.powersync.journeyapps.com',
+  })
+
+  it('puts the runtime origins into the document that is actually served', () => {
+    const html = injectMetaPolicy('<head><!--%SCEPTRE_CSP%--></head>', runtimePolicy)
+    expect(html).toContain('https://sceptredrive.onrender.com')
+    expect(html).toContain('https://abc.powersync.journeyapps.com')
+  })
+
+  it('keeps the meta policy a superset of the header, so the browser cannot intersect it away', () => {
+    const meta = metaContentSecurityPolicy(runtimePolicy)
+    const metaConnect = directive(meta, 'connect-src')
+    for (const origin of metaConnect) {
+      expect(runtimePolicy).toContain(origin)
+    }
+  })
+
+  it('drops frame-ancestors, which is invalid in a meta tag', () => {
+    expect(metaContentSecurityPolicy(runtimePolicy)).not.toContain('frame-ancestors')
   })
 })
 
