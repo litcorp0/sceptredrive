@@ -8,7 +8,8 @@ import { Label } from "#/components/ui/label"
 import { toastApiError } from "#/lib/toast"
 import { deactivateBranch, updateBranch } from "../api/branches"
 import { branchKeys } from "../api/keys"
-import type { Branch } from "../types"
+import type { Branch, BranchUpdateInput } from "../types"
+import { LATITUDE_BOUNDS, LONGITUDE_BOUNDS, parseCoordinate } from "../utils/coordinates"
 
 /**
  * The detail screen's edit form. It stays a form rather than a dialog because the pre-Phase-8
@@ -31,6 +32,8 @@ export function EditBranchForm({
 	const [area, setArea] = useState("")
 	const [address, setAddress] = useState("")
 	const [phone, setPhone] = useState("")
+	const [latitude, setLatitude] = useState("")
+	const [longitude, setLongitude] = useState("")
 	const [formError, setFormError] = useState<string | null>(null)
 	const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -40,18 +43,12 @@ export function EditBranchForm({
 		setArea(branch.area ?? "")
 		setAddress(branch.address ?? "")
 		setPhone(branch.phone ?? "")
+		setLatitude(branch.latitude === null ? "" : String(branch.latitude))
+		setLongitude(branch.longitude === null ? "" : String(branch.longitude))
 	}, [branch])
 
 	const updateMutation = useMutation({
-		mutationFn: () => {
-			const input: Record<string, string> = {}
-			if (name !== branch.name) input.name = name
-			if (isAdmin && city !== branch.city) input.city = city
-			if (isAdmin && area !== (branch.area ?? "")) input.area = area
-			if (address !== (branch.address ?? "")) input.address = address
-			if (phone !== (branch.phone ?? "")) input.phone = phone
-			return updateBranch(branch.id, input)
-		},
+		mutationFn: (input: BranchUpdateInput) => updateBranch(branch.id, input),
 		onSuccess: async () => {
 			toast.success("Branch updated")
 			await queryClient.invalidateQueries({ queryKey: branchKeys.all })
@@ -78,7 +75,27 @@ export function EditBranchForm({
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setFormError(null)
-		updateMutation.mutate()
+
+		const input: BranchUpdateInput = {}
+		if (name !== branch.name) input.name = name
+		if (isAdmin && city !== branch.city) input.city = city
+		if (isAdmin && area !== (branch.area ?? "")) input.area = area
+		if (address !== (branch.address ?? "")) input.address = address
+		if (phone !== (branch.phone ?? "")) input.phone = phone
+
+		try {
+			const nextLatitude = parseCoordinate(latitude, LATITUDE_BOUNDS, "Latitude")
+			const nextLongitude = parseCoordinate(longitude, LONGITUDE_BOUNDS, "Longitude")
+			// Coordinates are optional, but an empty box clears them: that is how a wrong pin is
+			// removed, and the site falls back to the address search rather than keeping it.
+			if (nextLatitude !== (branch.latitude ?? undefined)) input.latitude = nextLatitude ?? null
+			if (nextLongitude !== (branch.longitude ?? undefined)) input.longitude = nextLongitude ?? null
+		} catch (error) {
+			setFormError(error instanceof Error ? error.message : "Invalid coordinates")
+			return
+		}
+
+		updateMutation.mutate(input)
 	}
 
 	return (
@@ -130,6 +147,34 @@ export function EditBranchForm({
 					<Label htmlFor="phone">Phone</Label>
 					<Input id="phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
 				</div>
+
+				<div className="grid grid-cols-2 gap-3">
+					<div className="grid gap-1.5">
+						<Label htmlFor="latitude">Latitude</Label>
+						<Input
+							id="latitude"
+							inputMode="decimal"
+							placeholder="5.6037"
+							value={latitude}
+							onChange={(event) => setLatitude(event.target.value)}
+						/>
+					</div>
+					<div className="grid gap-1.5">
+						<Label htmlFor="longitude">Longitude</Label>
+						<Input
+							id="longitude"
+							inputMode="decimal"
+							placeholder="-0.1870"
+							value={longitude}
+							onChange={(event) => setLongitude(event.target.value)}
+						/>
+					</div>
+				</div>
+				<p className="-mt-2 text-xs text-muted-foreground">
+					Right-click the counter on Google Maps and copy the two numbers. They make the public
+					site&apos;s Directions link land at the door. Clearing them falls back to an address
+					search.
+				</p>
 
 				{formError ? (
 					<p role="alert" className="text-sm text-destructive">

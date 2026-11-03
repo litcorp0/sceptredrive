@@ -31,6 +31,14 @@ export function mailHref(email: string, subject?: string): string | null {
 
 export function mapsHref(branch: SiteBranch): string | null {
 	if (branch.mapUrl) return branch.mapUrl
+
+	// Coordinates beat any text: a directions link to a point lands at the door, while a
+	// search string for a road name lands wherever Google thinks that road starts.
+	if (branch.latitude !== null && branch.longitude !== null) {
+		const destination = `${branch.latitude},${branch.longitude}`
+		return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+	}
+
 	const query = [branch.address, branch.area, branch.city].filter(Boolean).join(", ")
 	return query
 		? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`

@@ -62,6 +62,8 @@ export async function listActiveRetailBranchContacts(
       area: branch.area,
       address: branch.address,
       phone: branch.phone,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
     })
     .from(branch)
     .where(and(eq(branch.isActive, true), eq(branch.type, 'RETAIL')))

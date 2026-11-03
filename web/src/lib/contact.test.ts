@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest"
 import { ENQUIRY_MESSAGE, mailHref, mapsHref, telHref, waHref } from "./contact"
 
 const BRANCH: SiteBranch = {
-	code: "ACC-SPX",
-	name: "Accra Spintex",
-	city: "Accra",
-	area: "Spintex",
+	code: "TEMA-01",
+	name: "Tema",
+	city: "Tema",
+	area: "Community 1",
 	address: null,
 	phone: null,
+	latitude: null,
+	longitude: null,
 	hours: null,
 	mapUrl: null,
 }
@@ -41,10 +43,13 @@ describe("contact links", () => {
 		expect(mailHref("")).toBeNull()
 	})
 
-	it("prefers an explicit map url and otherwise searches the address parts", () => {
+	it("prefers an explicit map url, then coordinates, then an address search", () => {
 		expect(mapsHref({ ...BRANCH, mapUrl: "https://maps.example/x" })).toBe("https://maps.example/x")
+		expect(mapsHref({ ...BRANCH, latitude: 5.6698, longitude: -0.0166 })).toBe(
+			"https://www.google.com/maps/dir/?api=1&destination=5.6698%2C-0.0166",
+		)
 		expect(mapsHref(BRANCH)).toBe(
-			"https://www.google.com/maps/search/?api=1&query=Spintex%2C%20Accra",
+			"https://www.google.com/maps/search/?api=1&query=Community%201%2C%20Tema",
 		)
 		expect(mapsHref({ ...BRANCH, area: null, city: "" })).toBeNull()
 	})

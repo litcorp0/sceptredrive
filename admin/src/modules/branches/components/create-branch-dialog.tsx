@@ -24,7 +24,8 @@ import { useDebouncedValue } from "#/lib/hooks"
 import { toastApiError } from "#/lib/toast"
 import { createBranch, suggestBranchCode } from "../api/branches"
 import { branchKeys } from "../api/keys"
-import type { BranchType } from "../types"
+import type { BranchCreateInput, BranchType } from "../types"
+import { LATITUDE_BOUNDS, LONGITUDE_BOUNDS, parseCoordinate } from "../utils/coordinates"
 
 export function CreateBranchDialog({
 	open,
@@ -41,6 +42,8 @@ export function CreateBranchDialog({
 	const [area, setArea] = useState("")
 	const [address, setAddress] = useState("")
 	const [phone, setPhone] = useState("")
+	const [latitude, setLatitude] = useState("")
+	const [longitude, setLongitude] = useState("")
 	const [preview, setPreview] = useState<{ code: string; adjusted: boolean } | null>(null)
 	const [formError, setFormError] = useState<string | null>(null)
 
@@ -66,15 +69,7 @@ export function CreateBranchDialog({
 	}, [debouncedCity, debouncedArea, type])
 
 	const createMutation = useMutation({
-		mutationFn: () =>
-			createBranch({
-				name,
-				type,
-				city,
-				area: area || undefined,
-				address: address || undefined,
-				phone: phone || undefined,
-			}),
+		mutationFn: (input: BranchCreateInput) => createBranch(input),
 		onSuccess: async (data) => {
 			toast.success(`Branch ${data.branch.name} (${data.branch.code}) created`)
 			await queryClient.invalidateQueries({ queryKey: branchKeys.all })
@@ -97,6 +92,8 @@ export function CreateBranchDialog({
 		setArea("")
 		setAddress("")
 		setPhone("")
+		setLatitude("")
+		setLongitude("")
 		setPreview(null)
 		setFormError(null)
 	}
@@ -104,7 +101,27 @@ export function CreateBranchDialog({
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setFormError(null)
-		createMutation.mutate()
+
+		let parsedLatitude: number | undefined
+		let parsedLongitude: number | undefined
+		try {
+			parsedLatitude = parseCoordinate(latitude, LATITUDE_BOUNDS, "Latitude")
+			parsedLongitude = parseCoordinate(longitude, LONGITUDE_BOUNDS, "Longitude")
+		} catch (error) {
+			setFormError(error instanceof Error ? error.message : "Invalid coordinates")
+			return
+		}
+
+		createMutation.mutate({
+			name,
+			type,
+			city,
+			area: area || undefined,
+			address: address || undefined,
+			phone: phone || undefined,
+			latitude: parsedLatitude,
+			longitude: parsedLongitude,
+		})
 	}
 
 	return (
@@ -187,6 +204,33 @@ export function CreateBranchDialog({
 							onChange={(event) => setAddress(event.target.value)}
 						/>
 					</div>
+
+					<div className="grid grid-cols-2 gap-3">
+						<div className="grid gap-1.5">
+							<Label htmlFor="branch-latitude">Latitude</Label>
+							<Input
+								id="branch-latitude"
+								inputMode="decimal"
+								placeholder="5.6037"
+								value={latitude}
+								onChange={(event) => setLatitude(event.target.value)}
+							/>
+						</div>
+						<div className="grid gap-1.5">
+							<Label htmlFor="branch-longitude">Longitude</Label>
+							<Input
+								id="branch-longitude"
+								inputMode="decimal"
+								placeholder="-0.1870"
+								value={longitude}
+								onChange={(event) => setLongitude(event.target.value)}
+							/>
+						</div>
+					</div>
+					<p className="-mt-2 text-xs text-muted-foreground">
+						Right-click the counter on Google Maps and copy the two numbers. They make the public
+						site's Directions link land at the door instead of searching the road name.
+					</p>
 
 					<div className="grid gap-1.5">
 						<span className="text-sm font-medium">Branch code</span>

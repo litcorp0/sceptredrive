@@ -26,7 +26,8 @@ import type {
   SuggestCodeResult,
 } from './branches.types.ts'
 
-const MANAGER_UPDATE_FIELDS = new Set(['name', 'address', 'phone'])
+/** Managers own their counter's contact details, including where the door is. */
+const MANAGER_UPDATE_FIELDS = new Set(['name', 'address', 'phone', 'latitude', 'longitude'])
 const MAX_CODE_ATTEMPTS = 5
 
 export async function listBranches(
@@ -97,6 +98,8 @@ export async function createBranch(
             area: input.area ?? null,
             address: input.address ?? null,
             phone: input.phone ?? null,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
             createdBy: actor.actorId,
           },
           tx,
@@ -158,6 +161,8 @@ export async function updateBranch(
         ...(input.area !== undefined ? { area: input.area } : {}),
         ...(input.address !== undefined ? { address: input.address } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+        ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
       },
       tx,
     )

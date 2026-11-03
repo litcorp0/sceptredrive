@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   index,
   pgEnum,
   pgTable,
@@ -22,6 +23,13 @@ export const branch = pgTable(
     area: text('area'),
     address: text('address'),
     phone: text('phone'),
+    /**
+     * Where the counter actually is. The public site turns these into a directions link;
+     * an address alone can only produce a text search, which lands people at the wrong gate
+     * on a road with a dozen compounds.
+     */
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
     isActive: boolean('is_active').notNull().default(true),
     createdBy: text('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

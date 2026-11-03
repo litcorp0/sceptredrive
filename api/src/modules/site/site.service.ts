@@ -81,6 +81,8 @@ async function resolveBranches(): Promise<SiteBranch[]> {
         area: row.area,
         address: row.address,
         phone: row.phone,
+        latitude: row.latitude,
+        longitude: row.longitude,
         hours: optional(hours),
         mapUrl: optional(mapUrl),
       }

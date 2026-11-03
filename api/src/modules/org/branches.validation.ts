@@ -21,6 +21,9 @@ export const branchCreateSchema = z
     area: z.string().trim().min(1).max(80).optional(),
     address: z.string().trim().min(1).max(240).optional(),
     phone: z.string().trim().min(3).max(32).optional(),
+    /** Decimal degrees, so the site can build a real directions link. */
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
   })
   .strict()
 
@@ -31,6 +34,9 @@ export const branchUpdateSchema = z
     area: z.string().trim().min(1).max(80).optional(),
     address: z.string().trim().min(1).max(240).optional(),
     phone: z.string().trim().min(3).max(32).optional(),
+    /** `null` clears a wrong pin; omitting the key leaves it alone. */
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {

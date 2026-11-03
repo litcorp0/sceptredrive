@@ -10,6 +10,9 @@ export interface Branch {
 	area: string | null
 	address: string | null
 	phone: string | null
+	/** Decimal degrees; null when nobody has pinned the door yet. */
+	latitude: number | null
+	longitude: number | null
 	isActive: boolean
 	createdBy: string | null
 	createdAt: string
@@ -39,6 +42,8 @@ export interface BranchCreateInput {
 	area?: string
 	address?: string
 	phone?: string
+	latitude?: number
+	longitude?: number
 }
 
 export interface BranchUpdateInput {
@@ -47,6 +52,9 @@ export interface BranchUpdateInput {
 	area?: string
 	address?: string
 	phone?: string
+	/** `null` clears a wrong pin; omitting the key leaves it alone. */
+	latitude?: number | null
+	longitude?: number | null
 }
 
 export type BranchListQuery = {

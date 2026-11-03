@@ -38,7 +38,13 @@ export interface SiteBranch {
   phone: string | null
   /** Opening hours; empty until an admin sets them for the branch. */
   hours: string | null
-  /** A map link; empty until set, in which case the site builds one from the address. */
+  /**
+   * Decimal degrees of the counter itself, when the branch has them. A directions link built
+   * from coordinates lands at the door; one built from an address is a text search.
+   */
+  latitude: number | null
+  longitude: number | null
+  /** A map link; empty until set, in which case the site builds one from coordinates or address. */
   mapUrl: string | null
 }
 

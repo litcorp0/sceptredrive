@@ -13,6 +13,10 @@ const branchSchema = z.object({
 	area: z.string().nullable(),
 	address: z.string().nullable(),
 	phone: z.string().nullable(),
+	// Defaulted so a web deploy that lands before the API does not reject the payload and
+	// fall back to the bundled content.
+	latitude: z.number().nullable().default(null),
+	longitude: z.number().nullable().default(null),
 	hours: z.string().nullable(),
 	mapUrl: z.string().nullable(),
 })

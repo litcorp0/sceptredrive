@@ -38,7 +38,7 @@ export interface BranchDirectoryResult {
  */
 export type PublicBranchContact = Pick<
   BranchRow,
-  'id' | 'code' | 'name' | 'city' | 'area' | 'address' | 'phone'
+  'id' | 'code' | 'name' | 'city' | 'area' | 'address' | 'phone' | 'latitude' | 'longitude'
 >
 
 export interface BranchCreateInput {
@@ -50,6 +50,8 @@ export interface BranchCreateInput {
   area?: string | undefined
   address?: string | undefined
   phone?: string | undefined
+  latitude?: number | undefined
+  longitude?: number | undefined
 }
 
 export interface BranchUpdateInput {
@@ -58,6 +60,9 @@ export interface BranchUpdateInput {
   area?: string | undefined
   address?: string | undefined
   phone?: string | undefined
+  /** `null` clears a wrong pin; omitting the key leaves it alone. */
+  latitude?: number | null | undefined
+  longitude?: number | null | undefined
 }
 
 export interface SuggestCodeInput {
