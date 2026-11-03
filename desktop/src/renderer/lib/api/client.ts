@@ -61,6 +61,16 @@ export function setTokenRefresher(refresher: (() => Promise<string | null>) | nu
   tokenRefresher = refresher
 }
 
+/**
+ * Asks the session layer for a fresh device JWT.
+ *
+ * Exported for transports that do not go through `apiRequest` — the payment client — so a stale
+ * token heals there too instead of surfacing as "Device token is invalid or expired".
+ */
+export async function refreshSessionToken(): Promise<string | null> {
+  return tokenRefresher ? tokenRefresher() : null
+}
+
 async function parseError(response: Response): Promise<ApiError> {
   let body: ApiErrorBody | null = null
   try {

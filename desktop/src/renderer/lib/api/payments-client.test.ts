@@ -55,6 +55,67 @@ function calls(fn: { mock: { calls: unknown[] } }): Array<[string, RequestInit]>
 }
 
 describe('payments client', () => {
+  it('renews an expired device token once and retries the payment', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: { code: 'DEVICE_TOKEN_INVALID', message: 'Device token is invalid or expired' },
+          },
+          401,
+        ),
+      )
+      .mockResolvedValueOnce(json({ payment: PAYMENT }, 201))
+
+    const refresh = vi.fn(async () => 'fresh-jwt')
+    const api = createPaymentClient({
+      baseUrl: 'https://api.example.test',
+      token: () => 'stale-jwt',
+      refresh,
+      fetch: fetchImpl,
+    })
+
+    const viewed = await api.create({
+      clientPaymentId: 'cp_1',
+      method: 'MOMO',
+      amountMinor: 5_000,
+      shiftId: 'shift_1',
+      mobileMoney: { provider: 'mtn', phone: '+233241234567' },
+    })
+
+    expect(viewed).toEqual(PAYMENT)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry a second time, so a revoked device still fails', async () => {
+    const fetchImpl = vi.fn(async () =>
+      json(
+        { error: { code: 'DEVICE_TOKEN_INVALID', message: 'Device token is invalid or expired' } },
+        401,
+      ),
+    )
+    const refresh = vi.fn(async () => null)
+    const api = createPaymentClient({
+      baseUrl: 'https://api.example.test',
+      token: () => 'stale-jwt',
+      refresh,
+      fetch: fetchImpl,
+    })
+
+    await expect(
+      api.create({
+        clientPaymentId: 'cp_1',
+        method: 'MOMO',
+        amountMinor: 5_000,
+        shiftId: 'shift_1',
+        mobileMoney: { provider: 'mtn', phone: '+233241234567' },
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it('creates a payment with the device bearer and returns the server view', async () => {
     const fetchImpl = vi.fn(async () => json({ payment: PAYMENT }, 201))
     const viewed = await client(fetchImpl).create({

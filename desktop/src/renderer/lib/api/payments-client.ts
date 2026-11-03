@@ -1,7 +1,7 @@
 import type { TenderMethod } from '@sceptre/shared'
 import { posRuntimeConfig } from '../config'
 import { describeNetworkFailure } from '../network-status'
-import { getAccessToken } from './client'
+import { getAccessToken, refreshSessionToken } from './client'
 
 /**
  * The device-facing payment-intent client (Plan 09 Task 1).
@@ -173,6 +173,15 @@ export interface PaymentClientDeps {
   baseUrl: string
   /** The in-memory device JWT; never persisted or logged. */
   token(): Promise<string | null> | string | null
+  /**
+   * Re-mints the device JWT after a 401. The session layer coalesces concurrent refreshes, so
+   * this is safe to call from every payment.
+   *
+   * Without it the payment client held a 15-minute token and had no way to renew it, so the first
+   * card or MoMo attempt after a quiet spell failed with "Device token is invalid or expired"
+   * while cash — which goes through `apiRequest` and does refresh — kept working.
+   */
+  refresh?: () => Promise<string | null>
   fetch?: typeof globalThis.fetch
   timeoutMs?: number
 }
@@ -188,9 +197,14 @@ export function createPaymentClient(deps: PaymentClientDeps): PaymentClient {
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const baseUrl = deps.baseUrl.replace(/\/$/, '')
 
-  async function request(path: string, init: RequestInit): Promise<PaymentView> {
+  async function request(path: string, init: RequestInit, retried = false): Promise<PaymentView> {
     const token = await deps.token()
     if (!token) {
+      // A signed-out terminal can still heal: the session layer re-mints from the device token.
+      if (!retried && deps.refresh) {
+        const refreshed = await deps.refresh()
+        if (refreshed) return request(path, init, true)
+      }
       throw new PaymentClientError('UNAUTHORIZED', 'Sign in again to take card or MoMo', {
         retryable: false,
         status: 401,
@@ -223,7 +237,17 @@ export function createPaymentClient(deps: PaymentClientDeps): PaymentClient {
       clearTimeout(timer)
     }
 
-    if (!response.ok) throw await readError(response)
+    if (!response.ok) {
+      const error = await readError(response)
+      // The device JWT lives 15 minutes. Retry once with a freshly minted one instead of telling
+      // the cashier to sign in to a terminal that is already signed in. `serverCode` carries the
+      // API's own reason (`DEVICE_TOKEN_INVALID`); a revoked device simply fails again below.
+      if (!retried && error.status === 401 && deps.refresh) {
+        const refreshed = await deps.refresh()
+        if (refreshed) return request(path, init, true)
+      }
+      throw error
+    }
 
     let body: PaymentEnvelope
     try {
@@ -276,4 +300,5 @@ export function createPaymentClient(deps: PaymentClientDeps): PaymentClient {
 export const paymentsClient: PaymentClient = createPaymentClient({
   baseUrl: posRuntimeConfig.apiBaseUrl,
   token: () => getAccessToken(),
+  refresh: () => refreshSessionToken(),
 })
