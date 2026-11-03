@@ -17,6 +17,9 @@ import {
  * the sending frame, so this file is intentionally dumb.
  */
 const api: DesktopApi = {
+  // Synchronous on purpose: the renderer's config module is evaluated at import time, before
+  // any promise could resolve, and these two URLs decide where it enrols.
+  runtimeConfig: ipcRenderer.sendSync(IPC_CHANNELS.runtimeConfig) as DesktopApi['runtimeConfig'],
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
   },

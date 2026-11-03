@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow, dialog, Menu, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage } from 'electron'
 import started from 'electron-squirrel-startup'
+import { IPC_CHANNELS } from '../shared/ipc'
 import {
   allowsLocalOrigins,
   BUNDLED_CONFIG_FILE_NAME,
@@ -137,6 +138,15 @@ void app.whenReady().then(() => {
 
   hardenSession()
   installGlobalSecurityHandlers(policy)
+
+  // The renderer reads these through preload before any of its modules load, so the handler has
+  // to exist before the first window does. Synchronous by design: `returnValue` is the reply.
+  ipcMain.on(IPC_CHANNELS.runtimeConfig, (event) => {
+    event.returnValue = {
+      apiBaseUrl: config.apiBaseUrl,
+      powersyncUrl: config.powersyncUrl,
+    }
+  })
 
   const keychain = createKeychain({
     userDataDir: app.getPath('userData'),

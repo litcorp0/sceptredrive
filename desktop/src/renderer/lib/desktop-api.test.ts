@@ -17,6 +17,10 @@ function installBridge(bridge: DesktopApi | undefined): void {
 
 function fakeBridge(overrides: Partial<DesktopApi['secure']> = {}): DesktopApi {
   return {
+    runtimeConfig: {
+      apiBaseUrl: 'http://localhost:4000',
+      powersyncUrl: 'http://localhost:8080',
+    },
     app: {
       getInfo: async () => ({
         ok: false,

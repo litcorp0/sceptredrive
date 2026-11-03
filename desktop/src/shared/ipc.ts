@@ -34,6 +34,8 @@ export type {
 
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
+  /** Synchronous: the renderer needs the URLs before its modules finish loading. */
+  runtimeConfig: 'config:runtime',
   secureGet: 'secure:get',
   secureSet: 'secure:set',
   secureDelete: 'secure:delete',
@@ -114,6 +116,14 @@ export type AppInfo = {
 }
 
 export type DesktopApi = {
+  /**
+   * The API and PowerSync URLs the main process resolved, read synchronously in preload because
+   * the renderer needs them before its own modules finish loading.
+   */
+  readonly runtimeConfig: {
+    readonly apiBaseUrl: string
+    readonly powersyncUrl: string
+  }
   app: {
     getInfo(): Promise<IpcResult<AppInfo>>
   }

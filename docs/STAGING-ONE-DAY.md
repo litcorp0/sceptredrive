@@ -583,6 +583,11 @@ message at all, because a packaged build has no console. Now a baked build ignor
 entirely, and an unbaked one shows a dialog naming the error (`CONFIG_INVALID`, the file path)
 instead of vanishing.
 
+The **renderer** gets those same two URLs across the Electron preload bridge at startup, so there
+is one source of truth. It used to read `VITE_API_URL` baked at build time, defaulting to
+`http://localhost:4000`; a release that did not set it shipped a till that failed enrolment with
+`Cannot reach the server` while the correct URLs sat unread in the app resources.
+
 **Baked and unbaked builds differ in which hosts they accept**, and this bites the first time a
 till is pointed at a staging host:
 

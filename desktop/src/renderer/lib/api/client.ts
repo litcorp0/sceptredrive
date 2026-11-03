@@ -111,9 +111,20 @@ async function requestOnce(
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new ApiError(0, NETWORK_TIMEOUT, 'The server did not respond in time')
     }
-    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server')
+    // Name the host: a packaged till has no devtools, so "Cannot reach the server" alone left
+    // nobody able to tell a wrong URL from a dead network.
+    throw new ApiError(0, 'NETWORK_ERROR', `Cannot reach the server at ${apiHost()}`)
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/** Host of the configured API, for the message above. The URL is validated at boot. */
+function apiHost(): string {
+  try {
+    return new URL(posRuntimeConfig.apiBaseUrl).host
+  } catch {
+    return 'the configured API'
   }
 }
 
