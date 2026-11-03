@@ -52,10 +52,12 @@ import { appendPesewaDigit, removePesewaDigit } from '../utils/pesewa'
  * arithmetic is `tenderBalance` from `@sceptre/shared` — the same function the
  * server asserts with — so the till cannot produce a set the upload will reject.
  *
- * Only cash and credit are offered here. MoMo, card and bank need a payment
- * provider round trip and arrive in Plan 09; the filter below is the whole
- * change that has to happen for them, because everything after this screen
- * already carries an ordered tender set.
+ * Cash and credit are entered from the keypad. MoMo, card and bank need a
+ * payment provider round trip, so they open `ElectronicTenderPanel`: the
+ * server creates the payment, the cashier completes it, and the tender is
+ * added only once that payment is `PAID`. Either way this screen ends with an
+ * ordered tender set, which is what the sale, the sync upload and the refund
+ * path all consume.
  *
  * A credit sale that needs a manager opens the override dialog instead of
  * silently completing — and that dialog always offers "continue without
