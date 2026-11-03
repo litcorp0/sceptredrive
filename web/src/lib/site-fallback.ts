@@ -28,17 +28,10 @@ export const SITE_FALLBACK: SiteContent = {
 		whatsapp: "",
 		social: { instagram: "", facebook: "", tiktok: "" },
 	},
-	branches: [
-		{
-			code: "ACC-SPX",
-			name: "Accra Spintex",
-			city: "Accra",
-			area: "Spintex",
-			address: null,
-			phone: null,
-			hours: null,
-			mapUrl: null,
-		},
-	],
+	// Deliberately empty. The fallback once listed the demo branch `ACC-SPX` (Accra Spintex),
+	// so any failure to reach the API made the public site advertise a branch that may not
+	// exist, with "contact the branch" placeholders for its address, hours and phone. An empty
+	// list shows the pages' own "details are being updated" state, which is true.
+	branches: [],
 	updatedAt: "2026-10-29T00:00:00.000Z",
 }
