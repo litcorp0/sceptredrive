@@ -1,5 +1,6 @@
 import type { TenderMethod } from '@sceptre/shared'
 import { posRuntimeConfig } from '../config'
+import { describeNetworkFailure } from '../network-status'
 import { getAccessToken } from './client'
 
 /**
@@ -48,6 +49,7 @@ export interface PaymentView {
 
 export type PaymentClientErrorCode =
   | 'NETWORK'
+  | 'OFFLINE'
   | 'TIMEOUT'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
@@ -211,11 +213,12 @@ export function createPaymentClient(deps: PaymentClientDeps): PaymentClient {
     } catch (error) {
       // A timeout is still "we do not know": the money may be in flight.
       const timedOut = error instanceof DOMException && error.name === 'AbortError'
-      throw new PaymentClientError(
-        timedOut ? 'TIMEOUT' : 'NETWORK',
-        timedOut ? 'The server did not answer in time' : 'Cannot reach the server',
-        { retryable: true },
-      )
+      const failure = timedOut
+        ? { code: 'TIMEOUT' as const, message: 'The server did not answer in time' }
+        : describeNetworkFailure('the payment server')
+      const code: PaymentClientErrorCode =
+        failure.code === 'NETWORK_ERROR' ? 'NETWORK' : failure.code
+      throw new PaymentClientError(code, failure.message, { retryable: true })
     } finally {
       clearTimeout(timer)
     }

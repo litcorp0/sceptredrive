@@ -1,4 +1,5 @@
 import { posRuntimeConfig } from '../config'
+import { describeNetworkFailure } from '../network-status'
 import type { ApiErrorBody, EnrolledDevice, PosSessionPayload } from './types'
 
 /**
@@ -111,9 +112,10 @@ async function requestOnce(
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new ApiError(0, NETWORK_TIMEOUT, 'The server did not respond in time')
     }
-    // Name the host: a packaged till has no devtools, so "Cannot reach the server" alone left
-    // nobody able to tell a wrong URL from a dead network.
-    throw new ApiError(0, 'NETWORK_ERROR', `Cannot reach the server at ${apiHost()}`)
+    // Distinguish "this machine has no internet" from "the server is unreachable": blaming the
+    // domain when the link is down sends someone to check the wrong thing.
+    const failure = describeNetworkFailure(apiHost())
+    throw new ApiError(0, failure.code, failure.message)
   } finally {
     clearTimeout(timer)
   }
