@@ -73,7 +73,7 @@ interface DemoProduct {
 
 export const DEMO_PRODUCTS: readonly DemoProduct[] = [
   {
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     name: 'Bosch Oil Filter',
     description: 'Spin-on oil filter for common saloon engines',
     category: 'Oil Filters',
@@ -84,7 +84,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['5901234123457', '4006381333931'],
   },
   {
-    sku: 'GIK-00002',
+    sku: 'SDP-00002',
     name: 'Denso Oil Filter',
     description: 'OEM-spec oil filter for Toyota and Lexus',
     category: 'Oil Filters',
@@ -95,7 +95,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['5901234123464'],
   },
   {
-    sku: 'GIK-00003',
+    sku: 'SDP-00003',
     name: 'Denso Air Filter Corolla',
     description: 'Panel air filter for Toyota Corolla 2009-2019',
     category: 'Air Filters',
@@ -106,7 +106,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['DEN-17801-0T020'],
   },
   {
-    sku: 'GIK-00004',
+    sku: 'SDP-00004',
     name: 'Bosch Air Filter Hilux',
     description: 'Panel air filter for Toyota Hilux 2016+',
     category: 'Air Filters',
@@ -117,7 +117,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['BSH-AF-HLX-001'],
   },
   {
-    sku: 'GIK-00005',
+    sku: 'SDP-00005',
     name: 'Febi Timing Belt Kit',
     description: 'Timing belt kit with tensioner for 1.6-2.0 engines',
     category: 'Belts',
@@ -128,7 +128,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['FEB-TBK-1999'],
   },
   {
-    sku: 'GIK-00006',
+    sku: 'SDP-00006',
     name: 'Bosch Front Brake Pads',
     description: 'Front axle brake pad set for common saloons',
     category: 'Pads',
@@ -139,7 +139,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['BSH-BP-FR-7788'],
   },
   {
-    sku: 'GIK-00007',
+    sku: 'SDP-00007',
     name: 'Febi Rear Brake Pads',
     description: 'Rear axle brake pad set',
     category: 'Pads',
@@ -150,7 +150,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['FEB-BP-RR-9922'],
   },
   {
-    sku: 'GIK-00008',
+    sku: 'SDP-00008',
     name: 'Febi Brake Disc 280mm',
     description: 'Vented front brake disc, 280mm diameter',
     category: 'Discs',
@@ -161,7 +161,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['4008321967859'],
   },
   {
-    sku: 'GIK-00009',
+    sku: 'SDP-00009',
     name: 'Bosch S4 Battery 70Ah',
     description: 'Maintenance-free lead-acid battery, 70Ah',
     category: 'Batteries',
@@ -172,7 +172,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['BSH-S4-70A', '5901234123471'],
   },
   {
-    sku: 'GIK-00010',
+    sku: 'SDP-00010',
     name: 'Denso Battery 60Ah',
     description: 'Maintenance-free lead-acid battery, 60Ah',
     category: 'Batteries',
@@ -183,7 +183,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['DEN-BT-60A'],
   },
   {
-    sku: 'GIK-00011',
+    sku: 'SDP-00011',
     name: 'NGK Iridium Spark Plug',
     description: 'Iridium spark plug, set of four',
     category: 'Spark Plugs',
@@ -194,7 +194,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
     barcodes: ['NGK-IR-IFR6'],
   },
   {
-    sku: 'GIK-00012',
+    sku: 'SDP-00012',
     name: 'Febi Engine Oil 5W-30 1L',
     description: 'Fully synthetic engine oil, one litre',
     category: 'Engine Oil',
@@ -273,7 +273,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   }
 
   const settingsSeeded = await Promise.all([
-    ensureSetting('staff.idPrefix', process.env.STAFF_ID_PREFIX?.trim() || 'GA'),
+    ensureSetting('staff.idPrefix', process.env.STAFF_ID_PREFIX?.trim() || 'SD'),
     ensureSetting('receipt.header', 'Thank you for shopping at Sceptre Drive'),
     ensureSetting('loyalty.earnPointsPerCedi', 1),
     ensureSetting('loyalty.pointsPerCedi', 100),
@@ -281,7 +281,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     ensureSetting('loyalty.minimumRedeemPoints', 100),
     ensureSetting('credit.repaymentPrefix', 'REP'),
     ensureSetting('credit.repaymentSequence', 1),
-    ensureSetting('catalog.skuPrefix', 'GIK'),
+    ensureSetting('catalog.skuPrefix', 'SDP'),
     ensureSetting('catalog.skuSequence', 1),
     ensureSetting('pricing.taxMode', 'INCLUSIVE'),
     ensureSetting('inventory.receiptPrefix', 'GRN'),
@@ -354,7 +354,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     if (result.created) created.push(`product ${item.sku}`)
   }
 
-  const overrideProductId = productIds.get('GIK-00006')
+  const overrideProductId = productIds.get('SDP-00006')
   if (
     overrideProductId &&
     (await ensureProductPrice({
@@ -363,7 +363,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
       priceMinor: 18_500,
     }))
   ) {
-    created.push('branch price override GIK-00006 @ ACC-SPX')
+    created.push('branch price override SDP-00006 @ ACC-SPX')
   }
 
   const productIdFor = (sku: string): string => {
@@ -373,8 +373,8 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   }
 
   const retailQuantityOverrides = new Map([
-    ['GIK-00007', 3],
-    ['GIK-00011', 8],
+    ['SDP-00007', 3],
+    ['SDP-00011', 8],
   ])
 
   if (
@@ -486,10 +486,10 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   if (linkedReceipts > 0) created.push(`linked ${linkedReceipts} receipt(s) to suppliers`)
 
   const supplierProductMappings = [
-    ['SUP-00001', 'GIK-00001', 'APD-OF-4501', 7, 4_500, true],
-    ['SUP-00001', 'GIK-00006', 'APD-BP-1275', 10, 12_000, false],
-    ['SUP-00002', 'GIK-00002', 'GIKIMP-OF-0500', 21, 5_000, false],
-    ['SUP-00002', 'GIK-00007', 'GIKIMP-BP-9910', 21, 10_500, false],
+    ['SUP-00001', 'SDP-00001', 'APD-OF-4501', 7, 4_500, true],
+    ['SUP-00001', 'SDP-00006', 'APD-BP-1275', 10, 12_000, false],
+    ['SUP-00002', 'SDP-00002', 'SDIMP-OF-0500', 21, 5_000, false],
+    ['SUP-00002', 'SDP-00007', 'SDIMP-BP-9910', 21, 10_500, false],
   ] as const
 
   for (const [
@@ -556,7 +556,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     number: 'SINV-00002',
     supplierId: sceptreImports.id,
     branchId: retail.id,
-    supplierInvoiceNumber: 'GIKIMP-7781',
+    supplierInvoiceNumber: 'SDIMP-7781',
     invoiceDate: '2026-10-08',
     dueDate: '2026-10-22',
     note: 'Standalone invoice — no stock receipt',
@@ -599,8 +599,8 @@ export async function seedDemo(): Promise<SeedDemoResult> {
   }
 
   for (const [sku, threshold] of [
-    ['GIK-00007', 5],
-    ['GIK-00011', 10],
+    ['SDP-00007', 5],
+    ['SDP-00011', 10],
   ] as const) {
     if (
       await ensureStockThreshold({
@@ -699,8 +699,8 @@ export async function seedDemo(): Promise<SeedDemoResult> {
       return found
     }
 
-    const cashOilFilter = productFor('GIK-00001')
-    const cashDensoFilter = productFor('GIK-00002')
+    const cashOilFilter = productFor('SDP-00001')
+    const cashDensoFilter = productFor('SDP-00002')
     const cashSale = await ensureDemoSale({
       receiptNumber: 'ACC-SPX-T01-20261020-0001',
       shiftId: demoShift.id,
@@ -735,7 +735,7 @@ export async function seedDemo(): Promise<SeedDemoResult> {
     })
     if (cashSale.created) created.push('cash sale ACC-SPX-T01-20261020-0001')
 
-    const creditProduct = productFor('GIK-00006')
+    const creditProduct = productFor('SDP-00006')
     const creditCustomerId = customerIds.get('+233241000001')
     const creditSale = creditCustomerId
       ? await ensureDemoSale({

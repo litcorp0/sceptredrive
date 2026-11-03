@@ -32,7 +32,7 @@ const NOW = new Date('2026-10-27T10:15:00.000Z')
 const BINDING: LocalStaffBinding = {
   id: 'binding-1',
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   name: 'Ama Mensah',
   role: 'CASHIER',
   bindingId: 'binding-1',
@@ -384,8 +384,8 @@ describe('hold helpers', () => {
   })
 
   it('takes two initials from the name and falls back to the staff id', () => {
-    expect(staffInitials('Ama Mensah', 'GA-0003')).toBe('AM')
-    expect(staffInitials(null, 'GA-0003')).toBe('03')
+    expect(staffInitials('Ama Mensah', 'SD-0003')).toBe('AM')
+    expect(staffInitials(null, 'SD-0003')).toBe('03')
   })
 })
 

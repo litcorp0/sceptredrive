@@ -21,7 +21,7 @@ const SHIFT: LocalShift = {
   terminalId: 'terminal-1',
   deviceId: 'device-1',
   cashierUserId: 'user-cashier',
-  cashierStaffId: 'GA-0003',
+  cashierStaffId: 'SD-0003',
   status: 'CLOSED',
   openedAt: '2026-10-27T08:00:00.000Z',
   closedAt: '2026-10-27T18:30:00.000Z',
@@ -29,8 +29,8 @@ const SHIFT: LocalShift = {
   countedCashMinor: 470_000,
   clientExpectedCashMinor: 470_000,
   closeNote: null,
-  openedBy: 'GA-0003',
-  closedBy: 'GA-0003',
+  openedBy: 'SD-0003',
+  closedBy: 'SD-0003',
   createdAt: '2026-10-27T08:00:00.000Z',
 }
 

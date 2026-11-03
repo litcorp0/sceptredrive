@@ -429,7 +429,7 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-EV${suffix.slice(0, 2)}`
+    cashierStaffId = `SD-EV${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })
@@ -453,7 +453,7 @@ describe.skipIf(!available)('E-VAT submissions', () => {
     const manager = await createTestUser({ role: 'MANAGER', branchId })
     createdUserIds.push(manager.id)
     managerUserId = manager.id
-    managerStaffId = `GA-EM${suffix.slice(0, 2)}`
+    managerStaffId = `SD-EM${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: managerStaffId, pinVersion: 1 })

@@ -151,7 +151,7 @@ Fill at least these. Never commit `.env`.
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` |
 | `ADMIN_EMAIL` | The first administrator's address |
 | `ADMIN_PASSWORD` | At least 12 characters |
-| `STAFF_ID_PREFIX` | e.g. `GA`; staff IDs become `GA-0001` |
+| `STAFF_ID_PREFIX` | e.g. `SD`; staff IDs become `SD-0001` |
 | `STAFF_ID_START` | `1` |
 | `POWERSYNC_URL` | `http://localhost:8080` for local sync |
 | `PAYSTACK_MODE` | `mock` until the business has keys |
@@ -165,6 +165,11 @@ DATABASE_URL="postgresql://sceptre_drive:sceptre_drive@localhost:5434/sceptre_dr
 ```
 
 The password above is the local Compose default, not a production secret.
+
+Staff ids and SKUs created before the rename carry the old prefixes (`GA-0001`, `GIK-00001`).
+Both prefixes are **stored settings**, so changing a default only affects rows created afterwards.
+`bun run prefix:rename` reports what would change and `bun run prefix:rename -- --apply` rewrites
+them to `SD-…` and `SDP-…`; it is idempotent and leaves a second run with nothing to do.
 
 ### 1.3 Start the database and migrate
 
@@ -222,7 +227,7 @@ bun run sync:up
    seeded value was shared.
 
 **Verify:** `Settings → Staff` shows you as `ADMIN` with a staff ID such as
-`GA-0001`. The branch switcher shows **All branches**.
+`SD-0001`. The branch switcher shows **All branches**.
 
 ---
 
@@ -476,7 +481,7 @@ version:
 - **Cashier** — POS only: sell, hold, void cart, discount within the cashier
   ceiling, refund with manager PIN, repayment.
 
-**Verify:** Staff list shows staff IDs (`GA-0001`, …), roles and branches. Sign
+**Verify:** Staff list shows staff IDs (`SD-0001`, …), roles and branches. Sign
 in as a manager in a private window; the sidebar is smaller and the branch
 switcher is fixed.
 

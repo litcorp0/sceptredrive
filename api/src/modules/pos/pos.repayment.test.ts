@@ -327,7 +327,7 @@ describe.skipIf(!available)('POS credit repayment', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-RP${suffix.slice(0, 2)}`
+    cashierStaffId = `SD-RP${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })
@@ -351,7 +351,7 @@ describe.skipIf(!available)('POS credit repayment', () => {
     const manager = await createTestUser({ role: 'MANAGER', branchId })
     createdUserIds.push(manager.id)
     managerUserId = manager.id
-    managerStaffId = `GA-RPM${suffix.slice(0, 2)}`
+    managerStaffId = `SD-RPM${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: managerStaffId, pinVersion: 1 })

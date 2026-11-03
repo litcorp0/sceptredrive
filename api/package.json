@@ -15,6 +15,7 @@
     "seed:demo-sales": "bun run src/seed/demo-sales.run.ts",
     "paystack:smoke": "bun run scripts/paystack-smoke.ts",
     "email:smoke": "bun run scripts/email-smoke.ts",
+    "prefix:rename": "bun run scripts/rename-brand-prefixes.ts",
     "check-types": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",

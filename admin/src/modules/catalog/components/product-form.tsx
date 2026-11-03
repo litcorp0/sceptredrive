@@ -222,7 +222,7 @@ export function ProductForm({
 									minLength={2}
 									maxLength={32}
 									className="font-mono"
-									placeholder="GIK-00001"
+									placeholder="SDP-00001"
 									value={values.sku}
 									disabled={disabled}
 									onChange={(event) => update("sku", event.target.value.toUpperCase())}

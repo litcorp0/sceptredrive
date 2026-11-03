@@ -36,7 +36,7 @@ if (!available) console.warn('[writeoffs.test] database unavailable; integration
 
 const actor: AuditActor = {
   actorId: 'writeoff-test',
-  actorStaffId: 'GA-WRITEOFF',
+  actorStaffId: 'SD-WRITEOFF',
   ip: null,
   userAgent: null,
   requestId: null,

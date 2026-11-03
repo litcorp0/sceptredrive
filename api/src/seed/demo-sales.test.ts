@@ -347,7 +347,7 @@ describe.skipIf(!available)('seed:demo-sales writer', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-D${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-D${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })

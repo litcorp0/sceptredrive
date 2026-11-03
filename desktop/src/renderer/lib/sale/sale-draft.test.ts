@@ -18,7 +18,7 @@ const CONTEXT = {
 
 const CASHIER = {
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   bindingId: '33333333-3333-7333-8333-333333333333',
   bindingToken: 'binding-token-value',
   pinVersion: 2,
@@ -26,7 +26,7 @@ const CASHIER = {
 
 const PROOF: CartOverrideProof = {
   approverUserId: 'user-manager',
-  approverStaffId: 'GA-0002',
+  approverStaffId: 'SD-0002',
   approverRole: 'MANAGER',
   bindingId: '22222222-2222-7222-8222-222222222222',
   pinVersion: 4,
@@ -105,7 +105,7 @@ describe('buildSaleDraft — cash', () => {
     expect(draft.payload.receiptNumber).toBe('SPX-T01-20261023-0001')
     expect(draft.payload.cashier).toEqual({
       userId: 'user-cashier',
-      staffId: 'GA-0003',
+      staffId: 'SD-0003',
       bindingId: CASHIER.bindingId,
       bindingToken: CASHIER.bindingToken,
       pinVersion: 2,
@@ -264,7 +264,7 @@ describe('buildSaleDraft — credit', () => {
         method: 'CREDIT',
         amountMinor: 1_000,
         override: {
-          staffId: 'GA-0002',
+          staffId: 'SD-0002',
           userId: 'user-manager',
           bindingId: PROOF.bindingId,
           pinVersion: 4,
@@ -321,7 +321,7 @@ describe('buildSaleDraft — discounts', () => {
       amountMinor: 2_000,
       reasonCode: 'PROMO',
       note: 'Weekend',
-      override: expect.objectContaining({ staffId: 'GA-0002', occurredAt: NOW }),
+      override: expect.objectContaining({ staffId: 'SD-0002', occurredAt: NOW }),
     })
   })
 
@@ -339,7 +339,7 @@ describe('buildSaleDraft — discounts', () => {
     expect(draft.payload.saleDiscount).toMatchObject({
       amountMinor: 0,
       reasonCode: 'OTHER',
-      override: { staffId: 'GA-0002' },
+      override: { staffId: 'SD-0002' },
     })
   })
 
@@ -484,7 +484,7 @@ describe('parseTenderMethod', () => {
 describe('toSaleProof', () => {
   it('maps only the fields the server accepts', () => {
     expect(toSaleProof(PROOF)).toEqual({
-      staffId: 'GA-0002',
+      staffId: 'SD-0002',
       userId: 'user-manager',
       bindingId: PROOF.bindingId,
       pinVersion: 4,

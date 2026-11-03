@@ -17,7 +17,7 @@ if (!available) console.warn('[inventory.test] database unavailable; integration
 
 const actor: AuditActor = {
   actorId: 'test-actor',
-  actorStaffId: 'GA-TEST',
+  actorStaffId: 'SD-TEST',
   ip: null,
   userAgent: null,
   requestId: null,

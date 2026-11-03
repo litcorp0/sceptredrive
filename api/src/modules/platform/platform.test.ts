@@ -158,16 +158,16 @@ describe.skipIf(!available)('audit and settings API', () => {
     await auditService.writeAudit({
       action: 'test.actor-filter',
       entity: 'test',
-      actorStaffId: 'GA-TEST-1',
+      actorStaffId: 'SD-TEST-1',
     })
 
-    const filtered = await app.request('/api/audit?actorStaffId=GA-TEST-1', {
+    const filtered = await app.request('/api/audit?actorStaffId=SD-TEST-1', {
       headers: authedHeaders(adminCookie),
     })
     expect(filtered.status).toBe(200)
     const body = await readJson<{ entries: AuditEntry[] }>(filtered)
     expect(body.entries.length).toBeGreaterThanOrEqual(1)
-    expect(body.entries.every((entry) => entry.actorStaffId === 'GA-TEST-1')).toBe(true)
+    expect(body.entries.every((entry) => entry.actorStaffId === 'SD-TEST-1')).toBe(true)
   })
 
   it('scopes audit reads to the manager branch', async () => {

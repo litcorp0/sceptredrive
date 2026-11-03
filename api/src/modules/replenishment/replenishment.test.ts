@@ -199,7 +199,7 @@ async function insertSale(
     shiftId,
     clientTransactionId: randomUUID(),
     cashierUserId: adminId,
-    cashierStaffId: 'GA-0001',
+    cashierStaffId: 'SD-0001',
     occurredAt,
     subtotalMinor: 0,
     totalMinor: 0,
@@ -500,7 +500,7 @@ beforeAll(async () => {
       terminalId,
       deviceId,
       cashierUserId: adminId,
-      cashierStaffId: 'GA-0001',
+      cashierStaffId: 'SD-0001',
       status: 'OPEN',
       openedAt: new Date(),
     })

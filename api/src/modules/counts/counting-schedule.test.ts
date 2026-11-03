@@ -30,7 +30,7 @@ if (!available) console.warn('[counting-schedule.test] database unavailable; tes
 
 const actor: AuditActor = {
   actorId: 'count-plan-09',
-  actorStaffId: 'GA-COUNT09',
+  actorStaffId: 'SD-COUNT09',
   ip: null,
   userAgent: null,
   requestId: null,
@@ -401,7 +401,7 @@ describe.skipIf(!available)('cycle counts — schedules, ABC, triggers, accuracy
       categoryId,
       frequency: 'QUARTERLY',
       firstDueAt: today(),
-      assignedTo: 'GA-SCOPE',
+      assignedTo: 'SD-SCOPE',
     })
     expect(categorySchedule.scopeKey).toBe(`category:${categoryId}`)
 
@@ -876,7 +876,7 @@ describe.skipIf(!available)('cycle counts — schedules, ABC, triggers, accuracy
         terminalId,
         deviceId,
         cashierUserId: managerAId,
-        cashierStaffId: 'GA-ABC',
+        cashierStaffId: 'SD-ABC',
         openedAt: new Date(),
       })
       .returning({ id: shift.id })
@@ -892,7 +892,7 @@ describe.skipIf(!available)('cycle counts — schedules, ABC, triggers, accuracy
         shiftId,
         clientTransactionId: randomUUID(),
         cashierUserId: managerAId,
-        cashierStaffId: 'GA-ABC',
+        cashierStaffId: 'SD-ABC',
         occurredAt: new Date(),
         subtotalMinor: 10_000,
         totalMinor: 10_000,

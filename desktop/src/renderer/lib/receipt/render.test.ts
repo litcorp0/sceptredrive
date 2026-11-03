@@ -21,7 +21,7 @@ const SALE: SaleRow = {
   shiftId: 'shift-1',
   clientTransactionId: '55555555-5555-7555-8555-555555555555',
   cashierUserId: 'user-cashier',
-  cashierStaffId: 'GA-0003',
+  cashierStaffId: 'SD-0003',
   customerId: null,
   occurredAt: '2026-10-23T10:15:00.000Z',
   subtotalMinor: 12_000,
@@ -51,7 +51,7 @@ const LINE: SaleLineRow = {
   saleId: SALE.id,
   lineNumber: 1,
   productId: '11111111-1111-7111-8111-111111111111',
-  sku: 'GIK-00001',
+  sku: 'SDP-00001',
   name: 'Brake Pad Set',
   barcode: '4006381333931',
   quantity: 2,
@@ -198,7 +198,7 @@ describe('42-column ESC/POS text', () => {
     '------------------------------------------',
     '    RECEIPT ACC-SPX-T01-20261023-0007',
     'Date                     23 Oct 2026 10:15',
-    'Cashier                            GA-0003',
+    'Cashier                            SD-0003',
     '------------------------------------------',
     'Brake Pad Set',
     '  2 x GHS 60.00                 GHS 120.00',
@@ -383,7 +383,7 @@ describe('refund receipt', () => {
     originalReceiptNumber: 'ACC-SPX-T01-20261027-0007',
     occurredAt: '2026-10-27T10:15:00.000Z',
     cashierName: 'Ama Mensah',
-    managerStaffId: 'GA-0002',
+    managerStaffId: 'SD-0002',
     reasonCode: 'DEFECTIVE',
     note: 'Cracked on opening',
     lines: [
@@ -417,7 +417,7 @@ describe('refund receipt', () => {
     expect(text).toContain('Cracked on opening')
     expect(text).toContain('1 · Damaged')
     expect(text).toContain('1 · Resalable')
-    expect(text).toContain('GA-0002')
+    expect(text).toContain('SD-0002')
   })
 
   it('prints each tender with the status its money is actually in', () => {
@@ -437,7 +437,7 @@ describe('refund receipt', () => {
       refundNumber: 'RF-ACC-SPX-T01-20261027-0001',
       originalReceiptNumber: 'ACC-SPX-T01-20261027-0007',
       occurredAt: '2026-10-27T10:15:00.000Z',
-      managerStaffId: 'GA-0002',
+      managerStaffId: 'SD-0002',
       reasonCode: 'DEFECTIVE',
       lines: [],
       tenders: [],

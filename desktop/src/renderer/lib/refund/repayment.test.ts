@@ -24,7 +24,7 @@ const CUSTOMER_ID = '77777777-7777-7777-8777-777777777777'
 const BINDING: LocalStaffBinding = {
   id: '33333333-3333-7333-8333-333333333333',
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   name: 'Ama Mensah',
   role: 'CASHIER',
   bindingId: '33333333-3333-7333-8333-333333333333',
@@ -42,7 +42,7 @@ const BINDING: LocalStaffBinding = {
 
 const OVERRIDE: CartOverrideProof = {
   approverUserId: 'user-manager',
-  approverStaffId: 'GA-0002',
+  approverStaffId: 'SD-0002',
   approverRole: 'MANAGER',
   bindingId: '22222222-2222-7222-8222-222222222222',
   pinVersion: 3,

@@ -33,7 +33,7 @@ const IDENTITY = {
 
 const CASHIER = {
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   bindingId: '33333333-3333-7333-8333-333333333333',
   bindingToken: 'binding-token-value',
   pinVersion: 2,
@@ -47,7 +47,7 @@ function cart(overrides: Partial<CartState> = {}): CartState {
       {
         id: 'line-1',
         productId: PRODUCT_A,
-        sku: 'GIK-00001',
+        sku: 'SDP-00001',
         name: 'Brake Pad Set',
         barcode: '4006381333931',
         quantity: 2,

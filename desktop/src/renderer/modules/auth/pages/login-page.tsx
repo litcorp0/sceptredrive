@@ -448,7 +448,7 @@ function ActivateForm({
         onChange={(event) => setIdentity(event.target.value)}
         autoComplete="username"
         className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
-        placeholder="GA-0004 or you@sceptre.local"
+        placeholder="SD-0004 or you@sceptre.local"
       />
 
       <p className="mt-4 mb-2 text-sm font-medium">PIN</p>

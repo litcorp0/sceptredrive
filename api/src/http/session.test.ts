@@ -37,7 +37,7 @@ function user(overrides: Partial<SessionUser> = {}): SessionUser {
     updatedAt: new Date(),
     role: 'MANAGER',
     branchId: 'branch-1',
-    staffId: 'GA-0001',
+    staffId: 'SD-0001',
     phone: null,
     isActive: true,
     mustChangePassword: false,

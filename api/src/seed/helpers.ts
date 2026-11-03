@@ -138,7 +138,7 @@ export async function createUserWithCredential(
 }
 
 export async function allocateStaffId(tx: Tx): Promise<string> {
-  const prefix = process.env.STAFF_ID_PREFIX?.trim() || 'GA'
+  const prefix = process.env.STAFF_ID_PREFIX?.trim() || 'SD'
   const start = Number.parseInt(process.env.STAFF_ID_START ?? '1', 10) || 1
 
   for (let attempt = 0; attempt < 3; attempt += 1) {

@@ -10,7 +10,7 @@ function binding(overrides: Partial<LocalStaffBinding> = {}): LocalStaffBinding 
   return {
     id: '22222222-2222-7222-8222-222222222222',
     userId: 'user-manager',
-    staffId: 'GA-0002',
+    staffId: 'SD-0002',
     name: 'Efua Owusu',
     role: 'MANAGER',
     bindingId: '22222222-2222-7222-8222-222222222222',
@@ -52,7 +52,7 @@ describe('approveOverride', () => {
 
     expect(proof).toEqual({
       approverUserId: 'user-manager',
-      approverStaffId: 'GA-0002',
+      approverStaffId: 'SD-0002',
       approverRole: 'MANAGER',
       bindingId: manager.bindingId,
       pinVersion: 3,
@@ -63,7 +63,7 @@ describe('approveOverride', () => {
   })
 
   it('refuses a cashier, who never carries the permission', async () => {
-    const cashier = binding({ role: 'CASHIER', staffId: 'GA-0003' })
+    const cashier = binding({ role: 'CASHIER', staffId: 'SD-0003' })
     const verifyPin = vi.fn()
 
     await expect(
@@ -140,7 +140,7 @@ describe('approveOverride', () => {
   })
 
   it('accepts an admin', async () => {
-    const admin = binding({ role: 'ADMIN', staffId: 'GA-0001' })
+    const admin = binding({ role: 'ADMIN', staffId: 'SD-0001' })
     const proof = await approveOverride(
       db,
       {
@@ -169,7 +169,7 @@ describe('reasonCodesFor', () => {
   })
 
   it('refuses a cashier binding for a refund, even with a valid PIN', async () => {
-    const cashier = binding({ role: 'CASHIER', staffId: 'GA-0003' })
+    const cashier = binding({ role: 'CASHIER', staffId: 'SD-0003' })
     await expect(
       approveOverride(
         db,
@@ -191,7 +191,7 @@ describe('listApprovers', () => {
     const row = (id: string, role: string) => ({
       id,
       user_id: `user-${id}`,
-      staff_id: `GA-${id}`,
+      staff_id: `SD-${id}`,
       name: `Staff ${id}`,
       role,
       binding_id: id,

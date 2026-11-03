@@ -13,7 +13,7 @@ import type { CatalogProductRow } from './search'
 function row(overrides: Partial<CatalogProductRow> = {}): CatalogProductRow {
   return {
     id: '11111111-1111-7111-8111-111111111111',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     name: 'Brake Pad Set',
     base_price_minor: 10_000,
     tax_category: 'STANDARD',
@@ -35,7 +35,7 @@ describe('toSellableProduct', () => {
     const product = toSellableProduct(row(), null)
     expect(product).toEqual({
       id: row().id,
-      sku: 'GIK-00001',
+      sku: 'SDP-00001',
       name: 'Brake Pad Set',
       barcode: '4006381333931',
       unitPriceMinor: 10_000,

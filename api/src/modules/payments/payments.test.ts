@@ -214,7 +214,7 @@ describe.skipIf(!available)('payment intents and provider state', () => {
     createdBranchIds.push(branchId)
 
     cashierUserId = `cashier-${suffix}`
-    cashierStaffId = `GA-P13-${suffix}`
+    cashierStaffId = `SD-P13-${suffix}`
 
     deviceA = await createTerminal('A')
     deviceB = await createTerminal('B')

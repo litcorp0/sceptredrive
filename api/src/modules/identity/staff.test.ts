@@ -168,7 +168,7 @@ describe.skipIf(!available)('staff management API', () => {
     cashierTempPassword = body.temporaryPassword
 
     expect(status).toBe(201)
-    expect(body.staff.staffId).toMatch(/^GA-\d{4}$/)
+    expect(body.staff.staffId).toMatch(/^SD-\d{4}$/)
     expect(body.staff.email).toBe(cashierEmail.toLowerCase())
     expect(body.staff.mustChangePassword).toBe(true)
     expect(body.staff.isActive).toBe(true)
@@ -380,7 +380,7 @@ describe.skipIf(!available)('staff management API', () => {
       .from(userTable)
       .where(eq(userTable.id, cashierId))
     const cashierStaffId = cashierRows[0]?.staffId ?? ''
-    expect(cashierStaffId).toMatch(/^GA-\d{4}$/)
+    expect(cashierStaffId).toMatch(/^SD-\d{4}$/)
 
     // A real terminal + device so the revocation has something to revoke.
     const terminalResponse = await app.request('/api/terminals', {
@@ -695,7 +695,7 @@ describe.skipIf(!available)('staff management API', () => {
       temporaryPin: string
       invitationSent: boolean
     }>(response)
-    expect(body.staffId).toMatch(/^GA-\d{4}$/)
+    expect(body.staffId).toMatch(/^SD-\d{4}$/)
     expect(body.temporaryPin).toMatch(/^\d{6}$/)
     expect(pinProblem(body.temporaryPin)).toBeNull()
     expect(body.pinVersion).toBe((before[0]?.pinVersion ?? 0) + 1)

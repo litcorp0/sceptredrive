@@ -25,7 +25,7 @@ if (!available) console.warn('[counts.test] database unavailable; integration te
 
 const actor: AuditActor = {
   actorId: 'count-test',
-  actorStaffId: 'GA-COUNT',
+  actorStaffId: 'SD-COUNT',
   ip: null,
   userAgent: null,
   requestId: null,

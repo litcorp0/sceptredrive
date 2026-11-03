@@ -538,7 +538,7 @@ describe.skipIf(!available)('POS shift reports', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-PC${suffix.slice(0, 2)}`
+    cashierStaffId = `SD-PC${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })
@@ -562,7 +562,7 @@ describe.skipIf(!available)('POS shift reports', () => {
     const manager = await createTestUser({ role: 'MANAGER', branchId })
     createdUserIds.push(manager.id)
     managerUserId = manager.id
-    managerStaffId = `GA-PM${suffix.slice(0, 2)}`
+    managerStaffId = `SD-PM${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: managerStaffId, pinVersion: 1 })

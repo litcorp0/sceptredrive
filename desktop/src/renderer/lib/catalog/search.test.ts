@@ -12,7 +12,7 @@ import {
 function row(overrides: Partial<CatalogProductRow> = {}): CatalogProductRow {
   return {
     id: '11111111-1111-7111-8111-111111111111',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     name: 'Brake Pad Set',
     base_price_minor: 10_000,
     tax_category: 'STANDARD',
@@ -80,8 +80,8 @@ describe('pickEnterTarget', () => {
   })
 
   it('prefers an exact SKU match among many results', () => {
-    const target = row({ id: 'target', sku: 'GIK-00002', name: 'Oil Filter' })
-    expect(pickEnterTarget('gik-00002', [row(), target])?.id).toBe('target')
+    const target = row({ id: 'target', sku: 'SDP-00002', name: 'Oil Filter' })
+    expect(pickEnterTarget('sdp-00002', [row(), target])?.id).toBe('target')
   })
 
   it('prefers an exact barcode match among many results', () => {

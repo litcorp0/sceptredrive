@@ -309,7 +309,7 @@ describe.skipIf(!available)('products API', () => {
       await ensureSequence(sequenceStart)
 
       const firstBody = { sku: await suggestSku() }
-      expect(firstBody.sku).toMatch(/^GIK-\d+$/)
+      expect(firstBody.sku).toMatch(/^SDP-\d+$/)
 
       const secondBody = { sku: await suggestSku() }
       expect(secondBody.sku).toBe(firstBody.sku)

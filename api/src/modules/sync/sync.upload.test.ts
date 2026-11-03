@@ -237,7 +237,7 @@ describe.skipIf(!available)('POS upload endpoint', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-U${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-U${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })

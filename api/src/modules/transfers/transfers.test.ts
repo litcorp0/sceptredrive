@@ -27,7 +27,7 @@ if (!available) console.warn('[transfers.test] database unavailable; integration
 
 const actor: AuditActor = {
   actorId: 'transfer-test',
-  actorStaffId: 'GA-TRANSFER',
+  actorStaffId: 'SD-TRANSFER',
   ip: null,
   userAgent: null,
   requestId: null,

@@ -130,7 +130,7 @@ export const SETTING_DEFINITIONS = {
       .min(1)
       .max(8)
       .regex(/^[A-Za-z0-9]+$/),
-    defaultValue: 'GIK',
+    defaultValue: 'SDP',
     branchScoped: false,
   },
   'catalog.skuSequence': {

@@ -169,7 +169,7 @@ export function AuditPage() {
 					</Label>
 					<Input
 						id="audit-actor"
-						placeholder="GA-0001"
+						placeholder="SD-0001"
 						className="h-8 font-mono text-xs"
 						value={actorStaffId}
 						onChange={(event) => setActorStaffId(event.target.value)}

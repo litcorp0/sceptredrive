@@ -353,7 +353,7 @@ describe.skipIf(!available)('POS sale tenders', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-T${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-T${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })
@@ -377,7 +377,7 @@ describe.skipIf(!available)('POS sale tenders', () => {
     const manager = await createTestUser({ role: 'MANAGER', branchId })
     createdUserIds.push(manager.id)
     managerUserId = manager.id
-    managerStaffId = `GA-TM${suffix.slice(0, 3)}`
+    managerStaffId = `SD-TM${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: managerStaffId, pinVersion: 1 })

@@ -66,11 +66,11 @@ describe.skipIf(!available)('credit service', () => {
   let cashierUser: SessionUser
 
   const actorId = `credit-actor-${suffix}`
-  const actorStaffId = `GA-CREDIT-${suffix}`
+  const actorStaffId = `SD-CREDIT-${suffix}`
   // A second actor for decisions: `canDecideApproval` refuses self-approval for
   // every role, so the admin deciding cannot be the manager requesting.
   const adminActorId = `credit-admin-actor-${suffix}`
-  const adminActorStaffId = `GA-CREDIT-ADMIN-${suffix}`
+  const adminActorStaffId = `SD-CREDIT-ADMIN-${suffix}`
 
   const actor: AuditActor = {
     actorId,

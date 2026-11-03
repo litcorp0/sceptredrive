@@ -127,7 +127,7 @@ describe.skipIf(!available)('analytics overview', () => {
 
     const user = await createTestUser({ role, branchId })
     createdUserIds.push(user.id)
-    const staffId = `GA-${label}${suffix.slice(0, 3)}`
+    const staffId = `SD-${label}${suffix.slice(0, 3)}`
     await db.update(userTable).set({ staffId, pinVersion: 1 }).where(eq(userTable.id, user.id))
 
     const bindingToken = randomToken(40)
@@ -1028,7 +1028,7 @@ describe.skipIf(!available)('analytics ledger read models', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId: branchC })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-R${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-R${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })

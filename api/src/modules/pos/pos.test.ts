@@ -126,7 +126,7 @@ describe.skipIf(!available)('POS shift application', () => {
     deviceA = await createTerminal(branchId, 'A')
     otherDevice = await createTerminal(branchId, 'B')
     cashierUserId = `cashier-${suffix}`
-    cashierStaffId = `GA-9${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-9${suffix.slice(0, 3)}`
   })
 
   afterAll(async () => {
@@ -457,7 +457,7 @@ describe.skipIf(!available)('POS shift application', () => {
         reasonCode: 'CUSTOMER_CHANGED_MIND',
         refundedMinor: input.amountMinor,
         approvedByUserId: 'test-manager',
-        approvedByStaffId: 'GA-TEST',
+        approvedByStaffId: 'SD-TEST',
         approvalPinVersion: 1,
         approvalReasonCode: 'RETURN',
         approvedAt: occurredAt,
@@ -788,7 +788,7 @@ describe.skipIf(!available)('POS sale application', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-S${suffix.slice(0, 3)}`
+    cashierStaffId = `SD-S${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })
@@ -812,7 +812,7 @@ describe.skipIf(!available)('POS sale application', () => {
     const manager = await createTestUser({ role: 'MANAGER', branchId })
     createdUserIds.push(manager.id)
     managerUserId = manager.id
-    managerStaffId = `GA-M${suffix.slice(0, 3)}`
+    managerStaffId = `SD-M${suffix.slice(0, 3)}`
     await db
       .update(userTable)
       .set({ staffId: managerStaffId, pinVersion: 1 })

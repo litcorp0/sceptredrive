@@ -775,7 +775,7 @@ describe.skipIf(!available)('stock report and exports', () => {
       action: 'report.test.customer',
       entity: 'customer',
       entityId: 'customer-1',
-      actorStaffId: 'GA-EXPORT-1',
+      actorStaffId: 'SD-EXPORT-1',
       branchId: branchAId,
       requestId: 'req-1',
       before: { email: 'seeded.customer@example.com', phone: '0244000111' },
@@ -785,7 +785,7 @@ describe.skipIf(!available)('stock report and exports', () => {
       action: 'report.test.customer',
       entity: 'customer',
       entityId: 'customer-2',
-      actorStaffId: 'GA-EXPORT-2',
+      actorStaffId: 'SD-EXPORT-2',
       branchId: branchBId,
       before: { email: 'other.customer@example.com', phone: '0209999888' },
     })
@@ -807,14 +807,14 @@ describe.skipIf(!available)('stock report and exports', () => {
     expect(body).not.toContain('0244000111')
     expect(body).not.toContain('other.customer@example.com')
     expect(body).not.toContain('0209999888')
-    expect(body).toContain('GA-EXPORT-1')
+    expect(body).toContain('SD-EXPORT-1')
 
     // A manager exports their branch and never another's.
     const asManager = await get('/api/audit/export?action=report.test.customer', managerCookie)
     expect(asManager.status).toBe(200)
     const managerBody = await asManager.text()
-    expect(managerBody).toContain('GA-EXPORT-1')
-    expect(managerBody).not.toContain('GA-EXPORT-2')
+    expect(managerBody).toContain('SD-EXPORT-1')
+    expect(managerBody).not.toContain('SD-EXPORT-2')
 
     const foreign = await get(`/api/audit/export?branchId=${branchBId}`, managerCookie)
     expect(foreign.status).toBe(403)

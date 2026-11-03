@@ -172,7 +172,7 @@ describe.skipIf(!available)('Paystack webhook', () => {
     createdDeviceIds.push(deviceId)
 
     cashierUserId = `cashier-${suffix}`
-    cashierStaffId = `GA-WH-${suffix}`
+    cashierStaffId = `SD-WH-${suffix}`
 
     const shiftRow = await db
       .insert(shift)

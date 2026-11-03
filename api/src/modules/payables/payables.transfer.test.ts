@@ -47,7 +47,7 @@ if (!available)
 
 const actor: AuditActor = {
   actorId: 'test-actor',
-  actorStaffId: 'GA-TRF',
+  actorStaffId: 'SD-TRF',
   ip: null,
   userAgent: null,
   requestId: null,

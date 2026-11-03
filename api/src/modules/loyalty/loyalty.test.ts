@@ -64,7 +64,7 @@ describe.skipIf(!available)('loyalty service', () => {
     actorIds.push(id)
     return {
       actorId: id,
-      actorStaffId: `GA-LOYALTY-${suffix}`,
+      actorStaffId: `SD-LOYALTY-${suffix}`,
       ip: null,
       userAgent: null,
       requestId: null,
@@ -945,7 +945,7 @@ describe.skipIf(!available)('loyalty expiry job', () => {
     actorIds.push(id)
     return {
       actorId: id,
-      actorStaffId: `GA-LOYALTY-JOB-${suffix}`,
+      actorStaffId: `SD-LOYALTY-JOB-${suffix}`,
       ip: null,
       userAgent: null,
       requestId: null,

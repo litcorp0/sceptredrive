@@ -25,7 +25,7 @@ export const SETTING_META: SettingMetaMap = {
 	// --- Staff and receipts ------------------------------------------------
 	"staff.idPrefix": {
 		label: "Staff ID prefix",
-		description: "Prefix for staff IDs, e.g. GA-0001. 1–8 letters or digits.",
+		description: "Prefix for staff IDs, e.g. SD-0001. 1–8 letters or digits.",
 	},
 	"staff.idSequence": {
 		label: "Next staff number",
@@ -73,7 +73,7 @@ export const SETTING_META: SettingMetaMap = {
 	// --- Catalog and pricing --------------------------------------------------
 	"catalog.skuPrefix": {
 		label: "SKU prefix",
-		description: "Prefix for auto-generated product SKUs, e.g. GIK-00001. 1–8 letters or digits.",
+		description: "Prefix for auto-generated product SKUs, e.g. SDP-00001. 1–8 letters or digits.",
 	},
 	"catalog.skuSequence": {
 		label: "Next SKU number",

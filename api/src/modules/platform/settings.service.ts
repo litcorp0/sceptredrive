@@ -295,7 +295,7 @@ const SEQUENCE_FORMATS: Record<
 
 /**
  * Atomically allocates the next formatted value from a settings sequence,
- * e.g. `GA-0001` for staff or `GIK-00001` for SKUs. The sequence row is
+ * e.g. `SD-0001` for staff or `SDP-00001` for SKUs. The sequence row is
  * locked for update; retries cover the insert race on first use.
  */
 export async function allocateFromSequence(
@@ -328,7 +328,7 @@ export async function allocateFromSequence(
 }
 
 /**
- * Atomically allocates the next staff identifier (e.g. GA-0001). Gaps are
+ * Atomically allocates the next staff identifier (e.g. SD-0001). Gaps are
  * acceptable because identifiers are never reused.
  */
 export async function allocateStaffId(executor: DbExecutor): Promise<string> {

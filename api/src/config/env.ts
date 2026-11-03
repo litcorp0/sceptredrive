@@ -36,7 +36,7 @@ const baseEnvSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(12).optional(),
-  STAFF_ID_PREFIX: z.string().min(1).max(8).default('GA'),
+  STAFF_ID_PREFIX: z.string().min(1).max(8).default('SD'),
   STAFF_ID_START: z.coerce.number().int().positive().default(1),
   RESEND_API_KEY: optionalNonEmpty(z.string().min(1)),
   EMAIL_FROM: z.string().min(1).default('Sceptre Drive <no-reply@sceptre.local>'),

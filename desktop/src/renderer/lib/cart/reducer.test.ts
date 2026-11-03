@@ -13,7 +13,7 @@ const NOW = '2026-10-23T10:00:00.000Z'
 function product(overrides: Partial<SellableProduct> = {}): SellableProduct {
   return {
     id: '11111111-1111-7111-8111-111111111111',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     name: 'Brake Pad Set',
     barcode: '4006381333931',
     unitPriceMinor: 10_000,
@@ -25,7 +25,7 @@ function product(overrides: Partial<SellableProduct> = {}): SellableProduct {
 function proof(overrides: Partial<CartOverrideProof> = {}): CartOverrideProof {
   return {
     approverUserId: 'user-manager',
-    approverStaffId: 'GA-0002',
+    approverStaffId: 'SD-0002',
     approverRole: 'MANAGER',
     bindingId: '22222222-2222-7222-8222-222222222222',
     pinVersion: 3,
@@ -199,7 +199,7 @@ describe('cart reducer — discounts', () => {
     expect(state.saleDiscount?.amountMinor).toBe(10_000)
     // ...and it keeps its reason and approval.
     expect(state.saleDiscount?.reasonCode).toBe('PROMO')
-    expect(state.saleDiscount?.override?.approverStaffId).toBe('GA-0002')
+    expect(state.saleDiscount?.override?.approverStaffId).toBe('SD-0002')
   })
 
   it('requires a valid reason code to keep a discount', () => {

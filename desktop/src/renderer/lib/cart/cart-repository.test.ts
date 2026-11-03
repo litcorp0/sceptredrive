@@ -7,7 +7,7 @@ const NOW = '2026-10-23T10:00:00.000Z'
 
 const PROOF: CartOverrideProof = {
   approverUserId: 'user-manager',
-  approverStaffId: 'GA-0002',
+  approverStaffId: 'SD-0002',
   approverRole: 'MANAGER',
   bindingId: '22222222-2222-7222-8222-222222222222',
   pinVersion: 4,
@@ -24,7 +24,7 @@ function state(): CartState {
       {
         id: 'line-1',
         productId: 'p1',
-        sku: 'GIK-00001',
+        sku: 'SDP-00001',
         name: 'Brake Pad Set',
         barcode: '4006381333931',
         quantity: 2,
@@ -38,7 +38,7 @@ function state(): CartState {
       {
         id: 'line-2',
         productId: 'p2',
-        sku: 'GIK-00002',
+        sku: 'SDP-00002',
         name: 'Oil Filter',
         barcode: null,
         quantity: 1,
@@ -81,7 +81,7 @@ describe('cart draft round-trip', () => {
   it('keeps line order by line number', () => {
     const { draft, lines } = toDraftRows(state())
     const restored = fromDraftRows(draft, [...lines].reverse())
-    expect(restored.lines.map((line) => line.sku)).toEqual(['GIK-00001', 'GIK-00002'])
+    expect(restored.lines.map((line) => line.sku)).toEqual(['SDP-00001', 'SDP-00002'])
   })
 
   it('round-trips an empty cart', () => {

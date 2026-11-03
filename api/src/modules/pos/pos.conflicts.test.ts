@@ -421,7 +421,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
     createdUserIds.push(manager.id)
     managerUserId = manager.id
     // A staff id the shops use: `resolved_by` prefers it over the account id.
-    managerStaffId = `GA-CM${suffix.slice(0, 2)}`
+    managerStaffId = `SD-CM${suffix.slice(0, 2)}`
     await db.update(userTable).set({ staffId: managerStaffId }).where(eq(userTable.id, manager.id))
     managerCookie = await signIn(manager.email)
 
@@ -433,7 +433,7 @@ describe.skipIf(!available)('POS conflict queue', () => {
     const cashier = await createTestUser({ role: 'CASHIER', branchId: home.branchId })
     createdUserIds.push(cashier.id)
     cashierUserId = cashier.id
-    cashierStaffId = `GA-CC${suffix.slice(0, 2)}`
+    cashierStaffId = `SD-CC${suffix.slice(0, 2)}`
     await db
       .update(userTable)
       .set({ staffId: cashierStaffId, pinVersion: 1 })

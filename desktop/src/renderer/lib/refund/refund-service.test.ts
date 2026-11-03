@@ -26,7 +26,7 @@ const TENDER_MOMO = 'cccccccc-cccc-7ccc-8ccc-cccccccccccc'
 
 const CASHIER = {
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   bindingId: '33333333-3333-7333-8333-333333333333',
   bindingToken: 'cashier-token',
   pinVersion: 2,
@@ -34,7 +34,7 @@ const CASHIER = {
 
 const MANAGER_PROOF: CartOverrideProof = {
   approverUserId: 'user-manager',
-  approverStaffId: 'GA-0002',
+  approverStaffId: 'SD-0002',
   approverRole: 'MANAGER',
   bindingId: '22222222-2222-7222-8222-222222222222',
   pinVersion: 3,
@@ -495,7 +495,7 @@ describe('createRefund', () => {
           approval: {
             ...MANAGER_PROOF,
             approverUserId: 'user-manager',
-            approverStaffId: 'GA-0002',
+            approverStaffId: 'SD-0002',
           },
         }),
         { now: NOW },

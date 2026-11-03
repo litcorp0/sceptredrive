@@ -40,7 +40,7 @@ if (!available) console.warn('[payables.test] database unavailable; integration 
 
 const actor: AuditActor = {
   actorId: 'test-actor',
-  actorStaffId: 'GA-PAY',
+  actorStaffId: 'SD-PAY',
   ip: null,
   userAgent: null,
   requestId: null,

@@ -19,7 +19,7 @@ const NOW = new Date('2026-10-27T14:32:00.000Z')
 const BINDING: LocalStaffBinding = {
   id: 'binding-1',
   userId: 'user-cashier',
-  staffId: 'GA-0003',
+  staffId: 'SD-0003',
   name: 'Ama Mensah',
   role: 'CASHIER',
   bindingId: 'binding-1',
