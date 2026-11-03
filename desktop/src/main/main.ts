@@ -8,10 +8,11 @@ import {
   CONFIG_FILE_NAME,
   originOf,
   type RuntimeConfig,
+  type RuntimeConfigSource,
   readAllowLocalApiFlag,
-  resolveRuntimeConfig,
+  resolveRuntimeConfigWithSource,
 } from './config'
-import { buildContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import { buildContentSecurityPolicy, isOriginPermitted } from './csp'
 import { APP_USER_MODEL_ID } from './identity'
 import { createKeychain } from './ipc/keychain'
 import { registerIpcHandlers } from './ipc/register'
@@ -79,7 +80,7 @@ const bundledConfigPath = app.isPackaged
   ? path.join(process.resourcesPath, BUNDLED_CONFIG_FILE_NAME)
   : undefined
 
-function resolveConfig(): RuntimeConfig {
+function resolveConfig(): { config: RuntimeConfig; source: RuntimeConfigSource } {
   try {
     const userConfig = path.join(app.getPath('userData'), CONFIG_FILE_NAME)
     if (app.isPackaged && fs.existsSync(userConfig)) {
@@ -87,7 +88,7 @@ function resolveConfig(): RuntimeConfig {
         '[config] this build has the API and PowerSync URLs baked in, so the copy in userData is ignored',
       )
     }
-    return resolveRuntimeConfig({
+    return resolveRuntimeConfigWithSource({
       userDataDir: app.getPath('userData'),
       bundledConfigPath,
       local: allowLocalOrigins,
@@ -98,9 +99,17 @@ function resolveConfig(): RuntimeConfig {
   }
 }
 
-function assertOriginsAllowed(config: RuntimeConfig): void {
+/**
+ * Reject origins that could impersonate the API or escape the shipped policy.
+ * See `isOriginPermitted` for which rule applies to a baked versus file-based configuration.
+ */
+function assertOriginsAllowed(config: RuntimeConfig, source: RuntimeConfigSource): void {
   for (const url of [config.apiBaseUrl, config.powersyncUrl]) {
-    if (!isAllowedConnectOrigin(url, { allowLocal: allowLocalOrigins })) {
+    const permitted = isOriginPermitted(url, {
+      allowLocal: allowLocalOrigins,
+      trusted: source === 'baked',
+    })
+    if (!permitted) {
       failClosed('CONFIG_ORIGIN_NOT_ALLOWED', `Refusing to connect to ${originOf(url)}`)
     }
   }
@@ -111,8 +120,8 @@ void app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
   }
 
-  const config = resolveConfig()
-  assertOriginsAllowed(config)
+  const { config, source } = resolveConfig()
+  assertOriginsAllowed(config, source)
 
   const windowOptions = {
     preloadPath: preloadPathFor(__dirname),

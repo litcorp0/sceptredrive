@@ -90,6 +90,43 @@ export function devContentSecurityPolicy(): string {
 }
 
 /**
+ * True for a plain-HTTP loopback origin — the shape a local impersonator would use. A packaged
+ * build refuses these unless `SCEPTRE_ALLOW_LOCAL_API=1`, whoever configured them.
+ */
+export function isLocalConnectOrigin(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return (
+      parsed.protocol === 'http:' &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether a configured URL may be used by this app.
+ *
+ * Two rules, and which applies depends on where the configuration came from:
+ *
+ *   - a loopback origin is refused in a packaged build unless the operator opted in, because a
+ *     shipped till pointed at `http://localhost:4000` is a credential harvester;
+ *   - the narrow host allowlist above constrains a **user-writable** config file only. A baked
+ *     config is inside the package, compiled there by whoever built it, so any https host is
+ *     trusted — otherwise every deployment host (a Render subdomain today, our own domain later)
+ *     would have to be hardcoded into the app before it could be used.
+ */
+export function isOriginPermitted(
+  url: string,
+  options: { allowLocal: boolean; trusted: boolean },
+): boolean {
+  if (isLocalConnectOrigin(url) && !options.allowLocal) return false
+  if (options.trusted) return true
+  return isAllowedConnectOrigin(url, { allowLocal: options.allowLocal })
+}
+
+/**
  * True when `url`'s origin is one the CSP also permits in `connect-src`.
  *
  * Used to reject config values that would point the app at an origin the policy

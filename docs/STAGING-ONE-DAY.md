@@ -583,6 +583,18 @@ message at all, because a packaged build has no console. Now a baked build ignor
 entirely, and an unbaked one shows a dialog naming the error (`CONFIG_INVALID`, the file path)
 instead of vanishing.
 
+**Baked and unbaked builds differ in which hosts they accept**, and this bites the first time a
+till is pointed at a staging host:
+
+| Configuration | Accepted origins |
+|---|---|
+| Baked into the package | any `https` host, because it was compiled in by whoever built it — plus it still refuses `http://localhost` unless `SCEPTRE_ALLOW_LOCAL_API=1` |
+| `config.json` in `%APPDATA%` | our own `*.sceptre` domain and `*.powersync.journeyapps.com` only, so a stray file cannot redirect the till elsewhere |
+
+So `POS_API_BASE_URL=https://<api>.onrender.com` works in a baked build and fails in a
+hand-written file with `CONFIG_ORIGIN_NOT_ALLOWED`. That refusal is the app's own allowlist, not
+the API's CORS: nothing on Render is involved, and no CORS entry can change it.
+
 ### 9.2 Building the till — Linux and Windows
 
 The POS is **not part of the deployed stack**: it is a desktop binary. Render, Vercel,

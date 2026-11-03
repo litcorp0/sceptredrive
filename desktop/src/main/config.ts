@@ -143,18 +143,37 @@ export interface ResolveRuntimeConfigOptions {
   bundledConfigPath?: string | undefined
 }
 
+/** Where the configuration in force came from. */
+export type RuntimeConfigSource = 'baked' | 'file' | 'default'
+
+export interface ResolvedRuntimeConfig {
+  config: RuntimeConfig
+  source: RuntimeConfigSource
+}
+
 /**
- * The configuration a packaged app actually uses.
+ * The configuration a packaged app actually uses, and where it came from.
  *
  * A baked file wins over `userData/config.json`. The URLs inside the installer are the ones the
  * build was tested against, and a stale or malformed file in the user profile must not be able to
  * stop the till from starting — which is exactly what a hand-written `config.json` did. Builds
  * without a baked file keep the documented per-machine file.
  */
-export function resolveRuntimeConfig(options: ResolveRuntimeConfigOptions): RuntimeConfig {
+export function resolveRuntimeConfigWithSource(
+  options: ResolveRuntimeConfigOptions,
+): ResolvedRuntimeConfig {
   if (options.bundledConfigPath) {
     const bundled = readConfigFile(options.bundledConfigPath)
-    if (bundled) return bundled
+    if (bundled) return { config: bundled, source: 'baked' }
   }
-  return loadRuntimeConfig(options.userDataDir, options.local)
+
+  const fromFile = readConfigFile(path.join(options.userDataDir, CONFIG_FILE_NAME))
+  if (fromFile) return { config: fromFile, source: 'file' }
+
+  return { config: defaultRuntimeConfig(options.local), source: 'default' }
+}
+
+/** Convenience for callers that only need the values. */
+export function resolveRuntimeConfig(options: ResolveRuntimeConfigOptions): RuntimeConfig {
+  return resolveRuntimeConfigWithSource(options).config
 }

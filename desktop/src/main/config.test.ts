@@ -9,6 +9,7 @@ import {
   parseRuntimeConfig,
   readAllowLocalApiFlag,
   resolveRuntimeConfig,
+  resolveRuntimeConfigWithSource,
   SCEPTRE_DOMAIN,
 } from './config'
 
@@ -207,5 +208,35 @@ describe('resolveRuntimeConfig', () => {
     expect(
       resolveRuntimeConfig({ userDataDir: path.join(root, 'missing'), local: false }).powersyncUrl,
     ).toContain('powersync')
+  })
+
+  it('reports where the configuration came from, which decides whether hosts are allowlisted', () => {
+    const bundled = write(
+      path.join(root, 'baked-source.json'),
+      JSON.stringify({
+        apiBaseUrl: 'https://api.staging.example',
+        powersyncUrl: 'https://sync.staging.example',
+      }),
+    )
+    const userDir = path.join(root, 'file-source')
+    fs.mkdirSync(userDir, { recursive: true })
+    write(
+      path.join(userDir, 'config.json'),
+      JSON.stringify({ apiBaseUrl: 'https://api.example', powersyncUrl: 'https://sync.example' }),
+    )
+
+    expect(
+      resolveRuntimeConfigWithSource({
+        userDataDir: userDir,
+        local: false,
+        bundledConfigPath: bundled,
+      }).source,
+    ).toBe('baked')
+    expect(resolveRuntimeConfigWithSource({ userDataDir: userDir, local: false }).source).toBe(
+      'file',
+    )
+    expect(
+      resolveRuntimeConfigWithSource({ userDataDir: path.join(root, 'none'), local: false }).source,
+    ).toBe('default')
   })
 })

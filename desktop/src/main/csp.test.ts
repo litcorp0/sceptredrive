@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { SCEPTRE_DOMAIN } from './config'
-import { buildContentSecurityPolicy, devContentSecurityPolicy, isAllowedConnectOrigin } from './csp'
+import {
+  buildContentSecurityPolicy,
+  devContentSecurityPolicy,
+  isAllowedConnectOrigin,
+  isLocalConnectOrigin,
+  isOriginPermitted,
+} from './csp'
 
 function directive(policy: string, name: string): string {
   const found = policy
@@ -84,6 +90,55 @@ describe('devContentSecurityPolicy', () => {
     expect(scriptSrc).toContain("'unsafe-inline'")
     expect(scriptSrc).toContain("'wasm-unsafe-eval'")
     expect(scriptSrc).not.toContain("'unsafe-eval'")
+  })
+})
+
+describe('isOriginPermitted', () => {
+  it('accepts a baked deployment host, such as a Render subdomain', () => {
+    expect(
+      isOriginPermitted('https://sceptredrive.onrender.com', { allowLocal: false, trusted: true }),
+    ).toBe(true)
+  })
+
+  it('still refuses the same host when it came from a user-writable file', () => {
+    expect(
+      isOriginPermitted('https://sceptredrive.onrender.com', { allowLocal: false, trusted: false }),
+    ).toBe(false)
+  })
+
+  it('refuses a loopback origin in a packaged build even when baked', () => {
+    expect(isOriginPermitted('http://localhost:4000', { allowLocal: false, trusted: true })).toBe(
+      false,
+    )
+  })
+
+  it('allows loopback only with the explicit opt-in', () => {
+    expect(isOriginPermitted('http://localhost:4000', { allowLocal: true, trusted: true })).toBe(
+      true,
+    )
+  })
+
+  it('keeps the allowlist for file-based configuration', () => {
+    expect(isOriginPermitted('https://evil.example', { allowLocal: false, trusted: false })).toBe(
+      false,
+    )
+    expect(
+      isOriginPermitted(`https://api.${SCEPTRE_DOMAIN}`, { allowLocal: false, trusted: false }),
+    ).toBe(true)
+  })
+})
+
+describe('isLocalConnectOrigin', () => {
+  it('spots plain-HTTP loopback origins, which a packaged build refuses', () => {
+    expect(isLocalConnectOrigin('http://localhost:4000')).toBe(true)
+    expect(isLocalConnectOrigin('http://127.0.0.1:8080')).toBe(true)
+  })
+
+  it('leaves everything else alone', () => {
+    expect(isLocalConnectOrigin('https://localhost:4000')).toBe(false)
+    expect(isLocalConnectOrigin('https://sceptredrive.onrender.com')).toBe(false)
+    expect(isLocalConnectOrigin('http://10.0.0.5:4000')).toBe(false)
+    expect(isLocalConnectOrigin('not a url')).toBe(false)
   })
 })
 
