@@ -12,7 +12,7 @@ import { priceCart } from './pos.ts'
 function holdLine(overrides: Partial<HoldLine> = {}): HoldLine {
   return {
     productId: 'p1',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     name: 'Brake pad',
     quantity: 1,
     unitPriceMinor: 10_000,
@@ -28,7 +28,7 @@ function catalogueLine(overrides: Partial<CatalogueSnapshotLine> = {}): Catalogu
   return {
     productId: 'p1',
     name: 'Brake pad',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     unitPriceMinor: 10_000,
     taxCategory: 'STANDARD',
     isActive: true,
@@ -78,14 +78,14 @@ describe('repriceHeldCart', () => {
         holdLine({ productId: 'p1', quantity: 2, unitPriceMinor: 10_000 }),
         holdLine({
           productId: 'p2',
-          sku: 'GIK-00002',
+          sku: 'SDP-00002',
           name: 'Oil filter old',
           unitPriceMinor: 5_000,
         }),
-        holdLine({ productId: 'p3', sku: 'GIK-00003', name: 'Wiper blade', unitPriceMinor: 3_000 }),
+        holdLine({ productId: 'p3', sku: 'SDP-00003', name: 'Wiper blade', unitPriceMinor: 3_000 }),
         holdLine({
           productId: 'p4',
-          sku: 'GIK-00004',
+          sku: 'SDP-00004',
           name: 'Washer fluid',
           unitPriceMinor: 1_000,
           lineDiscountMinor: 5_000,
@@ -291,7 +291,7 @@ describe('repriceHeldCart', () => {
     const result = repriceHeldCart({
       lines: [
         holdLine({ productId: 'p1', name: 'Brake pad', unitPriceMinor: 10_000 }),
-        holdLine({ productId: 'p2', sku: 'GIK-00002', name: 'Oil filter', unitPriceMinor: 5_000 }),
+        holdLine({ productId: 'p2', sku: 'SDP-00002', name: 'Oil filter', unitPriceMinor: 5_000 }),
       ],
       catalogue: [],
       loyaltyPointsRequested: 0,
@@ -323,12 +323,12 @@ describe('repriceHeldCart', () => {
     const result = repriceHeldCart({
       lines: [
         holdLine({ productId: 'p1' }),
-        holdLine({ productId: 'p2', sku: 'GIK-00002', name: 'Oil filter' }),
-        holdLine({ productId: 'p3', sku: 'GIK-00003', name: 'Wiper blade' }),
+        holdLine({ productId: 'p2', sku: 'SDP-00002', name: 'Oil filter' }),
+        holdLine({ productId: 'p3', sku: 'SDP-00003', name: 'Wiper blade' }),
       ],
       catalogue: [
         catalogueLine({ productId: 'p1' }),
-        catalogueLine({ productId: 'p2', sku: 'GIK-00002', name: 'Oil filter', isActive: false }),
+        catalogueLine({ productId: 'p2', sku: 'SDP-00002', name: 'Oil filter', isActive: false }),
       ],
       loyaltyPointsRequested: 0,
       pricing: { taxMode: 'INCLUSIVE' },

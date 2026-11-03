@@ -6,7 +6,7 @@ function line(overrides: Partial<CartLineInput> = {}): CartLineInput {
   return {
     productId: 'p1',
     name: 'Brake pad',
-    sku: 'GIK-00001',
+    sku: 'SDP-00001',
     quantity: 1,
     unitPriceMinor: 10000,
     taxCategory: 'STANDARD',
