@@ -431,6 +431,13 @@ reads the session **on the server**, by forwarding the browser's `Cookie` header
 API, and the route guards (`routes/login.tsx`, `routes/_authenticated/route.tsx`) act on
 that answer.
 
+The guard redirects to `/login` only when the API says the cookie is not a session — `401`,
+`403`, or a `null` body. When the API cannot be reached at all (a cold start, a deploy restart,
+a `429` from the auth rate limit) the console shows a **Cannot reach the server** screen with a
+retry button. Signing someone out over a transient outage is a lie: their cookie is still valid,
+and on a cold API they could not sign back in anyway. That distinction is what stopped users
+being dropped mid-shift.
+
 That means the only cookie the console can ever see is the one the browser sent **to the
 console**. A host-only cookie set by `api.onrender.com` is never sent to
 `admin.vercel.app`, so a cross-origin console signs in, receives a token, and then every

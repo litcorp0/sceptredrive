@@ -13,6 +13,30 @@ import type { Session } from "#/lib/auth-client"
  */
 const apiBaseUrl = process.env.API_URL?.trim().replace(/\/+$/, "") || env.VITE_API_URL
 
+/** A cold API does not answer in milliseconds; a hung one must not stall a navigation. */
+const SESSION_TIMEOUT_MS = 8_000
+
+/**
+ * What the API said about the browser's session cookie.
+ *
+ * `unavailable` is the important one: the API did not answer, so the console knows *nothing*
+ * about this session. Treating that as "anonymous" signed people out in the middle of a shift —
+ * a cold start, a deploy restart, or a 429 from the auth rate limit would all bounce a signed-in
+ * user to `/login` with a perfectly valid cookie still in the browser.
+ */
+export type SessionLookup =
+	| { status: "authenticated"; session: Session }
+	| { status: "anonymous" }
+	| { status: "unavailable" }
+
+/** Thrown by route guards so the failure reads as "cannot reach the server", not "signed out". */
+export class SessionUnavailableError extends Error {
+	constructor() {
+		super("The server could not be reached, so your session could not be checked.")
+		this.name = "SessionUnavailableError"
+	}
+}
+
 /**
  * Reads the current session from the API on the server, forwarding the
  * browser's cookie header. `disableCookieCache` keeps guards honest: role,
@@ -23,23 +47,27 @@ const apiBaseUrl = process.env.API_URL?.trim().replace(/\/+$/, "") || env.VITE_A
  * cookie the server can read is the one the browser sent to the console. A
  * cross-origin API sets a host-only cookie the console never receives, and every
  * guard then treats a signed-in user as anonymous. See docs/STAGING-ONE-DAY.md §8.3.
- *
- * Never throws: a network failure is treated as an anonymous visitor.
  */
 export const getSession = createServerFn({ method: "GET" }).handler(
-	async (): Promise<Session | null> => {
+	async (): Promise<SessionLookup> => {
 		const cookie = getRequestHeader("cookie")
-		if (!cookie) return null
+		if (!cookie) return { status: "anonymous" }
 
 		try {
 			const response = await fetch(`${apiBaseUrl}/api/auth/get-session?disableCookieCache=true`, {
 				headers: { cookie, accept: "application/json" },
+				signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
 			})
-			if (!response.ok) return null
+
+			// A rejected cookie is a real sign-out. Anything else non-2xx is the API talking about
+			// itself (cold start 502, deploy restart, auth rate limit 429), not about the user.
+			if (response.status === 401 || response.status === 403) return { status: "anonymous" }
+			if (!response.ok) return { status: "unavailable" }
+
 			const data = (await response.json()) as Session | null
-			return data ?? null
+			return data ? { status: "authenticated", session: data } : { status: "anonymous" }
 		} catch {
-			return null
+			return { status: "unavailable" }
 		}
 	},
 )
