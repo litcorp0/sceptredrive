@@ -17,9 +17,9 @@ process.env.BETTER_AUTH_SECRET = 'test-only-secret-value-32-characters-minimum'
 process.env.ADMIN_EMAIL ??= 'admin@sceptre.test'
 process.env.ADMIN_PASSWORD ??= 'test-admin-password-123'
 // The suite asserts the documented default prefix. Pin it so a developer's
-// `.env` (for example STAFF_ID_PREFIX=SD) cannot fail tests that have nothing
+// `.env` (for example STAFF_ID_PREFIX=GX) cannot fail tests that have nothing
 // to do with the setting.
-process.env.STAFF_ID_PREFIX = 'GA'
+process.env.STAFF_ID_PREFIX = 'SD'
 process.env.STAFF_ID_START = '1'
 // Device-facing POS endpoints: the PowerSync token endpoint answers 503 when
 // this is unset, so the sync suites configure a local instance explicitly.

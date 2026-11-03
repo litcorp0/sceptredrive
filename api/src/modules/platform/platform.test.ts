@@ -246,7 +246,7 @@ describe.skipIf(!available)('audit and settings API', () => {
     expect(response.status).toBe(200)
     const body = await readJson<SettingsResponse>(response)
     const prefix = body.settings.find((item) => item.key === 'staff.idPrefix')
-    expect(prefix?.value).toBe('GA')
+    expect(prefix?.value).toBe('SD')
     expect(prefix?.source).not.toBe('branch')
 
     const minimumRedeem = body.settings.find((item) => item.key === 'loyalty.minimumRedeemPoints')
