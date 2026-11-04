@@ -51,6 +51,8 @@ describe('site contract', () => {
           phone: null,
           hours: null,
           mapUrl: null,
+          latitude: null,
+          longitude: null,
         },
       ],
       updatedAt: '2026-10-29T10:00:00.000Z',
