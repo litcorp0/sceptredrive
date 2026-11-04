@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { SessionUnavailablePage } from "#/components/layout/session-unavailable"
-import { getSession, SessionUnavailableError } from "#/lib/session.functions"
+import { SessionUnavailableError } from "#/lib/session.functions"
+import { resolveSession } from "#/lib/session-cache"
 import { LoginPage } from "#/modules/auth"
 
 export const Route = createFileRoute("/login")({
@@ -8,7 +9,7 @@ export const Route = createFileRoute("/login")({
 		redirect: typeof search.redirect === "string" ? search.redirect : undefined,
 	}),
 	beforeLoad: async () => {
-		const lookup = await getSession()
+		const lookup = await resolveSession()
 
 		// A signed-in user must not land here because the API was briefly unreachable.
 		if (lookup.status === "unavailable") throw new SessionUnavailableError()

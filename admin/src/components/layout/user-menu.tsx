@@ -11,12 +11,15 @@ import {
 } from "#/components/ui/dropdown-menu"
 import type { Session } from "#/lib/auth-client"
 import { authClient } from "#/lib/auth-client"
+import { forgetSession } from "#/lib/session-cache"
 
 export function UserMenu({ session }: { session: Session }) {
 	const router = useRouter()
 
 	async function handleSignOut() {
 		await authClient.signOut()
+		// The guard's remembered answer dies with the session it described.
+		forgetSession()
 		await router.invalidate()
 		router.history.push("/login")
 	}

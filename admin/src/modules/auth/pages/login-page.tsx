@@ -4,6 +4,7 @@ import { Button } from "#/components/ui/button"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { authClient } from "#/lib/auth-client"
+import { forgetSession } from "#/lib/session-cache"
 import { AuthShell, FormError } from "../components/auth-shell"
 
 const routeApi = getRouteApi("/login")
@@ -36,6 +37,8 @@ export function LoginPage() {
 				return
 			}
 
+			// A new identity must not inherit the guard's remembered answer from the last one.
+			forgetSession()
 			await router.invalidate()
 			if (redirectTo) {
 				router.history.push(redirectTo)
