@@ -336,6 +336,14 @@ function ShiftReport({
 								report.cashRefundMinor === null ? "Not itemised" : formatGhs(report.cashRefundMinor)
 							}
 						/>
+						<Fact
+							label="Credit repaid (cash)"
+							value={
+								report.cashRepaymentMinor === null
+									? "Not itemised"
+									: formatGhs(report.cashRepaymentMinor)
+							}
+						/>
 						<Fact label="Expected cash" value={formatGhs(report.expectedCashMinor)} />
 						<Fact
 							label="Counted cash"
@@ -362,6 +370,12 @@ function ShiftReport({
 						<p className="text-xs text-muted-foreground">
 							This Z predates the cash-refund column, so the figure is not itemised rather than
 							invented.
+						</p>
+					) : null}
+					{report.cashRepaymentMinor === null ? (
+						<p className="text-xs text-muted-foreground">
+							This Z predates the credit-repayment column, so cash taken against credit is not
+							itemised here. Its expected cash may read high by exactly that amount.
 						</p>
 					) : null}
 				</section>

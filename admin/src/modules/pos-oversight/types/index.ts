@@ -254,6 +254,7 @@ export interface ShiftReportView {
 	cashInMinor: number
 	cashOutMinor: number
 	cashRefundMinor: number | null
+	cashRepaymentMinor: number | null
 	expectedCashMinor: number
 	countedCashMinor: number | null
 	varianceMinor: number | null
