@@ -54,6 +54,17 @@ export interface ShiftReportFigures {
    * says out loud instead of printing a zero it cannot prove.
    */
   cashRefundMinor: number | null
+  /**
+   * Cash taken against credit over this counter (P20-D1), the other figure the
+   * expected-cash sum already adds. It is a drawer movement, not a sale: the
+   * debt it settles was rung up in an earlier shift, so it appears here and
+   * never in the sales lines above.
+   *
+   * Null means the snapshot never measured it (a Z stored before the till
+   * attributed repayments to a drawer). The paper says so rather than printing
+   * a zero it cannot prove.
+   */
+  cashRepaymentMinor: number | null
   cashInMinor: number
   cashOutMinor: number
   expectedCashMinor: number
@@ -238,6 +249,15 @@ export function buildReportDocument(
   })
   lines.push({ kind: 'row', label: 'Cash in', value: amount(figures.cashInMinor) })
   lines.push({ kind: 'row', label: 'Cash out', value: amount(-figures.cashOutMinor) })
+  // The other direction of the same drawer: a debt paid in notes. Printed
+  // between `Cash out` and `Expected` because it is a drawer movement, and its
+  // own line because a reader who cannot see it reads the expected as inflated.
+  lines.push({
+    kind: 'row',
+    label: 'Credit repaid (cash)',
+    value:
+      figures.cashRepaymentMinor === null ? 'not itemised' : amount(figures.cashRepaymentMinor),
+  })
   lines.push({ kind: 'row', label: 'Expected', value: amount(figures.expectedCashMinor) })
   lines.push({
     kind: 'row',

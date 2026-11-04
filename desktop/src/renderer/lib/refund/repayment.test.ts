@@ -57,6 +57,8 @@ const CONFIG_ROW = {
   branch_id: 'branch-1',
 }
 
+const SHIFT_ID = 'shift-now'
+
 const SHIFT_ROW = {
   id: 'shift-now',
   number: 'ACC-SPX-T01-S-20261027-01',
@@ -214,6 +216,25 @@ describe('createRepayment', () => {
       paymentId: null,
       number: result.number,
     })
+  })
+
+  it('records the cash in the drawer the close will count (P20-D1)', async () => {
+    startStaffSession(BINDING)
+    const { db, committed } = fakeDb()
+
+    const result = await createRepayment(db, input(), { now: NOW })
+
+    const drawer = committed.find((row) => row.sql.includes('INSERT INTO credit_repayment'))
+    expect(drawer, 'a cash repayment must leave a drawer row').toBeDefined()
+
+    // One row per repayment, and it is the same fact as the outbox row: the
+    // shift that took the money, the amount handed over, and the method that
+    // decides whether the drawer expects it.
+    expect(drawer?.parameters?.[1]).toBe(result.repaymentId)
+    expect(drawer?.parameters?.[2]).toBe(result.number)
+    expect(drawer?.parameters?.[3]).toBe(SHIFT_ID)
+    expect(drawer?.parameters?.[6]).toBe(5_000)
+    expect(drawer?.parameters?.[7]).toBe('CASH')
   })
 
   it('refuses a MoMo repayment whose payment has not settled', async () => {

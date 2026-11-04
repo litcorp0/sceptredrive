@@ -42,6 +42,7 @@ const FIGURES: ShiftReportFigures = {
   bankTransferMinor: 0,
   changeMinor: 2_000,
   cashRefundMinor: 0,
+  cashRepaymentMinor: 15_000,
   cashInMinor: 5_000,
   cashOutMinor: 1_000,
   expectedCashMinor: 52_000,
@@ -191,10 +192,11 @@ const DRAWER_FIGURES: ShiftReportFigures = {
   cashMinor: 430_000,
   changeMinor: 20_000,
   cashRefundMinor: 50_000,
+  cashRepaymentMinor: 60_000,
   cashInMinor: 20_000,
   cashOutMinor: 10_000,
-  expectedCashMinor: 470_000,
-  countedCashMinor: 470_000,
+  expectedCashMinor: 530_000,
+  countedCashMinor: 530_000,
   varianceMinor: 0,
 }
 
@@ -245,27 +247,29 @@ describe('the DRAWER block', () => {
       'Cash refunds',
       'Cash in',
       'Cash out',
+      'Credit repaid (cash)',
       'Expected',
       'Counted',
       'Variance',
     ])
 
     const values = drawer.map((row) => row.value)
-    expect(values.slice(0, 6)).toEqual([
+    expect(values.slice(0, 7)).toEqual([
       'GHS 1000.00',
       'GHS 4300.00',
       'GHS -200.00',
       'GHS -500.00',
       'GHS 200.00',
       'GHS -100.00',
+      'GHS 600.00',
     ])
 
-    // 1000 + 4300 − 200 − 500 + 200 − 100 = 4700, which is the row below it.
-    const sum = values.slice(0, 6).reduce((total, value) => total + printedMinor(value), 0)
-    expect(sum).toBe(printedMinor(values[6] as string))
-    expect(values[6]).toBe('GHS 4700.00')
+    // 1000 + 4300 − 200 − 500 + 200 − 100 + 600 = 5300, which is the row below it.
+    const sum = values.slice(0, 7).reduce((total, value) => total + printedMinor(value), 0)
+    expect(sum).toBe(printedMinor(values[7] as string))
+    expect(values[7]).toBe('GHS 5300.00')
     // A drawer counted at the formula disagrees by nothing.
-    expect(values[8]).toBe(varianceWords(0))
+    expect(values[9]).toBe(varianceWords(0))
   })
 
   it('prints one cash figure for both TENDERS and DRAWER', () => {

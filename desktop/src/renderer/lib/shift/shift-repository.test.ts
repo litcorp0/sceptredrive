@@ -81,6 +81,7 @@ function fakeReader(fixture: Fixture = FIXTURE): { reader: SqlReader; queries: Q
           cash_in: fixture.cashInMinor,
           cash_out: fixture.cashOutMinor,
           cash_refunds: cashRefundsMinor,
+          cash_repayments: 12_000,
         } as T
       },
     },
@@ -100,13 +101,15 @@ describe('selectShiftCashTotals', () => {
       cashInMinor: 10_000,
       cashOutMinor: 0,
       cashRefundsMinor: 50_000,
+      cashRepaymentsMinor: 12_000,
     })
-    // float + cash tenders − change + cash in − cash out − cash refunds.
+    // float + cash tenders − change + cash in − cash out − cash refunds
+    // + cash credit repayments.
     // The pending, card, and other-shift refunds are absent because none of
     // them emptied this drawer.
-    expect(computeExpectedCash(totals)).toBe(160_000)
+    expect(computeExpectedCash(totals)).toBe(172_000)
     // One placeholder per subquery, all the shift: no figure crosses drawers.
-    expect(queries[0]?.parameters).toEqual(Array.from({ length: 5 }, () => SHIFT_ID))
+    expect(queries[0]?.parameters).toEqual(Array.from({ length: 6 }, () => SHIFT_ID))
   })
 
   it('joins the refund to its own shift and filters cash, settled tenders', async () => {

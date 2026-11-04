@@ -71,6 +71,7 @@ export function ShiftReportScreen({
           cashInMinor: figures.cashInMinor,
           cashOutMinor: figures.cashOutMinor,
           cashRefundsMinor: figures.cashRefundsMinor,
+          cashRepaymentsMinor: figures.cashRepaymentsMinor,
         })
         setReport(localShiftReport(row, figures, expectedCashMinor, new Date().toISOString()))
         // A missing binding costs the name, not the document: the line falls

@@ -256,6 +256,31 @@ export async function createRepayment(
       [uuidv7(now.getTime()), repaymentId, input.customerId, -input.amountMinor, null],
     )
 
+    // The drawer's own record of the repayment (P20-D1). The credit ledger never
+    // reaches the terminal, so without this row the close could not count the
+    // notes the cashier is holding and every cash repayment would close as an
+    // overage. Written here, in the same transaction as the outbox row, so the
+    // till can never print a receipt for money its drawer does not know about.
+    await tx.execute(
+      `INSERT INTO credit_repayment
+         (id, client_transaction_id, number, shift_id, customer_id, customer_name,
+          amount_minor, method, occurred_at, cashier_user_id, cashier_staff_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        repaymentId,
+        repaymentId,
+        amountNumber,
+        shift.id,
+        input.customerId,
+        account.name,
+        input.amountMinor,
+        input.method,
+        occurredAt,
+        session.userId,
+        session.staffId,
+      ],
+    )
+
     await insertOutbox(tx, {
       id: repaymentId,
       clientTransactionId: repaymentId,

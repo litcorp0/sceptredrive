@@ -330,6 +330,31 @@ export const cashMovement = new Table(
 )
 
 /**
+ * A credit repayment taken at this till (P20-D1).
+ *
+ * The credit ledger deliberately never syncs to the terminal, so the drawer
+ * cannot read a repayment back out of it. One row per repayment — written in the
+ * same transaction as its `CREDIT_REPAYMENT` outbox row — is what lets the
+ * close count the notes the cashier is holding. Only `method = 'CASH'` raised
+ * expected cash; a MoMo repayment never touched the drawer.
+ */
+export const creditRepayment = new Table(
+  {
+    client_transaction_id: column.text,
+    number: column.text,
+    shift_id: column.text,
+    customer_id: column.text,
+    customer_name: column.text,
+    amount_minor: minor,
+    method: column.text,
+    occurred_at: isoText,
+    cashier_user_id: column.text,
+    cashier_staff_id: column.text,
+  },
+  { localOnly: true, indexes: { credit_repayment_shift: ['shift_id'] } },
+)
+
+/**
  * The in-progress sale (Plan 06).
  *
  * One row per terminal: the `id` is the **future sale id / client transaction
@@ -583,6 +608,8 @@ export const shiftReport = new Table(
     change_minor: minor,
     cash_in_minor: minor,
     cash_out_minor: minor,
+    /** Cash taken against credit in this drawer (P20-D1). */
+    cash_repayment_minor: minor,
     expected_cash_minor: minor,
     counted_cash_minor: minor,
     variance_minor: minor,
@@ -751,6 +778,7 @@ export const PosSchema = new Schema({
   sale_line: saleLine,
   sale_tender: saleTender,
   cash_movement: cashMovement,
+  credit_repayment: creditRepayment,
   cart_draft: cartDraft,
   cart_draft_line: cartDraftLine,
   cart_tender: cartTender,

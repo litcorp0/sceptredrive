@@ -105,6 +105,10 @@ describe('the tables Plan 08 added', () => {
     expect(tableIndexes(PosSchema.tables, 'shift_report')).toMatchObject({
       shift_report_shift: ['shift_id'],
     })
+    // The drawer read: a shift's cash repayments, filtered by shift and method.
+    expect(tableIndexes(PosSchema.tables, 'credit_repayment')).toMatchObject({
+      credit_repayment_shift: ['shift_id'],
+    })
   })
 
   it('keeps the synced table list at exactly eight', () => {
@@ -120,6 +124,7 @@ describe('the tables Plan 08 added', () => {
       'refund_line',
       'refund_tender',
       'shift_report',
+      'credit_repayment',
     ]) {
       expect(SYNCED_TABLES as readonly string[]).not.toContain(table)
     }

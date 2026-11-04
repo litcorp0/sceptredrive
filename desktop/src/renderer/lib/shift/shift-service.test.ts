@@ -18,6 +18,7 @@ describe('computeExpectedCash', () => {
       cashInMinor: 10_000,
       cashOutMinor: 0,
       cashRefundsMinor: 50_000,
+      cashRepaymentsMinor: 0,
     })
 
     // 20 000 + 180 000 − 0 + 10 000 − 0 − 50 000
@@ -37,6 +38,7 @@ describe('computeExpectedCash', () => {
         cashInMinor: 10_000,
         cashOutMinor: 0,
         cashRefundsMinor: 0,
+        cashRepaymentsMinor: 0,
       }),
     ).toBe(210_000)
   })

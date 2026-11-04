@@ -57,6 +57,7 @@ describe('shift arithmetic', () => {
       cashInMinor: 5_000,
       cashOutMinor: 2_000,
       cashRefundsMinor: 0,
+      cashRepaymentsMinor: 0,
     })
     expect(expected).toBe(38_000)
     expect(computeVariance(22_500, 23_000)).toBe(-500)

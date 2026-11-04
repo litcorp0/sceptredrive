@@ -61,6 +61,7 @@ const FIGURES: ShiftSaleFigures = {
   cashInMinor: 20_000,
   cashOutMinor: 10_000,
   cashRefundsMinor: 50_000,
+  cashRepaymentsMinor: 15_000,
 }
 
 const IDENTITY = {

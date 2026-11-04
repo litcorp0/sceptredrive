@@ -59,12 +59,17 @@ export function formatShiftNumber(terminalCode: string, day: string, sequence: n
 }
 
 /**
- * Expected cash = float + cash tenders − change + cash in − cash out − cash refunds.
+ * Expected cash = float + cash tenders − change + cash in − cash out − cash
+ * refunds + cash credit repayments.
  *
  * The refund term is not optional bookkeeping: a settled cash refund is money
  * that physically left this drawer, so without it the till expects cash it has
  * already given back. Card and MoMo refunds are absent by construction — they
  * never touched the notes (`selectShiftCashTotals` filters `CASH`/`SETTLED`).
+ *
+ * The repayment term is the same argument in the other direction (P20-D1): a
+ * customer paying a debt in cash hands over notes that go in this drawer, so the
+ * till expects them. Without it every cash repayment closes as an overage.
  */
 export function computeExpectedCash(totals: ShiftCashTotals): number {
   return (
@@ -73,7 +78,8 @@ export function computeExpectedCash(totals: ShiftCashTotals): number {
     totals.changeMinor +
     totals.cashInMinor -
     totals.cashOutMinor -
-    totals.cashRefundsMinor
+    totals.cashRefundsMinor +
+    totals.cashRepaymentsMinor
   )
 }
 

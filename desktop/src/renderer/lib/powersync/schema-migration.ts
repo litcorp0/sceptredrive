@@ -409,6 +409,12 @@ const NEW_TABLE_FIXTURES: ReadonlyArray<{
     values: [FIXTURE.shiftId, FIXTURE.branchId, FIXTURE.terminalId, 'SHIFT-MIG-01', FIXTURE.to],
     index: 'shift_report_shift',
   },
+  {
+    table: 'credit_repayment',
+    columns: ['shift_id', 'customer_id', 'amount_minor', 'method', 'occurred_at'],
+    values: [FIXTURE.shiftId, 'customer-migration-01', 12_000, 'CASH', FIXTURE.from],
+    index: 'credit_repayment_shift',
+  },
 ] as const
 
 const STEP_TIMEOUT_MS = 30_000

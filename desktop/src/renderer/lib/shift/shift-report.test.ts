@@ -61,6 +61,7 @@ const FIGURES_ROW: Record<string, number> = {
   cash_in_minor: 5_000,
   cash_out_minor: 1_000,
   cash_refunds_minor: 7_500,
+  cash_repayments_minor: 15_000,
 }
 
 const COLUMN_FIELD: Record<string, keyof LocalShiftReport> = {
@@ -98,6 +99,7 @@ const COLUMN_FIELD: Record<string, keyof LocalShiftReport> = {
   change_minor: 'changeMinor',
   cash_in_minor: 'cashInMinor',
   cash_out_minor: 'cashOutMinor',
+  cash_repayment_minor: 'cashRepaymentMinor',
   expected_cash_minor: 'expectedCashMinor',
   counted_cash_minor: 'countedCashMinor',
   variance_minor: 'varianceMinor',
@@ -155,9 +157,10 @@ describe('readShiftFigures', () => {
       cashInMinor: 5_000,
       cashOutMinor: 1_000,
       cashRefundsMinor: 7_500,
+      cashRepaymentsMinor: 15_000,
     })
     // Every placeholder is the shift: a figure can never leak across shifts.
-    expect(parameters).toEqual(Array.from({ length: 25 }, () => SHIFT.id))
+    expect(parameters).toEqual(Array.from({ length: 26 }, () => SHIFT.id))
   })
 
   it('treats a missing row as zero rather than undefined money', async () => {

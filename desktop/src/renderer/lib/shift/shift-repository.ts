@@ -44,6 +44,12 @@ export interface ShiftCashTotals {
   cashOutMinor: number
   /** Settled cash refunds paid out of this shift's drawer. */
   cashRefundsMinor: number
+  /**
+   * Cash this drawer took against credit (P20-D1). The customer handed the
+   * cashier notes against a debt, so the till holds them exactly as it holds a
+   * cash sale's — the reader that forgets them closes every such shift over.
+   */
+  cashRepaymentsMinor: number
 }
 
 interface ShiftRow {
@@ -232,13 +238,17 @@ export interface SqlReader {
 
 /**
  * Cash totals for the expected-cash formula: cash tenders minus change plus
- * cash in minus cash out minus cash refunds. Reads the same local sale tables
- * the selling UI writes.
+ * cash in minus cash out minus cash refunds plus cash credit repayments. Reads
+ * the same local tables the selling UI writes.
  *
  * A refund is counted against the **refund's** shift, not the sale's: the
  * drawer that gave the money back is the one that is short. Only `CASH` and
  * `SETTLED` refund tenders reduce the till — a card or MoMo refund never moved a
  * note, and a pending one has not left the drawer yet.
+ *
+ * A repayment is counted against the **repayment's** shift for the same reason,
+ * and only when it was cash: money handed over the counter is in this drawer,
+ * while a MoMo repayment settled into the business account never was (P20-D1).
  */
 export async function selectShiftCashTotals(
   reader: SqlReader,
@@ -251,6 +261,7 @@ export async function selectShiftCashTotals(
     cash_in: number
     cash_out: number
     cash_refunds: number
+    cash_repayments: number
   }>(
     `SELECT
        COALESCE((SELECT SUM(st.amount_minor) FROM sale_tender st
@@ -264,8 +275,10 @@ export async function selectShiftCashTotals(
        COALESCE((SELECT SUM(rt.amount_minor) FROM refund_tender rt
                    JOIN refund r ON r.id = rt.refund_id
                   WHERE r.shift_id = ? AND rt.method = 'CASH'
-                    AND rt.status = 'SETTLED'), 0) AS cash_refunds`,
-    [shiftId, shiftId, shiftId, shiftId, shiftId],
+                    AND rt.status = 'SETTLED'), 0) AS cash_refunds,
+       COALESCE((SELECT SUM(amount_minor) FROM credit_repayment
+                  WHERE shift_id = ? AND method = 'CASH'), 0) AS cash_repayments`,
+    [shiftId, shiftId, shiftId, shiftId, shiftId, shiftId],
   )
 
   return {
@@ -275,6 +288,7 @@ export async function selectShiftCashTotals(
     cashInMinor: row?.cash_in ?? 0,
     cashOutMinor: row?.cash_out ?? 0,
     cashRefundsMinor: row?.cash_refunds ?? 0,
+    cashRepaymentsMinor: row?.cash_repayments ?? 0,
   }
 }
 

@@ -42,6 +42,8 @@ export interface ShiftSaleFigures {
   cashOutMinor: number
   /** Settled cash refunds: the drawer figure the expected cash already nets off. */
   cashRefundsMinor: number
+  /** Cash taken against credit in this drawer (P20-D1). */
+  cashRepaymentsMinor: number
 }
 
 export interface LocalShiftReport extends ShiftReportFigures {
@@ -99,7 +101,9 @@ const FIGURES_SQL = `SELECT
   (SELECT COALESCE(SUM(rt.amount_minor), 0) FROM refund_tender rt
      JOIN refund r ON r.id = rt.refund_id
      WHERE r.shift_id = ? AND rt.method = 'CASH' AND rt.status = 'SETTLED')
-    AS cash_refunds_minor`
+    AS cash_refunds_minor,
+  (SELECT COALESCE(SUM(amount_minor), 0) FROM credit_repayment
+     WHERE shift_id = ? AND method = 'CASH') AS cash_repayments_minor`
 
 /** One read: every aggregate a report prints, all filtered by the shift. */
 export async function readShiftFigures(
@@ -107,6 +111,7 @@ export async function readShiftFigures(
   shiftId: string,
 ): Promise<ShiftSaleFigures> {
   const row = await reader.getOptional<Record<string, number | null>>(FIGURES_SQL, [
+    shiftId,
     shiftId,
     shiftId,
     shiftId,
@@ -165,6 +170,7 @@ export async function readShiftFigures(
     cashInMinor: int('cash_in_minor'),
     cashOutMinor: int('cash_out_minor'),
     cashRefundsMinor: int('cash_refunds_minor'),
+    cashRepaymentsMinor: int('cash_repayments_minor'),
   }
 }
 
@@ -185,6 +191,9 @@ export function localShiftReport(
     // already subtracts (P14-D1). The local mirror table has no column for it,
     // so it travels with the report object the close hands to the printer.
     cashRefundMinor: figures.cashRefundsMinor,
+    // Same shape for the money the other way (P20-D1): the drawer line the
+    // expected-cash sum already adds, named once for the paper.
+    cashRepaymentMinor: figures.cashRepaymentsMinor,
     shiftId: shift.id,
     branchId: shift.branchId,
     terminalId: shift.terminalId,
@@ -218,9 +227,9 @@ export async function writeShiftReport(tx: Transaction, report: LocalShiftReport
         loyalty_discount_minor, loyalty_redeem_points, loyalty_earned_points, base_minor,
         vat_minor, nhil_minor, getfund_minor, tax_total_minor, cash_minor, credit_minor,
         momo_minor, card_minor, bank_transfer_minor, change_minor, cash_in_minor, cash_out_minor,
-        expected_cash_minor, counted_cash_minor, variance_minor, created_at)
+        cash_repayment_minor, expected_cash_minor, counted_cash_minor, variance_minor, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       // The row id is the shift id: one report per drawer, enforced locally the
       // same way `unique(shift_id)` enforces it on the server.
@@ -258,6 +267,7 @@ export async function writeShiftReport(tx: Transaction, report: LocalShiftReport
       report.changeMinor,
       report.cashInMinor,
       report.cashOutMinor,
+      report.cashRepaymentMinor,
       report.expectedCashMinor,
       report.countedCashMinor,
       report.varianceMinor,
