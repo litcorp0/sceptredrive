@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { customer } from '../customers/customers.schema.ts'
 import { branch } from '../org/branches.schema.ts'
+import { shift } from '../pos/pos.schema.ts'
 
 export const creditEntryKindEnum = pgEnum('credit_entry_kind', [
   'CHARGE',
@@ -101,6 +102,16 @@ export const creditLedgerEntry = pgTable(
     overrideReason: creditOverrideReasonEnum('override_reason'),
     overriddenBy: text('overridden_by'),
     receivedBy: text('received_by'),
+    /**
+     * The drawer the money physically landed in (P20-D1).
+     *
+     * A **cash** repayment collected at a till is money the shift's drawer holds,
+     * so it has to name the shift — otherwise the expected-cash arithmetic can
+     * never see it and every cash repayment closes as an overage. Repayments taken
+     * in the console have no drawer and leave this null; so does every non-cash
+     * method, which never touched the notes.
+     */
+    shiftId: uuid('shift_id').references(() => shift.id, { onDelete: 'restrict' }),
     idempotencyKey: text('idempotency_key'),
     createdBy: text('created_by'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
@@ -120,5 +131,7 @@ export const creditLedgerEntry = pgTable(
     uniqueIndex('credit_ledger_entry_pos_reference_unique')
       .on(table.referenceId)
       .where(sql`${table.referenceType} = 'POS_REPAYMENT'`),
+    // The drawer read: a shift's cash repayments, one index-only-ish scan.
+    index('credit_ledger_entry_shift_idx').on(table.shiftId, table.kind, table.method),
   ],
 )

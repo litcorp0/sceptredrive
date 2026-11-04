@@ -469,7 +469,8 @@ export function computeExpectedCash(totals: ShiftCashTotals): number {
     totals.changeMinor +
     totals.cashInMinor -
     totals.cashOutMinor -
-    totals.cashRefundsMinor
+    totals.cashRefundsMinor +
+    totals.cashRepaymentsMinor
   )
 }
 
@@ -719,6 +720,7 @@ export async function closeShift(
           changeMinor: totals.changeMinor,
           cashInMinor: totals.cashInMinor,
           cashOutMinor: totals.cashOutMinor,
+          cashRepaymentsMinor: totals.cashRepaymentsMinor,
         },
       },
       executor,
@@ -785,6 +787,9 @@ export async function closeShift(
       // already subtracted from: one selector, one figure, no second predicate
       // that can drift from the drawer arithmetic.
       cashRefundMinor: totals.cashRefundsMinor,
+      // The cash that came in against credit, stored beside the expected cash it
+      // is already added to: one selector, one figure (P20-D1).
+      cashRepaymentMinor: totals.cashRepaymentsMinor,
       expectedCashMinor: serverExpected,
       countedCashMinor: payload.countedCashMinor,
       varianceMinor: variance,
@@ -972,6 +977,9 @@ export async function readShiftReport(
       // The snapshot's own figure: null for a report written before Phase 14
       // measured it, so a legacy Z says "not itemised" rather than inventing one.
       cashRefundMinor: snapshot.cashRefundMinor,
+      // The snapshot's own figure, null for a Z written before repayments were
+      // attributed to a drawer (P20-D1).
+      cashRepaymentMinor: snapshot.cashRepaymentMinor,
       expectedCashMinor: snapshot.expectedCashMinor,
       countedCashMinor: snapshot.countedCashMinor,
       varianceMinor: snapshot.varianceMinor,
@@ -1026,6 +1034,7 @@ export async function readShiftReport(
     cashOutMinor: totals.cashOutMinor,
     // The live drawer, measured by the same selector the close uses.
     cashRefundMinor: totals.cashRefundsMinor,
+    cashRepaymentMinor: totals.cashRepaymentsMinor,
     expectedCashMinor,
     countedCashMinor,
     varianceMinor: countedCashMinor === null ? null : countedCashMinor - expectedCashMinor,
@@ -2777,6 +2786,10 @@ export async function applyRepayment(
       referenceType: 'POS_REPAYMENT',
       referenceId: payload.paymentId ?? context.clientTransactionId,
       referenceNumber: payload.number,
+      // The drawer the cash went into (P20-D1). The till already proved the shift
+      // is open and belongs to this terminal, so the ledger can name it and the
+      // close's expected cash can add the money back.
+      shiftId: payload.shiftId,
       occurredAt,
       idempotencyKey: `${context.clientTransactionId}:repayment`,
     },

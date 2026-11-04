@@ -177,6 +177,7 @@ describe.skipIf(!available)('POS shift application', () => {
         cashInMinor: 5_000,
         cashOutMinor: 2_000,
         cashRefundsMinor: 0,
+        cashRepaymentsMinor: 0,
       }),
     ).toBe(38_000)
 
@@ -188,6 +189,7 @@ describe.skipIf(!available)('POS shift application', () => {
         cashInMinor: 0,
         cashOutMinor: 0,
         cashRefundsMinor: 0,
+        cashRepaymentsMinor: 0,
       }),
     ).toBe(0)
 
@@ -200,8 +202,23 @@ describe.skipIf(!available)('POS shift application', () => {
         cashInMinor: 5_000,
         cashOutMinor: 2_000,
         cashRefundsMinor: 500,
+        cashRepaymentsMinor: 0,
       }),
     ).toBe(37_500)
+
+    // A cash repayment brings notes into the drawer that no sale carries, so it
+    // raises the expectation exactly as a cash sale does (P20-D1).
+    expect(
+      computeExpectedCash({
+        openingFloatMinor: 20_000,
+        cashTendersMinor: 22_500,
+        changeMinor: 7_500,
+        cashInMinor: 0,
+        cashOutMinor: 0,
+        cashRefundsMinor: 0,
+        cashRepaymentsMinor: 12_000,
+      }),
+    ).toBe(47_000)
   })
 
   it('opens a shift with the client id and audits it', async () => {

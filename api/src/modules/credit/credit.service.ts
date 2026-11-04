@@ -127,6 +127,13 @@ function normalizeEntryInput(input: PostEntryInput): NormalizedEntry {
     throw new ValidationError('The amount must be a non-zero integer (minor units)')
   }
 
+  // A shift names a drawer, and only money physically handed to a cashier belongs
+  // in one. Refusing it on every other kind keeps "which till holds this" from
+  // becoming a decorative column a later reader starts summing (P20-D1).
+  if (input.shiftId && input.kind !== 'REPAYMENT') {
+    throw new ValidationError('Only a repayment may name the shift that took the cash')
+  }
+
   if (input.kind === 'CHARGE') {
     if (input.amountMinor < 0) throw new ValidationError('A charge must be a positive amount')
     if (
@@ -348,6 +355,9 @@ export async function postEntryInTransaction(
       overrideReason,
       overriddenBy: overrideReason ? overrideRecordedBy : null,
       receivedBy: input.kind === 'REPAYMENT' || input.kind === 'REFUND' ? recordedBy : null,
+      // Only a cash repayment names a drawer (P20-D1); normalize already refused
+      // the column for every other kind.
+      shiftId: input.kind === 'REPAYMENT' ? (input.shiftId ?? null) : null,
       idempotencyKey: input.idempotencyKey ?? null,
       createdBy: recordedBy,
       occurredAt,

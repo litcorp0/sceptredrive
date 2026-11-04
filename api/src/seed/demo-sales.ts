@@ -653,6 +653,8 @@ export async function seedDemoSales(
       cashOutMinor: 0,
       // The demo shifts record no refunds, so no cash ever left this drawer.
       cashRefundsMinor: 0,
+      // Nor any credit repayments: the demo tills take none.
+      cashRepaymentsMinor: 0,
     })
     await closeShift(context.device, {
       shiftId,

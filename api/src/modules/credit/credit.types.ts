@@ -92,6 +92,12 @@ export interface PostEntryInput {
   referenceType?: string | null
   referenceId?: string | null
   referenceNumber?: string | null
+  /**
+   * The drawer a **cash repayment** was collected at (P20-D1). Only meaningful
+   * for `REPAYMENT`: it is how the shift's expected cash learns that the notes
+   * are in its till. Console repayments and every non-cash method leave it null.
+   */
+  shiftId?: string | null
   idempotencyKey?: string | null
   override?: { reasonCode: CreditOverrideReason; note?: string | null } | null
   /**

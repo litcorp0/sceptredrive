@@ -155,6 +155,13 @@
       "when": 1793711694896,
       "tag": "0021_complex_mattie_franklin",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793787777592,
+      "tag": "0022_wild_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

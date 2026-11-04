@@ -200,6 +200,7 @@ export async function listEntryRows(
       overrideReason: creditLedgerEntry.overrideReason,
       overriddenBy: creditLedgerEntry.overriddenBy,
       receivedBy: creditLedgerEntry.receivedBy,
+      shiftId: creditLedgerEntry.shiftId,
       idempotencyKey: creditLedgerEntry.idempotencyKey,
       createdBy: creditLedgerEntry.createdBy,
       occurredAt: creditLedgerEntry.occurredAt,

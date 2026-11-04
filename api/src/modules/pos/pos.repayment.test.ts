@@ -32,6 +32,7 @@ import type {
   DeviceAuthContext,
   PosUploadBody,
 } from '../sync/sync.types.ts'
+import { selectShiftCashTotals } from './pos.repository.ts'
 import {
   cashMovement,
   posStaffBinding,
@@ -42,7 +43,7 @@ import {
   shift,
   syncConflict,
 } from './pos.schema.ts'
-import { applyRepayment, applySale } from './pos.service.ts'
+import { applyRepayment, applySale, computeExpectedCash } from './pos.service.ts'
 import type { OverrideProof, SalePayload } from './pos.types.ts'
 
 const available = await databaseAvailable()
@@ -488,6 +489,34 @@ describe.skipIf(!available)('POS credit repayment', () => {
     expect(result.entryId).toBe(entries[0]?.id)
     expect(result.balanceAfterMinor).toBe(before - 5_000)
     expect(await profileBalance()).toBe(before - 5_000)
+  })
+
+  it('names the drawer the cash went into, so expected cash includes it (P20-D1)', async () => {
+    // The shift accumulates across this file, so the claim is about the movement this
+    // repayment made, not the shift's absolute total.
+    const before = await selectShiftCashTotals(shiftId, 50_000)
+
+    const cash = await applyNow(repaymentPayload({ amountMinor: 5_000 }))
+
+    const entries = await repaymentEntries()
+    expect(entries.find((entry) => entry.id === cash.entryId)?.shiftId).toBe(shiftId)
+
+    // The drawer's own view of the shift: the notes the cashier is holding went up by
+    // exactly the repayment, and expected cash followed it.
+    const after = await selectShiftCashTotals(shiftId, 50_000)
+    expect(after.cashRepaymentsMinor - before.cashRepaymentsMinor).toBe(5_000)
+    expect(computeExpectedCash(after) - computeExpectedCash(before)).toBe(5_000)
+  })
+
+  it('never counts a MoMo repayment in the drawer it did not touch', async () => {
+    const before = await selectShiftCashTotals(shiftId, 50_000)
+
+    const paymentId = await moMoPayment(7_500)
+    await applyNow(repaymentPayload({ amountMinor: 7_500, method: 'MOMO', paymentId }))
+
+    const after = await selectShiftCashTotals(shiftId, 50_000)
+    expect(after.cashRepaymentsMinor).toBe(before.cashRepaymentsMinor)
+    expect(computeExpectedCash(after)).toBe(computeExpectedCash(before))
   })
 
   it('still allocates a number when the console sends none', async () => {

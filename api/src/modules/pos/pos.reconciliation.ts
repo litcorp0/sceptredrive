@@ -274,7 +274,11 @@ export async function reconcileShifts(
                SELECT SUM(rt.amount_minor) FROM refund_tender rt
                JOIN refund r ON r.id = rt.refund_id
                WHERE r.shift_id = sh.id AND rt.method = 'CASH' AND rt.status = 'SETTLED'
-             ), 0)::int AS cash_refunds
+             ), 0)::int AS cash_refunds,
+             COALESCE((
+               SELECT SUM(-e.amount_minor) FROM credit_ledger_entry e
+               WHERE e.shift_id = sh.id AND e.kind = 'REPAYMENT' AND e.method = 'CASH'
+             ), 0)::int AS cash_repayments
       FROM shift sh
       WHERE ${branch}
     )
@@ -287,18 +291,21 @@ export async function reconcileShifts(
         'cashInMinor', cash_in,
         'cashOutMinor', cash_out,
         'cashRefundsMinor', cash_refunds,
+        'cashRepaymentsMinor', cash_repayments,
         'serverExpectedCashMinor', server_expected_cash_minor,
         'countedCashMinor', counted_cash_minor,
         'varianceMinor', variance_minor,
         'recomputedExpectedMinor',
-          opening_float_minor + cash_tenders - change_total + cash_in - cash_out - cash_refunds
+          opening_float_minor + cash_tenders - change_total + cash_in - cash_out
+          - cash_refunds + cash_repayments
       ) AS details
     FROM cash
     WHERE
       (status = 'CLOSED'
         AND (
           server_expected_cash_minor IS DISTINCT FROM
-            (opening_float_minor + cash_tenders - change_total + cash_in - cash_out - cash_refunds)
+            (opening_float_minor + cash_tenders - change_total + cash_in - cash_out
+             - cash_refunds + cash_repayments)
           OR variance_minor IS DISTINCT FROM (counted_cash_minor - server_expected_cash_minor)
         ))
       OR (status = 'OPEN'

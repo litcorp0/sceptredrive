@@ -296,6 +296,7 @@ export async function selectShiftCashTotals(
     cash_in: string
     cash_out: string
     cash_refunds: string
+    cash_repayments: string
   }>(sql`
     SELECT
       COALESCE((
@@ -318,7 +319,12 @@ export async function selectShiftCashTotals(
         FROM refund_tender rt
         JOIN refund r ON r.id = rt.refund_id
         WHERE r.shift_id = ${shiftId} AND rt.method = 'CASH' AND rt.status = 'SETTLED'
-      ), 0)::text AS cash_refunds
+      ), 0)::text AS cash_refunds,
+      COALESCE((
+        SELECT SUM(-e.amount_minor)
+        FROM credit_ledger_entry e
+        WHERE e.shift_id = ${shiftId} AND e.kind = 'REPAYMENT' AND e.method = 'CASH'
+      ), 0)::text AS cash_repayments
   `)
   const row = rows.rows[0]
   return {
@@ -328,6 +334,9 @@ export async function selectShiftCashTotals(
     cashInMinor: Number(row?.cash_in ?? 0),
     cashOutMinor: Number(row?.cash_out ?? 0),
     cashRefundsMinor: Number(row?.cash_refunds ?? 0),
+    // The ledger stores a repayment as a negative amount (it reduces the debt);
+    // the drawer adds the money that was handed over, so the sign flips here.
+    cashRepaymentsMinor: Number(row?.cash_repayments ?? 0),
   }
 }
 

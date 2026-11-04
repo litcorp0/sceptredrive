@@ -696,6 +696,14 @@ export const shiftReport = pgTable(
      * day nobody counted. The print says "not itemised" for those rows.
      */
     cashRefundMinor: integer('cash_refund_minor'),
+    /**
+     * Cash taken against credit during this shift (P20-D1). Nullable for the same
+     * reason as `cash_refund_minor`: a Z written before the till attributed
+     * repayments to a drawer did not measure it, and an invented zero would
+     * report a number nobody counted. It is part of expected cash, never a
+     * separate sum a reader has to know to add.
+     */
+    cashRepaymentMinor: integer('cash_repayment_minor'),
     expectedCashMinor: integer('expected_cash_minor').notNull().default(0),
     countedCashMinor: integer('counted_cash_minor').notNull().default(0),
     varianceMinor: integer('variance_minor').notNull().default(0),

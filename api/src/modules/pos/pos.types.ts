@@ -105,6 +105,14 @@ export interface ShiftCashTotals {
    * moved the notes.
    */
   cashRefundsMinor: number
+  /**
+   * Cash taken against credit **in this drawer** (P20-D1). Paying a debt down
+   * hands the cashier notes and they go in the till, so the drawer expects them
+   * exactly as it expects a cash sale. Counted here from the credit ledger's
+   * `REPAYMENT`/`CASH` rows that name this shift — never merged into cash
+   * tenders, because no sale exists to carry them.
+   */
+  cashRepaymentsMinor: number
 }
 
 // --- Offline sale payload (Plan 06/07 produce this; the uploader ships it) ----
@@ -289,6 +297,12 @@ export interface ShiftReportView {
    * measures the shift live and always has a figure.
    */
   cashRefundMinor: number | null
+  /**
+   * Cash taken against credit during this shift (P20-D1), the other figure
+   * expected cash already adds. Null on a `Z` written before the till
+   * attributed repayments to a drawer; an `X` always measures it.
+   */
+  cashRepaymentMinor: number | null
   expectedCashMinor: number
   /** The drawer, once someone has counted it (a Z always has; an X may not). */
   countedCashMinor: number | null
