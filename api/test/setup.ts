@@ -21,6 +21,12 @@ process.env.ADMIN_PASSWORD ??= 'test-admin-password-123'
 // to do with the setting.
 process.env.STAFF_ID_PREFIX = 'SD'
 process.env.STAFF_ID_START = '1'
+// Payments: the suite settles charges through the process-local mock provider, so the mode is
+// pinned rather than inherited. A developer's `.env` with `PAYSTACK_MODE=test` would send every
+// charge to Paystack's real test API, whose references the mock never held — and every tender,
+// refund, and repayment test would fail on a setting that has nothing to do with them. Tests
+// that exercise the mode matrix pass it to `parseEnv`/`createApp` explicitly.
+process.env.PAYSTACK_MODE = 'mock'
 // Device-facing POS endpoints: the PowerSync token endpoint answers 503 when
 // this is unset, so the sync suites configure a local instance explicitly.
 process.env.POWERSYNC_URL ??= 'http://localhost:8080'
