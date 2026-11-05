@@ -127,6 +127,10 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'loyalty.adjust',
   'supplier.read',
   'supplier.create',
+  // A manager runs the counter: taking a supplier's payment details and mapping
+  // the parts that supplier sells is counter work, and the same `supplier.update`
+  // that edits the record (P20-D4).
+  'supplier.update',
   'payable.read',
   'payable.invoice.manage',
   'payable.payment',

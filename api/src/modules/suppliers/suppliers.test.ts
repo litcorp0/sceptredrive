@@ -592,15 +592,18 @@ describe.skipIf(!available)('suppliers module', () => {
       const managerUpdate = await app.request(`/api/suppliers/${httpSupplierId}`, {
         method: 'PATCH',
         headers: authedHeaders(managerCookie),
-        body: JSON.stringify({ notes: 'Nope' }),
+        body: JSON.stringify({ notes: 'Counter can edit this' }),
       })
-      expect(managerUpdate.status).toBe(403)
+      // P20-D4: a manager may update a supplier — the same permission guards the
+      // payment details and the supplied-products mapping the counter needs.
+      expect(managerUpdate.status).toBe(200)
 
       const managerArchive = await app.request(`/api/suppliers/${httpSupplierId}/archive`, {
         method: 'POST',
         headers: authedHeaders(managerCookie),
         body: JSON.stringify({}),
       })
+      // Archiving stays with an administrator.
       expect(managerArchive.status).toBe(403)
 
       const archive = await app.request(`/api/suppliers/${httpSupplierId}/archive`, {

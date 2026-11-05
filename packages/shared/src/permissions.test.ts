@@ -98,11 +98,13 @@ describe('permissions', () => {
     expect(can('CASHIER', 'loyalty.read')).toBe(false)
   })
 
-  it('lets managers read suppliers, create them, and run payables — never edit or archive', () => {
+  it('lets managers read, create, and update suppliers, and run payables — never archive', () => {
     expect(can('MANAGER', 'supplier.read')).toBe(true)
     // Phase 11 (MGR-01): a manager may add a supplier they need to order from.
     expect(can('MANAGER', 'supplier.create')).toBe(true)
-    expect(can('MANAGER', 'supplier.update')).toBe(false)
+    // P20-D4: the payment details and the parts a supplier sells are counter work,
+    // guarded by the same `supplier.update` as the record itself.
+    expect(can('MANAGER', 'supplier.update')).toBe(true)
     expect(can('MANAGER', 'supplier.archive')).toBe(false)
 
     expect(can('MANAGER', 'payable.read')).toBe(true)
@@ -142,8 +144,9 @@ describe('permissions', () => {
 
     // +1 each for `catalog.describe` (17-02): a manager may describe a product,
     // not redefine it.
+    // +1 for `supplier.update` (P20-D4): payment details and product mapping.
     expect(ROLE_PERMISSIONS.ADMIN).toHaveLength(69)
-    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(56)
+    expect(ROLE_PERMISSIONS.MANAGER).toHaveLength(57)
     expect(ROLE_PERMISSIONS.CASHIER).toHaveLength(0)
   })
 
