@@ -26,6 +26,12 @@ export interface Device {
 export interface Enrollment {
 	code: string
 	expiresAt: string
+	/** Managers of the terminal's branch who were emailed the code (P20-D5). */
+	emailedTo: string[]
+	/** Managers the mail server refused. */
+	emailFailed: string[]
+	/** True when the branch has no manager, so the code must be handed over. */
+	noRecipients: boolean
 }
 
 export interface TerminalCreateInput {

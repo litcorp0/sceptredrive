@@ -17,6 +17,9 @@ import type { Enrollment, Terminal } from "../types"
 /**
  * The one-time enrollment code surface. The code is a credential: it lives in local state only,
  * never in a query key, and is never logged. Each generate call expires the previous code.
+ *
+ * It is also emailed to the branch's managers (P20-D5), so it stays on screen as well: a mail
+ * server that is down must cost a message, not a terminal. The dialog says which happened.
  */
 export function EnrollmentDialog({
 	terminal,
@@ -44,8 +47,8 @@ export function EnrollmentDialog({
 	})
 
 	const remainingMs = enrollment ? new Date(enrollment.expiresAt).getTime() - now : 0
-	const minutes = Math.max(0, Math.floor(remainingMs / 60_000))
-	const seconds = Math.max(0, Math.floor((remainingMs % 60_000) / 1000))
+	const hours = Math.max(0, Math.floor(remainingMs / 3_600_000))
+	const minutes = Math.max(0, Math.floor((remainingMs % 3_600_000) / 60_000))
 	const expired = enrollment !== null && remainingMs <= 0
 
 	return (
@@ -65,10 +68,27 @@ export function EnrollmentDialog({
 							<p className="mt-2 text-xs text-muted-foreground">
 								{expired
 									? "Expired — generate a new code."
-									: `Expires in ${minutes}:${String(seconds).padStart(2, "0")}`}
+									: `Expires in ${hours}h ${String(minutes).padStart(2, "0")}m`}
 							</p>
 						</div>
 						<CopyButton value={enrollment.code} label="Copy code" />
+						{enrollment.emailedTo.length > 0 ? (
+							<p className="text-xs text-muted-foreground">
+								Emailed to {enrollment.emailedTo.length}{" "}
+								{enrollment.emailedTo.length === 1 ? "manager" : "managers"} at this branch:{" "}
+								{enrollment.emailedTo.join(", ")}.
+							</p>
+						) : null}
+						{enrollment.emailFailed.length > 0 ? (
+							<p className="text-xs text-destructive">
+								Could not email {enrollment.emailFailed.join(", ")}. Give the code to them directly.
+							</p>
+						) : null}
+						{enrollment.noRecipients ? (
+							<p className="text-xs text-muted-foreground">
+								This branch has no manager to email, so hand the code over in person.
+							</p>
+						) : null}
 						<p className="text-xs text-muted-foreground">
 							Enter this code in the POS app to enroll this terminal. Generating a new code expires
 							the previous one; each code works once.
@@ -77,7 +97,7 @@ export function EnrollmentDialog({
 				) : (
 					<p className="text-sm text-muted-foreground">
 						Generate a one-time code, then enter it in the POS app on this terminal. The code
-						expires after 15 minutes.
+						expires after 24 hours and is emailed to this branch's managers.
 					</p>
 				)}
 
