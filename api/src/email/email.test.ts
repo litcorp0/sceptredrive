@@ -41,6 +41,16 @@ describe('email provider selection', () => {
     expect(provider.name).toBe('resend')
   })
 
+  it('never selects a sending provider in a test, even with a real key (P20-D7)', () => {
+    // A developer `.env` with a live key must not turn the suite into a mailer.
+    const provider = createEmailProvider({
+      resendApiKey: 'test-key',
+      emailFrom: 'Sceptre Drive <no-reply@sceptredrive.com>',
+      nodeEnv: 'test',
+    })
+    expect(provider.name).toBe('console')
+  })
+
   it('fails loudly in production when no key is configured', async () => {
     const provider = createEmailProvider({
       emailFrom: 'Sceptre Drive <no-reply@sceptre.local>',

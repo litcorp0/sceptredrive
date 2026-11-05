@@ -30,11 +30,20 @@ export const disabledEmailProvider: EmailProvider = {
 }
 
 /**
- * Selects the email provider once at boot: Resend when an API key is present,
- * the local mail folder in development, a failing provider in production, and the
- * console provider otherwise.
+ * Selects the email provider once at boot: never in a test, Resend when an API
+ * key is present, the local mail folder in development, a failing provider in
+ * production, and the console provider otherwise.
+ *
+ * **`test` is checked first, before the key (P20-D7).** A developer `.env` that
+ * carries a real `RESEND_API_KEY` used to decide this, so the suite put live mail
+ * in flight: the staff-invitation and enrollment suites then waited on someone
+ * else's network, and a test run could email a real address. A test never sends
+ * mail, whatever the environment holds.
  */
 export function createEmailProvider(options: EmailProviderOptions): EmailProvider {
+  if (options.nodeEnv === 'test') {
+    return consoleEmailProvider
+  }
   if (options.resendApiKey) {
     return createResendEmailProvider(options.resendApiKey, options.emailFrom)
   }
