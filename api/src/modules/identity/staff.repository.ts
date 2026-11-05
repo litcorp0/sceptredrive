@@ -85,6 +85,30 @@ export async function findStaffById(
   return rows[0] ?? null
 }
 
+/**
+ * The active managers of one branch, oldest staff ID first.
+ *
+ * Enrollment codes are emailed to the people who run the branch (P20-D5), so
+ * this is a delivery list, not a session: it returns only what an email needs
+ * and never a credential column.
+ */
+export async function selectActiveBranchManagers(
+  branchId: string,
+  executor: DbExecutor = db,
+): Promise<{ email: string; name: string }[]> {
+  return executor
+    .select({ email: userTable.email, name: userTable.name })
+    .from(userTable)
+    .where(
+      and(
+        eq(userTable.branchId, branchId),
+        eq(userTable.role, 'MANAGER'),
+        eq(userTable.isActive, true),
+      ),
+    )
+    .orderBy(asc(userTable.staffId))
+}
+
 export async function findUserById(
   id: string,
   executor: DbExecutor = db,

@@ -25,6 +25,7 @@ import {
   findUserById,
   findUserIdByEmail,
   revokeStaffBindings,
+  selectActiveBranchManagers,
   selectStaffPage,
   selectStaffPinState,
   updateCredentialPassword,
@@ -294,6 +295,20 @@ export async function getStaff(actorUser: SessionUser, id: string): Promise<Staf
     throw new ForbiddenError('You can only access your own branch')
   }
   return found
+}
+
+/**
+ * The active managers of a branch, for another module that needs to reach them.
+ *
+ * Deliberately a delivery list — email and name only — so a caller can never
+ * read a credential column through it. Enrollment is the first caller (P20-D5):
+ * the code belongs to the people who run that branch, not to whoever happened to
+ * click in the console.
+ */
+export async function listBranchManagers(
+  branchId: string,
+): Promise<{ email: string; name: string }[]> {
+  return selectActiveBranchManagers(branchId)
 }
 
 export async function updateStaff(

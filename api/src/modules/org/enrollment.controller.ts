@@ -10,7 +10,17 @@ export async function createEnrollment(c: Context<AppEnv>, terminalId: string) {
   const actor = actorFromContext(c)
   const created = await enrollmentService.createEnrollment(user, actor, terminalId)
   return c.json(
-    { enrollment: { code: created.code, expiresAt: created.expiresAt.toISOString() } },
+    {
+      enrollment: {
+        code: created.code,
+        expiresAt: created.expiresAt.toISOString(),
+        // The code is a credential, but the operator who just generated it is
+        // entitled to know where it went — and whether it went anywhere at all.
+        emailedTo: created.notification.sent,
+        emailFailed: created.notification.failed,
+        noRecipients: created.notification.noRecipients,
+      },
+    },
     201,
   )
 }

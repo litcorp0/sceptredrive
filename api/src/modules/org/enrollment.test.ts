@@ -35,7 +35,13 @@ interface RedeemedBody {
 }
 
 interface EnrollmentBody {
-  enrollment: { code: string; expiresAt: string }
+  enrollment: {
+    code: string
+    expiresAt: string
+    emailedTo: string[]
+    emailFailed: string[]
+    noRecipients: boolean
+  }
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -76,7 +82,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
     return body.terminal.id
   }
 
-  async function requestEnrollment(terminalId: string): Promise<string> {
+  async function requestEnrollment(terminalId: string): Promise<EnrollmentBody['enrollment']> {
     const response = await app.request(`/api/terminals/${terminalId}/enrollment`, {
       method: 'POST',
       headers: authedHeaders(adminCookie),
@@ -84,7 +90,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
     expect(response.status).toBe(201)
     const body = await readJson<EnrollmentBody>(response)
     createdCodes.push(hashEnrollmentCode(body.enrollment.code))
-    return body.enrollment.code
+    return body.enrollment
   }
 
   /** Seeds an enrollment row directly, for states the API will not produce. */
@@ -136,8 +142,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
   })
 
   it('issues a device token once and stores only its hash', async () => {
-    const code = await requestEnrollment(retailTerminalId)
-
+    const { code } = await requestEnrollment(retailTerminalId)
     const response = await redeem(code, 'machine-abc')
     expect(response.status).toBe(201)
     const body = await readJson<RedeemedBody>(response)
@@ -159,8 +164,44 @@ describe.skipIf(!available)('enrollment redemption', () => {
     expect(active?.id).toBe(body.deviceId)
   })
 
+  it('gives the code a full day and emails it to the branch managers (P20-D5)', async () => {
+    const manager = await createTestUser({
+      role: 'MANAGER',
+      branchId: retailBranchId,
+      email: `enroll-mgr-${suffix}@test.local`,
+    })
+    createdUserIds.push(manager.id)
+
+    // The API stores emails lower-cased (better-auth normalises them), so the
+    // delivery list is compared in the same shape the database holds.
+
+    const enrollment = await requestEnrollment(retailTerminalId)
+
+    const ttlMs = new Date(enrollment.expiresAt).getTime() - Date.now()
+    expect(ttlMs).toBeGreaterThan(23 * 60 * 60 * 1000)
+    expect(ttlMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000)
+
+    // The code goes to the people who run this branch, and the response says so.
+    expect(enrollment.emailedTo).toContain(manager.email.toLowerCase())
+    expect(enrollment.emailFailed).toEqual([])
+    expect(enrollment.noRecipients).toBe(false)
+  })
+
+  it('says so when the branch has no manager to email', async () => {
+    // A second retail branch with nobody assigned to it: the console must tell the
+    // operator to hand the code over rather than imply an email went out.
+    const unstaffed = await createBranch(`M${suffix}`, 'RETAIL')
+    const unstaffedTerminal = await createTerminal(unstaffed, 'Unstaffed desk')
+
+    const enrollment = await requestEnrollment(unstaffedTerminal)
+
+    expect(enrollment.emailedTo).toEqual([])
+    expect(enrollment.emailFailed).toEqual([])
+    expect(enrollment.noRecipients).toBe(true)
+  })
+
   it('never puts the device token in the audit log or the response envelope', async () => {
-    const code = await requestEnrollment(retailTerminalId)
+    const { code } = await requestEnrollment(retailTerminalId)
     const response = await redeem(code)
     const body = await readJson<RedeemedBody>(response)
 
@@ -177,7 +218,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
   })
 
   it('refuses a second redemption of the same code', async () => {
-    const code = await requestEnrollment(retailTerminalId)
+    const { code } = await requestEnrollment(retailTerminalId)
     expect((await redeem(code)).status).toBe(201)
 
     const second = await redeem(code)
@@ -209,7 +250,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
   })
 
   it('rejects an inactive terminal', async () => {
-    const code = await requestEnrollment(retailTerminalId)
+    const { code } = await requestEnrollment(retailTerminalId)
     await db.update(terminal).set({ isActive: false }).where(eq(terminal.id, retailTerminalId))
 
     try {
@@ -247,7 +288,7 @@ describe.skipIf(!available)('enrollment redemption', () => {
   })
 
   it('does not resolve a revoked device token', async () => {
-    const code = await requestEnrollment(retailTerminalId)
+    const { code } = await requestEnrollment(retailTerminalId)
     const body = await readJson<RedeemedBody>(await redeem(code))
 
     await db

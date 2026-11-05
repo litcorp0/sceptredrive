@@ -1,8 +1,12 @@
 import { createHmac, randomBytes, randomInt } from 'node:crypto'
 import { db } from '@sceptre/db'
+import { formatAccraDateTime } from '@sceptre/shared'
 import { env } from '../../config/env.ts'
+import { email } from '../../email/index.ts'
 import { AppError, ConflictError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { logger } from '../../logger.ts'
+import * as staffService from '../identity/staff.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { findBranchById } from './branches.repository.ts'
@@ -12,14 +16,27 @@ import {
   insertEnrollmentRow,
   markEnrollmentUsed,
 } from './enrollment.repository.ts'
-import type { CreatedEnrollment, RedeemedDevice } from './enrollment.types.ts'
+import type {
+  CreatedEnrollment,
+  EnrollmentNotification,
+  RedeemedDevice,
+} from './enrollment.types.ts'
 import { findTerminalById, insertDevice } from './terminals.repository.ts'
 import * as terminalsService from './terminals.service.ts'
 
 /** Human-typable alphabet without ambiguous characters (no 0/O, 1/I/L). */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const CODE_LENGTH = 8
-export const ENROLLMENT_TTL_MS = 15 * 60 * 1000
+/**
+ * A day, not a quarter of an hour (P20-D5).
+ *
+ * The code now arrives by email at the branch, not on the screen of the person
+ * creating the terminal: the manager who receives it may be off shift, and a
+ * terminal that has to be enrolled in the next fifteen minutes is a terminal
+ * enrolled in a hurry. It is still single-use, still expires the previous code,
+ * and still keyed-hashed at rest.
+ */
+export const ENROLLMENT_TTL_MS = 24 * 60 * 60 * 1000
 
 export function generateEnrollmentCode(): string {
   let code = ''
@@ -64,7 +81,7 @@ export async function createEnrollment(
   const terminal = await terminalsService.getTerminal(user, terminalId)
   if (!terminal.isActive) throw new ConflictError('Terminal is not active')
 
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await expireOutstandingEnrollments(terminal.id, tx)
 
     const code = generateEnrollmentCode()
@@ -94,6 +111,76 @@ export async function createEnrollment(
 
     return { code, expiresAt }
   })
+
+  // Outside the transaction on purpose: the code exists once the close commits,
+  // and a mail server that is slow or down must not roll back an enrollment row
+  // the auditor already has. The console still shows the code, so a failed send
+  // costs a message, not a terminal.
+  const managers = await staffService.listBranchManagers(terminal.branchId)
+  const notification = await notifyBranchManagers(terminal, created, managers)
+
+  if (notification.failed.length > 0) {
+    logger.warn(
+      { terminalId: terminal.id, failed: notification.failed.length },
+      'enrollment code email failed for some branch managers',
+    )
+  }
+
+  return { ...created, notification }
+}
+
+/**
+ * Emails the code to the branch's managers.
+ *
+ * Never throws and never logs the code: the caller decides what to tell the
+ * operator, and a credential in a log is a credential leaked. A branch with no
+ * manager is reported as `noRecipients` rather than silently doing nothing,
+ * because the person who generated the code needs to know they must hand it over.
+ */
+async function notifyBranchManagers(
+  terminal: { code: string; name: string; branchId: string },
+  created: { code: string; expiresAt: Date },
+  managers: { email: string; name: string }[],
+): Promise<EnrollmentNotification> {
+  const branch = await findBranchById(terminal.branchId)
+  const branchName = branch ? `${branch.name} (${branch.code})` : 'your branch'
+  const expires = formatAccraDateTime(created.expiresAt)
+
+  const notification: EnrollmentNotification = {
+    sent: [],
+    failed: [],
+    noRecipients: managers.length === 0,
+  }
+
+  for (const manager of managers) {
+    try {
+      await email.send({
+        to: manager.email,
+        subject: `Enrollment code for ${terminal.code} at ${branchName}`,
+        text: [
+          `Hello ${manager.name},`,
+          '',
+          `A point-of-sale terminal is waiting to be enrolled at ${branchName}.`,
+          '',
+          `  Terminal: ${terminal.code} — ${terminal.name}`,
+          `  Enrollment code: ${created.code}`,
+          `  Valid until: ${expires} (Accra)`,
+          '',
+          'Open the Sceptre Drive POS app on that terminal and enter the code.',
+          'The code works once and expires the moment the terminal enrolls.',
+          '',
+          'If you did not expect this, tell your administrator: anyone holding this',
+          'code can enroll a device at this branch.',
+        ].join('\n'),
+      })
+      notification.sent.push(manager.email)
+    } catch (error) {
+      logger.error({ err: error, to: manager.email }, 'failed to email an enrollment code')
+      notification.failed.push(manager.email)
+    }
+  }
+
+  return notification
 }
 
 /**

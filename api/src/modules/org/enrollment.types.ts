@@ -13,6 +13,21 @@ export type RedeemEnrollmentBody = z.infer<typeof redeemEnrollmentSchema>
 export interface CreatedEnrollment {
   code: string
   expiresAt: Date
+  /** Who was emailed, and who could not be reached (P20-D5). */
+  notification: EnrollmentNotification
+}
+
+/**
+ * What happened when the code was emailed to the branch's managers.
+ *
+ * `noRecipients` is its own flag rather than "sent is empty": a branch with no
+ * manager means the code has to be handed over by hand, and that is a different
+ * instruction from "the mail server was down".
+ */
+export interface EnrollmentNotification {
+  sent: string[]
+  failed: string[]
+  noRecipients: boolean
 }
 
 /**
