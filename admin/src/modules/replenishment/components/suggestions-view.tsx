@@ -180,8 +180,9 @@ export function SuggestionsView({
 		if (!onlySuggested) {
 			return (
 				<MessageTable colSpan={columns}>
-					No stock levels are set for this branch yet. Set a minimum and maximum on a product's
-					stock page to start replenishing.{" "}
+					This branch carries no stock yet, so there is nothing to replenish. A product appears here
+					once it has a stock level or a minimum on its stock page — and until then it uses the
+					branch or company default threshold.{" "}
 					<Link to="/inventory/stock" className="font-medium text-primary hover:underline">
 						Open stock
 					</Link>
@@ -199,8 +200,9 @@ export function SuggestionsView({
 		if (hasThresholds === false) {
 			return (
 				<MessageTable colSpan={columns}>
-					No stock levels are set for this branch yet. Set a minimum and maximum on a product's
-					stock page to start replenishing.{" "}
+					This branch carries no stock yet, so there is nothing to replenish. A product appears here
+					once it has a stock level or a minimum on its stock page — and until then it uses the
+					branch or company default threshold.{" "}
 					<Link to="/inventory/stock" className="font-medium text-primary hover:underline">
 						Open stock
 					</Link>

@@ -132,6 +132,7 @@ let productOnOrderId = ''
 let productNoHistoryId = ''
 let productMoqId = ''
 let productNoLevelId = ''
+let productStockOnlyId = ''
 let productNeverStockedId = ''
 let productUnassignedId = ''
 let productAssumedLeadId = ''
@@ -427,6 +428,14 @@ beforeAll(async () => {
         costPriceMinor: 700,
       },
       {
+        sku: `RD${tail}`,
+        name: `Default-threshold part ${suffix}`,
+        categoryId,
+        uomId,
+        basePriceMinor: 10_000,
+        costPriceMinor: 700,
+      },
+      {
         sku: `RP${tail}`,
         name: `Performance part A ${suffix}`,
         categoryId,
@@ -454,8 +463,9 @@ beforeAll(async () => {
   productNeverStockedId = ids[5] ?? ''
   productUnassignedId = ids[6] ?? ''
   productAssumedLeadId = ids[7] ?? ''
-  const productPerfAId = ids[8] ?? ''
-  const productPerfBId = ids[9] ?? ''
+  productStockOnlyId = ids[8] ?? ''
+  const productPerfAId = ids[9] ?? ''
+  const productPerfBId = ids[10] ?? ''
   productIds.push(...ids)
 
   const admin = await createTestUser({ role: 'ADMIN', email: `repl-admin-${suffix}@test.local` })
@@ -549,6 +559,9 @@ beforeAll(async () => {
   await insertStockLevel(productMoqId, 10)
   await insertStockLevel(productNoLevelId, 10)
   await insertStockLevel(productUnassignedId, 5)
+  // Stocked at the branch, no threshold row of its own: the configured default
+  // is the only level it has (P20-D3).
+  await insertStockLevel(productStockOnlyId, 0)
 
   const now = Date.now()
   const DAY = 86_400_000
@@ -751,14 +764,32 @@ describe.skipIf(!available)('replenishment suggestions', () => {
     expect(row.basis).toBe('MIN_ORDER')
   })
 
-  it('says there is no level rather than inventing demand', async () => {
+  it('tops a no-maximum row up to its reorder point instead of inventing demand', async () => {
     const body = await suggestions(`branchId=${branchAId}`)
     const row = rowFor(body, productNoLevelId)
 
+    // No stored maximum and no sales, but the branch's own threshold is 10 and
+    // it already holds 10: the row is at its reorder point, so nothing is owed.
     expect(row.maxLevel).toBeNull()
+    expect(row.minLevel).toBe(10)
     expect(row.coverageLevel).toBe(0)
+    expect(row.targetLevel).toBe(10)
     expect(row.suggested).toBe(0)
-    expect(row.basis).toBe('NO_LEVEL')
+    expect(row.basis).toBe('AT_TARGET')
+  })
+
+  it('replenishes a stocked product from the configured default threshold', async () => {
+    const body = await suggestions(`branchId=${branchAId}`)
+    const row = rowFor(body, productStockOnlyId)
+
+    // No threshold row at all: the built-in default is 5, and the product is on
+    // zero, so the branch is told to order five instead of being told to go and
+    // set thresholds it already configured.
+    expect(row.minLevel).toBe(5)
+    expect(row.maxLevel).toBeNull()
+    expect(row.targetLevel).toBe(5)
+    expect(row.suggested).toBe(5)
+    expect(row.basis).toBe('STORED_MIN')
   })
 
   it('includes a part the branch has never stocked', async () => {

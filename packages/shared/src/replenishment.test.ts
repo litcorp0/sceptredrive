@@ -84,12 +84,36 @@ describe('suggestReplenishment', () => {
     expect(result.basis).toBe('MIN_ORDER')
   })
 
-  it('reports no level when there is neither a max nor any sales', () => {
-    const result = suggestReplenishment(inputs({ unitsSold: 0, maxLevel: null }))
+  it('tops up to the reorder point when no maximum is stored', () => {
+    // P20-D3: a branch that set only a threshold (or is relying on the branch or
+    // company default) asked to be topped back up to it. Before this, the row
+    // showed a threshold and proposed nothing, because only `maxLevel` counted.
+    const result = suggestReplenishment(
+      inputs({ unitsSold: 0, onHand: 0, minLevel: 5, maxLevel: null }),
+    )
+
+    expect(result.coverageLevel).toBe(0)
+    expect(result.targetLevel).toBe(5)
+    expect(result.suggested).toBe(5)
+    expect(result.basis).toBe('STORED_MIN')
+  })
+
+  it('still reports no level when the reorder point is zero as well', () => {
+    const result = suggestReplenishment(inputs({ unitsSold: 0, minLevel: 0, maxLevel: null }))
 
     expect(result.targetLevel).toBe(0)
     expect(result.suggested).toBe(0)
     expect(result.basis).toBe('NO_LEVEL')
+  })
+
+  it('lets the reorder point top up when it is above a stored maximum', () => {
+    const result = suggestReplenishment(
+      inputs({ unitsSold: 0, onHand: 0, minLevel: 25, maxLevel: 20 }),
+    )
+
+    expect(result.targetLevel).toBe(25)
+    expect(result.suggested).toBe(25)
+    expect(result.basis).toBe('STORED_MIN')
   })
 
   it('uses the stored maximum when it is larger than coverage', () => {

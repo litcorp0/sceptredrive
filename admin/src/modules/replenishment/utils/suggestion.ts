@@ -4,6 +4,7 @@ import type { ReplenishmentRow } from "../types"
 const BASIS_LABELS: Record<ReplenishmentBasis, string> = {
 	COVERAGE: "Sales-cover target",
 	STORED_MAX: "Stored maximum",
+	STORED_MIN: "Reorder point",
 	NO_HISTORY: "No sales history",
 	NO_LEVEL: "No level set",
 	AT_TARGET: "Already at target",
@@ -27,6 +28,8 @@ export function reasonSentence(row: ReplenishmentRow): string {
 			return `Sales cover: ${formatCount(row.unitsSold)} sold in ${formatCount(row.velocityDays)} days and a ${formatCount(row.leadTimeDays)}-day lead time give a ${formatCount(row.coverageLevel)}-unit target.`
 		case "STORED_MAX":
 			return `Stored maximum: ${formatCount(row.maxLevel ?? 0)} units tops the ${formatCount(row.coverageLevel)}-unit sales cover.`
+		case "STORED_MIN":
+			return `Reorder point: the branch tops this part back up to ${formatCount(row.minLevel)} units (its own level, or the branch or company default).`
 		case "NO_HISTORY":
 			return `No sales in the last ${formatCount(row.velocityDays)} days, so the stored maximum is the only target.`
 		case "NO_LEVEL":

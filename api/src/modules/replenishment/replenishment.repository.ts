@@ -12,13 +12,29 @@
  * convention `inventory.repository.ts` already uses.
  */
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or, sql, sum } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lt,
+  lte,
+  or,
+  type SQL,
+  sql,
+  sum,
+} from 'drizzle-orm'
 import {
   stockLevel,
   stockReceipt,
   stockReceiptLine,
   stockThreshold,
 } from '../inventory/inventory.schema.ts'
+import { effectiveThresholdSql } from '../inventory/stock-threshold.sql.ts'
 import { sale, saleLine } from '../pos/pos.schema.ts'
 import { purchaseOrder, purchaseOrderLine } from '../procurement/procurement.schema.ts'
 import { product } from '../products/products.schema.ts'
@@ -30,12 +46,20 @@ import type {
 } from './replenishment.types.ts'
 
 /**
- * Every product with a min/max row at this branch, plus the facts the suggestion
- * needs.
+ * Every product this branch carries, plus the facts the suggestion needs.
  *
- * `LEFT JOIN stock_level` is what makes a part the branch has never stocked
- * appear (PROC-06): on hand reads 0, and the row exists because the manager set
- * a min/max here — the only honest way to say "we want to stock this".
+ * "Carries" is the same pair the stock screen uses (P20-D3): a min/max row at
+ * this branch, or a stock level here. A part with an explicit row is one the
+ * manager wants even before it is stocked; a part with a level is one the branch
+ * actually holds. Reading only the first is what made a branch that relies on
+ * the configured default see an empty replenishment screen and be told to go
+ * and set thresholds it had already configured.
+ *
+ * `minLevel` is therefore the **effective** threshold — the product's row, else
+ * the branch default, else the company default, else the built-in 5 — through
+ * `effectiveThresholdSql`, the one definition the stock list and the dashboard's
+ * attention counts already read. Two definitions is how a badge and a report
+ * start disagreeing.
  *
  * The preferred supplier is joined rather than queried per product: it is
  * unique per product (partial unique index), so it cannot multiply rows.
@@ -45,7 +69,10 @@ export async function selectReplenishmentRows(
   filters: { supplierId?: string; q?: string },
   executor: DbExecutor = db,
 ): Promise<ReplenishmentFactRow[]> {
-  const conditions = [eq(stockThreshold.branchId, branchId)]
+  const conditions = [
+    // The branch carries this product: it has a level row here, or it stocks it.
+    or(isNotNull(stockThreshold.productId), isNotNull(stockLevel.productId)) as SQL<unknown>,
+  ]
   if (filters.supplierId) conditions.push(eq(supplierProduct.supplierId, filters.supplierId))
   if (filters.q) {
     const pattern = `%${filters.q}%`
@@ -55,7 +82,7 @@ export async function selectReplenishmentRows(
 
   return executor
     .select({
-      productId: stockThreshold.productId,
+      productId: product.id,
       sku: product.sku,
       name: product.name,
       supplierId: supplierProduct.supplierId,
@@ -63,19 +90,21 @@ export async function selectReplenishmentRows(
       leadTimeDays: supplierProduct.leadTimeDays,
       linkLastCostMinor: supplierProduct.lastCostMinor,
       catalogueCostMinor: product.costPriceMinor,
-      minLevel: stockThreshold.threshold,
+      minLevel: effectiveThresholdSql(sql`${branchId}`, sql`${stockThreshold.threshold}`).mapWith(
+        Number,
+      ),
       maxLevel: stockThreshold.maxQuantity,
-      minOrderQuantity: stockThreshold.minOrderQuantity,
+      minOrderQuantity: sql<number>`coalesce(${stockThreshold.minOrderQuantity}, 0)`,
       onHand: stockLevel.quantityOnHand,
     })
-    .from(stockThreshold)
-    .innerJoin(product, eq(product.id, stockThreshold.productId))
+    .from(product)
+    .leftJoin(
+      stockThreshold,
+      and(eq(stockThreshold.productId, product.id), eq(stockThreshold.branchId, branchId)),
+    )
     .leftJoin(
       stockLevel,
-      and(
-        eq(stockLevel.productId, stockThreshold.productId),
-        eq(stockLevel.branchId, stockThreshold.branchId),
-      ),
+      and(eq(stockLevel.productId, product.id), eq(stockLevel.branchId, branchId)),
     )
     .leftJoin(
       supplierProduct,

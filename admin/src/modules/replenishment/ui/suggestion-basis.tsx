@@ -20,9 +20,11 @@ export function SuggestionBasis({
 }) {
 	const coverDays = row.leadTimeDays + safetyDays
 	const targetSource =
-		row.maxLevel !== null && row.maxLevel >= row.coverageLevel
-			? "the stored maximum"
-			: "the sales cover"
+		row.targetLevel === row.coverageLevel && row.coverageLevel > 0
+			? "the sales cover"
+			: row.maxLevel !== null && row.maxLevel === row.targetLevel
+				? "the stored maximum"
+				: "the reorder point"
 
 	return (
 		<div className="grid gap-3 text-sm">
@@ -40,7 +42,7 @@ export function SuggestionBasis({
 			<p>
 				Reorder point {formatCount(row.minLevel)} units · minimum order{" "}
 				{formatCount(row.minOrderQuantity)} units.
-			</p>
+			</p>{" "}
 			<p>
 				On hand {formatCount(row.onHand)} + on order {formatCount(row.onOrder)} = position{" "}
 				{formatCount(row.position)}.
@@ -56,7 +58,6 @@ export function SuggestionBasis({
 			<p className="text-muted-foreground">
 				Basis: {formatBasis(row.basis)}. {reasonSentence(row)}
 			</p>
-
 			{row.leadTimeAssumed ? (
 				<div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
 					<StatusBadge variant="warn">Lead time assumed</StatusBadge>

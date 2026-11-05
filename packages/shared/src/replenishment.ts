@@ -7,12 +7,18 @@
  * end.
  *
  *   coverage  = ceilDiv(unitsSold × (leadTimeDays + safetyDays), 90)
- *   target    = max(maxLevel, coverage)
+ *   target    = max(maxLevel, coverage, minLevel)
  *   position  = onHand + onOrder
  *   suggested = max(clamp(target − position, 0, target), minOrderQuantity)
  *
  * `onOrder` is part of the position because ordering a part that is already on
  * its way is how a branch ends up with twice as much as it wanted.
+ *
+ * `minLevel` is in the target because it is the level that says "reorder": a
+ * branch that has set only a reorder point (or is relying on the branch or
+ * company default) is saying "top me back up to this", and a formula that read
+ * only `maxLevel` left that setting decorative — the screen showed a threshold
+ * and proposed nothing (P20-D3).
  */
 
 /** The trailing window the suggestion is computed over. Fixed, not a setting. */
@@ -43,8 +49,7 @@ export interface ReplenishmentInputs {
   /** `stock_threshold.threshold` — the level that says "reorder". */
   minLevel: number
   /** `stock_threshold.max_quantity`; null when the branch has not set one. */
-  maxLevel: number | null
-  /** `stock_threshold.min_order_quantity` — a supplier's minimum. */
+  maxLevel: number | null /** `stock_threshold.min_order_quantity` — a supplier's minimum. */
   minOrderQuantity: number
   /** `supplier_product.lead_time_days`, already resolved by the caller. */
   leadTimeDays: number
@@ -56,6 +61,8 @@ export interface ReplenishmentInputs {
 export type ReplenishmentBasis =
   | 'COVERAGE'
   | 'STORED_MAX'
+  /** The reorder point set the target: no max, and no sales cover to beat it. */
+  | 'STORED_MIN'
   | 'NO_HISTORY'
   | 'NO_LEVEL'
   | 'AT_TARGET'
@@ -96,7 +103,9 @@ export function suggestReplenishment(input: ReplenishmentInputs): ReplenishmentS
   const coverDays = input.leadTimeDays + input.safetyDays
   const coverageLevel = ceilDiv(input.unitsSold * coverDays, VELOCITY_DAYS)
   const storedMax = input.maxLevel ?? 0
-  const targetLevel = Math.max(storedMax, coverageLevel)
+  // The reorder point is a target too, not just a label: it is the level the
+  // branch has said it wants to be topped back up to (P20-D3).
+  const targetLevel = Math.max(storedMax, coverageLevel, input.minLevel)
   const position = input.onHand + input.onOrder
 
   const gap = Math.min(Math.max(targetLevel - position, 0), targetLevel)
@@ -120,17 +129,21 @@ function basisOf(
   computed: { coverageLevel: number; targetLevel: number; position: number; gap: number },
 ): ReplenishmentBasis {
   const { coverageLevel, targetLevel, position, gap } = computed
+  const storedMax = input.maxLevel ?? 0
 
   // The floor is the most specific reason, so it is named first: without it the
   // suggestion would have been smaller, whatever else is true of the row.
   if (input.minOrderQuantity > gap) return 'MIN_ORDER'
   // "No level set" beats "at target": with a target of zero the row is trivially
   // at target, and saying so tells the manager nothing they can act on.
-  if (input.maxLevel === null && coverageLevel === 0) return 'NO_LEVEL'
+  if (targetLevel === 0) return 'NO_LEVEL'
   if (position >= targetLevel) return 'AT_TARGET'
-  if (input.unitsSold === 0) return 'NO_HISTORY'
-  if (coverageLevel > (input.maxLevel ?? 0)) return 'COVERAGE'
-  return 'STORED_MAX'
+  // A stored maximum with nothing selling is still worth naming plainly.
+  if (input.unitsSold === 0 && storedMax >= input.minLevel) return 'NO_HISTORY'
+  // Which of the three terms is the target, reported so the screen can say it.
+  if (coverageLevel > storedMax && coverageLevel > input.minLevel) return 'COVERAGE'
+  if (storedMax >= input.minLevel) return 'STORED_MAX'
+  return 'STORED_MIN'
 }
 
 /**
