@@ -1,10 +1,9 @@
 import type { FlagKey, Permission } from "@sceptre/shared"
-import { can, FLAG_DEFAULTS, FLAG_KEYS } from "@sceptre/shared"
+import { can } from "@sceptre/shared"
 import { useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { Link, useRouterState } from "@tanstack/react-router"
 import { cn } from "cn"
 import {
-	ArrowLeftRight,
 	BadgeCheck,
 	Building2,
 	ChartLine,
@@ -16,7 +15,6 @@ import {
 	MonitorSmartphone,
 	Package,
 	ReceiptText,
-	Scale,
 	ScrollText,
 	Settings2,
 	ShieldCheck,
@@ -40,9 +38,9 @@ import {
 	useSidebar,
 } from "#/components/ui/sidebar"
 import { useBranch } from "#/lib/branch-context"
+import { useFlagValues } from "#/lib/flags"
 import { toRole } from "#/lib/role"
 import { approvalSummaryOptions } from "#/modules/approvals"
-import { type ResolvedSetting, settingsListOptions } from "#/modules/settings"
 
 /** Route paths the console shell links to. Presentation only — no new routes. */
 type NavPath =
@@ -61,8 +59,6 @@ type NavPath =
 	| "/procurement"
 	| "/inventory"
 	| "/suppliers"
-	| "/suppliers/transfers"
-	| "/suppliers/reconciliation"
 	| "/evat"
 	| "/audit"
 	| "/settings"
@@ -122,21 +118,10 @@ export const NAV_GROUPS: NavGroup[] = [
 				permission: "procurement.read",
 			},
 			{ to: "/inventory", label: "Inventory", icon: Warehouse, permission: "inventory.read" },
+			// Transfers and Reconciliation are tabs of this section, not separate rail
+			// entries (P20-D6): one route path, one highlight, and the two pages are
+			// where a payables reader already looks.
 			{ to: "/suppliers", label: "Suppliers", icon: Truck, permission: "supplier.read" },
-			{
-				to: "/suppliers/transfers",
-				label: "Transfers",
-				icon: ArrowLeftRight,
-				permission: "payable.read",
-				flag: "flag.supplierTransfers",
-			},
-			{
-				to: "/suppliers/reconciliation",
-				label: "Reconciliation",
-				icon: Scale,
-				permission: "payable.read",
-				flag: "flag.supplierTransfers",
-			},
 			{ to: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
 			{ to: "/loyalty", label: "Loyalty", icon: Gift, permission: "loyalty.read" },
 		],
@@ -284,6 +269,21 @@ export function topbarBreadcrumb(pathname: string): { section: string | null; pa
 	return page === section ? { section: null, page } : { section, page }
 }
 
+/**
+ * The one navigation entry a path belongs to: the deepest `to` that is a prefix
+ * of it. `/` matches only itself, so the dashboard does not claim every page.
+ */
+export function deepestNavPath(paths: readonly NavPath[], pathname: string): NavPath | null {
+	let best: NavPath | null = null
+	for (const path of paths) {
+		const matches =
+			path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)
+		if (!matches) continue
+		if (best === null || path.length > best.length) best = path
+	}
+	return best
+}
+
 function visibleGroups(roleValue: string, flags: Record<FlagKey, boolean>): NavGroup[] {
 	const role = toRole(roleValue)
 
@@ -295,16 +295,6 @@ function visibleGroups(roleValue: string, flags: Record<FlagKey, boolean>): NavG
 				(!item.flag || flags[item.flag]),
 		),
 	})).filter((group) => group.items.length > 0)
-}
-
-/** A flag is a typed setting; a key with no row resolves to its registry default (P14-D41). */
-function flagValues(settings: ResolvedSetting[] | undefined): Record<FlagKey, boolean> {
-	const values: Record<FlagKey, boolean> = { ...FLAG_DEFAULTS }
-	for (const key of FLAG_KEYS) {
-		const row = settings?.find((setting) => setting.key === key)
-		if (typeof row?.value === "boolean") values[key] = row.value
-	}
-	return values
 }
 
 /**
@@ -340,11 +330,15 @@ export function AppSidebar({ role }: { role: string }) {
 	const { isMobile, setOpenMobile } = useSidebar()
 	const roleValue = toRole(role)
 	const canReadSettings = roleValue !== null && can(roleValue, "settings.read")
-	const settingsQuery = useQuery({
-		...settingsListOptions(),
-		enabled: canReadSettings,
-	})
-	const groups = visibleGroups(role, flagValues(settingsQuery.data?.settings))
+	const groups = visibleGroups(role, useFlagValues(canReadSettings))
+	const pathname = useRouterState({ select: (state) => state.location.pathname })
+	// Exactly one entry is the current page: the deepest one whose path matches.
+	// Prefix matching alone lit both "Staff" and "Permissions" on /staff/permissions,
+	// and both "Suppliers" and "Transfers" before transfers became a tab (P20-D6).
+	const activePath = deepestNavPath(
+		groups.flatMap((group) => group.items.map((item) => item.to)),
+		pathname,
+	)
 
 	return (
 		<Sidebar collapsible="icon" className="print:hidden">
@@ -401,8 +395,8 @@ export function AppSidebar({ role }: { role: string }) {
 											>
 												<Link
 													to={item.to}
-													activeOptions={{ exact: item.to === "/" }}
-													activeProps={{ "data-active": "true", "aria-current": "page" }}
+													data-active={activePath === item.to ? "true" : undefined}
+													aria-current={activePath === item.to ? "page" : undefined}
 													onClick={() => {
 														if (isMobile) setOpenMobile(false)
 													}}
