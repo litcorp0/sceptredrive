@@ -21,6 +21,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	// every page. `getSiteContent` never throws: an API outage returns the
 	// bundled fallback, so the shell always renders.
 	loader: () => getSiteContent(),
+	// Resolved once per page load, never re-fetched on a client navigation (P20-D8).
+	// Without this, every click re-ran the root loader, and a single failed
+	// revalidation replaced a rendered branch list with the empty bundled copy —
+	// the URL changed, the page was fine, and then the branches disappeared.
+	staleTime: Number.POSITIVE_INFINITY,
 	head: ({ loaderData }) => {
 		const name = loaderData?.site.name ?? "Sceptre Drive"
 		const description =

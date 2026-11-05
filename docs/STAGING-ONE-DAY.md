@@ -402,6 +402,7 @@ the build fails with a module-not-found that sends people hunting for a phantom 
 | `admin` | `VITE_API_URL` | `https://<admin>.vercel.app` — the console's **own** origin | **required** | **build time** — Vite inlines it into the bundle |
 | `admin` | `API_URL` | `https://<api>.onrender.com` | **required** in a deployment | **server-side** — the `/api/*` proxy target and the guards' API origin |
 | `web` | `VITE_SITE_URL` | `https://<web>.vercel.app` | optional | **build time** — canonical links, `robots.txt`, JSON-LD |
+| `web` | `SITE_FETCH_TIMEOUT_MS` | `6000` | optional | server-side — how long the public API read may take before the cache serves the last good answer |
 | `admin` | `VITE_APP_TITLE` | `Sceptre Drive` | optional | build time — page title fallback |
 
 Only these. Neither project touches the database, Paystack, the POS JWT key, or Better Auth
@@ -838,6 +839,8 @@ happened and the outbox is holding it — check the POS sync screen before anyth
 | Homepage renders but empty | `WEB_API_URL` missing, or set as `VITE_API_URL` (server function cannot see a `VITE_` name) | set `WEB_API_URL`, redeploy |
 | Sitemap/robots point at `localhost:3004` | `VITE_SITE_URL` unset | set it, redeploy |
 | Public site renders an empty shell | `WEB_API_URL` missing or set as `VITE_` | set the server-side variable, redeploy |
+| Public site shows the branch list, then loses it on the next click | the root loader re-ran against a cold API and cached the empty fallback — fixed in P20-D8 (root `staleTime`, last-good cache, 6s timeout) | redeploy `web`; if it persists, the API host itself is wrong |
+| Public site has never shown branches on a fresh instance | the API has never answered from that instance (cold Render start longer than `SITE_FETCH_TIMEOUT_MS`) | raise `SITE_FETCH_TIMEOUT_MS`, or keep the Render service warm |
 | POS: "request timed out" on upload | Render cold start | retry; the outbox keeps the sale |
 | POS: cannot reach the API | `config.json` wrong, or a packaged build with a localhost URL | fix the file; never localhost in a packaged build |
 | Paystack: `Invalid key` | `PAYSTACK_MODE` and key prefix disagree | `sk_test_` with `test`, `sk_live_` with `live` in production |
