@@ -13,8 +13,18 @@ import type { Session } from "#/lib/auth-client"
  */
 const apiBaseUrl = process.env.API_URL?.trim().replace(/\/+$/, "") || env.VITE_API_URL
 
-/** A cold API does not answer in milliseconds; a hung one must not stall a navigation. */
-const SESSION_TIMEOUT_MS = 8_000
+/**
+ * How long one attempt may take, and how many attempts a guard makes.
+ *
+ * The API runs on Render, whose free instances spin down after 15 minutes idle and take
+ * about a minute to wake (P20-D16). One 8-second attempt could never fit that, so the guard
+ * gave up on every wake-up. Two attempts, with a short gap, survive the common case where
+ * the first request is what starts the wake and the second lands once it is listening —
+ * and still give up in bounded time instead of holding a navigation open forever.
+ */
+const SESSION_TIMEOUT_MS = 10_000
+const SESSION_ATTEMPTS = 2
+const SESSION_RETRY_DELAY_MS = 750
 
 /**
  * What the API said about the browser's session cookie.
@@ -37,6 +47,38 @@ export class SessionUnavailableError extends Error {
 	}
 }
 
+/** One request to the API's session endpoint. Never throws. */
+async function attemptSessionLookup(cookie: string): Promise<SessionLookup> {
+	try {
+		const response = await fetch(`${apiBaseUrl}/api/auth/get-session?disableCookieCache=true`, {
+			headers: { cookie, accept: "application/json" },
+			signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
+		})
+
+		// A rejected cookie is a real sign-out. Anything else non-2xx is the API talking about
+		// itself (cold start 502, deploy restart, auth rate limit 429), not about the user.
+		if (response.status === 401 || response.status === 403) return { status: "anonymous" }
+		if (!response.ok) return { status: "unavailable" }
+
+		const data = (await response.json()) as Partial<Session> | null
+
+		// A 200 with no usable session is "anonymous"; a 200 whose body is not a session at all
+		// means the API (or a proxy in front of it) answered something we cannot interpret.
+		// Treating that as authenticated read `user` off an empty object and crashed the guard
+		// with "Cannot read properties of undefined (reading 'mustChangePassword')".
+		if (!data) return { status: "anonymous" }
+		if (!data.session || !data.user) return { status: "unavailable" }
+
+		return { status: "authenticated", session: data as Session }
+	} catch {
+		return { status: "unavailable" }
+	}
+}
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /**
  * Reads the current session from the API on the server, forwarding the
  * browser's cookie header. `disableCookieCache` keeps guards honest: role,
@@ -53,29 +95,13 @@ export const getSession = createServerFn({ method: "GET" }).handler(
 		const cookie = getRequestHeader("cookie")
 		if (!cookie) return { status: "anonymous" }
 
-		try {
-			const response = await fetch(`${apiBaseUrl}/api/auth/get-session?disableCookieCache=true`, {
-				headers: { cookie, accept: "application/json" },
-				signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
-			})
-
-			// A rejected cookie is a real sign-out. Anything else non-2xx is the API talking about
-			// itself (cold start 502, deploy restart, auth rate limit 429), not about the user.
-			if (response.status === 401 || response.status === 403) return { status: "anonymous" }
-			if (!response.ok) return { status: "unavailable" }
-
-			const data = (await response.json()) as Partial<Session> | null
-
-			// A 200 with no usable session is "anonymous"; a 200 whose body is not a session at all
-			// means the API (or a proxy in front of it) answered something we cannot interpret.
-			// Treating that as authenticated read `user` off an empty object and crashed the guard
-			// with "Cannot read properties of undefined (reading 'mustChangePassword')".
-			if (!data) return { status: "anonymous" }
-			if (!data.session || !data.user) return { status: "unavailable" }
-
-			return { status: "authenticated", session: data as Session }
-		} catch {
-			return { status: "unavailable" }
+		for (let attempt = 1; attempt <= SESSION_ATTEMPTS; attempt += 1) {
+			const outcome = await attemptSessionLookup(cookie)
+			// Only "the API did not answer" is worth another try; a rejection is final, and a
+			// success is a success.
+			if (outcome.status !== "unavailable") return outcome
+			if (attempt < SESSION_ATTEMPTS) await delay(SESSION_RETRY_DELAY_MS)
 		}
+		return { status: "unavailable" }
 	},
 )

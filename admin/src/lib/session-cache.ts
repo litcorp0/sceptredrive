@@ -30,10 +30,11 @@ const SESSION_TTL_MS = 60_000
 /**
  * How long a *blocking* check may take before the console says it cannot reach the server.
  *
- * The server function already caps its own API call at 8s; this covers the hop to that
- * function (a cold serverless instance), so a navigation can never hang indefinitely.
+ * Must exceed the server function's own budget (two 10s attempts plus a short gap), or this
+ * would abort a retry that was about to succeed. This covers the hop to that function too,
+ * so a navigation can never hang indefinitely.
  */
-const SESSION_CHECK_TIMEOUT_MS = 12_000
+const SESSION_CHECK_TIMEOUT_MS = 25_000
 
 let last: SessionLookup | null = null
 let checkedAt = 0
