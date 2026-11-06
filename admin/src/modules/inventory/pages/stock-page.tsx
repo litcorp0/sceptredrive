@@ -188,7 +188,9 @@ export function StockPage() {
 											<TableCell className="font-medium">{row.productName}</TableCell>
 											<TableCell className="text-muted-foreground">{row.categoryName}</TableCell>
 											<TableCell className="text-right tabular-nums">
-												{row.quantityOnHand}
+												{/* A branch that never carried the product has no level, which is not
+												    the same fact as a product it carries and has run out of. */}
+												{row.neverStocked ? "—" : row.quantityOnHand}
 											</TableCell>
 											<TableCell className="text-right tabular-nums">
 												{formatGhs(row.avgCostMinor)}
@@ -198,19 +200,19 @@ export function StockPage() {
 											</TableCell>
 											<TableCell className="text-right tabular-nums">{row.threshold}</TableCell>
 											<TableCell>
-												{/* Disjoint buckets: empty is out of stock, not "OK" (18-02/D3). */}
-												{row.quantityOnHand <= 0 ? (
+												{/* Disjoint buckets: empty is out of stock, not "OK" (18-02/D3).
+												    A product this branch never carried is neither: it has no level
+												    here at all, so it reads as "not stocked" rather than as a
+												    shortage a manager should chase. */}
+												{row.neverStocked ? (
+													<StatusBadge variant="muted">Not stocked here</StatusBadge>
+												) : row.quantityOnHand <= 0 ? (
 													<StatusBadge tone="red">Out of stock</StatusBadge>
 												) : row.isLow ? (
 													<StatusBadge tone="amber">Low</StatusBadge>
 												) : (
 													<StatusBadge tone="green">OK</StatusBadge>
 												)}
-												{row.neverStocked ? (
-													<span className="ml-1 text-[11px] text-muted-foreground">
-														never stocked
-													</span>
-												) : null}
 											</TableCell>
 											<TableCell>
 												<Link
