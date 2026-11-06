@@ -85,7 +85,7 @@ export function SellScreen({
     setCartTenders,
   } = useCart()
   const db = usePosDatabase()
-  const availability = useBranchAvailability(identity.branchId)
+  const { available: availability } = useBranchAvailability(identity.branchId)
   const customerContext = useCustomerContext(state.customer, identity.branchId)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)

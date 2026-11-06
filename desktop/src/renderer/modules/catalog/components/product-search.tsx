@@ -73,8 +73,9 @@ export function ProductSearch({
   }, [prices.data])
 
   // The same availability the cart caps `+` with (P20-D9): one query pair, so a
-  // badge and a quantity control cannot disagree.
-  const available = useBranchAvailability(branchId)
+  // badge and a quantity control cannot disagree. `carried` answers a different
+  // question — does this branch stock the product at all (P20-D13).
+  const { available, carried } = useBranchAvailability(branchId)
 
   function addRow(row: CatalogProductRow) {
     const product = toSellableProduct(row, priceOverrides.get(row.id) ?? null)
@@ -171,6 +172,7 @@ export function ProductSearch({
               rows={products.data ?? []}
               priceOverrides={priceOverrides}
               available={available}
+              carried={carried}
               threshold={threshold}
               policy={policy}
               onAdd={onAdd}

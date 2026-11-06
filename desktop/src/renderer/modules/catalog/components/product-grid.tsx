@@ -108,6 +108,7 @@ function ProductCard({
   row,
   overrideMinor,
   available,
+  carried,
   threshold,
   policy,
   onAdd,
@@ -116,6 +117,8 @@ function ProductCard({
   row: CatalogProductRow
   overrideMinor: number | null
   available: number
+  /** False when this branch has never stocked the product (P20-D13). */
+  carried: boolean
   threshold: number
   policy: OutOfStockPolicy
   onAdd: (product: SellableProduct) => void
@@ -124,7 +127,13 @@ function ProductCard({
 }) {
   const product = toSellableProduct(row, overrideMinor)
   const price = displayPriceMinor(row, overrideMinor)
-  const badge = stockBadge(available, threshold)
+  // "Out of stock" and "Not stocked here" are different facts and must not read the
+  // same: one is a product this branch sells and has run out of, the other is one it
+  // has never carried. The card still sells it (a manager authorises, as at zero stock)
+  // because a till that refuses is how a sale is lost.
+  const badge = carried
+    ? stockBadge(available, threshold)
+    : { label: 'Not stocked here', tone: 'out' as const }
   const dot = TONE_DOT[badge.tone]
   // Blocked: dimmed, announced as disabled, and the click asks for a manager
   // instead of adding. `ALLOW` is the pre-18 behaviour (badge only).
@@ -188,6 +197,7 @@ export function ProductGrid({
   rows,
   priceOverrides,
   available,
+  carried,
   threshold,
   policy,
   onAdd,
@@ -197,6 +207,8 @@ export function ProductGrid({
   rows: readonly CatalogProductRow[]
   priceOverrides: Map<string, number>
   available: Map<string, number>
+  /** Products this branch carries at all; absent means never stocked here. */
+  carried: Set<string>
   threshold: number
   policy: OutOfStockPolicy
   onAdd: (product: SellableProduct) => void
@@ -256,6 +268,7 @@ export function ProductGrid({
                   row={card}
                   overrideMinor={priceOverrides.get(card.id) ?? null}
                   available={available.get(card.id) ?? 0}
+                  carried={carried.has(card.id)}
                   threshold={threshold}
                   policy={policy}
                   onAdd={onAdd}

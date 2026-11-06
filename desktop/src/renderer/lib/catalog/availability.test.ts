@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAvailability } from './availability'
+import { buildAvailability, buildCarried } from './availability'
 
 /**
  * One availability number for the catalogue badge and the cart's `+` (P20-D9).
@@ -33,5 +33,20 @@ describe('buildAvailability', () => {
       [{ product_id: 'a', quantity_delta: -3 }],
     )
     expect(available.get('a')).toBe(-2)
+  })
+})
+
+describe('buildCarried', () => {
+  it('treats a stock level as "this branch carries it", even at zero', () => {
+    const carried = buildCarried([
+      { product_id: 'a', quantity_on_hand: 11 },
+      { product_id: 'b', quantity_on_hand: 0 },
+    ])
+
+    expect(carried.has('a')).toBe(true)
+    // Zero on hand is "out of stock", not "never stocked here".
+    expect(carried.has('b')).toBe(true)
+    // No row at all is the branch never carrying it.
+    expect(carried.has('c')).toBe(false)
   })
 })
