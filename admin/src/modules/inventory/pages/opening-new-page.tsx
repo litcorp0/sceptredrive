@@ -1,4 +1,4 @@
-import { parseCsv } from "@sceptre/shared"
+import { formatBranchLabel, parseCsv } from "@sceptre/shared"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { UploadIcon } from "lucide-react"
@@ -10,6 +10,13 @@ import { Button } from "#/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
@@ -123,7 +130,7 @@ function parseFileText(text: string): OpeningLineInput[] {
  */
 export function OpeningNewPage() {
 	const { session } = authenticatedRoute.useRouteContext()
-	const { activeBranchId, activeBranch } = useBranch()
+	const { activeBranchId, activeBranch, branches, setActiveBranchId } = useBranch()
 	const navigate = useNavigate()
 	const queryClient = useQueryClient()
 
@@ -237,9 +244,35 @@ export function OpeningNewPage() {
 			/>
 
 			{!branchId ? (
-				<StatusNote tone="warn" className="mb-4">
-					Choose a branch in the branch switcher. An opening document belongs to one branch.
-				</StatusNote>
+				// An opening document belongs to one branch, so there is nothing to fill in yet
+				// (P20-D19). The picker here sets the shell's active branch too, so the rest of
+				// the console agrees with what is about to be posted.
+				<Card>
+					<CardHeader>
+						<CardTitle>Choose a branch to begin</CardTitle>
+						<CardDescription>
+							An opening count belongs to one branch. Pick it here — the rest of the console
+							switches with you — and the count file appears.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="grid max-w-sm gap-1.5">
+						<Label htmlFor="opening-branch">Branch</Label>
+						<Select value={undefined} onValueChange={(value) => setActiveBranchId(value)}>
+							<SelectTrigger id="opening-branch">
+								<SelectValue placeholder="Select a branch" />
+							</SelectTrigger>
+							<SelectContent>
+								{branches
+									.filter((branch) => branch.isActive)
+									.map((branch) => (
+										<SelectItem key={branch.id} value={branch.id}>
+											{formatBranchLabel(branch)}
+										</SelectItem>
+									))}
+							</SelectContent>
+						</Select>
+					</CardContent>
+				</Card>
 			) : (
 				<StatusNote tone="info" className="mb-4">
 					Posting at <strong>{activeBranch?.name ?? "the selected branch"}</strong>. The count is
@@ -253,123 +286,133 @@ export function OpeningNewPage() {
 				</StatusNote>
 			) : null}
 
-			<form onSubmit={handleSubmit} className="grid gap-4">
-				<Card>
-					<CardHeader>
-						<CardTitle>1. The count file</CardTitle>
-						<CardDescription>
-							CSV columns: <code>name, category, unit, price, cost, quantity</code>. Optional:
-							<code> sku, barcode, brand, taxCategory</code>. Use the physical count, not the old
-							system's number. One row per product, and no product twice.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="grid gap-4">
-						<div className="grid gap-1.5">
-							<Label htmlFor="opening-file">Upload CSV</Label>
-							<Input
-								id="opening-file"
-								type="file"
-								accept=".csv,text/csv"
-								onChange={(event) => void handleFile(event)}
-							/>
-						</div>
-						<div className="grid gap-1.5">
-							<Label htmlFor="opening-paste">…or paste the rows</Label>
-							<Textarea
-								id="opening-paste"
-								rows={5}
-								value={pasteValue}
-								placeholder={
-									"name,category,unit,price,cost,quantity\nBrake pad,brakes,piece,120.00,80.00,12"
-								}
-								onChange={(event) => setPasteValue(event.target.value)}
-							/>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="w-fit"
-								onClick={() => acceptText(pasteValue)}
-							>
-								Use pasted rows
-							</Button>
-						</div>
-						<div className="grid gap-3 sm:grid-cols-2">
-							<div className="grid gap-1.5">
-								<Label htmlFor="opening-counted-at">Count date</Label>
-								<Input
-									id="opening-counted-at"
-									type="date"
-									value={countedAt}
-									onChange={(event) => setCountedAt(event.target.value)}
-								/>
-							</div>
-							<div className="grid gap-1.5">
-								<Label htmlFor="opening-note">Note (optional)</Label>
-								<Input
-									id="opening-note"
-									value={note}
-									maxLength={300}
-									placeholder="e.g. Physical count before go-live"
-									onChange={(event) => setNote(event.target.value)}
-								/>
-							</div>
-						</div>
-						<div className="flex flex-wrap items-center gap-3">
-							<Button type="submit" disabled={previewMutation.isPending || rows.length === 0}>
-								<UploadIcon className="size-4" aria-hidden="true" />
-								{previewMutation.isPending ? "Checking…" : `Preview ${rows.length} rows`}
-							</Button>
-							<p className="text-xs text-muted-foreground">
-								{rows.length > 0
-									? `${rows.length} rows loaded. The preview writes nothing.`
-									: "No rows loaded yet."}
-							</p>
-						</div>
-					</CardContent>
-				</Card>
-
-				{preview ? (
+			{branchId ? (
+				<form onSubmit={handleSubmit} className="grid gap-4">
 					<Card>
 						<CardHeader>
-							<CardTitle>2. Review</CardTitle>
+							<CardTitle>1. The count file</CardTitle>
 							<CardDescription>
-								{preview.lineCount} lines · {preview.totalUnits} units ·{" "}
-								{formatGhs(preview.countedValueMinor)} counted value · {preview.newProductCount} new
-								product(s)
-								{preview.uncostedLineCount > 0
-									? ` · ${preview.uncostedLineCount} uncosted line(s)`
-									: ""}
+								CSV columns: <code>name, category, unit, price, cost, quantity</code>. Optional:
+								<code> sku, barcode, brand, taxCategory</code>. Use the physical count, not the old
+								system's number. One row per product, and no product twice.
+							</CardDescription>
+							<CardDescription>
+								A nested category is written as a path with <code>Parent &gt; Child</code> — for
+								example <code>Lubricants &gt; Engine Oil</code>. The category must already exist
+								under Catalog → Categories; the file does not create it. The preview shows the full
+								path it matched, so a wrong branch is visible before you save.
 							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid gap-3">
-							{preview.canPost ? (
-								<StatusNote tone="ok">
-									Every row is ready. Saving creates a draft; the admin can post it.
-								</StatusNote>
-							) : (
-								<StatusNote tone="danger">
-									Fix the rows marked below. Nothing can be saved until every row is valid.
-								</StatusNote>
-							)}
-							<OpeningPreviewTable preview={preview} />
+						<CardContent className="grid gap-4">
+							<div className="grid gap-1.5">
+								<Label htmlFor="opening-file">Upload CSV</Label>
+								<Input
+									id="opening-file"
+									type="file"
+									accept=".csv,text/csv"
+									onChange={(event) => void handleFile(event)}
+								/>
+							</div>
+							<div className="grid gap-1.5">
+								<Label htmlFor="opening-paste">…or paste the rows</Label>
+								<Textarea
+									id="opening-paste"
+									rows={5}
+									value={pasteValue}
+									placeholder={
+										"name,category,unit,price,cost,quantity\nBrake pad,Brakes > Pads,piece,120.00,80.00,12"
+									}
+									onChange={(event) => setPasteValue(event.target.value)}
+								/>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="w-fit"
+									onClick={() => acceptText(pasteValue)}
+								>
+									Use pasted rows
+								</Button>
+							</div>
+							<div className="grid gap-3 sm:grid-cols-2">
+								<div className="grid gap-1.5">
+									<Label htmlFor="opening-counted-at">Count date</Label>
+									<Input
+										id="opening-counted-at"
+										type="date"
+										value={countedAt}
+										onChange={(event) => setCountedAt(event.target.value)}
+									/>
+								</div>
+								<div className="grid gap-1.5">
+									<Label htmlFor="opening-note">Note (optional)</Label>
+									<Input
+										id="opening-note"
+										value={note}
+										maxLength={300}
+										placeholder="e.g. Physical count before go-live"
+										onChange={(event) => setNote(event.target.value)}
+									/>
+								</div>
+							</div>
+							<div className="flex flex-wrap items-center gap-3">
+								<Button type="submit" disabled={previewMutation.isPending || rows.length === 0}>
+									<UploadIcon className="size-4" aria-hidden="true" />
+									{previewMutation.isPending ? "Checking…" : `Preview ${rows.length} rows`}
+								</Button>
+								<p className="text-xs text-muted-foreground">
+									{rows.length > 0
+										? `${rows.length} rows loaded. The preview writes nothing.`
+										: "No rows loaded yet."}
+								</p>
+							</div>
 						</CardContent>
 					</Card>
-				) : null}
 
-				<div className="flex flex-wrap items-center gap-3">
-					<Button
-						type="button"
-						disabled={!preview?.canPost || createMutation.isPending || !branchId || !idempotencyKey}
-						onClick={() => createMutation.mutate()}
-					>
-						{createMutation.isPending ? "Saving…" : "Save draft"}
-					</Button>
-					<p className="text-sm text-muted-foreground">
-						The manager prepares; an admin posts. Nothing reaches the ledger until then.
-					</p>
-				</div>
-			</form>
+					{preview ? (
+						<Card>
+							<CardHeader>
+								<CardTitle>2. Review</CardTitle>
+								<CardDescription>
+									{preview.lineCount} lines · {preview.totalUnits} units ·{" "}
+									{formatGhs(preview.countedValueMinor)} counted value · {preview.newProductCount}{" "}
+									new product(s)
+									{preview.uncostedLineCount > 0
+										? ` · ${preview.uncostedLineCount} uncosted line(s)`
+										: ""}
+								</CardDescription>
+							</CardHeader>
+							<CardContent className="grid gap-3">
+								{preview.canPost ? (
+									<StatusNote tone="ok">
+										Every row is ready. Saving creates a draft; the admin can post it.
+									</StatusNote>
+								) : (
+									<StatusNote tone="danger">
+										Fix the rows marked below. Nothing can be saved until every row is valid.
+									</StatusNote>
+								)}
+								<OpeningPreviewTable preview={preview} />
+							</CardContent>
+						</Card>
+					) : null}
+
+					<div className="flex flex-wrap items-center gap-3">
+						<Button
+							type="button"
+							disabled={
+								!preview?.canPost || createMutation.isPending || !branchId || !idempotencyKey
+							}
+							onClick={() => createMutation.mutate()}
+						>
+							{createMutation.isPending ? "Saving…" : "Save draft"}
+						</Button>
+						<p className="text-sm text-muted-foreground">
+							The manager prepares; an admin posts. Nothing reaches the ledger until then.
+						</p>
+					</div>
+				</form>
+			) : null}
 		</section>
 	)
 }

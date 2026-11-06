@@ -108,6 +108,25 @@ function categoryPath(
   return `${categoryPath(parent, byId, seen)} / ${normalize(row.name)}`
 }
 
+/**
+ * The same path as an operator reads it: original names, `Lubricants / Engine Oil`.
+ *
+ * The preview shows this instead of the leaf name, so a file that says
+ * `Lubricants > Engine Oil` visibly resolved to the right branch of the tree rather than
+ * to some other "Engine Oil" elsewhere.
+ */
+export function displayCategoryPath(
+  row: CategoryRow,
+  byId: Map<string, CategoryRow>,
+  seen: Set<string> = new Set(),
+): string {
+  if (!row.parentId || seen.has(row.id)) return row.name
+  const parent = byId.get(row.parentId)
+  if (!parent) return row.name
+  seen.add(row.id)
+  return `${displayCategoryPath(parent, byId, seen)} / ${row.name}`
+}
+
 async function loadCatalogIndex(): Promise<CatalogIndex> {
   const [categories, brands, units] = await Promise.all([
     listCategoryRows({ includeArchived: true }),
@@ -152,9 +171,18 @@ function oneId(ids: string[] | undefined): string | null {
   return ids[0] ?? null
 }
 
+/**
+ * A category cell, flat or as a path.
+ *
+ * `Lubricants > Engine Oil` and `Lubricants / Engine Oil` both work: `>` is the convention
+ * every spreadsheet importer uses (WooCommerce documents it, Import WP defaults to it), and
+ * `/` is what this column accepted first, so neither existing files nor the habit break.
+ * Matching is on the **whole path**, so a child name that appears under two parents resolves
+ * only when the parent is given.
+ */
 function resolveCategory(index: CatalogIndex, raw: string): CategoryRow | null {
   const parts = raw
-    .split('/')
+    .split(/[/>]/)
     .map((part) => normalize(part))
     .filter(Boolean)
   const path = parts.join(' / ')
@@ -314,7 +342,9 @@ async function resolveRows(
         lineNo,
         name,
         categoryId: product.categoryId,
-        categoryLabel: productCategory?.name ?? '—',
+        categoryLabel: productCategory
+          ? displayCategoryPath(productCategory, index.categoryById)
+          : '—',
         uomId: product.uomId,
         unitLabel: productUnit?.code ?? '—',
         brandId: product.brandId,
@@ -333,7 +363,12 @@ async function resolveRows(
     }
 
     if (!category) {
-      errors.push(rowErrorMessage(lineNo, `unknown category "${raw.category}"`))
+      errors.push(
+        rowErrorMessage(
+          lineNo,
+          `unknown category "${raw.category.trim()}" — create it first under Catalog → Categories, using "Parent > Child" for a nested one`,
+        ),
+      )
     } else if (!category.isActive) {
       errors.push(rowErrorMessage(lineNo, `category "${raw.category}" is archived`))
     }
@@ -358,7 +393,7 @@ async function resolveRows(
       lineNo,
       name,
       categoryId: category?.id ?? null,
-      categoryLabel: category?.name ?? raw.category,
+      categoryLabel: category ? displayCategoryPath(category, index.categoryById) : raw.category,
       uomId: unit?.id ?? null,
       unitLabel: unit?.code ?? raw.unit,
       brandId: brand?.id ?? null,

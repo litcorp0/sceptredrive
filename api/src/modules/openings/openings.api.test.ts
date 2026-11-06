@@ -94,6 +94,7 @@ describe.skipIf(!available)('opening stock API', () => {
   let branchAId = ''
   let branchBId = ''
   let categoryId = ''
+  let childCategoryId = ''
   let uomId = ''
   let stockedProductId = ''
   let emptyProductId = ''
@@ -152,6 +153,13 @@ describe.skipIf(!available)('opening stock API', () => {
       .values({ name: `Opening Cat ${suffix}` })
       .returning({ id: category.id })
     categoryId = categories[0]?.id ?? ''
+
+    // A child, so a nested path has something real to resolve to (P20-D20).
+    const children = await db
+      .insert(category)
+      .values({ name: `Opening Child ${suffix}`, parentId: categoryId })
+      .returning({ id: category.id })
+    childCategoryId = children[0]?.id ?? ''
 
     stockedProductName = `Stocked Part ${suffix}`
     emptyProductName = `Empty Part ${suffix}`
@@ -228,6 +236,7 @@ describe.skipIf(!available)('opening stock API', () => {
     if (createdProductIds.length > 0) {
       await db.delete(product).where(inArray(product.id, createdProductIds))
     }
+    if (childCategoryId) await db.delete(category).where(eq(category.id, childCategoryId))
     if (categoryId) await db.delete(category).where(eq(category.id, categoryId))
     if (uomId) await db.delete(uom).where(eq(uom.id, uomId))
     for (const userId of createdUserIds) await deleteTestUser(userId)
@@ -286,6 +295,51 @@ describe.skipIf(!available)('opening stock API', () => {
       .from(stockOpening)
       .where(eq(stockOpening.branchId, branchAId))
     expect(rows).toHaveLength(0)
+  })
+
+  it('resolves a nested category written as a path (P20-D20)', async () => {
+    const post = async (categoryCell: string) => {
+      const response = await app.request('/api/openings/preview', {
+        method: 'POST',
+        headers: authedHeaders(managerCookie),
+        body: JSON.stringify({
+          branchId: branchAId,
+          rows: [cleanRow({ category: categoryCell, name: `Path ${suffix} ${categoryCell}` })],
+        }),
+      })
+      expect(response.status).toBe(200)
+      return readJson<{
+        rows: { category: string; categoryId: string | null; errors: string[] }[]
+      }>(response)
+    }
+
+    // `>` is the convention; `/` was the first syntax and still works.
+    for (const cell of [
+      `Opening Cat ${suffix} > Opening Child ${suffix}`,
+      `Opening Cat ${suffix} / Opening Child ${suffix}`,
+    ]) {
+      const body = await post(cell)
+      const row = body.rows[0]
+      expect(row?.errors).toEqual([])
+      expect(row?.categoryId).toBe(childCategoryId)
+      // The preview shows the whole path, so the nesting is visible before saving.
+      expect(row?.category).toBe(`Opening Cat ${suffix} / Opening Child ${suffix}`)
+    }
+  })
+
+  it('names the path when a nested category does not exist', async () => {
+    const response = await app.request('/api/openings/preview', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        rows: [cleanRow({ category: `Opening Cat ${suffix} > Missing ${suffix}` })],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<{ rows: { errors: string[] }[] }>(response)
+    expect(body.rows[0]?.errors.join(' ')).toContain('Catalog → Categories')
   })
 
   it('creates a draft, posts it once, and seeds the branch average', async () => {
