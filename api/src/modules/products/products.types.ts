@@ -147,6 +147,19 @@ export interface ProductListRow {
   basePriceMinor: number
   effectivePriceMinor: number | null
   barcodeCount: number
+  /**
+   * The branches that carry this product, with their on-hand (P20-D17).
+   *
+   * A branch "carries" a product when it has a stock level there, which is the same fact
+   * the stock list and the till use. An administrator sees every branch; a manager sees
+   * only their own, because another branch's shelf is not their business.
+   */
+  stockedAt: {
+    branchId: string
+    branchCode: string
+    branchName: string
+    quantityOnHand: number
+  }[]
   updatedAt: Date
 }
 

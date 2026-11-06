@@ -806,6 +806,19 @@ export async function listProducts(
 
   const [rows, total] = await Promise.all([listProductRows(filters), countProductRows(filters)])
 
+  // One extra read for the whole page, not one per row. Scoped callers only hear about
+  // their own branch's shelves.
+  const stocked = await inventoryService.listStockedBranches(
+    rows.map((row) => row.id),
+    roleOf(user) === 'ADMIN' ? null : branchScope(user),
+  )
+  const stockedByProduct = new Map<string, typeof stocked>()
+  for (const entry of stocked) {
+    const list = stockedByProduct.get(entry.productId)
+    if (list) list.push(entry)
+    else stockedByProduct.set(entry.productId, [entry])
+  }
+
   const products = rows.map((row) => ({
     id: row.id,
     sku: row.sku,
@@ -823,6 +836,12 @@ export async function listProducts(
     effectivePriceMinor:
       branchId === null ? null : resolveEffectivePrice(row.basePriceMinor, row.overrideMinor),
     barcodeCount: row.barcodeCount,
+    stockedAt: (stockedByProduct.get(row.id) ?? []).map((entry) => ({
+      branchId: entry.branchId,
+      branchCode: entry.branchCode,
+      branchName: entry.branchName,
+      quantityOnHand: entry.quantityOnHand,
+    })),
     updatedAt: row.updatedAt,
   }))
 

@@ -37,6 +37,7 @@ import { PendingProductSubmissions } from "#/modules/procurement"
 import { brandListOptions, categoryListOptions } from "../api/catalog"
 import { catalogKeys } from "../api/keys"
 import { archiveProduct, productListOptions, reactivateProduct } from "../api/products"
+import { StockedBranches } from "../components/stocked-branches"
 import type { Product } from "../types"
 
 const authenticatedRoute = getRouteApi("/_authenticated")
@@ -82,7 +83,7 @@ export function ProductsPage() {
 	const products = productsQuery.data?.products ?? []
 	const total = productsQuery.data?.total ?? 0
 	const showEffectivePrice = activeBranchId !== null
-	const columnCount = showEffectivePrice ? 9 : 8
+	const columnCount = showEffectivePrice ? 10 : 9
 
 	const toggleMutation = useMutation({
 		mutationFn: (product: Product) =>
@@ -215,6 +216,7 @@ export function ProductsPage() {
 							<TableHead className="w-40">Category</TableHead>
 							<TableHead className="w-28">Brand</TableHead>
 							<TableHead className="w-16">Unit</TableHead>
+							<TableHead className="w-44">Branches</TableHead>
 							<TableHead className="w-28 text-right">Base price</TableHead>
 							{showEffectivePrice ? (
 								<TableHead className="w-28 text-right">Effective</TableHead>
@@ -260,6 +262,9 @@ export function ProductsPage() {
 									</TableCell>
 									<TableCell>
 										<StatusBadge tone="zinc">{product.uomCode}</StatusBadge>
+									</TableCell>
+									<TableCell className="text-xs text-muted-foreground">
+										<StockedBranches branches={product.stockedAt} />
 									</TableCell>
 									<TableCell className="text-right tabular-nums">
 										{formatGhs(product.basePriceMinor)}

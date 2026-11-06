@@ -45,6 +45,7 @@ export {
 	suggestProductSku,
 	updateProduct,
 } from "./api/products"
+export { StockedBranches } from "./components/stocked-branches"
 export { BrandsPage } from "./pages/brands-page"
 export { CatalogLayout } from "./pages/catalog-layout"
 export { CategoriesPage } from "./pages/categories-page"

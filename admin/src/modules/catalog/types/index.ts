@@ -119,6 +119,13 @@ export interface Product {
 	basePriceMinor: number
 	effectivePriceMinor: number | null
 	barcodeCount: number
+	/** Branches that carry this product, with their on-hand (P20-D17). */
+	stockedAt: {
+		branchId: string
+		branchCode: string
+		branchName: string
+		quantityOnHand: number
+	}[]
 	updatedAt: string
 }
 

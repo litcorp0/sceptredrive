@@ -434,6 +434,26 @@ describe.skipIf(!available)('products API', () => {
       expect(updated.product.costPriceMinor).toBe(8_000)
     })
 
+    it('names the branches that carry the product (P20-D17)', async () => {
+      const response = await createProductViaApi(productPayload())
+      expect(response.status).toBe(201)
+      const body = await readJson<{ product: ProductRecord }>(response)
+
+      // Nobody has received it yet, so it is carried nowhere — not "carried at zero".
+      const fresh = await app.request(`/api/products/${body.product.id}`, {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(fresh.status).toBe(200)
+
+      const list = await app.request(`/api/products?q=${encodeURIComponent(body.product.sku)}`, {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(list.status).toBe(200)
+      const listBody = await readJson<{ products: { id: string; stockedAt: unknown[] }[] }>(list)
+      const row = listBody.products.find((product) => product.id === body.product.id)
+      expect(row?.stockedAt).toEqual([])
+    })
+
     it('rejects a duplicate SKU with 409', async () => {
       const sku = `DUP-${suffix}-01`
       await createProductViaApi(productPayload({ sku }))
