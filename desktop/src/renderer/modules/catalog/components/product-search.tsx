@@ -3,7 +3,8 @@ import { type RefObject, useMemo, useState } from 'react'
 import { ManagerOverrideDialog } from '@/components/common'
 import { Button } from '@/components/ui/button'
 import type { SellableProduct } from '@/lib/cart/types'
-import { availableQuantity, indexByProduct, toSellableProduct } from '@/lib/catalog/pricing'
+import { useBranchAvailability } from '@/lib/catalog/availability'
+import { toSellableProduct } from '@/lib/catalog/pricing'
 import {
   BROWSE_LIMIT,
   buildProductSearchQuery,
@@ -30,16 +31,6 @@ const SEARCH_DEBOUNCE_MS = 150
 interface ProductPriceRow {
   product_id: string
   price_minor: number
-}
-
-interface StockRow {
-  product_id: string
-  quantity_on_hand: number
-}
-
-interface DeltaRow {
-  product_id: string
-  quantity_delta: number
 }
 
 export function ProductSearch({
@@ -75,39 +66,15 @@ export function ProductSearch({
     'SELECT product_id, price_minor FROM product_price WHERE branch_id = ?',
     [branchId],
   )
-  const stock = useQuery<StockRow>(
-    'SELECT product_id, quantity_on_hand FROM stock_level WHERE branch_id = ?',
-    [branchId],
-  )
-  const deltas = useQuery<DeltaRow>(
-    `SELECT product_id, SUM(quantity_delta) AS quantity_delta
-       FROM local_stock_delta
-      WHERE acked_at IS NULL
-      GROUP BY product_id`,
-  )
-
   const priceOverrides = useMemo(() => {
     const map = new Map<string, number>()
     for (const row of prices.data ?? []) map.set(row.product_id, row.price_minor)
     return map
   }, [prices.data])
 
-  const available = useMemo(() => {
-    const stockIndex = indexByProduct(stock.data ?? [])
-    const deltaIndex = indexByProduct(deltas.data ?? [])
-    const map = new Map<string, number>()
-
-    for (const row of products.data ?? []) {
-      map.set(
-        row.id,
-        availableQuantity(
-          stockIndex.get(row.id)?.quantity_on_hand ?? 0,
-          deltaIndex.get(row.id)?.quantity_delta ?? 0,
-        ),
-      )
-    }
-    return map
-  }, [products.data, stock.data, deltas.data])
+  // The same availability the cart caps `+` with (P20-D9): one query pair, so a
+  // badge and a quantity control cannot disagree.
+  const available = useBranchAvailability(branchId)
 
   function addRow(row: CatalogProductRow) {
     const product = toSellableProduct(row, priceOverrides.get(row.id) ?? null)

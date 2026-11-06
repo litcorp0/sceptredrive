@@ -7,9 +7,12 @@ import type { CatalogProductRow } from './search'
  * Catalogue → cart pricing (Plan 06 Task 2).
  *
  * The price a cashier sees is the branch price when one is set, otherwise the
- * base price — the same rule the API uses (`resolveEffectivePrice`). Stock is
- * presented, never enforced: an oversold line still sells and the server
- * records the conflict (D16).
+ * base price — the same rule the API uses (`resolveEffectivePrice`).
+ *
+ * Stock is still not a hard sale limit: an oversold line sells and the server
+ * records the conflict (D16). What P20-D9 added is a control limit — the `+`
+ * button stops at availability so a cashier is not walked past the shelf one
+ * click at a time, while a quantity typed by hand still oversells and is recorded.
  */
 
 const TAX_CATEGORIES: readonly TaxCategory[] = ['STANDARD', 'ZERO_RATED', 'EXEMPT']
@@ -65,6 +68,32 @@ export interface StockBadge {
  */
 export function outOfStockBlocked(policy: OutOfStockPolicy, available: number): boolean {
   return policy !== 'ALLOW' && available <= 0
+}
+
+/**
+ * Whether the `+` control may raise this line (P20-D9).
+ *
+ * The stock rule overall is unchanged — the till still sells, and an oversold line
+ * still reaches the server as a `STOCK_OVERSELL` conflict rather than being lost.
+ * What this stops is the *button* walking a cashier past what the shelf holds, one
+ * click at a time, without them noticing: at 11 of 11, `+` is done.
+ *
+ * It only ever refuses to go **up**. A line already above availability — a recalled
+ * hold, or stock that synced downwards while the cart was open — keeps its
+ * quantity; nothing on this till reduces a line the cashier already set. And a
+ * typed quantity is still the cashier's decision, so a genuine 12th unit can be
+ * keyed in and will be recorded as the oversell it is.
+ *
+ * `null`/`undefined` means "not known here" (a product with no stock row in the
+ * map), which allows the increase rather than inventing a limit.
+ */
+export function canIncreaseQuantity(
+  quantity: number,
+  available: number | null | undefined,
+): boolean {
+  if (available === null || available === undefined) return true
+  if (!Number.isSafeInteger(available)) return true
+  return quantity < available
 }
 
 export function stockBadge(available: number, threshold = 5): StockBadge {

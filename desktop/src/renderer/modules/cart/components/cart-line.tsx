@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { CartLine as CartLineModel } from '@/lib/cart/types'
+import { canIncreaseQuantity } from '@/lib/catalog/pricing'
 import { formatGhs } from '@/lib/format'
 
 /**
@@ -20,6 +21,7 @@ export function CartLineRow({
   line,
   priced,
   selected,
+  available,
   onSelect,
   onQuantity,
   onRemove,
@@ -28,12 +30,20 @@ export function CartLineRow({
   line: CartLineModel
   priced: PricedLine
   selected: boolean
+  /**
+   * What this branch can sell of this product (on hand + unacked deltas), or
+   * `null` when it is not known. The `+` control stops here; it never lowers a
+   * quantity the cashier already set (P20-D9).
+   */
+  available: number | null
   onSelect: () => void
   onQuantity: (quantity: number) => void
   onRemove: () => void
   onDiscount: () => void
 }) {
   const [draft, setDraft] = useState(String(line.quantity))
+  const canIncrease = canIncreaseQuantity(line.quantity, available)
+  const atStockLimit = !canIncrease
 
   useEffect(() => {
     setDraft(String(line.quantity))
@@ -121,8 +131,14 @@ export function CartLineRow({
             type="button"
             variant="outline"
             aria-label="Increase quantity"
-            title="Increase quantity (keyboard +)"
+            title={
+              atStockLimit && available !== null
+                ? `Only ${available} in stock`
+                : 'Increase quantity (keyboard +)'
+            }
             onClick={() => onQuantity(line.quantity + 1)}
+            disabled={atStockLimit}
+            data-testid="cart-line-inc"
             className="h-11 min-w-11 text-lg leading-none"
           >
             +
@@ -152,6 +168,12 @@ export function CartLineRow({
           </Button>
         </div>
       </div>
+
+      {atStockLimit && available !== null ? (
+        <output className="mt-1 block text-[11px] text-warn" data-testid="cart-line-at-stock-limit">
+          All {available} in stock are in the cart. Type a higher quantity to oversell.
+        </output>
+      ) : null}
 
       {line.discountReasonCode ? (
         <p className="mt-1 text-[11px] text-muted-foreground">

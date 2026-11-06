@@ -12,6 +12,8 @@ import { cartReducer } from '@/lib/cart/reducer'
 import { computeCartTotals } from '@/lib/cart/totals'
 import type { CartDiscount } from '@/lib/cart/types'
 import { cartVoidLines, recordCartVoid } from '@/lib/cart/void-service'
+import { useBranchAvailability } from '@/lib/catalog/availability'
+import { canIncreaseQuantity } from '@/lib/catalog/pricing'
 import { lookupScannedProduct } from '@/lib/catalog/resolve'
 import { overLimitMinor } from '@/lib/credit/headroom'
 import { useCustomerContext } from '@/lib/customers/context'
@@ -83,6 +85,7 @@ export function SellScreen({
     setCartTenders,
   } = useCart()
   const db = usePosDatabase()
+  const availability = useBranchAvailability(identity.branchId)
   const customerContext = useCustomerContext(state.customer, identity.branchId)
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -439,14 +442,33 @@ export function SellScreen({
           if (next) setSelectedLineId(next.id)
         },
         '+': () => {
-          if (selectedLine) setQuantity(selectedLine.id, selectedLine.quantity + 1)
+          // The same cap as the button (P20-D9): the keyboard must not be a way
+          // around a limit the cashier can see on screen.
+          if (
+            selectedLine &&
+            canIncreaseQuantity(
+              selectedLine.quantity,
+              availability.get(selectedLine.productId) ?? 0,
+            )
+          ) {
+            setQuantity(selectedLine.id, selectedLine.quantity + 1)
+          }
         },
         '-': () => {
           if (selectedLine) setQuantity(selectedLine.id, selectedLine.quantity - 1)
         },
         Escape: () => setSelectedLineId(null),
       }),
-      [goTender, holds, selectedLine, selectedLineId, setQuantity, state.customer, state.lines],
+      [
+        availability,
+        goTender,
+        holds,
+        selectedLine,
+        selectedLineId,
+        setQuantity,
+        state.customer,
+        state.lines,
+      ],
     ),
     !dialogOpen,
   )
@@ -651,6 +673,7 @@ export function SellScreen({
                       line={line}
                       priced={pricedLine}
                       selected={line.id === selectedLineId}
+                      available={availability.get(line.productId) ?? 0}
                       onSelect={() => setSelectedLineId(line.id)}
                       onQuantity={(quantity) => setQuantity(line.id, quantity)}
                       onRemove={() => dispatch({ type: 'removeLine', lineId: line.id })}

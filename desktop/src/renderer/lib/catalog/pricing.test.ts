@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableQuantity,
+  canIncreaseQuantity,
   displayPriceMinor,
   indexByProduct,
   isTaxCategory,
@@ -108,5 +109,33 @@ describe('indexByProduct', () => {
     expect(index.get('a')?.quantity_on_hand).toBe(3)
     expect(index.get('b')?.quantity_on_hand).toBe(2)
     expect(index.get('c')).toBeUndefined()
+  })
+})
+
+describe('canIncreaseQuantity', () => {
+  it('stops the + control at what the branch holds', () => {
+    // 11 on the shelf: ten may be pushed to eleven, eleven may not be pushed further.
+    expect(canIncreaseQuantity(10, 11)).toBe(true)
+    expect(canIncreaseQuantity(11, 11)).toBe(false)
+    expect(canIncreaseQuantity(12, 11)).toBe(false)
+  })
+
+  it('never asks a line to come back down', () => {
+    // A recalled hold, or stock that synced downwards mid-cart, keeps its quantity.
+    // The control is simply disabled; nothing here reduces the line.
+    expect(canIncreaseQuantity(5, 2)).toBe(false)
+  })
+
+  it('refuses to increase an oversold or empty product', () => {
+    expect(canIncreaseQuantity(1, 0)).toBe(false)
+    expect(canIncreaseQuantity(1, -3)).toBe(false)
+  })
+
+  it('allows the increase when availability is unknown', () => {
+    // A product with no stock row in the map has no number to cap against, and
+    // inventing a limit would block a sale the till cannot verify.
+    expect(canIncreaseQuantity(1, null)).toBe(true)
+    expect(canIncreaseQuantity(1, undefined)).toBe(true)
+    expect(canIncreaseQuantity(1, Number.NaN)).toBe(true)
   })
 })
