@@ -17,6 +17,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select"
+import { Switch } from "#/components/ui/switch"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
 import { useBranch } from "#/lib/branch-context"
@@ -141,12 +142,15 @@ export function OpeningNewPage() {
 	const [note, setNote] = useState("")
 	const [pasteValue, setPasteValue] = useState("")
 	const [fileError, setFileError] = useState<string | null>(null)
+	// Off by default: a typo in the file must not become a permanent category without a
+	// deliberate choice (P20-D21).
+	const [createMissingCategories, setCreateMissingCategories] = useState(false)
 
 	const branchId = activeBranchId
 	const canDraft = hasPermission(session.user.role, "inventory.opening.draft")
 
 	const previewMutation = useMutation({
-		mutationFn: () => previewOpening(branchId as string, rows),
+		mutationFn: () => previewOpening(branchId as string, rows, createMissingCategories),
 		onSuccess: (data) => {
 			setPreview(data)
 			setIdempotencyKey(crypto.randomUUID())
@@ -168,6 +172,7 @@ export function OpeningNewPage() {
 				...(countedAt ? { countedAt } : {}),
 				...(note.trim() ? { note: note.trim() } : {}),
 				idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
+				createMissingCategories,
 				rows,
 			}),
 		onSuccess: async (detail) => {
@@ -334,6 +339,26 @@ export function OpeningNewPage() {
 									Use pasted rows
 								</Button>
 							</div>
+							<div className="flex items-start gap-2">
+								<Switch
+									id="opening-create-categories"
+									checked={createMissingCategories}
+									onCheckedChange={(checked) => {
+										setCreateMissingCategories(checked)
+										setPreview(null)
+									}}
+								/>
+								<div className="grid gap-0.5">
+									<Label htmlFor="opening-create-categories">
+										Create missing categories from the file
+									</Label>
+									<p className="text-xs text-muted-foreground">
+										Off, a row naming a category that does not exist is an error. On, the path is
+										created for you — and the preview lists exactly which ones before you save.
+									</p>
+								</div>
+							</div>
+
 							<div className="grid gap-3 sm:grid-cols-2">
 								<div className="grid gap-1.5">
 									<Label htmlFor="opening-counted-at">Count date</Label>
@@ -368,6 +393,20 @@ export function OpeningNewPage() {
 							</div>
 						</CardContent>
 					</Card>
+
+					{preview && preview.categoriesToCreate.length > 0 ? (
+						<div className="rounded-md border border-warn/30 bg-warn/10 p-3 text-sm">
+							<p className="font-medium">
+								{preview.categoriesToCreate.length} categor
+								{preview.categoriesToCreate.length === 1 ? "y" : "ies"} will be created:
+							</p>
+							<ul className="mt-1 list-inside list-disc text-muted-foreground">
+								{preview.categoriesToCreate.map((path) => (
+									<li key={path.join(" / ")}>{path.join(" / ")}</li>
+								))}
+							</ul>
+						</div>
+					) : null}
 
 					{preview ? (
 						<Card>

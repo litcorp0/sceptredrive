@@ -17,6 +17,7 @@ import {
 } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
 import { listBrandRows, listCategoryRows, listUomRows } from '../catalog/catalog.repository.ts'
+import * as catalogService from '../catalog/catalog.service.ts'
 import type { BrandRow, CategoryRow, UomRow } from '../catalog/catalog.types.ts'
 import * as inventoryRepository from '../inventory/inventory.repository.ts'
 import * as inventoryService from '../inventory/inventory.service.ts'
@@ -213,6 +214,8 @@ interface ResolvedRow {
   name: string
   categoryId: string | null
   categoryLabel: string
+  /** Segments of a category the import will create, when allowed (P20-D21). */
+  pendingCategoryPath: string[] | null
   uomId: string | null
   unitLabel: string
   brandId: string | null
@@ -235,6 +238,7 @@ function rowErrorMessage(lineNo: number, message: string): string {
 async function resolveRows(
   branchId: string,
   rows: readonly OpeningLineInput[],
+  options: { createMissingCategories: boolean } = { createMissingCategories: false },
 ): Promise<{ resolved: ResolvedRow[]; levels: Map<string, { quantityOnHand: number }> }> {
   const index = await loadCatalogIndex()
   const resolved: ResolvedRow[] = []
@@ -345,6 +349,7 @@ async function resolveRows(
         categoryLabel: productCategory
           ? displayCategoryPath(productCategory, index.categoryById)
           : '—',
+        pendingCategoryPath: null,
         uomId: product.uomId,
         unitLabel: productUnit?.code ?? '—',
         brandId: product.brandId,
@@ -362,13 +367,30 @@ async function resolveRows(
       continue
     }
 
+    // A row that will become a new product may build its category tree, but only when the
+    // operator asked for it in the preview (P20-D21). An existing product uses its own
+    // category, so nothing is created on its behalf.
+    let pendingCategoryPath: string[] | null = null
     if (!category) {
-      errors.push(
-        rowErrorMessage(
-          lineNo,
-          `unknown category "${raw.category.trim()}" — create it first under Catalog → Categories, using "Parent > Child" for a nested one`,
-        ),
-      )
+      const segments = raw.category
+        .split(/[/>]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+      if (!product && options.createMissingCategories && segments.length > 0) {
+        if (segments.length > 2) {
+          errors.push(rowErrorMessage(lineNo, 'categories can only be two levels deep'))
+        } else {
+          pendingCategoryPath = segments
+          warnings.push(`Will create the category ${segments.join(' / ')}`)
+        }
+      } else {
+        errors.push(
+          rowErrorMessage(
+            lineNo,
+            `unknown category "${raw.category.trim()}" — create it first under Catalog → Categories, using "Parent > Child" for a nested one`,
+          ),
+        )
+      }
     } else if (!category.isActive) {
       errors.push(rowErrorMessage(lineNo, `category "${raw.category}" is archived`))
     }
@@ -393,7 +415,10 @@ async function resolveRows(
       lineNo,
       name,
       categoryId: category?.id ?? null,
-      categoryLabel: category ? displayCategoryPath(category, index.categoryById) : raw.category,
+      categoryLabel: category
+        ? displayCategoryPath(category, index.categoryById)
+        : (pendingCategoryPath?.join(' / ') ?? raw.category),
+      pendingCategoryPath,
       uomId: unit?.id ?? null,
       unitLabel: unit?.code ?? raw.unit,
       brandId: brand?.id ?? null,
@@ -457,6 +482,7 @@ function toPreviewRow(
     name: row.name,
     category: row.categoryLabel,
     categoryId: row.categoryId,
+    createsCategory: row.pendingCategoryPath,
     unit: row.unitLabel,
     uomId: row.uomId,
     brand: row.brandLabel,
@@ -481,7 +507,7 @@ function formatMinor(value: number): string {
 
 export async function previewOpening(
   user: SessionUser,
-  input: { branchId: string; rows: OpeningLineInput[] },
+  input: { branchId: string; rows: OpeningLineInput[]; createMissingCategories?: boolean },
 ): Promise<OpeningPreview> {
   const branch = await branchesService.getBranch(user, input.branchId)
   if (!branch.isActive) throw new ConflictError('The branch is inactive')
@@ -489,7 +515,9 @@ export async function previewOpening(
     throw new ValidationError(`A file can have at most ${OPENING_MAX_ROWS} rows`)
   }
 
-  const { resolved, levels } = await resolveRows(branch.id, input.rows)
+  const { resolved, levels } = await resolveRows(branch.id, input.rows, {
+    createMissingCategories: input.createMissingCategories === true,
+  })
   const rows = resolved.map((row) => toPreviewRow(row, levels))
   const totals = openingTotals(
     rows.map((row) => ({
@@ -507,6 +535,15 @@ export async function previewOpening(
     deltaValueMinor: rows.reduce((sum, row) => sum + row.deltaValueMinor, 0),
     newProductCount: rows.filter((row) => row.status === 'NEW').length,
     uncostedLineCount: totals.uncostedLineCount,
+    // One entry per path, in the order the rows mention them: the operator reads the list
+    // before saving, so a typo is visible as a category about to be born.
+    categoriesToCreate: [
+      ...new Map(
+        rows
+          .filter((row) => row.createsCategory !== null)
+          .map((row) => [(row.createsCategory ?? []).join(' / '), row.createsCategory ?? []]),
+      ).values(),
+    ],
     canPost: rows.length > 0 && rows.every((row) => row.errors.length === 0),
   }
 }
@@ -528,7 +565,11 @@ export async function createOpening(
     if (existing) return loadOpeningDetail(existing.id, user)
   }
 
-  const preview = await previewOpening(user, { branchId: branch.id, rows: input.rows })
+  const preview = await previewOpening(user, {
+    branchId: branch.id,
+    rows: input.rows,
+    createMissingCategories: input.createMissingCategories === true,
+  })
   if (!preview.canPost) {
     throw new AppError(
       400,
@@ -561,6 +602,14 @@ export async function createOpening(
       )
       if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create the opening draft')
 
+      // The tree is built inside the same transaction as the document (P20-D21): a failed
+      // save leaves no orphan categories behind, and a re-run starts from the same state.
+      const createdCategoryIds = new Map<string, string>()
+      for (const path of preview.categoriesToCreate) {
+        const created = await catalogService.ensureCategoryPath(actor, path, tx)
+        createdCategoryIds.set(path.join(' / '), created.id)
+      }
+
       await insertOpeningLines(
         preview.rows.map((row) => ({
           openingId: created.id,
@@ -569,7 +618,11 @@ export async function createOpening(
           isNew: row.status === 'NEW',
           sku: row.sku,
           name: row.name,
-          categoryId: row.categoryId,
+          categoryId: row.categoryId
+            ? row.categoryId
+            : row.createsCategory
+              ? (createdCategoryIds.get(row.createsCategory.join(' / ')) ?? null)
+              : null,
           uomId: row.uomId,
           brandId: row.brandId,
           barcode: row.barcode,

@@ -33,6 +33,11 @@ export interface OpeningPreviewRow {
   name: string
   category: string
   categoryId: string | null
+  /**
+   * Segments of a category this line will create on save (P20-D21). Empty on every row
+   * unless the operator asked for it, so the preview is where the decision is visible.
+   */
+  createsCategory: string[] | null
   unit: string
   uomId: string | null
   brand: string | null
@@ -59,11 +64,15 @@ export interface OpeningPreview {
   deltaValueMinor: number
   newProductCount: number
   uncostedLineCount: number
+  /** Deduped category paths the save would create, in tree order (P20-D21). */
+  categoriesToCreate: string[][]
   canPost: boolean
 }
 
 export interface OpeningCreateInput {
   branchId: string
+  /** Build the category paths this file names when they do not exist (P20-D21). */
+  createMissingCategories?: boolean
   countedAt?: Date
   note?: string
   idempotencyKey?: string

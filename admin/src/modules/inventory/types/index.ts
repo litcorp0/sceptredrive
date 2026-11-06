@@ -498,6 +498,8 @@ export interface OpeningPreviewRow {
 	name: string
 	category: string
 	categoryId: string | null
+	/** Category path this line will create on save (P20-D21). */
+	createsCategory: string[] | null
 	unit: string
 	uomId: string | null
 	brand: string | null
@@ -524,6 +526,8 @@ export interface OpeningPreview {
 	deltaValueMinor: number
 	newProductCount: number
 	uncostedLineCount: number
+	/** Deduped category paths the save would create (P20-D21). */
+	categoriesToCreate: string[][]
 	canPost: boolean
 }
 

@@ -236,8 +236,11 @@ describe.skipIf(!available)('opening stock API', () => {
     if (createdProductIds.length > 0) {
       await db.delete(product).where(inArray(product.id, createdProductIds))
     }
-    if (childCategoryId) await db.delete(category).where(eq(category.id, childCategoryId))
-    if (categoryId) await db.delete(category).where(eq(category.id, categoryId))
+    if (categoryId) {
+      // Children first: the tree cascades by restrict, and the auto-create test adds one.
+      await db.delete(category).where(eq(category.parentId, categoryId))
+      await db.delete(category).where(eq(category.id, categoryId))
+    }
     if (uomId) await db.delete(uom).where(eq(uom.id, uomId))
     for (const userId of createdUserIds) await deleteTestUser(userId)
     if (createdBranchIds.length > 0) {
@@ -340,6 +343,91 @@ describe.skipIf(!available)('opening stock API', () => {
     expect(response.status).toBe(200)
     const body = await readJson<{ rows: { errors: string[] }[] }>(response)
     expect(body.rows[0]?.errors.join(' ')).toContain('Catalog → Categories')
+  })
+
+  it('offers to create the categories a file names, and says which (P20-D21)', async () => {
+    const child = `Fresh Child ${suffix}`
+    const path = `Opening Cat ${suffix} > ${child}`
+
+    // Off (the default): refusing is the behaviour, and the row carries the error.
+    const refused = await app.request('/api/openings/preview', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({ branchId: branchAId, rows: [cleanRow({ category: path })] }),
+    })
+    const refusedBody = await readJson<{
+      rows: { errors: string[] }[]
+      categoriesToCreate: string[][]
+    }>(refused)
+    expect(refusedBody.rows[0]?.errors.join(' ')).toContain('unknown category')
+    expect(refusedBody.categoriesToCreate).toEqual([])
+
+    // On: no error, and the preview says exactly what would be created.
+    const offered = await app.request('/api/openings/preview', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        createMissingCategories: true,
+        rows: [cleanRow({ category: path })],
+      }),
+    })
+    expect(offered.status).toBe(200)
+    const offeredBody = await readJson<{
+      rows: { errors: string[]; createsCategory: string[] | null }[]
+      categoriesToCreate: string[][]
+      canPost: boolean
+    }>(offered)
+    expect(offeredBody.rows[0]?.errors).toEqual([])
+    expect(offeredBody.rows[0]?.createsCategory).toEqual([`Opening Cat ${suffix}`, child])
+    expect(offeredBody.categoriesToCreate).toEqual([[`Opening Cat ${suffix}`, child]])
+    expect(offeredBody.canPost).toBe(true)
+
+    // Nothing exists until the draft is saved: a preview writes nothing.
+    const before = await db.select().from(category).where(eq(category.name, child))
+    expect(before).toHaveLength(0)
+  })
+
+  it('builds the missing category when the draft is saved', async () => {
+    const child = `Saved Child ${suffix}`
+    const response = await app.request('/api/openings', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        createMissingCategories: true,
+        rows: [
+          cleanRow({ name: `Fresh part ${suffix}`, category: `Opening Cat ${suffix} > ${child}` }),
+        ],
+      }),
+    })
+
+    expect(response.status).toBe(201)
+    const detail = await readJson<{ opening: { id: string }; lines: { categoryId: string }[] }>(
+      response,
+    )
+
+    const created = await db.select().from(category).where(eq(category.name, child))
+    expect(created).toHaveLength(1)
+    // Two levels: the child sits under the parent the file named.
+    expect(created[0]?.parentId).toBe(categoryId)
+    expect(detail.lines[0]?.categoryId).toBe(created[0]?.id)
+  })
+
+  it('refuses a path deeper than two levels', async () => {
+    const response = await app.request('/api/openings/preview', {
+      method: 'POST',
+      headers: authedHeaders(managerCookie),
+      body: JSON.stringify({
+        branchId: branchAId,
+        createMissingCategories: true,
+        rows: [cleanRow({ category: 'One > Two > Three' })],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readJson<{ rows: { errors: string[] }[] }>(response)
+    expect(body.rows[0]?.errors.join(' ')).toContain('two levels deep')
   })
 
   it('creates a draft, posts it once, and seeds the branch average', async () => {

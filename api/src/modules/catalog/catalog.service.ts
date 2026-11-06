@@ -1,5 +1,5 @@
-import { db } from '@sceptre/db'
-import { AppError, ConflictError, NotFoundError } from '../../http/errors.ts'
+import { type DbExecutor, db } from '@sceptre/db'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
 import { isUniqueViolation } from '../platform/db-errors.ts'
@@ -59,6 +59,59 @@ export async function listCategories(filters: {
 }): Promise<CategoryWithChildren[]> {
   const rows = await listCategoryRows(filters)
   return buildCategoryTree(rows)
+}
+
+/**
+ * Resolves a `Parent > Child` path, creating the levels that do not exist (P20-D21).
+ *
+ * Written for the opening-stock import, where a go-live file may name a category tree
+ * nobody has built yet. It is deliberately conservative, because the constraints this
+ * schema already enforces are easy to trip:
+ *
+ * - **Two levels only.** `createCategory` refuses a third, so this does too rather than
+ *   half-building a tree.
+ * - **Names are unique across the whole tree** (`category_name_unique` on `lower(name)`),
+ *   so an existing `Engine Oil` is reused only when it sits under the parent the path
+ *   names. Reparenting is never done silently: the caller gets a conflict instead.
+ * - **Idempotent**, so a re-run of the same file creates nothing twice.
+ */
+export async function ensureCategoryPath(
+  actor: AuditActor,
+  segments: readonly string[],
+  executor: DbExecutor = db,
+): Promise<CategoryRow> {
+  const names = segments.map((segment) => segment.trim()).filter(Boolean)
+  if (names.length === 0) throw new ValidationError('A category path needs at least one name')
+  if (names.length > 2) {
+    throw new ValidationError('Categories can only be two levels deep')
+  }
+
+  let parentId: string | null = null
+  let current: CategoryRow | null = null
+
+  for (const [index, name] of names.entries()) {
+    const existing = await findCategoryByNameInsensitive(name, executor)
+    const isLast = index === names.length - 1
+
+    if (existing) {
+      if (isLast && existing.parentId !== parentId) {
+        throw new ConflictError(
+          `A category named "${name}" already exists under a different parent; rename one of them before importing`,
+        )
+      }
+      current = existing
+      parentId = existing.id
+      continue
+    }
+
+    const created = await insertCategory({ name, parentId, createdBy: actor.actorId }, executor)
+    if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create a category')
+    current = created
+    parentId = created.id
+  }
+
+  if (!current) throw new AppError(500, 'INTERNAL', 'Failed to resolve the category path')
+  return current
 }
 
 export async function createCategory(

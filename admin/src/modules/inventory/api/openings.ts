@@ -10,10 +10,14 @@ import type {
 import { openingKeys } from "./keys"
 
 /** `POST /api/openings/preview` — pure validation; nothing is written. */
-export function previewOpening(branchId: string, rows: OpeningLineInput[]) {
+export function previewOpening(
+	branchId: string,
+	rows: OpeningLineInput[],
+	createMissingCategories = false,
+) {
 	return apiRequest<OpeningPreview>("/api/openings/preview", {
 		method: "POST",
-		body: { branchId, rows },
+		body: { branchId, rows, createMissingCategories },
 	})
 }
 
@@ -23,6 +27,7 @@ export function createOpening(input: {
 	countedAt?: string
 	note?: string
 	idempotencyKey?: string
+	createMissingCategories?: boolean
 	rows: OpeningLineInput[]
 }) {
 	return apiRequest<OpeningDetail>("/api/openings", { method: "POST", body: input })

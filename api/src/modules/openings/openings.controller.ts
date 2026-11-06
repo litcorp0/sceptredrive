@@ -12,7 +12,7 @@ import type {
 
 export async function previewOpening(
   c: Context<AppEnv>,
-  input: { branchId: string; rows: OpeningLineInput[] },
+  input: { branchId: string; rows: OpeningLineInput[]; createMissingCategories?: boolean },
 ) {
   const user = currentUser(c)
   return c.json(await openingsService.previewOpening(user, input))

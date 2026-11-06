@@ -30,6 +30,11 @@ export const openingLineSchema = z
 export const openingPreviewSchema = z
   .object({
     branchId: z.uuid(),
+    /**
+     * Build the category paths the file names when they do not exist (P20-D21).
+     * Off unless asked for: a typo should not silently become a category.
+     */
+    createMissingCategories: z.boolean().optional(),
     rows: z.array(openingLineSchema).min(1).max(OPENING_MAX_ROWS),
   })
   .strict()
@@ -37,6 +42,7 @@ export const openingPreviewSchema = z
 export const openingCreateSchema = z
   .object({
     branchId: z.uuid(),
+    createMissingCategories: z.boolean().optional(),
     countedAt: z.coerce.date().optional(),
     note: z.string().trim().max(300).optional(),
     idempotencyKey: z.string().trim().min(8).max(120).optional(),
