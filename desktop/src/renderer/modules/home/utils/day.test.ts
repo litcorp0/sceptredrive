@@ -162,7 +162,11 @@ describe('homeSummary', () => {
         change_minor: 500,
       },
       itemsSold: 3,
-      drawer: { expectedCashMinor: 31_500, shiftNumber: 'T1-S-20261025-01' },
+      drawer: {
+        expectedCashMinor: 31_500,
+        shiftNumber: 'T1-S-20261025-01',
+        cashTotals: null,
+      },
     })
 
     expect(summary.takeMinor).toBe(24_500)

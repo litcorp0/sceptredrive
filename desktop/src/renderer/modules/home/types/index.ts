@@ -1,3 +1,4 @@
+import type { ShiftCashTotals } from '@/lib/shift/shift-repository'
 /**
  * The home screen's vocabulary (Plan 04).
  *
@@ -63,6 +64,8 @@ export interface HomeSummary {
   expectedCashMinor: number | null
   /** The open shift's number, shown beside the drawer figure so the window is unambiguous. */
   shiftNumber: string | null
+  /** The drawer's own terms, so the tile can show how the figure was reached (P20-D10). */
+  cashTotals: ShiftCashTotals | null
 }
 
 /** A hash route a cashier can actually reach today. */

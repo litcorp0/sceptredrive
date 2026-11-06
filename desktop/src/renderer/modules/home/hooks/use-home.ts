@@ -1,6 +1,7 @@
 import { useQuery } from '@powersync/react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePos } from '@/lib/powersync/provider'
+import type { ShiftCashTotals } from '@/lib/shift/shift-repository'
 import { loadShiftState } from '@/lib/shift/shift-service'
 import { useOutboxSummary } from '@/lib/sync/outbox-summary'
 import { useUnprintedCount } from '@/modules/sales'
@@ -90,9 +91,15 @@ export function useOutOfStock(branchId: string): number {
 export interface ExpectedCash {
   shiftNumber: string | null
   expectedCashMinor: number | null
+  /** The terms the drawer figure was built from, so the tile can show them. */
+  cashTotals: ShiftCashTotals | null
 }
 
-const NO_SHIFT: ExpectedCash = { shiftNumber: null, expectedCashMinor: null }
+const NO_SHIFT: ExpectedCash = {
+  shiftNumber: null,
+  expectedCashMinor: null,
+  cashTotals: null,
+}
 
 /**
  * Expected cash in the drawer for **this shift** — a different window from the day
@@ -117,7 +124,11 @@ export function useExpectedCash(): ExpectedCash {
           if (cancelled) return
           setState(
             next.shift
-              ? { shiftNumber: next.shift.number, expectedCashMinor: next.expectedCashMinor }
+              ? {
+                  shiftNumber: next.shift.number,
+                  expectedCashMinor: next.expectedCashMinor,
+                  cashTotals: next.cashTotals,
+                }
               : NO_SHIFT,
           )
         },
@@ -192,7 +203,11 @@ export function useHomeDay(day: string, identity: HomeIdentity | null): HomeDay 
         itemsSold,
         drawer:
           drawer.shiftNumber !== null && drawer.expectedCashMinor !== null
-            ? { shiftNumber: drawer.shiftNumber, expectedCashMinor: drawer.expectedCashMinor }
+            ? {
+                shiftNumber: drawer.shiftNumber,
+                expectedCashMinor: drawer.expectedCashMinor,
+                cashTotals: drawer.cashTotals,
+              }
             : null,
       }),
     [header, itemsSold, drawer],

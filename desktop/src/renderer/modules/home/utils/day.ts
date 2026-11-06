@@ -1,4 +1,5 @@
 import { accraDayBounds, averageBasketMinor } from '@sceptre/shared'
+import type { ShiftCashTotals } from '@/lib/shift/shift-repository'
 import type { DayHeaderRow, TopSellerRow } from '../api/queries'
 import type { AccraDay, HomeSummary, HourPoint, TopSeller } from '../types'
 
@@ -106,7 +107,11 @@ export interface HomeSummaryInput {
   header: DayHeaderRow | null
   itemsSold: number
   /** `null` when no shift is open, so the card can say so instead of showing a figure. */
-  drawer: { expectedCashMinor: number; shiftNumber: string } | null
+  drawer: {
+    expectedCashMinor: number
+    shiftNumber: string
+    cashTotals: ShiftCashTotals | null
+  } | null
 }
 
 /**
@@ -131,5 +136,6 @@ export function homeSummary(input: HomeSummaryInput): HomeSummary {
     hasSales: salesCount > 0,
     expectedCashMinor: input.drawer?.expectedCashMinor ?? null,
     shiftNumber: input.drawer?.shiftNumber ?? null,
+    cashTotals: input.drawer?.cashTotals ?? null,
   }
 }

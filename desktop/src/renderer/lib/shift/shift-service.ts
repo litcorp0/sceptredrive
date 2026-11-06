@@ -421,6 +421,14 @@ export async function closeShift(
 export interface ShiftState {
   shift: LocalShift | null
   expectedCashMinor: number
+  /**
+   * The terms `expectedCashMinor` was computed from (P20-D10).
+   *
+   * Carried so a screen can show *why* the drawer holds what it holds. Without it the home
+   * screen shows "take GHS 4,245" beside "drawer GHS 2,930" and the difference reads as a
+   * shortage, when it is a MoMo payment that never touched the notes.
+   */
+  cashTotals: ShiftCashTotals | null
   movements: LocalCashMovement[]
 }
 
@@ -428,10 +436,12 @@ export interface ShiftState {
 export async function loadShiftState(db: PowerSyncDatabase): Promise<ShiftState> {
   const identity = await readPosIdentity(db)
   const session = getStaffSession()
-  if (!identity || !session) return { shift: null, expectedCashMinor: 0, movements: [] }
+  if (!identity || !session) {
+    return { shift: null, expectedCashMinor: 0, cashTotals: null, movements: [] }
+  }
 
   const shift = await findOpenShift(db, identity.terminalId)
-  if (!shift) return { shift: null, expectedCashMinor: 0, movements: [] }
+  if (!shift) return { shift: null, expectedCashMinor: 0, cashTotals: null, movements: [] }
 
   const [movements, totals] = await Promise.all([
     listCashMovements(db, shift.id),
@@ -441,6 +451,7 @@ export async function loadShiftState(db: PowerSyncDatabase): Promise<ShiftState>
   return {
     shift,
     expectedCashMinor: computeExpectedCash(totals),
+    cashTotals: totals,
     movements,
   }
 }

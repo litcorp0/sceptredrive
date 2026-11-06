@@ -139,6 +139,7 @@ export function HomePage({
           <DrawerTile
             expectedCashMinor={home.summary.expectedCashMinor}
             shiftNumber={home.summary.shiftNumber}
+            cashTotals={home.summary.cashTotals}
           />
           <StatTiles summary={home.summary} />
         </section>
