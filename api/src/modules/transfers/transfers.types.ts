@@ -48,6 +48,12 @@ export interface ShortCloseInput {
   note: string
 }
 
+export interface TransferSourceStockQuery {
+  branchId: string
+  q: string
+  includeEmpty?: boolean
+}
+
 export interface TransferListQuery {
   branchId?: string
   status?: TransferStatus

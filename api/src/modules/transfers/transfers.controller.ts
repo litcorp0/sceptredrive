@@ -10,8 +10,15 @@ import type {
   TransferCreateInput,
   TransferLinesReplaceInput,
   TransferListQuery,
+  TransferSourceStockQuery,
   TransferUpdateInput,
 } from './transfers.types.ts'
+
+export async function searchSourceStock(c: Context<AppEnv>, query: TransferSourceStockQuery) {
+  return c.json(
+    await transfersService.searchSourceStock(query.branchId, query.q, query.includeEmpty ?? false),
+  )
+}
 
 export async function listTransfers(c: Context<AppEnv>, query: TransferListQuery) {
   const user = currentUser(c)

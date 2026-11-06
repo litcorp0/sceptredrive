@@ -114,5 +114,21 @@ export const validateTransferLinesReplace = validateJson(transferLinesReplaceSch
 export const validateDispatch = validateJson(dispatchSchema)
 export const validateReceive = validateJson(receiveSchema)
 export const validateShortClose = validateJson(shortCloseSchema)
+/**
+ * What the source branch can give (P20-D18).
+ *
+ * `includeEmpty` exists for the same reason Acumatica has "Show Available Items Only": the
+ * default list is what the shelf holds, and seeing the rest is an explicit choice.
+ */
+export const transferSourceStockQuerySchema = z.object({
+  branchId: z.uuid(),
+  q: z.string().trim().min(1).max(120),
+  includeEmpty: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+})
+
 export const validateTransferListQuery = validateQuery(transferListQuerySchema)
+export const validateTransferSourceStockQuery = validateQuery(transferSourceStockQuerySchema)
 export const validateTransferIdParam = validateParam(transferIdParamSchema)

@@ -26,6 +26,7 @@ import {
   findTransferByIdForUpdate,
   insertTransfer,
   insertTransferLines,
+  searchSourceStock as searchSourceStockRows,
   selectLevelsForProducts,
   selectTransferBase,
   selectTransferLineDetails,
@@ -114,6 +115,19 @@ function assertLinesUnique(lines: readonly { productId: string }[]): void {
   if (new Set(lines.map((line) => line.productId)).size !== lines.length) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Each product may appear only once')
   }
+}
+
+/** Product names for one error message; one read, no per-line query. */
+async function productLabels(
+  productIds: readonly string[],
+  executor: DbExecutor,
+): Promise<Map<string, string>> {
+  const labels = new Map<string, string>()
+  for (const id of new Set(productIds)) {
+    const found = await findProductById(id, executor)
+    if (found) labels.set(id, `${found.sku} ${found.name}`)
+  }
+  return labels
 }
 
 async function validateLineProducts(
@@ -224,6 +238,29 @@ export async function createTransfer(
     // read the detail shows, so the number a manager sees is the number the
     // decider is given (P12-D6).
     const sourceLevels = await selectLevelsForProducts(from.id, productIds, tx)
+
+    // Never ask for more than the source actually holds (P20-D18). A request for 50
+    // against a shelf of 3 is not a negotiation, it is a typo the source manager would
+    // have to reject — and the shelf is the only number that matters here. The till's
+    // oversell rules are untouched: this refuses a *request*, not a sale.
+    const overRequested = input.lines.filter(
+      (line) => line.quantityRequested > (sourceLevels.get(line.productId)?.quantityOnHand ?? 0),
+    )
+    if (overRequested.length > 0) {
+      const names = await productLabels(
+        overRequested.map((line) => line.productId),
+        tx,
+      )
+      throw new ConflictError(
+        `The source branch does not hold that much: ${overRequested
+          .map(
+            (line) =>
+              `${names.get(line.productId) ?? line.productId} (asked ${line.quantityRequested})`,
+          )
+          .join(', ')}`,
+      )
+    }
+
     const amountMinor = input.lines.reduce(
       (sum, line) =>
         sum + line.quantityRequested * (sourceLevels.get(line.productId)?.avgCostMinor ?? 0),
@@ -313,6 +350,27 @@ function inclusiveEnd(date: Date): Date {
     date.getUTCSeconds() === 0 &&
     date.getUTCMilliseconds() === 0
   return isMidnight ? new Date(date.getTime() + 86_400_000 - 1) : date
+}
+
+/**
+ * What one branch can give, for the transfer form's picker (P20-D18).
+ *
+ * Deliberately **not** branch-scoped: the form's whole purpose is to ask another branch for
+ * stock, so a manager must see whether the source can fill the request. It returns a name, a
+ * code and a quantity — never cost, price or another branch's movements.
+ */
+export async function searchSourceStock(
+  branchId: string,
+  query: string,
+  includeEmpty: boolean,
+): Promise<{
+  products: { productId: string; sku: string; name: string; quantityOnHand: number }[]
+}> {
+  const branchRow = await findBranchById(branchId)
+  if (!branchRow) throw new NotFoundError('Branch not found')
+  if (!branchRow.isActive) throw new ConflictError('That branch is inactive')
+
+  return { products: await searchSourceStockRows(branchId, query, includeEmpty) }
 }
 
 export async function listTransfers(

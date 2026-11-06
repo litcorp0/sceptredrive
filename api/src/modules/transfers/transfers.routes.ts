@@ -10,6 +10,7 @@ import {
   validateTransferIdParam,
   validateTransferLinesReplace,
   validateTransferListQuery,
+  validateTransferSourceStockQuery,
   validateTransferUpdate,
 } from './transfers.validation.ts'
 
@@ -21,6 +22,14 @@ transfersRoutes.get(
   requirePermission('inventory.read'),
   validateTransferListQuery,
   (c) => transfersController.listTransfers(c, c.req.valid('query')),
+)
+
+transfersRoutes.get(
+  '/api/inventory/transfers/source-stock',
+  requireSession,
+  requirePermission('inventory.read'),
+  validateTransferSourceStockQuery,
+  (c) => transfersController.searchSourceStock(c, c.req.valid('query')),
 )
 
 transfersRoutes.post(

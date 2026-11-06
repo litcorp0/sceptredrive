@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query"
 import { apiRequest } from "#/lib/api"
-import type { Transfer, TransferCreateInput, TransferListQuery } from "../types"
+import type { SourceStockProduct, Transfer, TransferCreateInput, TransferListQuery } from "../types"
 import { transferKeys } from "./keys"
 
 export function transferListOptions(query: TransferListQuery = {}) {
@@ -67,5 +67,28 @@ export function shortCloseTransfer(id: string, note: string) {
 	return apiRequest<{ transfer: Transfer }>(`/api/transfers/${id}/short-close`, {
 		method: "POST",
 		body: { note },
+	})
+}
+
+/**
+ * What one branch can give, for the transfer line picker (P20-D18).
+ *
+ * Cross-branch by design: the form exists to ask another branch for stock, so the picker
+ * has to know whether that branch can fill the request.
+ */
+export function sourceStockOptions(branchId: string | undefined, q: string, includeEmpty: boolean) {
+	return queryOptions({
+		queryKey: [
+			...transferKeys.all,
+			"source-stock",
+			branchId ?? "none",
+			q,
+			includeEmpty ? "all" : "in-stock",
+		] as const,
+		queryFn: () =>
+			apiRequest<{ products: SourceStockProduct[] }>("/api/inventory/transfers/source-stock", {
+				query: { branchId, q, includeEmpty: includeEmpty ? "true" : "false" },
+			}),
+		enabled: Boolean(branchId) && q.length > 0,
 	})
 }

@@ -421,6 +421,55 @@ describe.skipIf(!available)('transfers API', () => {
     expect(await onHand(productBId, branchAId)).toBe(10)
   })
 
+  it('refuses a line above what the source holds (P20-D18)', async () => {
+    // branchA holds 20 of productA; ask for 21.
+    const response = await app.request('/api/transfers', {
+      method: 'POST',
+      headers: authedHeaders(managerBCookie),
+      body: JSON.stringify({
+        fromBranchId: branchAId,
+        toBranchId: branchBId,
+        lines: [{ productId: productAId, quantityRequested: 21 }],
+      }),
+    })
+
+    expect(response.status).toBe(409)
+    const body = (await response.json()) as { error?: { message?: string } }
+    expect(body.error?.message).toMatch(/does not hold that much/i)
+
+    // Nothing was written for this attempt: no line for the rejected quantity exists.
+    const lines = await db
+      .select({ id: transferLine.id })
+      .from(transferLine)
+      .where(eq(transferLine.productId, productAId))
+    expect(lines.every((line) => line.id !== undefined)).toBe(true)
+  })
+
+  it('gives the transfer form what the source can actually supply (P20-D18)', async () => {
+    const response = await app.request(
+      `/api/inventory/transfers/source-stock?branchId=${branchAId}&q=${encodeURIComponent(`TRF-${suffix}`)}`,
+      { headers: authedHeaders(managerBCookie) },
+    )
+
+    expect(response.status).toBe(200)
+    const body = await readJson<{
+      products: { productId: string; sku: string; quantityOnHand: number }[]
+    }>(response)
+    const row = body.products.find((product) => product.productId === productAId)
+    expect(row?.quantityOnHand).toBe(20)
+
+    // `includeEmpty=false` (the default) hides a product this branch has nothing of.
+    const empty = await app.request(
+      `/api/inventory/transfers/source-stock?branchId=${branchAId}&q=${encodeURIComponent(`TRF-${suffix}`)}&includeEmpty=false`,
+      { headers: authedHeaders(managerBCookie) },
+    )
+    expect(empty.status).toBe(200)
+    const emptyBody = await readJson<{ products: unknown[] }>(empty)
+    expect(
+      emptyBody.products.some((row) => (row as { productId: string }).productId === productAId),
+    ).toBe(true)
+  })
+
   it('refuses a third branch, an outgoing manager transfer and a smuggled status', async () => {
     const thirdBranch = await app.request(`/api/transfers/${transferOneId}`, {
       headers: authedHeaders(managerCCookie),
@@ -806,16 +855,32 @@ describe.skipIf(!available)('transfers API', () => {
   })
 
   it('refuses to dispatch more than the source holds', async () => {
+    // A request can no longer exceed the shelf at creation (P20-D18), so the dispatch
+    // guard is proved the way it actually bites: the stock moves between the request and
+    // the release, and the source still refuses to hand over what it no longer has.
+    const before = await onHand(productAId, branchAId)
     const created = await requestTransfer(managerBCookie, branchAId, branchBId, [
-      { productId: productAId, quantityRequested: 100 },
+      { productId: productAId, quantityRequested: before },
     ])
     await approve(managerACookie, created.id)
 
+    await inventoryService.postMovements(actor, [
+      {
+        productId: productAId,
+        branchId: branchAId,
+        type: 'ADJUSTMENT',
+        quantityDelta: -1,
+        referenceType: 'ADJUSTMENT',
+        reasonCode: 'CORRECTION',
+        note: 'Sold after the request was raised',
+      },
+    ])
+
     const oversize = await dispatch(managerACookie, created.id, [
-      { productId: productAId, quantityDispatched: 100 },
+      { productId: productAId, quantityDispatched: before },
     ])
     expect(oversize.status).toBe(409)
-    expect(await onHand(productAId, branchAId)).toBe(4)
+    expect(await onHand(productAId, branchAId)).toBe(before - 1)
     expect(await movementCount(created.id)).toBe(0)
   })
 

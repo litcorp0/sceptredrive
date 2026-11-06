@@ -1,5 +1,5 @@
 import { type DbExecutor, db } from '@sceptre/db'
-import { and, count, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, type SQL, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
@@ -267,4 +267,41 @@ export async function selectLevelsForProducts(
       { quantityOnHand: row.quantityOnHand, avgCostMinor: row.avgCostMinor },
     ]),
   )
+}
+
+/**
+ * Products matching a search, with what one branch holds of each (P20-D18).
+ *
+ * Branches may be searched across: a manager raising a request must be able to see which
+ * branch can actually fill it, and the transfer form's source picker is the only caller.
+ */
+export async function searchSourceStock(
+  branchId: string,
+  query: string,
+  includeEmpty: boolean,
+  executor: DbExecutor = db,
+): Promise<{ productId: string; sku: string; name: string; quantityOnHand: number }[]> {
+  const pattern = `%${query}%`
+  const prefix = `${query}%`
+  const conditions = [
+    eq(product.isActive, true),
+    or(ilike(product.name, pattern), ilike(product.sku, prefix)) as SQL<unknown>,
+  ]
+  if (!includeEmpty) conditions.push(sql`coalesce(${stockLevel.quantityOnHand}, 0) > 0`)
+
+  return executor
+    .select({
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      quantityOnHand: sql<number>`coalesce(${stockLevel.quantityOnHand}, 0)`.mapWith(Number),
+    })
+    .from(product)
+    .leftJoin(
+      stockLevel,
+      and(eq(stockLevel.productId, product.id), eq(stockLevel.branchId, branchId)),
+    )
+    .where(and(...conditions))
+    .orderBy(asc(product.name))
+    .limit(10)
 }

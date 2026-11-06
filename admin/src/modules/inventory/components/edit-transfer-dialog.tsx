@@ -114,7 +114,12 @@ export function EditTransferDialog({
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="grid gap-4">
-					<TransferLinesEditor rows={rows} onChange={setRows} disabled={mutation.isPending} />
+					<TransferLinesEditor
+						rows={rows}
+						onChange={setRows}
+						disabled={mutation.isPending}
+						sourceBranchId={transfer.fromBranchId}
+					/>
 
 					<div className="grid gap-1.5">
 						<Label htmlFor="transfer-edit-note">Note</Label>
