@@ -25,6 +25,10 @@ export interface StockRow {
 	sku: string
 	productName: string
 	categoryName: string
+	/** The branch this level belongs to; the API returns it on every row. */
+	branchId: string
+	branchCode: string
+	branchName: string
 	quantityOnHand: number
 	avgCostMinor: number
 	valueMinor: number
@@ -52,10 +56,20 @@ export interface StockDetail {
 	updatedAt: string | null
 }
 
+/** One product the source branch can give, with what it holds (P20-D18). */
+export interface SourceStockProduct {
+	productId: string
+	sku: string
+	name: string
+	quantityOnHand: number
+}
+
 export type StockListQuery = {
 	branchId?: string
 	q?: string
 	lowStock?: boolean
+	/** Only products with a stock level at this branch (P20-D17). */
+	carried?: boolean
 	limit?: number
 	offset?: number
 }

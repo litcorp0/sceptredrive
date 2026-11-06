@@ -34,6 +34,14 @@ export const MOVEMENT_META: Record<
  */
 export const stockSearchSchema = z.object({
 	lowStock: z.literal("true").optional().catch(undefined),
+	/**
+	 * Only products this branch actually carries (P20-D17).
+	 *
+	 * The switch is **on by default**, so the URL stores the exception (`carried=false`)
+	 * rather than the common case — the same shape `lowStock` uses in reverse, and why a
+	 * bare `/inventory/stock` lists the branch's own shelf and nothing else.
+	 */
+	carried: z.literal("false").optional().catch(undefined),
 	branchId: z.uuid().optional().catch(undefined),
 	report: z.literal("true").optional().catch(undefined),
 	reportBranch: z

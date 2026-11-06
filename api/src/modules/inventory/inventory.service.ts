@@ -1,10 +1,11 @@
 import { type DbExecutor, db } from '@sceptre/db'
 import { averageCostAfterReceipt } from '@sceptre/shared'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { assertBranchAccess, resolveBranchFilter, roleOf } from '../../auth/scope.ts'
 import { actorLabel } from '../../http/audit-context.ts'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../http/errors.ts'
 import type { SessionUser } from '../../http/factory.ts'
+import { branch } from '../org/branches.schema.ts'
 import * as branchesService from '../org/branches.service.ts'
 import { writeAudit } from '../platform/audit.service.ts'
 import type { AuditActor } from '../platform/audit.types.ts'
@@ -37,7 +38,7 @@ import {
   updateLevel,
   upsertThresholdRow,
 } from './inventory.repository.ts'
-import { stockReceipt } from './inventory.schema.ts'
+import { stockLevel, stockReceipt } from './inventory.schema.ts'
 import type {
   AdjustmentCreateInput,
   BranchReconciliation,
@@ -630,11 +631,52 @@ async function queryStock(
     q: query.q,
     lowStock: forceLowStock || query.lowStock === true,
     outOfStock: query.outOfStock === true,
+    carried: query.carried === true,
     limit: query.limit,
     offset: query.offset,
   }
   const [rows, total] = await Promise.all([selectStockPage(filters), countStockRows(filters)])
   return { stock: rows.map(toStockRow), total, branchId }
+}
+
+/**
+ * Which branches carry each product, with their on-hand (P20-D17).
+ *
+ * "Carries" is a `stock_level` row, the same fact the till and the stock list use, so the
+ * catalogue column cannot claim a branch stocks something the branch list denies. `branchId`
+ * narrows it for a scoped caller: a manager is told about their own shelf, never another
+ * branch's.
+ */
+export async function listStockedBranches(
+  productIds: readonly string[],
+  branchId: string | null,
+  executor: DbExecutor = db,
+): Promise<
+  {
+    productId: string
+    branchId: string
+    branchCode: string
+    branchName: string
+    quantityOnHand: number
+  }[]
+> {
+  if (productIds.length === 0) return []
+
+  const conditions = [inArray(stockLevel.productId, [...productIds])]
+  if (branchId) conditions.push(eq(stockLevel.branchId, branchId))
+
+  return executor
+    .select({
+      productId: stockLevel.productId,
+      branchId: branch.id,
+      branchCode: branch.code,
+      branchName: branch.name,
+      quantityOnHand: sql<number>`coalesce(${stockLevel.quantityOnHand}, 0)`.mapWith(Number),
+    })
+    .from(stockLevel)
+    .innerJoin(branch, eq(branch.id, stockLevel.branchId))
+    .where(and(...conditions))
+    .orderBy(asc(branch.name))
 }
 
 export async function listStock(

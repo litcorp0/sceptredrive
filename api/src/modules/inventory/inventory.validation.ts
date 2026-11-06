@@ -89,6 +89,15 @@ export const stockListQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  /**
+   * Only products this branch actually carries — a stock level here, even at zero
+   * (P20-D17). A product the branch never stocked is a catalogue row, not a stock
+   * row, and the list is noisy enough without it.
+   */
+  carried: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
   limit: limitSchema,
   offset: offsetSchema,
 })

@@ -41,6 +41,9 @@ export function StockPage() {
 	const [search, setSearch] = useState("")
 	const lowOnly = listSearch.lowStock === "true"
 	const reportMode = listSearch.report === "true"
+	// On unless the URL says otherwise: a stock list is a branch's own shelf, not the
+	// whole catalogue (P20-D17).
+	const carriedOnly = listSearch.carried !== "false"
 	const [offset, setOffset] = useState(0)
 	const [receiveOpen, setReceiveOpen] = useState(false)
 	const [adjustOpen, setAdjustOpen] = useState(false)
@@ -52,6 +55,7 @@ export function StockPage() {
 		branchId: branchId ?? undefined,
 		q: debouncedSearch.trim() || undefined,
 		lowStock: lowOnly ? true : undefined,
+		carried: carriedOnly ? true : undefined,
 		limit: PAGE_SIZE,
 		offset,
 	}
@@ -98,6 +102,20 @@ export function StockPage() {
 								}}
 							/>
 							<Label htmlFor="low-stock-only">Low stock only</Label>
+						</div>
+
+						<div className="flex items-center gap-2 pb-2">
+							<Switch
+								id="stock-carried-only"
+								checked={carriedOnly}
+								onCheckedChange={(checked) => {
+									void navigateSearch({
+										search: (prev) => ({ ...prev, carried: checked ? undefined : "false" }),
+									})
+									setOffset(0)
+								}}
+							/>
+							<Label htmlFor="stock-carried-only">Stocked here only</Label>
 						</div>
 					</>
 				)}
@@ -151,6 +169,7 @@ export function StockPage() {
 								<TableRow>
 									<TableHead>SKU</TableHead>
 									<TableHead>Product</TableHead>
+									{branchId === null ? <TableHead>Branch</TableHead> : null}
 									<TableHead>Category</TableHead>
 									<TableHead className="text-right">On hand</TableHead>
 									<TableHead className="text-right">Avg cost</TableHead>
@@ -163,19 +182,25 @@ export function StockPage() {
 							<TableBody>
 								{stockQuery.isLoading ? (
 									<TableRow>
-										<TableCell colSpan={9} className="text-muted-foreground">
+										<TableCell
+											colSpan={branchId === null ? 10 : 9}
+											className="text-muted-foreground"
+										>
 											Loading stock…
 										</TableCell>
 									</TableRow>
 								) : stockQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={9} className="text-destructive">
+										<TableCell colSpan={branchId === null ? 10 : 9} className="text-destructive">
 											Could not load stock.
 										</TableCell>
 									</TableRow>
 								) : rows.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={9} className="text-muted-foreground">
+										<TableCell
+											colSpan={branchId === null ? 10 : 9}
+											className="text-muted-foreground"
+										>
 											{lowOnly
 												? "No products are at or below their threshold."
 												: "No stock recorded for this branch yet. Receive stock to begin."}
@@ -186,6 +211,9 @@ export function StockPage() {
 										<TableRow key={row.productId}>
 											<TableCell className="font-mono text-xs">{row.sku}</TableCell>
 											<TableCell className="font-medium">{row.productName}</TableCell>
+											{branchId === null ? (
+												<TableCell className="text-muted-foreground">{row.branchName}</TableCell>
+											) : null}
 											<TableCell className="text-muted-foreground">{row.categoryName}</TableCell>
 											<TableCell className="text-right tabular-nums">
 												{/* A branch that never carried the product has no level, which is not

@@ -185,6 +185,8 @@ export interface StockListQuery {
   limit: number
   offset: number
   outOfStock?: boolean
+  /** Only products the branch has a stock level for (P20-D17). */
+  carried?: boolean
 }
 
 export interface StockListFilters {
@@ -194,6 +196,8 @@ export interface StockListFilters {
   lowStock: boolean
   /** Only rows with nothing on hand (18-01). Mutually exclusive with lowStock in the UI. */
   outOfStock: boolean
+  /** Only products with a stock level at the branch (P20-D17). */
+  carried: boolean
   limit: number
   offset: number
 }

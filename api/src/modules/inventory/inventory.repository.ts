@@ -374,6 +374,11 @@ function stockConditions(filters: StockListFilters) {
   if (filters.outOfStock) {
     conditions.push(sql`${onHand} <= 0`)
   }
+  // A null level is a product the branch never carried: it belongs to the catalogue,
+  // not to this branch's stock list (P20-D17).
+  if (filters.carried) {
+    conditions.push(sql`${stockLevel.id} is not null`)
+  }
   return conditions
 }
 
