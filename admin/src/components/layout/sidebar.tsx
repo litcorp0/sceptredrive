@@ -38,7 +38,7 @@ import {
 	useSidebar,
 } from "#/components/ui/sidebar"
 import { useBranch } from "#/lib/branch-context"
-import { useFlagValues } from "#/lib/flags"
+import { useFlagValues, useVatRegistered } from "#/lib/flags"
 import { toRole } from "#/lib/role"
 import { approvalSummaryOptions } from "#/modules/approvals"
 
@@ -70,6 +70,11 @@ interface NavItem {
 	permission?: Permission
 	/** An entry a feature flag can hide without a deploy (P14-D41). */
 	flag?: FlagKey
+	/**
+	 * An entry whose page only makes sense for a VAT-registered business (P20-D14).
+	 * The route keeps its permission; the rail simply stops offering it.
+	 */
+	requiresVatRegistered?: true
 }
 
 interface NavGroup {
@@ -148,7 +153,13 @@ export const NAV_GROUPS: NavGroup[] = [
 	{
 		label: "System",
 		items: [
-			{ to: "/evat", label: "E-VAT", icon: BadgeCheck, permission: "evat.read" },
+			{
+				to: "/evat",
+				label: "E-VAT",
+				icon: BadgeCheck,
+				permission: "evat.read",
+				requiresVatRegistered: true,
+			},
 			{ to: "/audit", label: "Audit log", icon: ScrollText, permission: "audit.read" },
 			{ to: "/settings", label: "Settings", icon: Settings2, permission: "settings.read" },
 		],
@@ -284,7 +295,11 @@ export function deepestNavPath(paths: readonly NavPath[], pathname: string): Nav
 	return best
 }
 
-function visibleGroups(roleValue: string, flags: Record<FlagKey, boolean>): NavGroup[] {
+function visibleGroups(
+	roleValue: string,
+	flags: Record<FlagKey, boolean>,
+	vatRegistered: boolean,
+): NavGroup[] {
 	const role = toRole(roleValue)
 
 	return NAV_GROUPS.map((group) => ({
@@ -292,7 +307,8 @@ function visibleGroups(roleValue: string, flags: Record<FlagKey, boolean>): NavG
 		items: group.items.filter(
 			(item) =>
 				(!item.permission || (role !== null && can(role, item.permission))) &&
-				(!item.flag || flags[item.flag]),
+				(!item.flag || flags[item.flag]) &&
+				(!item.requiresVatRegistered || vatRegistered),
 		),
 	})).filter((group) => group.items.length > 0)
 }
@@ -330,7 +346,11 @@ export function AppSidebar({ role }: { role: string }) {
 	const { isMobile, setOpenMobile } = useSidebar()
 	const roleValue = toRole(role)
 	const canReadSettings = roleValue !== null && can(roleValue, "settings.read")
-	const groups = visibleGroups(role, useFlagValues(canReadSettings))
+	const groups = visibleGroups(
+		role,
+		useFlagValues(canReadSettings),
+		useVatRegistered(canReadSettings),
+	)
 	const pathname = useRouterState({ select: (state) => state.location.pathname })
 	// Exactly one entry is the current page: the deepest one whose path matches.
 	// Prefix matching alone lit both "Staff" and "Permissions" on /staff/permissions,

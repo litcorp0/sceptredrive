@@ -23,3 +23,25 @@ export function useFlagValues(enabled = true): Record<FlagKey, boolean> {
 	const { data } = useQuery({ ...settingsListOptions(), enabled })
 	return flagValues(data?.settings)
 }
+
+/**
+ * One typed boolean setting, with the registry default when no row exists.
+ *
+ * Same rule as a flag: absence is not "off", it is "whatever the default says". Used by the
+ * navigation, which must not offer a page the business cannot use (P20-D14).
+ */
+export function booleanSetting(
+	settings: ResolvedSetting[] | undefined,
+	key: string,
+): boolean | null {
+	const row = settings?.find((setting) => setting.key === key)
+	return typeof row?.value === "boolean" ? row.value : null
+}
+
+/** Whether the business is VAT-registered — the switch the E-VAT page depends on. */
+export function useVatRegistered(enabled = true): boolean {
+	const { data } = useQuery({ ...settingsListOptions(), enabled })
+	// The registry default is `true`: a deployment that never wrote the setting still
+	// collects tax, so the link stays visible until someone turns it off.
+	return booleanSetting(data?.settings, "pricing.vatRegistered") ?? true
+}
