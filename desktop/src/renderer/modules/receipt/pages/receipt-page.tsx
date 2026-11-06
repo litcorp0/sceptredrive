@@ -284,7 +284,7 @@ export function ReceiptScreen({
 
           <Button
             type="button"
-            onClick={() => navigate('home')}
+            onClick={() => navigate('pos')}
             className="h-14 text-sm"
             data-testid="new-sale"
           >
