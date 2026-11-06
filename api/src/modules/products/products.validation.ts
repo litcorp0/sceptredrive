@@ -35,6 +35,15 @@ export const productCreateSchema = z
     brandId: z.uuid().nullish(),
     uomId: z.uuid(),
     basePriceMinor: priceMinorSchema,
+    /**
+     * A **fallback** cost, never the authority (P20-D12).
+     *
+     * Sales are costed from the branch's moving average, which only a goods receipt can
+     * set (`costForSale`). This field exists for the products whose stock never arrived
+     * through a receipt — an opening count, or a part carried since before the system —
+     * so their margin is not reported as "uncosted" forever. A receipt still wins.
+     */
+    costPriceMinor: priceMinorSchema.optional(),
     taxCategory: taxCategorySchema.optional(),
     barcodes: z.array(barcodeCodeSchema).max(10).optional(),
   })
@@ -52,6 +61,8 @@ export const productSubmissionSchema = z
     brandId: z.uuid().optional(),
     description: z.string().trim().min(1).max(500).optional(),
     proposedBasePriceMinor: z.number().int().min(1).max(100_000_000_000),
+    /** The manager's estimate; approved as the product's fallback cost. */
+    proposedCostMinor: z.number().int().min(0).optional(),
     barcode: barcodeCodeSchema.optional(),
     supplierId: z.uuid().optional(),
     note: z.string().trim().min(1).max(300).optional(),
@@ -80,6 +91,7 @@ export const productUpdateSchema = z
     brandId: z.uuid().nullish(),
     uomId: z.uuid().optional(),
     basePriceMinor: priceMinorSchema.optional(),
+    costPriceMinor: priceMinorSchema.optional(),
     taxCategory: taxCategorySchema.optional(),
   })
   .strict()

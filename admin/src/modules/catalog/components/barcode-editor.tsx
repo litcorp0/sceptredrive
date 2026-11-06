@@ -68,7 +68,8 @@ export function BarcodeEditor({
 				</div>
 			) : (
 				<p className="text-xs text-muted-foreground">
-					No barcodes yet. Scanners accept any unique code, EAN or supplier style.
+					No barcodes yet. Scanners accept any unique code, EAN or supplier style. A new product
+					saved without one is given an internal SD-code automatically.
 				</p>
 			)}
 

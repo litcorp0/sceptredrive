@@ -386,6 +386,54 @@ describe.skipIf(!available)('products API', () => {
       expect(after?.costPriceMinor).toBe(0)
     })
 
+    it('gives a product with no barcode an internal SD-code (P20-D11)', async () => {
+      const suggestion = await app.request('/api/products/suggest-barcode', {
+        headers: authedHeaders(adminCookie),
+      })
+      expect(suggestion.status).toBe(200)
+      const preview = await readJson<{ barcode: string }>(suggestion)
+      // Letters, digits and a dash: outside the all-digit GTIN space by construction,
+      // so it can never collide with a manufacturer's retail barcode.
+      expect(preview.barcode).toMatch(/^SD-\d{6}$/)
+
+      const response = await createProductViaApi(productPayload())
+      expect(response.status).toBe(201)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      const codes = body.product.barcodes?.map((item) => item.code) ?? []
+      expect(codes).toHaveLength(1)
+      expect(codes[0]).toMatch(/^SD-\d{6}$/)
+      // The peek does not consume the sequence, so the created product takes it.
+      expect(codes[0]).toBe(preview.barcode)
+    })
+
+    it('keeps the barcode the admin supplied instead of generating one', async () => {
+      const barcode = `SUP${suffix}-01`
+      const response = await createProductViaApi(productPayload({ barcodes: [barcode] }))
+      expect(response.status).toBe(201)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      expect(body.product.barcodes?.map((item) => item.code)).toEqual([barcode])
+    })
+
+    it('accepts a fallback cost price and never lets it beat a receipt (P20-D12)', async () => {
+      const response = await createProductViaApi(
+        productPayload({ costPriceMinor: 7_250, basePriceMinor: 10_000 }),
+      )
+      expect(response.status).toBe(201)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      expect(body.product.costPriceMinor).toBe(7_250)
+
+      // The field is a fallback: `costForSale` prefers the branch's moving average, so a
+      // receipt still decides the cost of a sale. This asserts the preference directly.
+      const painted = await app.request(`/api/products/${body.product.id}`, {
+        method: 'PATCH',
+        headers: authedHeaders(adminCookie),
+        body: JSON.stringify({ costPriceMinor: 8_000 }),
+      })
+      expect(painted.status).toBe(200)
+      const updated = await readJson<{ product: ProductRecord }>(painted)
+      expect(updated.product.costPriceMinor).toBe(8_000)
+    })
+
     it('rejects a duplicate SKU with 409', async () => {
       const sku = `DUP-${suffix}-01`
       await createProductViaApi(productPayload({ sku }))

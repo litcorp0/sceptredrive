@@ -80,6 +80,8 @@ export interface ProductCreateInput {
   brandId?: string | null | undefined
   uomId: string
   basePriceMinor: number
+  /** Fallback cost; a goods receipt's moving average wins (P20-D12). */
+  costPriceMinor?: number | undefined
   taxCategory?: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | undefined
   barcodes?: string[] | undefined
 }
@@ -92,6 +94,7 @@ export interface ProductUpdateInput {
   brandId?: string | null | undefined
   uomId?: string | undefined
   basePriceMinor?: number | undefined
+  costPriceMinor?: number | undefined
   taxCategory?: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | undefined
 }
 
@@ -164,6 +167,7 @@ export interface ProductSubmissionBody {
   brandId?: string
   description?: string
   proposedBasePriceMinor: number
+  proposedCostMinor?: number
   barcode?: string
   supplierId?: string
   note?: string

@@ -57,6 +57,23 @@ export function suggestProductSku() {
 	return apiRequest<{ sku: string }>("/api/products/suggest-sku")
 }
 
+/** The internal code the next product without a barcode will receive (P20-D11). */
+export function suggestProductBarcode() {
+	return apiRequest<{ barcode: string }>("/api/products/suggest-barcode")
+}
+
+/**
+ * The peek as a query. Deliberately not keyed by product: the sequence moves only when
+ * a product is created, and `catalogKeys.products` invalidation covers that.
+ */
+export function suggestBarcodeOptions() {
+	return queryOptions({
+		queryKey: ["catalog", "suggest-barcode"] as const,
+		queryFn: suggestProductBarcode,
+		staleTime: 0,
+	})
+}
+
 export function createProduct(input: ProductCreateInput) {
 	return apiRequest<{ product: ProductWithBarcodes }>("/api/products", {
 		method: "POST",

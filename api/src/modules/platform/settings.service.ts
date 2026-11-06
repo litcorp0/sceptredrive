@@ -229,6 +229,7 @@ export async function updateSetting(
 export type SequenceKey =
   | 'staff.idSequence'
   | 'catalog.skuSequence'
+  | 'catalog.barcodeSequence'
   | 'inventory.receiptSequence'
   | 'inventory.transferSequence'
   | 'inventory.countSequence'
@@ -243,6 +244,7 @@ const SEQUENCE_FORMATS: Record<
     prefixKey:
       | 'staff.idPrefix'
       | 'catalog.skuPrefix'
+      | 'catalog.barcodePrefix'
       | 'inventory.receiptPrefix'
       | 'inventory.transferPrefix'
       | 'inventory.countPrefix'
@@ -256,6 +258,7 @@ const SEQUENCE_FORMATS: Record<
 > = {
   'staff.idSequence': { prefixKey: 'staff.idPrefix', pad: 4, label: 'staff identifier' },
   'catalog.skuSequence': { prefixKey: 'catalog.skuPrefix', pad: 5, label: 'SKU' },
+  'catalog.barcodeSequence': { prefixKey: 'catalog.barcodePrefix', pad: 6, label: 'barcode' },
   'inventory.receiptSequence': {
     prefixKey: 'inventory.receiptPrefix',
     pad: 5,

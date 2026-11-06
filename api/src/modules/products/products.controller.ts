@@ -23,6 +23,10 @@ export async function suggestSku(c: Context<AppEnv>) {
   return c.json(suggestion)
 }
 
+export async function suggestBarcode(c: Context<AppEnv>) {
+  return c.json(await productsService.suggestBarcode())
+}
+
 export async function createProduct(c: Context<AppEnv>, input: ProductCreateInput) {
   const actor = actorFromContext(c)
   const product = await productsService.createProduct(actor, input)

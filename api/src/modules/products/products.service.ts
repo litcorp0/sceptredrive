@@ -186,6 +186,11 @@ export async function suggestSku(): Promise<{ sku: string }> {
   return { sku: await peekSequenceValue('catalog.skuSequence') }
 }
 
+/** Peeks the internal barcode the next product without one would receive (P20-D11). */
+export async function suggestBarcode(): Promise<{ barcode: string }> {
+  return { barcode: await peekSequenceValue('catalog.barcodeSequence') }
+}
+
 /**
  * Creates a product with optional barcodes in a single transaction. When no
  * SKU is supplied it is allocated atomically from `catalog.skuSequence`.
@@ -216,8 +221,9 @@ export async function createProduct(
         categoryId,
         brandId,
         uomId,
-        // Derived from the latest receipt and never typed (P11-D13).
-        costPriceMinor: 0,
+        // A typed fallback cost, used only until a goods receipt sets the branch's
+        // moving average (P20-D12). Zero means "no fallback", which is the old behaviour.
+        costPriceMinor: input.costPriceMinor ?? 0,
         basePriceMinor: input.basePriceMinor,
         taxCategory: input.taxCategory ?? 'STANDARD',
         createdBy: actor.actorId,
@@ -230,8 +236,15 @@ export async function createProduct(
       await advanceSequencePast('catalog.skuSequence', created.sku, tx)
     }
 
+    // A product the supplier did not barcode still needs a code a label can carry
+    // (P20-D11). Allocated inside the transaction, from a sequence, in a format that
+    // cannot collide with a real GTIN.
+    const supplied = normalizeBarcodes(input.barcodes)
+    const codes =
+      supplied.length > 0 ? supplied : [await allocateFromSequence('catalog.barcodeSequence', tx)]
+
     const barcodeRows: BarcodeRow[] = []
-    for (const code of normalizeBarcodes(input.barcodes)) {
+    for (const code of codes) {
       try {
         const row = await insertBarcode(
           { productId: created.id, code, createdBy: actor.actorId },
@@ -364,6 +377,9 @@ export async function updateProduct(
       }
       if (input.taxCategory !== undefined && input.taxCategory !== existing.taxCategory) {
         patch.taxCategory = input.taxCategory
+      }
+      if (input.costPriceMinor !== undefined && input.costPriceMinor !== existing.costPriceMinor) {
+        patch.costPriceMinor = input.costPriceMinor
       }
 
       if (Object.keys(patch).length === 0) return existing
@@ -904,7 +920,7 @@ async function createProductFromSubmission(
       categoryId,
       brandId,
       uomId,
-      costPriceMinor: 0,
+      costPriceMinor: input.proposedCostMinor ?? 0,
       basePriceMinor: input.proposedBasePriceMinor,
       taxCategory: 'STANDARD',
       createdBy: actor.actorId,
@@ -913,18 +929,14 @@ async function createProductFromSubmission(
   )
   if (!created) throw new AppError(500, 'INTERNAL', 'Failed to create the approved product')
 
-  if (input.barcode) {
-    try {
-      await insertBarcode(
-        { productId: created.id, code: input.barcode, createdBy: actor.actorId },
-        executor,
-      )
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw new ConflictError(`Barcode ${input.barcode} is already in use`)
-      }
-      throw error
+  const code = input.barcode ?? (await allocateFromSequence('catalog.barcodeSequence', executor))
+  try {
+    await insertBarcode({ productId: created.id, code, createdBy: actor.actorId }, executor)
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError(`Barcode ${code} is already in use`)
     }
+    throw error
   }
 
   await writeAudit(

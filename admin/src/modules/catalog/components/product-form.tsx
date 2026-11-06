@@ -18,7 +18,12 @@ import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import { settingsListOptions } from "#/modules/settings"
 import { catalogKeys } from "../api/keys"
-import { createProduct, suggestProductSku, updateProduct } from "../api/products"
+import {
+	createProduct,
+	suggestBarcodeOptions,
+	suggestProductSku,
+	updateProduct,
+} from "../api/products"
 import type { Brand, CategoryTreeNode, ProductRow, TaxCategory, TaxMode, Uom } from "../types"
 import { TaxPreview } from "./tax-preview"
 
@@ -33,6 +38,8 @@ export interface ProductFormValues {
 	uomId: string
 	taxCategory: TaxCategory
 	basePrice: string
+	/** Optional fallback cost; a goods receipt's average always wins (P20-D12). */
+	costPrice: string
 }
 
 const EMPTY_VALUES: ProductFormValues = {
@@ -44,6 +51,7 @@ const EMPTY_VALUES: ProductFormValues = {
 	uomId: "",
 	taxCategory: "STANDARD",
 	basePrice: "",
+	costPrice: "",
 }
 
 function valuesFromProduct(product: ProductRow): ProductFormValues {
@@ -56,6 +64,7 @@ function valuesFromProduct(product: ProductRow): ProductFormValues {
 		uomId: product.uomId,
 		taxCategory: product.taxCategory,
 		basePrice: formatMinorPlain(product.basePriceMinor),
+		costPrice: product.costPriceMinor > 0 ? formatMinorPlain(product.costPriceMinor) : "",
 	}
 }
 
@@ -103,6 +112,13 @@ export function ProductForm({
 	const [priceError, setPriceError] = useState<string | null>(null)
 	const [suggesting, setSuggesting] = useState(false)
 
+	// What a product saved with no barcode will be given. A peek, not an allocation:
+	// the code is assigned inside the create transaction (P20-D11).
+	const barcodeHint = useQuery({
+		...suggestBarcodeOptions(),
+		enabled: !isEdit && !readOnly && (createBarcodes?.length ?? 0) === 0,
+	})
+
 	useEffect(() => {
 		setValues(initialProduct ? valuesFromProduct(initialProduct) : EMPTY_VALUES)
 		setFormError(null)
@@ -147,6 +163,15 @@ export function ProductForm({
 				throw new Error("invalid price")
 			}
 
+			// Empty is "no fallback"; a typed 0.00 is the same thing to the server, so the
+			// field can be cleared without inventing a cost.
+			const costPriceMinor =
+				values.costPrice.trim() === "" ? undefined : parseGhsToMinor(values.costPrice)
+			if (costPriceMinor === null) {
+				setFormError("Enter a valid cost, e.g. 72.50")
+				throw new Error("invalid cost")
+			}
+
 			const payload = {
 				sku: values.sku.trim() || undefined,
 				name: values.name.trim(),
@@ -155,6 +180,7 @@ export function ProductForm({
 				brandId: values.brandId === NO_BRAND ? null : values.brandId,
 				uomId: values.uomId,
 				basePriceMinor,
+				costPriceMinor,
 				taxCategory: values.taxCategory,
 			}
 
@@ -175,7 +201,7 @@ export function ProductForm({
 		},
 		onError: (error) => {
 			if (error instanceof Error && !("status" in error)) {
-				if (error.message === "invalid price") return
+				if (error.message === "invalid price" || error.message === "invalid cost") return
 				setFormError(error.message)
 				return
 			}
@@ -342,12 +368,37 @@ export function ProductForm({
 					</div>
 
 					{/*
-					 * No cost field: the catalogue cost follows the latest goods receipt (P11-D13), and a
-					 * branch average can also come from an opening-stock adjustment (17-05).
-					 * The read-only line lives on the product detail page, beside the price history;
-					 * a form field here would be a second, editable source of truth and the API
-					 * rejects it (`productUpdateSchema` is strict).
+					 * The cost here is a **fallback**, not the authority (P20-D12). Sales are costed
+					 * from the branch's moving average, which only a goods receipt sets
+					 * (`costForSale`); this field covers the products whose stock never arrived through
+					 * one — an opening count, or a part carried since before the system — so their
+					 * margin is not reported as "uncosted" forever. A receipt still wins.
 					 */}
+					<div className="grid gap-1.5 sm:max-w-xs">
+						<Label htmlFor="product-cost-price">
+							Cost price
+							<span className="ml-1 text-xs font-normal text-muted-foreground">optional</span>
+						</Label>
+						<div className="relative">
+							<span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
+								GHS
+							</span>
+							<Input
+								id="product-cost-price"
+								className="pl-10 tabular-nums"
+								inputMode="decimal"
+								placeholder="0.00"
+								value={values.costPrice}
+								disabled={disabled}
+								onChange={(event) => update("costPrice", event.target.value)}
+							/>
+						</div>
+						<p className="text-xs text-muted-foreground">
+							Used for margin until a goods receipt sets this branch&apos;s average. The receipt
+							always wins.
+						</p>
+					</div>
+
 					<div className="grid gap-1.5 sm:max-w-xs">
 						<Label htmlFor="product-base-price">
 							Base selling price{taxMode === "INCLUSIVE" ? " (tax included)" : ""}
@@ -385,6 +436,12 @@ export function ProductForm({
 					</div>
 
 					{barcodeEditor}
+					{!isEdit && !readOnly && (createBarcodes?.length ?? 0) === 0 && barcodeHint.data ? (
+						<p className="text-xs text-muted-foreground" data-testid="barcode-hint">
+							Saved without a barcode, this product gets{" "}
+							<span className="font-mono">{barcodeHint.data.barcode}</span>.
+						</p>
+					) : null}
 
 					{formError ? (
 						<p role="alert" className="text-sm text-destructive">

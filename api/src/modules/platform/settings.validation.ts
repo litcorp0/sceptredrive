@@ -138,6 +138,30 @@ export const SETTING_DEFINITIONS = {
     defaultValue: 1,
     branchScoped: false,
   },
+  /**
+   * The internal barcode sequence (P20-D11).
+   *
+   * A product with no manufacturer barcode still needs something a label can carry, and
+   * that code must not look like a retail GTIN: an invented EAN "scans perfectly and rings
+   * up as somebody else's product" (GS1). `SD-000001` is letters, digits and a dash — outside
+   * the all-digit GTIN space by construction — and it is a plain Code 128 payload when the
+   * shop prints a shelf label.
+   */
+  'catalog.barcodePrefix': {
+    schema: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8)
+      .regex(/^[A-Za-z0-9]+$/),
+    defaultValue: 'SD',
+    branchScoped: false,
+  },
+  'catalog.barcodeSequence': {
+    schema: z.number().int().positive(),
+    defaultValue: 1,
+    branchScoped: false,
+  },
   'pricing.taxMode': {
     schema: z.enum(['INCLUSIVE', 'EXCLUSIVE']),
     defaultValue: 'INCLUSIVE',

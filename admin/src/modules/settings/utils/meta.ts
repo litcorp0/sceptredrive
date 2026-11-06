@@ -79,6 +79,15 @@ export const SETTING_META: SettingMetaMap = {
 		label: "Next SKU number",
 		description: "The next number for new products. Saving a suggested SKU advances it.",
 	},
+	"catalog.barcodePrefix": {
+		label: "Internal barcode prefix",
+		description:
+			"Prefix for the barcode given to a product that has none, e.g. SD-000001. This is not a retail GTIN — never use a 13-digit number you do not hold a GS1 licence for.",
+	},
+	"catalog.barcodeSequence": {
+		label: "Next internal barcode number",
+		description: "The next number handed to a product created without a barcode.",
+	},
 	"pricing.vatRegistered": {
 		label: "The business is VAT-registered",
 		description:

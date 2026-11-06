@@ -39,6 +39,13 @@ productsRoutes.get(
   (c) => productsController.suggestSku(c),
 )
 
+productsRoutes.get(
+  '/api/products/suggest-barcode',
+  requireSession,
+  requirePermission('catalog.create'),
+  (c) => productsController.suggestBarcode(c),
+)
+
 productsRoutes.post(
   '/api/products',
   requireSession,

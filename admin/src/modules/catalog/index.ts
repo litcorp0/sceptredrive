@@ -41,6 +41,7 @@ export {
 	removeProductBarcode,
 	removeProductPrice,
 	setProductPrice,
+	suggestProductBarcode,
 	suggestProductSku,
 	updateProduct,
 } from "./api/products"
