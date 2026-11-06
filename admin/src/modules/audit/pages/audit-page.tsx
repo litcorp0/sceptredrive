@@ -36,6 +36,11 @@ export function AuditPage() {
 	const { session } = authenticatedRoute.useRouteContext()
 	const { activeBranchId, branches } = useBranch()
 	const canRead = hasPermission(session.user.role, "audit.read")
+	// A manager is pinned to their branch by the API (`resolveBranchFilter`), so the header
+	// says which branch rather than claiming to be the company's whole log (P20-D15).
+	const canSeeAllBranches = session.user.role === "ADMIN"
+	const ownBranchName =
+		branches.find((branch) => branch.id === session.user.branchId)?.name ?? "your branch"
 
 	const [action, setAction] = useState("")
 	const [entity, setEntity] = useState("")
@@ -109,7 +114,14 @@ export function AuditPage() {
 		<div>
 			<PageHeader
 				title="Audit log"
-				description="Every change made in the console, newest first."
+				description={
+					// The API scopes a manager to their own branch; the page said "every change",
+					// which read as company-wide and made a correct scope look like a missing one
+					// (P20-D15).
+					canSeeAllBranches
+						? "Every change made in the console, newest first."
+						: `Every change recorded against ${ownBranchName}, newest first.`
+				}
 				actions={
 					<div className="flex max-w-72 flex-col items-end gap-1">
 						<ExportButton
