@@ -339,6 +339,24 @@ describe.skipIf(!available)('payment intents and provider state', () => {
     expect(paid.paidAt).not.toBeNull()
   })
 
+  it('polls an OTP-pending charge with check-charge, so it cannot fail before the code', async () => {
+    requestMockPaymentOtp()
+    const created = await readPayment(await postPayment(createBody()))
+    expect(created.requiresOtp).toBe(true)
+
+    // The first tick of the till's poll must not call transaction/verify:
+    // Paystack can report "Transaction was not completed" while it is still
+    // waiting for the OTP, which is the regression this pins.
+    const refreshed = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(refreshed.status).toBe('PENDING')
+    expect(refreshed.requiresOtp).toBe(true)
+    expect(getMockCallCounts().check).toBe(1)
+    expect(getMockCallCounts().verify).toBe(0)
+
+    const paid = await readPayment(await submitOtpRequest(created.id, MOCK_PAYMENT_OTP))
+    expect(paid.status).toBe('PAID')
+  })
+
   it('refuses an OTP for a payment that never asked for one', async () => {
     const created = await readPayment(await postPayment(createBody()))
 

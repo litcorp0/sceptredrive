@@ -252,7 +252,10 @@ the reason.
 Some live Ghana numbers answer `send_otp` instead of `pay_offline` (notably the
 Telecel/Vodafone voucher flow). That is **not** a failure and not a dashboard setting: the till
 must show a one-time-code field and post the code to `/charge/submit_otp`. The app stores only
-the fact that a code is required, never the code itself. If the field does not appear and the
+the fact that a code is required, never the code itself. While that row is pending it is polled
+with `GET /charge/:reference` (check pending charge), **not** `transaction/verify`: Paystack's
+verify call can report the still-waiting charge as "Transaction was not completed", which would
+close the window before the cashier can submit the code. If the field does not appear and the
 charge ends as "Transaction was not completed", the POS/API build predates the OTP fix.
 
 ### What test mode does not simulate
@@ -338,6 +341,7 @@ charge ends as "Transaction was not completed", the POS/API build predates the O
 | `Invalid key` from the API | wrong mode/key pair | `sk_test_` with `PAYSTACK_MODE=test`, `sk_live_` with `live` in production |
 | `pay_offline` forever | customer did not approve within 180s | expected; start a new charge |
 | "Please enter the one-time password" then "Transaction was not completed" | the number answered `send_otp` and no code was submitted before the 180s timeout | the till must show the OTP field and post it to `/api/pos/payments/:id/otp`; update the POS/API if it does not |
+| OTP field appears, then "Transaction was not completed" a second later | the poll used `transaction/verify`, which reports an OTP-pending charge as not completed | an OTP-pending row must be polled with `GET /charge/:reference` (check pending charge); update the API |
 | OTP field shows but every code is rejected | wrong code, expired charge, or the phone is not the one that received the code | read the provider's message; if it says expired, start a new charge |
 | Transfer `blocked` | the approval URL/server did not answer in time | not used by this app unless you configure URL approval; prefer OTP |
 

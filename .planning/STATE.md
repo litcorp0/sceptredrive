@@ -17,11 +17,16 @@
 > `/charge/submit_otp`; `POST /api/pos/payments/:id/otp` is device-scoped and
 > rate-limited to 10 attempts a minute; the tender and credit-repayment screens
 > show a one-time-code field. A wrong code stays `PENDING` with Paystack's
-> message, and only `success` moves money. Tests: API provider mapping + OTP
-> lifecycle, desktop client + state machine. Gates: `check-types` 7/7, `lint`
-> clean, API **910**, desktop **657**, shared **370**, web **33**, `bun run build`
-> green. Live verification still needs a real Telecel/Vodafone charge; the MTN
-> test number does not exercise `send_otp`.
+> message, and only `success` moves money. A live follow-up showed the field
+> appearing and "Transaction was not completed" arriving a second later: the
+> till's first poll used `transaction/verify`, which reports an OTP-pending
+> charge as not completed. OTP-pending rows are now polled with
+> `GET /charge/:reference` (check pending charge), which keeps `send_otp` live;
+> a check that cannot be read stays `PENDING`, never failed. Tests: API provider
+> mapping + OTP lifecycle + check-charge, desktop client + state machine. Gates:
+> `check-types` 7/7, `lint` clean, API **914**, desktop **657**, shared **370**,
+> web **33**, `bun run build` green. Live verification still needs a real
+> Telecel/Vodafone charge; the MTN test number does not exercise `send_otp`.
 
 > **2026-10-28 (post-Phase-14):** Two-factor authentication was removed at the
 > operator's request. Sign-in is email + password; migration `0018` drops the

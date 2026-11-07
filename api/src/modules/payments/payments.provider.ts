@@ -130,6 +130,12 @@ export interface PaymentProvider {
    * the row stays `PENDING` and the customer can try again.
    */
   submitOtp(reference: string, otp: string): Promise<ProviderChargeResult>
+  /**
+   * `GET /charge/:reference` — Paystack's "check pending charge" call. Unlike
+   * `verify`, it keeps `send_otp` as a live state instead of reporting a
+   * not-yet-completed charge as failed.
+   */
+  checkCharge(reference: string): Promise<ProviderChargeResult>
   verify(reference: string): Promise<ProviderVerification>
   refund(input: { reference: string; amountMinor: number; note: string }): Promise<ProviderRefund>
   createTransferRecipient(input: TransferRecipientInput): Promise<{ recipientCode: string }>

@@ -299,6 +299,39 @@ export class PaystackPaymentProvider implements PaymentProvider {
     return result
   }
 
+  /**
+   * Paystack's documented "check pending charge" call. This is the right way to
+   * poll a charge that is waiting for an OTP: `transaction/verify` can report a
+   * still-pending charge as failed ("Transaction was not completed"), which
+   * would end the customer's 180-second window before they submit the code.
+   */
+  async checkCharge(reference: string): Promise<ProviderChargeResult> {
+    const response = await this.request<PaystackChargeData>(
+      'GET',
+      `/charge/${encodeURIComponent(reference)}`,
+    )
+
+    if (!response.ok || !response.data) {
+      // A check that cannot be read is "we do not know", never a decline: keep
+      // the payment pending for the next poll or the expiry path.
+      return {
+        reference,
+        status: 'PENDING',
+        displayText: null,
+        authorizationUrl: null,
+        accountNumber: null,
+        accountName: null,
+        accountBank: null,
+        expiresAt: null,
+        transactionId: null,
+        failureCode: 'check_failed',
+        failureMessage: response.message,
+      }
+    }
+
+    return this.toChargeResult({ reference }, response, 'PENDING')
+  }
+
   async verify(reference: string): Promise<ProviderVerification> {
     const response = await this.request<PaystackTransactionData>(
       'GET',

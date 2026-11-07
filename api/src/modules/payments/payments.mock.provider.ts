@@ -87,6 +87,7 @@ let balanceMinor = DEFAULT_MOCK_BALANCE_MINOR
 
 interface MockCallCounts {
   charge: number
+  check: number
   verify: number
   refund: number
   recipient: number
@@ -96,6 +97,7 @@ interface MockCallCounts {
 
 let calls: MockCallCounts = {
   charge: 0,
+  check: 0,
   verify: 0,
   refund: 0,
   recipient: 0,
@@ -279,6 +281,23 @@ export class MockPaymentProvider implements PaymentProvider {
     record.paidAt = new Date()
     chargesAwaitingOtp.delete(reference)
     return baseResult(reference, 'SUCCESS', record)
+  }
+
+  /**
+   * The mock mirrors Paystack's charge endpoint: an OTP-pending charge is
+   * `OTP_REQUIRED`, not `failed`, even though `verify` may be less forgiving.
+   */
+  async checkCharge(reference: string): Promise<ProviderChargeResult> {
+    calls.check += 1
+    const record = charges.get(reference)
+    if (!record) return baseResult(reference, 'PENDING', {})
+
+    if (record.requiresOtp) return baseResult(reference, 'OTP_REQUIRED', record)
+    if (record.status === 'PAID') return baseResult(reference, 'SUCCESS', record)
+    if (record.status === 'FAILED' || record.status === 'EXPIRED') {
+      return baseResult(reference, 'FAILED', record)
+    }
+    return baseResult(reference, record.method === 'MOMO' ? 'PAY_OFFLINE' : 'PENDING', record)
   }
 
   async verify(reference: string): Promise<ProviderVerification> {
@@ -533,5 +552,5 @@ export function resetMockProvider(): void {
   awaitingOtp.clear()
   otpForNextTransfer = false
   balanceMinor = DEFAULT_MOCK_BALANCE_MINOR
-  calls = { charge: 0, verify: 0, refund: 0, recipient: 0, transfer: 0, balance: 0 }
+  calls = { charge: 0, check: 0, verify: 0, refund: 0, recipient: 0, transfer: 0, balance: 0 }
 }

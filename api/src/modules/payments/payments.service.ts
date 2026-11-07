@@ -453,6 +453,24 @@ function verificationFromCharge(
   }
 }
 
+/**
+ * Reads the provider's current state for a `PENDING` payment.
+ *
+ * An OTP-pending charge must be polled with `GET /charge/:reference`, not
+ * `transaction/verify`: Paystack's verify call can report "Transaction was not
+ * completed" while it is still waiting for the code, which would end the
+ * customer's 180-second window a second after the OTP field appears.
+ */
+function verifyOrCheckPayment(row: PaymentRow): Promise<ProviderVerification> {
+  const provider = getPaymentProvider()
+  if (row.requiresOtp) {
+    return provider
+      .checkCharge(row.providerReference)
+      .then((result) => verificationFromCharge(result, row.amountMinor))
+  }
+  return provider.verify(row.providerReference)
+}
+
 function projectionFromCharge(result: ProviderChargeResult): PaymentPatch {
   const patch: PaymentPatch = {
     displayText: result.displayText,
@@ -649,7 +667,7 @@ export async function getPayment(
 
   let result: ProviderVerification
   try {
-    result = await getPaymentProvider().verify(row.providerReference)
+    result = await verifyOrCheckPayment(row)
   } catch (error) {
     if (error instanceof ProviderUnavailableError) {
       return toView((await repo.findById(row.id)) ?? row)
@@ -752,7 +770,7 @@ export async function abandonPayment(device: DeviceAuthContext, id: string): Pro
   // The webhook may simply be late. One verify inside the abandon call can still
   // win, and a success then becomes an orphan rather than being lost (P13-D8).
   try {
-    const result = await getPaymentProvider().verify(row.providerReference)
+    const result = await verifyOrCheckPayment(row)
     await db.transaction(async (tx) => {
       const locked = await repo.findByIdForUpdate(row.id, tx)
       if (!locked) return

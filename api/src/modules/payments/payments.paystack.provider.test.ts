@@ -75,6 +75,41 @@ describe('Paystack mobile-money charge responses', () => {
     expect(JSON.parse(String(init.body))).toEqual({ otp: '123456', reference: INPUT.reference })
   })
 
+  it('checks a pending charge with GET /charge/:reference and keeps send_otp live', async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({
+        status: true,
+        message: 'Charge attempted',
+        data: {
+          reference: INPUT.reference,
+          status: 'send_otp',
+          display_text: 'Please enter the one-time password sent to your phone',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const result = await provider().checkCharge(INPUT.reference)
+
+    expect(result.status).toBe('OTP_REQUIRED')
+    const [url, init] = (fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>)[0] as [
+      string,
+      RequestInit,
+    ]
+    expect(url).toBe('https://api.paystack.test/charge/sd-otp-1')
+    expect(init.method).toBe('GET')
+  })
+
+  it('treats an unreadable check as pending, not a failed payment', async () => {
+    const fetchImpl = vi.fn(async () => json({ status: false, message: 'Charge not found' }, 404))
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const result = await provider().checkCharge(INPUT.reference)
+
+    expect(result.status).toBe('PENDING')
+    expect(result.failureCode).toBe('check_failed')
+  })
+
   it('treats a repeated send_otp after submission as a code the provider did not accept', async () => {
     const fetchImpl = vi.fn(async () =>
       json({
