@@ -411,6 +411,73 @@ describe.skipIf(!available)('inventory API', () => {
     expect(auditRows.length).toBeGreaterThanOrEqual(1)
   })
 
+  it('values a costless increase at the product cost price (P20-D23)', async () => {
+    // A fresh product: catalogue cost 1800, never stocked, so its level average is zero.
+    // Found stock stated without a unit cost used to land at 0.00, which read as "this
+    // stock is worthless" beside a product that plainly had a cost.
+    const [fresh] = await db
+      .insert(product)
+      .values({
+        // Deliberately outside the suite's suffix alphabet (`randomToken` emits only
+        // A-HJ-NP-Z2-9), so this row cannot join the other tests' suffix searches.
+        sku: 'OI01-01',
+        name: 'Costless fallback oil',
+        categoryId,
+        uomId,
+        costPriceMinor: 1_800,
+        basePriceMinor: 3_000,
+      })
+      .returning({ id: product.id })
+    const freshId = fresh?.id ?? ''
+    createdProductIds.push(freshId)
+
+    const response = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchBId,
+        productId: freshId,
+        quantityDelta: 5,
+        reasonCode: 'FOUND',
+        note: 'Found on the shelf',
+      }),
+    })
+
+    expect(response.status).toBe(201)
+    const body = await readJson<{
+      level: { quantityOnHand: number; avgCostMinor: number }
+    }>(response)
+    expect(body.level.quantityOnHand).toBe(5)
+    // The fallback, not an invented number: the product's own cost price.
+    expect(body.level.avgCostMinor).toBe(1_800)
+
+    const detail = await app.request(`/api/inventory/stock/${freshId}?branchId=${branchBId}`, {
+      headers: authedHeaders(adminCookie),
+    })
+    expect(detail.status).toBe(200)
+    const detailBody = await readJson<{ stock: { avgCostMinor: number; valueMinor: number } }>(
+      detail,
+    )
+    expect(detailBody.stock.avgCostMinor).toBe(1_800)
+    expect(detailBody.stock.valueMinor).toBe(9_000)
+
+    // A stated cost still wins: (5 × 1800 + 5 × 2200) / 10 = 2000.
+    const stated = await app.request('/api/inventory/adjustments', {
+      method: 'POST',
+      headers: authedHeaders(adminCookie),
+      body: JSON.stringify({
+        branchId: branchBId,
+        productId: freshId,
+        quantityDelta: 5,
+        reasonCode: 'FOUND',
+        unitCostMinor: 2_200,
+      }),
+    })
+    expect(stated.status).toBe(201)
+    const statedBody = await readJson<{ level: { avgCostMinor: number } }>(stated)
+    expect(statedBody.level.avgCostMinor).toBe(2_000)
+  })
+
   it('lists movement history with filters', async () => {
     const all = await app.request(
       `/api/inventory/movements?productId=${productAId}&branchId=${branchAId}`,

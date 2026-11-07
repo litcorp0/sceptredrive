@@ -22,7 +22,7 @@ import {
 } from "#/components/ui/select"
 import { Textarea } from "#/components/ui/textarea"
 import { ApiError } from "#/lib/api"
-import { parseGhsToMinor } from "#/lib/format"
+import { formatMinorPlain, parseGhsToMinor } from "#/lib/format"
 import { toastApiError } from "#/lib/toast"
 import { createAdjustment } from "../api/inventory"
 import { inventoryKeys } from "../api/keys"
@@ -76,6 +76,21 @@ export function AdjustDialog({
 	// Opening stock: stock the shop already owns, which a receipt cannot describe.
 	const openingStock = direction === "in" && (reasonCode === "FOUND" || reasonCode === "CORRECTION")
 	const parsedCost = openingStock ? parseGhsToMinor(unitCost) : null
+
+	/**
+	 * Prefill the unit cost from the product itself (P20-D23).
+	 *
+	 * It is the number the catalogue already holds, so a FOUND batch is valued at what the
+	 * product costs unless the operator says this batch was different. Leaving it blank used
+	 * to value the goods at zero; the API now falls back to the same cost, and this makes the
+	 * fallback visible instead of silent.
+	 */
+	useEffect(() => {
+		if (!open) return
+		setUnitCost(
+			product && product.costPriceMinor > 0 ? formatMinorPlain(product.costPriceMinor) : "",
+		)
+	}, [open, product])
 
 	const createMutation = useMutation({
 		mutationFn: (delta: number) =>
@@ -216,8 +231,9 @@ export function AdjustDialog({
 								onChange={(event) => setUnitCost(event.target.value)}
 							/>
 							<p className="text-xs text-muted-foreground">
-								What these units cost you. Without it the branch average stays as it is, and sales
-								of this stock report no margin.
+								What these units cost you. Prefilled from the product&apos;s cost price; change it
+								if this batch cost something else. Left empty, the product&apos;s cost price is used
+								when the branch has no average yet.
 							</p>
 						</div>
 					) : null}

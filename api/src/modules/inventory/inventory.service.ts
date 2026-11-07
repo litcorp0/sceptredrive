@@ -167,11 +167,22 @@ export async function postMovements(
       // 17-05: opening stock carries a cost the way a receipt does. An adjustment
       // that states what the goods cost values them into the branch average; one
       // without a cost moves quantity only, exactly as before.
-      const valuedInbound =
-        inbound ||
-        (input.type === 'ADJUSTMENT' &&
-          input.quantityDelta > 0 &&
-          input.unitCostMinor !== undefined)
+      //
+      // Unless the level has never been valued (P20-D23). Stock that arrives without a
+      // stated cost, on a level whose average is still zero, used to be valued at
+      // nothing: the product's own cost price was ignored here even though the sale
+      // margin already fell back to it, so the shelf showed "Avg cost 0.00 / Value
+      // 0.00" beside a product that plainly had a cost. The catalogue cost is now the
+      // valuation fallback — a stated cost, or an average from a receipt, always wins.
+      let effectiveUnitCost = input.unitCostMinor
+      if (effectiveUnitCost === undefined && input.quantityDelta > 0 && level.avgCostMinor === 0) {
+        const catalogue = await findProductById(input.productId, executor)
+        if (catalogue && catalogue.costPriceMinor > 0) {
+          effectiveUnitCost = catalogue.costPriceMinor
+        }
+      }
+
+      const valuedInbound = inbound || (input.quantityDelta > 0 && effectiveUnitCost !== undefined)
 
       const quantityOnHand = level.quantityOnHand + input.quantityDelta
       if (quantityOnHand < 0 && !options.allowNegative) {
@@ -182,13 +193,11 @@ export async function postMovements(
         ? averageCostAfterReceipt(
             level.avgCostMinor,
             level.quantityOnHand,
-            input.unitCostMinor as number,
+            effectiveUnitCost ?? level.avgCostMinor,
             input.quantityDelta,
           )
         : level.avgCostMinor
-      const unitCostMinor = valuedInbound
-        ? (input.unitCostMinor as number)
-        : (input.unitCostMinor ?? level.avgCostMinor)
+      const unitCostMinor = effectiveUnitCost ?? level.avgCostMinor
 
       const updated = await updateLevel(level.id, { quantityOnHand, avgCostMinor }, executor)
       if (!updated) throw new AppError(500, 'INTERNAL', 'Failed to update the stock level')
