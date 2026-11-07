@@ -98,6 +98,8 @@ export function RepaymentScreen({
   const [momoProvider, setMomoProvider] = useState<'mtn' | 'vod' | 'atl'>('mtn')
   const [momoPhone, setMomoPhone] = useState('')
   const [payment, setPayment] = useState<PaymentView | null>(null)
+  const [otp, setOtp] = useState('')
+  const [otpBusy, setOtpBusy] = useState(false)
   const [showOverride, setShowOverride] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -124,6 +126,7 @@ export function RepaymentScreen({
     if (!db || !hit.customerId) return
     setError(null)
     setPayment(null)
+    setOtp('')
     setMessage(null)
     const loaded = await readCreditAccount(db, hit.customerId, identity.branchId)
     if (!loaded) {
@@ -205,6 +208,43 @@ export function RepaymentScreen({
       )
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function submitMomoOtp(): Promise<void> {
+    if (!payment || payment.status !== 'PENDING' || otpBusy) return
+
+    const code = otp.trim()
+    if (!/^\d{4,8}$/.test(code)) {
+      setError('Enter the one-time code sent to the customer’s phone.')
+      return
+    }
+
+    setOtpBusy(true)
+    setError(null)
+
+    try {
+      const next = await paymentsClient.submitOtp(payment.id, code)
+      setPayment(next)
+      setOtp('')
+      if (next.status === 'PAID') setMessage('MoMo payment received. Record the repayment.')
+      else if (next.status === 'PENDING') {
+        setMessage(
+          next.failedCode === 'otp_invalid'
+            ? (next.failedMessage ?? 'That code was not accepted. Check it and try again.')
+            : 'Still waiting for the payment network…',
+        )
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof PaymentClientError && cause.retryable
+          ? 'The payment network cannot be reached. Check the code again when the signal returns.'
+          : cause instanceof Error
+            ? cause.message
+            : 'The code could not be submitted',
+      )
+    } finally {
+      setOtpBusy(false)
     }
   }
 
@@ -559,6 +599,7 @@ export function RepaymentScreen({
                   if (!value) return
                   setMethod(value as RepaymentMethod)
                   setPayment(null)
+                  setOtp('')
                   setMessage(null)
                 }}
                 aria-label="Repayment method"
@@ -625,6 +666,48 @@ export function RepaymentScreen({
                 <StatusNote tone="info" role="status" className="mt-3">
                   {message}
                 </StatusNote>
+              ) : null}
+              {method === 'MOMO' && payment?.status === 'PENDING' && payment.requiresOtp ? (
+                <form
+                  className="mt-3 grid gap-2 rounded-md border border-border bg-background p-3"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void submitMomoOtp()
+                  }}
+                >
+                  <Label htmlFor="repayment-otp" className="text-xs text-muted-foreground">
+                    One-time code from the customer’s phone
+                  </Label>
+                  <Input
+                    id="repayment-otp"
+                    value={otp}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={8}
+                    disabled={otpBusy}
+                    placeholder="123456"
+                    onChange={(event) => setOtp(event.target.value)}
+                    aria-invalid={payment.failedCode === 'otp_invalid' ? true : undefined}
+                    data-testid="repayment-otp"
+                  />
+                  {payment.failedCode === 'otp_invalid' && payment.failedMessage ? (
+                    <p className="text-xs text-danger" role="alert">
+                      {payment.failedMessage}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      The customer reads the code sent to their phone. It is never stored.
+                    </p>
+                  )}
+                  <Button
+                    type="submit"
+                    className="h-11"
+                    disabled={otpBusy || otp.trim().length < 4}
+                    data-testid="repayment-otp-submit"
+                  >
+                    {otpBusy ? 'Checking…' : 'Submit code'}
+                  </Button>
+                </form>
               ) : null}
               {payment ? (
                 <p

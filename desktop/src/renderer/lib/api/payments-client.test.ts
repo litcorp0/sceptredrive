@@ -22,6 +22,7 @@ const PAYMENT: PaymentView = {
   status: 'PENDING',
   channel: null,
   displayText: 'Approve the prompt on your phone',
+  requiresOtp: false,
   authorizationUrl: null,
   accountNumber: null,
   accountName: null,
@@ -136,6 +137,17 @@ describe('payments client', () => {
       method: 'MOMO',
       mobileMoney: { provider: 'mtn' },
     })
+  })
+
+  it('submits a one-time code to the payment, never to the provider directly', async () => {
+    const fetchImpl = vi.fn(async () => json({ payment: { ...PAYMENT, requiresOtp: true } }))
+    const viewed = await client(fetchImpl).submitOtp('pay_1', '123456')
+
+    expect(viewed.requiresOtp).toBe(true)
+    const [url, init] = calls(fetchImpl)[0] as [string, RequestInit]
+    expect(url).toBe('https://api.example.test/api/pos/payments/pay_1/otp')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ otp: '123456' })
   })
 
   it('asks for a refresh only when told to', async () => {

@@ -104,6 +104,11 @@ const CHARGE_STATUS: Record<string, ProviderChargeResult['status']> = {
   success: 'SUCCESS',
   pending: 'PENDING',
   pending_bank_transfer: 'PENDING_BANK_TRANSFER',
+  // Some Ghana MoMo numbers (notably the Telecel/Vodafone voucher flow) answer
+  // with `send_otp` instead of `pay_offline`. The till must collect the code and
+  // call `/charge/submit_otp`; treating it as a plain offline prompt dead-ends
+  // the charge and Paystack reports "Transaction was not completed" at timeout.
+  send_otp: 'OTP_REQUIRED',
   failed: 'FAILED',
   timeout: 'FAILED',
 }
@@ -145,7 +150,7 @@ function integer(value: unknown): number | null {
 }
 
 function failureResult(
-  input: ChargeInput,
+  input: Pick<ChargeInput, 'reference'>,
   message: string,
   status: ProviderChargeResult['status'] = 'FAILED',
 ): ProviderChargeResult {
@@ -246,6 +251,52 @@ export class PaystackPaymentProvider implements PaymentProvider {
     })
 
     return this.toChargeResult(input, response, 'PENDING_BANK_TRANSFER')
+  }
+
+  /**
+   * Completes a charge that returned `send_otp`. The OTP is never logged and
+   * never persisted; it exists only in this request. A rejected code comes back
+   * as `OTP_REQUIRED` with the provider's own words, so the payment stays
+   * `PENDING` and the cashier can retry.
+   */
+  async submitOtp(reference: string, otp: string): Promise<ProviderChargeResult> {
+    const response = await this.request<PaystackChargeData>('POST', '/charge/submit_otp', {
+      otp,
+      reference,
+    })
+
+    if (!response.ok || !response.data) {
+      return {
+        reference,
+        status: 'OTP_REQUIRED',
+        displayText: null,
+        authorizationUrl: null,
+        accountNumber: null,
+        accountName: null,
+        accountBank: null,
+        expiresAt: null,
+        transactionId: null,
+        failureCode: 'otp_invalid',
+        failureMessage: response.message,
+      }
+    }
+
+    const result = this.toChargeResult({ reference }, response, 'PENDING')
+
+    // A 200 can still ask for the code again. It is not a settlement, and it is
+    // not a terminal failure: tell the cashier the code was not accepted.
+    if (result.status === 'OTP_REQUIRED') {
+      return {
+        ...result,
+        failureCode: result.failureCode ?? 'otp_invalid',
+        failureMessage:
+          result.failureMessage ??
+          result.displayText ??
+          'The provider did not accept that code. Check it and try again.',
+      }
+    }
+
+    return result
   }
 
   async verify(reference: string): Promise<ProviderVerification> {
@@ -445,7 +496,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
   }
 
   private toChargeResult(
-    input: ChargeInput,
+    input: Pick<ChargeInput, 'reference'>,
     response: RequestOutcome<PaystackChargeData>,
     fallbackStatus: ProviderChargeResult['status'],
   ): ProviderChargeResult {

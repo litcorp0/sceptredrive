@@ -35,6 +35,8 @@ export interface PaymentView {
   status: PaymentStatus
   channel: string | null
   displayText: string | null
+  /** The customer must give the till a one-time code before this can settle. */
+  requiresOtp: boolean
   authorizationUrl: string | null
   accountNumber: string | null
   accountName: string | null
@@ -165,6 +167,8 @@ export interface CreatePaymentInput {
 export interface PaymentClient {
   create(input: CreatePaymentInput): Promise<PaymentView>
   get(id: string, opts?: { refresh?: boolean }): Promise<PaymentView>
+  /** Completes a MoMo charge whose provider asked for an OTP. */
+  submitOtp(id: string, otp: string): Promise<PaymentView>
   abandon(id: string): Promise<PaymentView>
   claim(id: string, saleId: string): Promise<PaymentView>
 }
@@ -278,6 +282,13 @@ export function createPaymentClient(deps: PaymentClientDeps): PaymentClient {
     get(id, opts) {
       const query = opts?.refresh ? '?refresh=1' : ''
       return request(`/api/pos/payments/${encodeURIComponent(id)}${query}`, { method: 'GET' })
+    },
+
+    submitOtp(id, otp) {
+      return request(`/api/pos/payments/${encodeURIComponent(id)}/otp`, {
+        method: 'POST',
+        body: JSON.stringify({ otp }),
+      })
     },
 
     abandon(id) {

@@ -14,6 +14,7 @@ import {
   validateMockSettleTransfer,
   validatePaymentIdParam,
   validatePaymentQuery,
+  validateSubmitPaymentOtp,
 } from './payments.validation.ts'
 
 /**
@@ -51,6 +52,25 @@ paymentsRoutes.get(
     paymentsController.getPayment(c, c.req.valid('param').id, {
       refresh: c.req.valid('query').refresh === '1',
     }),
+)
+
+/**
+ * The second leg of a MoMo charge that answered `send_otp`. The bucket is
+ * deliberately tighter than create: a six-digit code is guessable, so the
+ * terminal gets ten attempts a minute and the provider sees the rest.
+ */
+paymentsRoutes.post(
+  '/api/pos/payments/:id/otp',
+  requireDeviceJwt,
+  rateLimit({
+    windowMs: 60_000,
+    max: 10,
+    keyPrefix: 'pos:payment:otp',
+    keyForRequest: (c) => c.get('device')?.deviceId ?? null,
+  }),
+  validatePaymentIdParam,
+  validateSubmitPaymentOtp,
+  (c) => paymentsController.submitPaymentOtp(c, c.req.valid('param').id, c.req.valid('json')),
 )
 
 paymentsRoutes.post(

@@ -33,6 +33,11 @@ export async function getPayment(c: Context<AppEnv>, id: string, query: PaymentQ
   return c.json({ payment })
 }
 
+export async function submitPaymentOtp(c: Context<AppEnv>, id: string, input: { otp: string }) {
+  const payment = await paymentsService.submitPaymentOtp(deviceFrom(c), id, input.otp)
+  return c.json({ payment })
+}
+
 export async function abandonPayment(c: Context<AppEnv>, id: string) {
   const payment = await paymentsService.abandonPayment(deviceFrom(c), id)
   return c.json({ payment })

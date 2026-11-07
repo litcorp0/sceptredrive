@@ -20,6 +20,8 @@ import { signDeviceJwt } from '../sync/sync.jwt.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import {
   getMockCallCounts,
+  MOCK_PAYMENT_OTP,
+  requestMockPaymentOtp,
   resetMockProvider,
   settleMockPayment,
 } from './payments.mock.provider.ts'
@@ -186,6 +188,14 @@ describe.skipIf(!available)('payment intents and provider state', () => {
     })
   }
 
+  function submitOtpRequest(id: string, otp: string, token = deviceA.token) {
+    return app.request(`/api/pos/payments/${id}/otp`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ otp }),
+    })
+  }
+
   async function readPayment(response: Response): Promise<PaymentView> {
     const body = (await response.json()) as { payment?: PaymentView; error?: unknown }
     if (!response.ok || !body.payment) {
@@ -297,6 +307,62 @@ describe.skipIf(!available)('payment intents and provider state', () => {
       .where(eq(payment.clientPaymentId, body.clientPaymentId))
     expect(rows).toHaveLength(1)
     expect(getMockCallCounts().charge).toBe(1)
+  })
+
+  it('asks for the one-time code Paystack sends and settles when it is submitted', async () => {
+    requestMockPaymentOtp()
+
+    const created = await readPayment(await postPayment(createBody()))
+    expect(created.status).toBe('PENDING')
+    expect(created.requiresOtp).toBe(true)
+    expect(created.displayText).toContain('one-time code')
+
+    const rows = await db.select().from(payment).where(eq(payment.id, created.id))
+    expect(rows[0]?.requiresOtp).toBe(true)
+
+    // A wrong code keeps the charge alive: it is not a failure, and the
+    // customer may read the message again.
+    const wrong = await submitOtpRequest(created.id, '000000')
+    expect(wrong.status).toBe(200)
+    const stillPending = await readPayment(wrong)
+    expect(stillPending.status).toBe('PENDING')
+    expect(stillPending.requiresOtp).toBe(true)
+    expect(stillPending.failedCode).toBe('otp_invalid')
+    expect(stillPending.paidAt).toBeNull()
+
+    // The right code moves money only through the provider's own success.
+    const right = await submitOtpRequest(created.id, MOCK_PAYMENT_OTP)
+    expect(right.status).toBe(200)
+    const paid = await readPayment(right)
+    expect(paid.status).toBe('PAID')
+    expect(paid.requiresOtp).toBe(false)
+    expect(paid.paidAt).not.toBeNull()
+  })
+
+  it('refuses an OTP for a payment that never asked for one', async () => {
+    const created = await readPayment(await postPayment(createBody()))
+
+    const response = await submitOtpRequest(created.id, MOCK_PAYMENT_OTP)
+    expect(response.status).toBe(409)
+    const body = (await response.json()) as { error?: { code?: string } }
+    expect(body.error?.code).toBe('PAYMENT_OTP_NOT_REQUIRED')
+
+    const rows = await db.select().from(payment).where(eq(payment.id, created.id))
+    expect(rows[0]?.status).toBe('PENDING')
+  })
+
+  it('scopes the OTP route to the owning terminal and rejects a malformed code', async () => {
+    requestMockPaymentOtp()
+    const created = await readPayment(await postPayment(createBody()))
+
+    const foreign = await submitOtpRequest(created.id, MOCK_PAYMENT_OTP, deviceB.token)
+    expect(foreign.status).toBe(404)
+
+    const malformed = await submitOtpRequest(created.id, '12ab')
+    expect(malformed.status).toBe(400)
+
+    const rows = await db.select().from(payment).where(eq(payment.id, created.id))
+    expect(rows[0]?.status).toBe('PENDING')
   })
 
   it('settles a pending payment through the mock harness and the refresh path', async () => {

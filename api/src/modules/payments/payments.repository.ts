@@ -16,6 +16,7 @@ export interface PaymentPatch {
   status?: PaymentStatus
   channel?: string | null
   displayText?: string | null
+  requiresOtp?: boolean
   authorizationUrl?: string | null
   accountNumber?: string | null
   accountName?: string | null

@@ -49,6 +49,8 @@ export interface ElectronicTender {
   amountMinor: number
   status: PaymentStatus
   displayText: string | null
+  /** The provider asked for a one-time code before it will settle. */
+  requiresOtp: boolean
   expiresAt: string | null
   providerReference: string | null
   /** Present on the live view; not persisted, refetched on resume for a card. */
@@ -56,6 +58,7 @@ export interface ElectronicTender {
   accountNumber?: string | null
   accountName?: string | null
   accountBank?: string | null
+  failedCode?: string | null
   failedMessage?: string | null
   momoProvider?: string | null
   phone?: string | null
@@ -115,12 +118,14 @@ function base(payment: PaymentView): ElectronicTender {
     amountMinor: payment.amountMinor,
     status: payment.status,
     displayText: payment.displayText,
+    requiresOtp: payment.requiresOtp,
     expiresAt: payment.expiresAt,
     providerReference: payment.providerReference,
     authorizationUrl: payment.authorizationUrl,
     accountNumber: payment.accountNumber,
     accountName: payment.accountName,
     accountBank: payment.accountBank,
+    failedCode: payment.failedCode,
     failedMessage: payment.failedMessage,
     abandoned: false,
   }
@@ -186,6 +191,9 @@ export function transition(
       amountMinor: row.amountMinor,
       status: row.status as PaymentStatus,
       displayText: row.displayText,
+      // Not persisted in the draft row: the first poll after a restart asks
+      // the server and turns the OTP field on.
+      requiresOtp: false,
       expiresAt: row.expiresAt,
       providerReference: row.providerReference,
       abandoned: false,

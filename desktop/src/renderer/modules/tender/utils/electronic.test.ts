@@ -23,6 +23,7 @@ function payment(overrides: Partial<PaymentView> = {}): PaymentView {
     status: 'PENDING',
     channel: null,
     displayText: 'Approve the prompt on your phone',
+    requiresOtp: false,
     authorizationUrl: null,
     accountNumber: null,
     accountName: null,
@@ -114,6 +115,22 @@ describe('electronic tender state machine', () => {
 
     expect(outcome.shouldPoll).toBe(true)
     expect(outcome.abandon).toBe(false)
+    expect(outcome.addTender).toBe(false)
+  })
+
+  it('carries the provider OTP demand to the screen without settling the tender', () => {
+    const outcome = transition(pending(), {
+      type: 'update',
+      payment: payment({
+        requiresOtp: true,
+        displayText: 'Enter the one-time code sent to the phone',
+      }),
+      now: BEFORE,
+    })
+
+    expect(outcome.tender?.requiresOtp).toBe(true)
+    expect(outcome.tender?.status).toBe('PENDING')
+    expect(outcome.shouldPoll).toBe(true)
     expect(outcome.addTender).toBe(false)
   })
 

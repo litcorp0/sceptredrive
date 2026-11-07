@@ -27,6 +27,8 @@ export type ProviderChargeStatus =
   | 'PENDING'
   | 'PAY_OFFLINE'
   | 'PENDING_BANK_TRANSFER'
+  /** Paystack `send_otp`: the customer must give the till a one-time code. */
+  | 'OTP_REQUIRED'
   | 'SUCCESS'
   | 'FAILED'
 
@@ -122,6 +124,12 @@ export interface PaymentProvider {
   createMobileMoneyCharge(input: ChargeInput): Promise<ProviderChargeResult>
   createCardCheckout(input: ChargeInput): Promise<ProviderChargeResult>
   createBankTransferCharge(input: ChargeInput): Promise<ProviderChargeResult>
+  /**
+   * Completes a charge that answered `send_otp`. A wrong code is a result, not
+   * an exception: it comes back `OTP_REQUIRED` with the provider's message so
+   * the row stays `PENDING` and the customer can try again.
+   */
+  submitOtp(reference: string, otp: string): Promise<ProviderChargeResult>
   verify(reference: string): Promise<ProviderVerification>
   refund(input: { reference: string; amountMinor: number; note: string }): Promise<ProviderRefund>
   createTransferRecipient(input: TransferRecipientInput): Promise<{ recipientCode: string }>

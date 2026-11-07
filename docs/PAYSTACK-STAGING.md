@@ -249,6 +249,12 @@ The API sends the charge to Paystack; Paystack returns `pay_offline` and the tes
 completes. The customer has **180 seconds**; after that the charge fails and `verify` returns
 the reason.
 
+Some live Ghana numbers answer `send_otp` instead of `pay_offline` (notably the
+Telecel/Vodafone voucher flow). That is **not** a failure and not a dashboard setting: the till
+must show a one-time-code field and post the code to `/charge/submit_otp`. The app stores only
+the fact that a code is required, never the code itself. If the field does not appear and the
+charge ends as "Transaction was not completed", the POS/API build predates the OTP fix.
+
 ### What test mode does not simulate
 
 - No real money moves and the test balance is not a settlement balance.
@@ -280,7 +286,11 @@ the reason.
 1. Choose **MoMo**, enter `0551234987`, choose MTN, and start.
 2. The till shows Paystack's `display_text` ("Please complete authorization…").
 3. The test number completes; `charge.success` settles the payment.
-4. If it stays pending past 180 seconds, the payment expires; the till returns to the tender
+4. If Paystack answers `send_otp`, the till shows **One-time code from the customer's phone**.
+   The customer reads the code, the cashier submits it, and only then does `charge.success`
+   settle the payment. A wrong code keeps the charge pending with Paystack's message; it does
+   not fail it.
+5. If it stays pending past 180 seconds, the payment expires; the till returns to the tender
    screen. Check the dashboard for the final status.
 
 ### Bank transfer
@@ -327,6 +337,8 @@ the reason.
 | Card checkout opens but never returns | callback URL points at your domain and the Electron window blocks it | use the default callback for the POS; the poll settles and closes the window |
 | `Invalid key` from the API | wrong mode/key pair | `sk_test_` with `PAYSTACK_MODE=test`, `sk_live_` with `live` in production |
 | `pay_offline` forever | customer did not approve within 180s | expected; start a new charge |
+| "Please enter the one-time password" then "Transaction was not completed" | the number answered `send_otp` and no code was submitted before the 180s timeout | the till must show the OTP field and post it to `/api/pos/payments/:id/otp`; update the POS/API if it does not |
+| OTP field shows but every code is rejected | wrong code, expired charge, or the phone is not the one that received the code | read the provider's message; if it says expired, start a new charge |
 | Transfer `blocked` | the approval URL/server did not answer in time | not used by this app unless you configure URL approval; prefer OTP |
 
 The dashboard **Webhook Events** page lists every attempt with the payload and your response;
@@ -351,6 +363,8 @@ Do these in order; none is optional.
 - [ ] CORS includes the production admin, web and `app://sceptre-drive` origins.
 - [ ] A small live card charge is made, refunded, and settled; its webhook is received.
 - [ ] A small live MoMo charge is made and settled; its webhook is received.
+- [ ] A live Telecel/Vodafone number that asks for a one-time code is completed through the
+      till's OTP field (the MTN test number does not exercise this path).
 - [ ] A supplier transfer is made to a real recipient (or a controlled one) and reconciled.
 - [ ] Keys are in the secret manager; rotation procedure is written down.
 - [ ] `docs/STAGING-ONE-DAY.md` is not used for production; it is disposable.

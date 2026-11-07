@@ -90,6 +90,8 @@ export function ElectronicTenderPanel({
   const [active, setActive] = useState<ElectronicTender | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [otpBusy, setOtpBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   const activeRef = useRef<ElectronicTender | null>(null)
@@ -99,6 +101,13 @@ export function ElectronicTenderPanel({
   const resumed = useRef(false)
 
   activeRef.current = active
+
+  // The code belongs to one charge, not to the next one: clear it whenever the
+  // panel moves to a different payment id.
+  useEffect(() => {
+    setOtp('')
+    setOtpBusy(false)
+  }, [active?.paymentId])
 
   function persist(tender: ElectronicTender | null, paymentId?: string | null): void {
     const id = tender?.paymentId ?? paymentId ?? null
@@ -380,6 +389,41 @@ export function ElectronicTenderPanel({
     }
   }
 
+  async function submitCode(): Promise<void> {
+    const paymentId = activeRef.current?.paymentId
+    if (!paymentId || otpBusy) return
+
+    const code = otp.trim()
+    if (!/^\d{4,8}$/.test(code)) {
+      setMessage('Enter the one-time code sent to the customer’s phone.')
+      return
+    }
+
+    setOtpBusy(true)
+    setMessage(null)
+
+    try {
+      const payment = await paymentsClient.submitOtp(paymentId, code)
+      setOtp('')
+      apply(transition(activeRef.current, { type: 'update', payment, now: Date.now() }))
+      if (payment.status === 'PENDING') {
+        setMessage(
+          payment.failedCode === 'otp_invalid'
+            ? (payment.failedMessage ?? 'That code was not accepted. Check it and try again.')
+            : 'Still waiting for the payment network…',
+        )
+      }
+    } catch (error) {
+      setMessage(
+        retryable(error)
+          ? 'Could not reach the payment network. Check the code again when the signal returns.'
+          : describe(error),
+      )
+    } finally {
+      setOtpBusy(false)
+    }
+  }
+
   async function cancel(): Promise<void> {
     const paymentId = activeRef.current?.paymentId
     closeCheckout()
@@ -521,6 +565,54 @@ export function ElectronicTenderPanel({
                     ? 'Paid.'
                     : '')}
             </p>
+
+            {active.method === 'MOMO' && waiting && active.requiresOtp ? (
+              <form
+                className="grid gap-2 rounded-md border border-border bg-background p-3"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void submitCode()
+                }}
+              >
+                <Label htmlFor="payment-otp" className="text-xs text-muted-foreground">
+                  One-time code from the customer’s phone
+                </Label>
+                <Input
+                  id="payment-otp"
+                  value={otp}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  disabled={otpBusy}
+                  placeholder="123456"
+                  onChange={(event) => setOtp(event.target.value)}
+                  aria-invalid={active.failedCode === 'otp_invalid' ? true : undefined}
+                  aria-describedby={
+                    active.failedCode === 'otp_invalid' && active.failedMessage
+                      ? 'payment-otp-problem'
+                      : undefined
+                  }
+                  data-testid="electronic-otp"
+                />
+                {active.failedCode === 'otp_invalid' && active.failedMessage ? (
+                  <p id="payment-otp-problem" className="text-xs text-danger" role="alert">
+                    {active.failedMessage}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    The customer reads the code sent to their phone. It is never stored.
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  disabled={otpBusy || otp.trim().length < 4}
+                  className="h-11"
+                  data-testid="electronic-otp-submit"
+                >
+                  {otpBusy ? 'Checking…' : 'Submit code'}
+                </Button>
+              </form>
+            ) : null}
 
             {active.method === 'CARD' && waiting ? (
               <Button

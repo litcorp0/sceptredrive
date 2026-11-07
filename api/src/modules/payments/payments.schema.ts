@@ -81,6 +81,12 @@ export const payment = pgTable(
     channel: text('channel'),
     /** What the till shows the customer at the counter. */
     displayText: text('display_text'),
+    /**
+     * The provider asked for a one-time code (`send_otp`, e.g. the Telecel
+     * voucher flow). The till shows an OTP field; the code itself is never
+     * stored. Cleared the moment the provider settles or rejects the charge.
+     */
+    requiresOtp: boolean('requires_otp').notNull().default(false),
     /** Card checkout only (P13-D13). */
     authorizationUrl: text('authorization_url'),
     /** Bank transfer only (P13-D14). */

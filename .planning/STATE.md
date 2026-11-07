@@ -4,7 +4,24 @@
 > old name; the code and document sweep is Phase 7, Plan 01.
 
 **Milestone:** v1
-**Updated:** 2026-10-28
+**Updated:** 2026-11-07
+
+> **2026-11-07 (live MoMo OTP):** A live Ghana MoMo charge showed Paystack's
+> "please enter the one-time password sent to your phone" and then ended as
+> "Transaction was not completed". Paystack's Charge API answers `send_otp` for
+> some numbers (notably the Telecel/Vodafone voucher flow), and the till had no
+> OTP step: the unknown status fell back to `pay_offline`, so the 180-second
+> window expired with no code submitted. This was a code gap, not a dashboard
+> setting. Migration `0023` adds `payment.requires_otp` (boolean, never the code);
+> the Paystack provider maps `send_otp` to `OTP_REQUIRED` and calls
+> `/charge/submit_otp`; `POST /api/pos/payments/:id/otp` is device-scoped and
+> rate-limited to 10 attempts a minute; the tender and credit-repayment screens
+> show a one-time-code field. A wrong code stays `PENDING` with Paystack's
+> message, and only `success` moves money. Tests: API provider mapping + OTP
+> lifecycle, desktop client + state machine. Gates: `check-types` 7/7, `lint`
+> clean, API **910**, desktop **657**, shared **370**, web **33**, `bun run build`
+> green. Live verification still needs a real Telecel/Vodafone charge; the MTN
+> test number does not exercise `send_otp`.
 
 > **2026-10-28 (post-Phase-14):** Two-factor authentication was removed at the
 > operator's request. Sign-in is email + password; migration `0018` drops the

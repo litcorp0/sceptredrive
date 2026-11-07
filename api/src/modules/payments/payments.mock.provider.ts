@@ -29,6 +29,7 @@ interface MockChargeRecord {
   status: 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED'
   expiresAt: Date
   displayText: string | null
+  requiresOtp: boolean
   authorizationUrl: string | null
   accountNumber: string | null
   accountName: string | null
@@ -45,9 +46,14 @@ interface MockRefundRecord {
 
 const charges = new Map<string, MockChargeRecord>()
 const refunds = new Map<string, MockRefundRecord>()
+const chargesAwaitingOtp = new Set<string>()
+let otpForNextCharge = false
 
-/** The one OTP the mock accepts; a test signs in with anything else to fail. */
+/** The one OTP the mock accepts for a transfer; any other code fails. */
 export const MOCK_TRANSFER_OTP = '123456'
+
+/** The one OTP the mock accepts for a mobile-money charge. */
+export const MOCK_PAYMENT_OTP = '123456'
 
 /** Enough for any fixture; a test lowers it to prove the precheck (P14-D29). */
 const DEFAULT_MOCK_BALANCE_MINOR = 100_000_000
@@ -102,12 +108,12 @@ const BANK_TRANSFER_EXPIRY_MS = 15 * 60_000
 const CARD_EXPIRY_MS = 30 * 60_000
 
 function baseResult(
-  input: ChargeInput,
+  reference: string,
   status: ProviderChargeResult['status'],
   record: Partial<MockChargeRecord>,
 ): ProviderChargeResult {
   return {
-    reference: input.reference,
+    reference,
     status,
     displayText: record.displayText ?? null,
     authorizationUrl: record.authorizationUrl ?? null,
@@ -180,12 +186,17 @@ export class MockPaymentProvider implements PaymentProvider {
   async createMobileMoneyCharge(input: ChargeInput): Promise<ProviderChargeResult> {
     calls.charge += 1
     const expiresAt = new Date(Date.now() + MOMO_EXPIRY_MS)
+    const wantsOtp = otpForNextCharge || chargesAwaitingOtp.has(input.reference)
+    otpForNextCharge = false
     const record = {
       amountMinor: input.amountMinor,
       method: 'MOMO' as const,
       status: 'PENDING' as const,
       expiresAt,
-      displayText: "Approve the prompt on the customer's phone",
+      displayText: wantsOtp
+        ? 'Enter the one-time code sent to the customer’s phone'
+        : "Approve the prompt on the customer's phone",
+      requiresOtp: wantsOtp,
       authorizationUrl: null,
       accountNumber: null,
       accountName: null,
@@ -194,7 +205,7 @@ export class MockPaymentProvider implements PaymentProvider {
       paidAt: null,
     }
     store(input, record)
-    return baseResult(input, 'PAY_OFFLINE', record)
+    return baseResult(input.reference, wantsOtp ? 'OTP_REQUIRED' : 'PAY_OFFLINE', record)
   }
 
   async createCardCheckout(input: ChargeInput): Promise<ProviderChargeResult> {
@@ -205,6 +216,7 @@ export class MockPaymentProvider implements PaymentProvider {
       status: 'PENDING' as const,
       expiresAt: new Date(Date.now() + CARD_EXPIRY_MS),
       displayText: null,
+      requiresOtp: false,
       authorizationUrl: `https://checkout.paystack.com/mock/${input.reference}`,
       accountNumber: null,
       accountName: null,
@@ -213,7 +225,7 @@ export class MockPaymentProvider implements PaymentProvider {
       paidAt: null,
     }
     store(input, record)
-    return baseResult(input, 'PENDING', record)
+    return baseResult(input.reference, 'PENDING', record)
   }
 
   async createBankTransferCharge(input: ChargeInput): Promise<ProviderChargeResult> {
@@ -224,6 +236,7 @@ export class MockPaymentProvider implements PaymentProvider {
       status: 'PENDING' as const,
       expiresAt: new Date(Date.now() + BANK_TRANSFER_EXPIRY_MS),
       displayText: 'Transfer the exact amount to the account shown',
+      requiresOtp: false,
       authorizationUrl: null,
       accountNumber: '1234567890',
       accountName: 'Sceptre Drive Mock',
@@ -232,7 +245,40 @@ export class MockPaymentProvider implements PaymentProvider {
       paidAt: null,
     }
     store(input, record)
-    return baseResult(input, 'PENDING_BANK_TRANSFER', record)
+    return baseResult(input.reference, 'PENDING_BANK_TRANSFER', record)
+  }
+
+  async submitOtp(reference: string, otp: string): Promise<ProviderChargeResult> {
+    const record = charges.get(reference)
+    if (!record) {
+      return {
+        reference,
+        status: 'OTP_REQUIRED',
+        displayText: null,
+        authorizationUrl: null,
+        accountNumber: null,
+        accountName: null,
+        accountBank: null,
+        expiresAt: null,
+        transactionId: null,
+        failureCode: 'otp_invalid',
+        failureMessage: 'Unknown mock charge',
+      }
+    }
+
+    if (otp !== MOCK_PAYMENT_OTP) {
+      return {
+        ...baseResult(reference, 'OTP_REQUIRED', record),
+        failureCode: 'otp_invalid',
+        failureMessage: 'The one-time code is not correct',
+      }
+    }
+
+    record.requiresOtp = false
+    record.status = 'PAID'
+    record.paidAt = new Date()
+    chargesAwaitingOtp.delete(reference)
+    return baseResult(reference, 'SUCCESS', record)
   }
 
   async verify(reference: string): Promise<ProviderVerification> {
@@ -443,12 +489,24 @@ export function getMockTransferByReference(reference: string): {
   return record ? { recipientCode: record.recipientCode, status: record.status } : null
 }
 
+/**
+ * Makes the next mobile-money charge answer `send_otp`. With a reference it
+ * targets that charge; the one-shot form is what a test normally uses because
+ * the server mints the reference.
+ */
+export function requestMockPaymentOtp(reference?: string): void {
+  if (reference) chargesAwaitingOtp.add(reference)
+  else otpForNextCharge = true
+}
+
 /** Harness hook: the till polls `verify`, which reports what this sets. */
 export function settleMockPayment(reference: string, outcome: MockSettlementOutcome): boolean {
   const record = charges.get(reference)
   if (!record) return false
   record.status = outcome === 'PAID' ? 'PAID' : outcome === 'FAILED' ? 'FAILED' : 'EXPIRED'
   record.paidAt = outcome === 'PAID' ? new Date() : null
+  record.requiresOtp = false
+  chargesAwaitingOtp.delete(reference)
   return true
 }
 
@@ -470,6 +528,8 @@ export function resetMockProvider(): void {
   refunds.clear()
   recipients.clear()
   transfers.clear()
+  chargesAwaitingOtp.clear()
+  otpForNextCharge = false
   awaitingOtp.clear()
   otpForNextTransfer = false
   balanceMinor = DEFAULT_MOCK_BALANCE_MINOR

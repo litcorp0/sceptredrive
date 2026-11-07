@@ -57,6 +57,19 @@ export const paymentQuerySchema = z.object({ refresh: z.enum(['1', '0']).default
 
 export const paymentIdParamSchema = z.object({ id: z.uuid() })
 
+/**
+ * The customer's one-time code. Shape only: the provider decides whether the
+ * digits are right, and the value is never persisted or logged.
+ */
+export const submitPaymentOtpSchema = z
+  .object({
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{4,8}$/),
+  })
+  .strict()
+
 export const claimPaymentSchema = z.object({ saleId: z.uuid() }).strict()
 
 export const mockSettleSchema = z
@@ -76,6 +89,7 @@ export const mockSettleTransferSchema = z
 export const validateCreatePayment = validateJson(createPaymentSchema)
 export const validatePaymentQuery = validateQuery(paymentQuerySchema)
 export const validatePaymentIdParam = validateParam(paymentIdParamSchema)
+export const validateSubmitPaymentOtp = validateJson(submitPaymentOtpSchema)
 export const validateClaimPayment = validateJson(claimPaymentSchema)
 export const validateMockSettle = validateJson(mockSettleSchema)
 export const validateMockSettleTransfer = validateJson(mockSettleTransferSchema)

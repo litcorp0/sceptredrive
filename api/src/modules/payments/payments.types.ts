@@ -41,6 +41,8 @@ export interface PaymentView {
   status: 'PENDING' | 'PAID' | 'FAILED' | 'ABANDONED' | 'EXPIRED'
   channel: string | null
   displayText: string | null
+  /** The till must collect a one-time code and submit it before settlement. */
+  requiresOtp: boolean
   authorizationUrl: string | null
   accountNumber: string | null
   accountName: string | null

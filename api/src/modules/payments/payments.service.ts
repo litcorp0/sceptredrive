@@ -131,6 +131,7 @@ function toView(row: PaymentRow): PaymentView {
     status: row.status,
     channel: row.channel,
     displayText: row.displayText,
+    requiresOtp: row.requiresOtp,
     authorizationUrl: row.authorizationUrl,
     accountNumber: row.accountNumber,
     accountName: row.accountName,
@@ -217,6 +218,7 @@ export async function applyProviderCharge(
         channel: result.channel ?? row.channel,
         providerTransactionId: result.transactionId ?? row.providerTransactionId,
         orphaned: wasWaiting || row.orphaned,
+        requiresOtp: false,
         failedCode: null,
         failedMessage: null,
       },
@@ -241,6 +243,7 @@ export async function applyProviderCharge(
         status: 'FAILED',
         channel: result.channel ?? row.channel,
         providerTransactionId: result.transactionId ?? row.providerTransactionId,
+        requiresOtp: false,
         failedCode:
           result.failureCode ?? (result.status === 'abandoned' ? 'abandoned' : 'provider_failed'),
         failedMessage: result.failureMessage ?? result.gatewayResponse ?? 'The payment failed',
@@ -453,6 +456,7 @@ function verificationFromCharge(
 function projectionFromCharge(result: ProviderChargeResult): PaymentPatch {
   const patch: PaymentPatch = {
     displayText: result.displayText,
+    requiresOtp: result.status === 'OTP_REQUIRED',
     authorizationUrl: result.authorizationUrl,
     accountNumber: result.accountNumber,
     accountName: result.accountName,
@@ -663,6 +667,71 @@ export async function getPayment(
   return toView(updated)
 }
 
+/**
+ * Completes a MoMo charge that Paystack answered with `send_otp`.
+ *
+ * The OTP is a customer secret: it is validated for shape, handed to the
+ * provider once, and never stored, logged, echoed back, or included in a
+ * conflict row. A wrong code leaves the payment `PENDING` with the provider's
+ * message so the cashier can ask the customer again. Only the provider's
+ * `success` can move money (P13-D6).
+ */
+export async function submitPaymentOtp(
+  device: DeviceAuthContext,
+  id: string,
+  otp: string,
+): Promise<PaymentView> {
+  const row = await findPaymentForDevice(device, id)
+
+  if (row.method !== 'MOMO') {
+    throw new ValidationError('Only a mobile money payment carries a one-time code')
+  }
+  if (row.status !== 'PENDING') {
+    throw new AppError(
+      409,
+      'PAYMENT_NOT_PENDING',
+      'This payment is no longer waiting for a one-time code',
+    )
+  }
+  if (!row.requiresOtp) {
+    throw new AppError(409, 'PAYMENT_OTP_NOT_REQUIRED', 'This payment does not need a code')
+  }
+  if (!/^\d{4,8}$/.test(otp)) {
+    throw new ValidationError('Enter the one-time code sent to the customer’s phone')
+  }
+
+  let result: ProviderChargeResult
+  try {
+    result = await getPaymentProvider().submitOtp(row.providerReference, otp)
+  } catch (error) {
+    // A timeout is "we do not know": keep the pending row and let the till retry
+    // or the poll settle it. It is never a failed payment.
+    if (error instanceof ProviderUnavailableError) return toView(row)
+    throw error
+  }
+
+  const updated = await db.transaction(async (tx) => {
+    const locked = await repo.findByIdForUpdate(row.id, tx)
+    if (!locked) throw new NotFoundError('Payment not found')
+
+    // A webhook may have settled or expired the row while the OTP was in
+    // flight. The provider's success is still applied; a terminal row is not
+    // moved backwards.
+    if (locked.status !== 'PENDING') {
+      return (await repo.findById(locked.id, tx)) ?? locked
+    }
+
+    if (result.status === 'SUCCESS' || result.status === 'FAILED') {
+      await applyProviderCharge(tx, locked, verificationFromCharge(result, locked.amountMinor))
+    }
+
+    const after = await repo.updatePaymentStatus(locked.id, projectionFromCharge(result), tx)
+    return after ?? locked
+  })
+
+  return toView(updated)
+}
+
 export async function abandonPayment(device: DeviceAuthContext, id: string): Promise<PaymentView> {
   const row = await findPaymentForDevice(device, id)
   if (row.status === 'PAID') return toView(row)
@@ -672,7 +741,7 @@ export async function abandonPayment(device: DeviceAuthContext, id: string): Pro
     const locked = await repo.findByIdForUpdate(row.id, tx)
     if (!locked) return
     if (locked.status === 'PENDING') {
-      await repo.updatePaymentStatus(locked.id, { status: 'EXPIRED' }, tx)
+      await repo.updatePaymentStatus(locked.id, { status: 'EXPIRED', requiresOtp: false }, tx)
       transitioned = true
     }
   })
