@@ -14,6 +14,7 @@ import {
 import { app } from '../../app.ts'
 import { approval } from '../approvals/approvals.schema.ts'
 import { brand, category, uom } from '../catalog/catalog.schema.ts'
+import { stockLevel } from '../inventory/inventory.schema.ts'
 import { branch } from '../org/branches.schema.ts'
 import { auditLog } from '../platform/audit.schema.ts'
 import { setting } from '../platform/settings.schema.ts'
@@ -273,6 +274,8 @@ describe.skipIf(!available)('products API', () => {
   afterAll(async () => {
     for (const userId of createdUserIds) await deleteTestUser(userId)
     if (createdProductIds.length > 0) {
+      // stock_level restricts the product delete, and the branch test inserts one.
+      await db.delete(stockLevel).where(inArray(stockLevel.productId, createdProductIds))
       await db.delete(product).where(inArray(product.id, createdProductIds))
     }
     if (createdCategoryIds.length > 0) {
@@ -452,6 +455,40 @@ describe.skipIf(!available)('products API', () => {
       const listBody = await readJson<{ products: { id: string; stockedAt: unknown[] }[] }>(list)
       const row = listBody.products.find((product) => product.id === body.product.id)
       expect(row?.stockedAt).toEqual([])
+    })
+
+    it('filters the catalogue to what one branch carries (P20-D22)', async () => {
+      const response = await createProductViaApi(productPayload())
+      expect(response.status).toBe(201)
+      const body = await readJson<{ product: ProductRecord }>(response)
+      const productId = body.product.id
+
+      const list = async (query: string) => {
+        const result = await app.request(`/api/products?${query}`, {
+          headers: authedHeaders(adminCookie),
+        })
+        expect(result.status).toBe(200)
+        return readJson<{ products: { id: string }[] }>(result)
+      }
+
+      // Searched by its own SKU, so the page size cannot hide it.
+      const term = `q=${encodeURIComponent(body.product.sku)}`
+
+      // Carried nowhere yet: the branch filter excludes it, the unfiltered list has it.
+      const carried = await list(`${term}&branchId=${managerBranchId}&carried=true`)
+      expect(carried.products.some((product) => product.id === productId)).toBe(false)
+
+      const all = await list(`${term}&branchId=${managerBranchId}`)
+      expect(all.products.some((product) => product.id === productId)).toBe(true)
+
+      // A stock level at the branch is what "carries" means.
+      await db.insert(stockLevel).values({ productId, branchId: managerBranchId })
+      const after = await list(`${term}&branchId=${managerBranchId}&carried=true`)
+      expect(after.products.some((product) => product.id === productId)).toBe(true)
+
+      // Another branch still does not carry it.
+      const other = await list(`${term}&branchId=${otherBranchId}&carried=true`)
+      expect(other.products.some((product) => product.id === productId)).toBe(false)
     })
 
     it('rejects a duplicate SKU with 409', async () => {

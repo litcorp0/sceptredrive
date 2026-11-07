@@ -189,6 +189,8 @@ export type ProductListQuery = {
 	brandId?: string
 	includeArchived?: boolean
 	branchId?: string
+	/** Only products with a stock level at `branchId` (P20-D22). */
+	carried?: boolean
 	limit?: number
 	offset?: number
 }

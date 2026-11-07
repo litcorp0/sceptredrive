@@ -800,6 +800,7 @@ export async function listProducts(
     brandId: query.brandId,
     includeArchived: query.includeArchived,
     branchId,
+    carried: query.carried === true,
     limit: query.limit,
     offset: query.offset,
   }

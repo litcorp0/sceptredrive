@@ -108,6 +108,8 @@ export interface ProductListFilters {
   brandId?: string | undefined
   includeArchived: boolean
   branchId: string | null
+  /** Only products with a stock level at `branchId` (P20-D22). */
+  carried: boolean
   limit: number
   offset: number
 }

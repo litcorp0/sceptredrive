@@ -208,6 +208,15 @@ function buildProductFilters(filters: ProductListFilters): SQL | undefined {
   }
   if (filters.brandId) conditions.push(eq(product.brandId, filters.brandId))
 
+  // "Only what this branch carries" (P20-D22): a stock level here is the same membership
+  // fact the stock list, the till and the branch column use. Without a branch there is
+  // nothing to be a member of, so the filter is ignored rather than emptying the list.
+  if (filters.carried && filters.branchId) {
+    conditions.push(
+      sql`exists (select 1 from stock_level sl where sl.product_id = ${product.id} and sl.branch_id = ${filters.branchId})`,
+    )
+  }
+
   if (filters.q) {
     const term = filters.q
     const escaped = term.replace(/[\\%_]/g, (match) => `\\${match}`)

@@ -60,6 +60,10 @@ export function ProductsPage() {
 	const [categoryId, setCategoryId] = useState<string>(ALL)
 	const [brandId, setBrandId] = useState<string>(ALL)
 	const [includeArchived, setIncludeArchived] = useState(false)
+	// On by default, like the stock page: with a branch selected, the catalogue question is
+	// "what does this branch carry", and the company-wide list is one switch away
+	// (P20-D22).
+	const [carriedOnly, setCarriedOnly] = useState(true)
 	const [offset, setOffset] = useState(0)
 	const [confirmTarget, setConfirmTarget] = useState<Product | null>(null)
 
@@ -74,6 +78,7 @@ export function ProductsPage() {
 		brandId: brandId === ALL ? undefined : brandId,
 		includeArchived,
 		branchId: activeBranchId ?? undefined,
+		carried: carriedOnly && activeBranchId ? true : undefined,
 		limit: PAGE_SIZE,
 		offset,
 	}
@@ -182,6 +187,23 @@ export function ProductsPage() {
 					</Label>
 				</div>
 
+				{/* Meaningless with every branch in view, so it appears only when one is chosen. */}
+				{activeBranchId ? (
+					<div className="flex items-center gap-2 pb-2">
+						<Switch
+							id="catalog-carried-only"
+							checked={carriedOnly}
+							onCheckedChange={(checked) => {
+								setCarriedOnly(checked)
+								setOffset(0)
+							}}
+						/>
+						<Label htmlFor="catalog-carried-only" className="text-sm text-muted-foreground">
+							Stocked at this branch
+						</Label>
+					</div>
+				) : null}
+
 				{canCreate ? (
 					<Button size="sm" asChild className="ml-auto">
 						<Link to="/catalog/products/new">
@@ -236,7 +258,9 @@ export function ProductsPage() {
 							<TableMessage colSpan={columnCount}>
 								{debouncedSearch || categoryId !== ALL || brandId !== ALL
 									? "No products match these filters."
-									: "No products yet. Create the first one."}
+									: carriedOnly && activeBranchId
+										? "No products are stocked at this branch yet. Receive stock, or switch off “Stocked at this branch” to see the whole catalogue."
+										: "No products yet. Create the first one."}
 							</TableMessage>
 						) : (
 							products.map((product) => (

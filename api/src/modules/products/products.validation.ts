@@ -107,6 +107,11 @@ export const productListQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  /** Only products this branch carries; needs `branchId` to mean anything (P20-D22). */
+  carried: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
   branchId: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
