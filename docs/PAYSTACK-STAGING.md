@@ -286,6 +286,10 @@ completed", the POS/API build predates the OTP fix.
 5. If the till says pending after success, check the webhook delivery and `PAYMENT_LATE_SETTLEMENT`
    / `PAYMENT_AMOUNT_MISMATCH` in Operations → Conflicts. The poll uses `verify`, so it can
    settle even when the webhook is late.
+6. While the checkout is still open, Paystack reports the transaction as `abandoned` or
+   "Transaction was not completed". That is **not a decline**: the API keeps the payment
+   `PENDING` and the window open until the 30-minute expiry, a webhook, or the cashier's
+   explicit cancel. Do not treat `abandoned` as a failed card.
 
 ### Mobile money
 
@@ -298,17 +302,35 @@ completed", the POS/API build predates the OTP fix.
    not fail it.
 5. If it stays pending past 180 seconds, the payment expires; the till returns to the tender
    screen. Check the dashboard for the final status.
+6. **180 seconds is a hard provider limit**, set by the mobile-money networks. Do not extend the
+   app's MoMo window to five minutes: the network has already killed the charge at 180 seconds,
+   so a longer window only delays the retry. A late OTP means starting a new charge.
 
 ### Bank transfer
 
 1. Choose **Bank transfer**. The API creates a temporary account with a 15-minute expiry (the
    Paystack maximum is 8 hours; the app uses 15 minutes).
-2. The till shows the account number, bank and expiry.
+2. The till shows the account number, bank and expiry. The account name is Paystack's own
+   `account_name`, shown verbatim: the customer must use exactly that name or the bank may
+   reject the transfer.
 3. A transfer into the account sends `charge.success`; a wrong amount sends
    `bank.transfer.rejected`. The POS listens for both.
 4. In test mode, use the amount/account the API returned; if Paystack's test simulator does
    not complete the transfer, the payment expires and the till returns to tender. The mock
    provider remains the way to test the full offline till path without Paystack.
+
+Paystack calls the temporary account name **PAYSTACK CHECKOUT** until the dashboard is told
+otherwise. To show the business's trading name instead:
+
+1. Paystack Dashboard → **Settings → Preferences**.
+2. Scroll to **Virtual Accounts**.
+3. Under **Name on Virtual Bank Account**, choose **Trading Name**.
+4. Save changes.
+
+New Pay with Transfer accounts then use the trading name. If the trading name itself needs to
+change, email `support@paystack.com` with the name; it must belong to the business. The app
+must not override the provider's account name in the meantime: a name mismatch is a failed
+transfer.
 
 ### Refund
 
@@ -346,6 +368,9 @@ completed", the POS/API build predates the OTP fix.
 | "Please enter the one-time password" then "Transaction was not completed" | the number answered `send_otp` and no code was submitted before the 180s timeout | the till must show the OTP field and post it to `/api/pos/payments/:id/otp`; update the POS/API if it does not |
 | OTP field appears, then "Transaction was not completed" a second later | the poll used `transaction/verify`, which reports an OTP-pending charge as not completed | an OTP-pending row must be polled with `GET /charge/:reference` (check pending charge); update the API |
 | OTP field appears, then "Reference check successful" and the field disappears | the check endpoint answered `failed` with that envelope message while the OTP was still pending | the API must keep a failed check pending until the 180-second window closes; update the API |
+| Card window opens then closes, "Transaction was not completed" | the poll treated Paystack's `abandoned` as a failure and closed the window | the API must keep an `abandoned` card pending until its 30-minute window closes; update the API |
+| "The secure card window could not be opened" after a card failure | the payment failed while the window was still loading, so the close raced the open | update the POS; it now ignores an open failure after it has deliberately closed the window |
+| Bank transfer account name shows **PAYSTACK CHECKOUT** | the dashboard uses Paystack's default virtual-account name | Settings → Preferences → Virtual Accounts → Name on Virtual Bank Account → **Trading Name**, then save |
 | OTP field shows but every code is rejected | wrong code, expired charge, or the phone is not the one that received the code | read the provider's message; if it says expired, start a new charge |
 | Transfer `blocked` | the approval URL/server did not answer in time | not used by this app unless you configure URL approval; prefer OTP |
 
@@ -368,8 +393,11 @@ Do these in order; none is optional.
 - [ ] Callback URL is set if you have a web checkout; the POS does not need it.
 - [ ] Card, Mobile Money (MTN/Telecel/AT) and Bank Transfer are enabled.
 - [ ] Transfer approval mode is chosen (OTP is what the console supports).
+- [ ] **Settings → Preferences → Virtual Accounts → Name on Virtual Bank Account** is
+      **Trading Name**, so Pay with Transfer does not show **PAYSTACK CHECKOUT**.
 - [ ] CORS includes the production admin, web and `app://sceptre-drive` origins.
-- [ ] A small live card charge is made, refunded, and settled; its webhook is received.
+- [ ] A small live card charge is made, refunded, and settled; its webhook is received. The
+      checkout window must stay open until the card is paid or the cashier cancels.
 - [ ] A small live MoMo charge is made and settled; its webhook is received.
 - [ ] A live Telecel/Vodafone number that asks for a one-time code is completed through the
       till's OTP field (the MTN test number does not exercise this path).

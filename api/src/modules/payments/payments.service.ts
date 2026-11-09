@@ -454,6 +454,43 @@ function verificationFromCharge(
   }
 }
 
+function withinWindow(row: PaymentRow): boolean {
+  return row.expiresAt !== null && row.expiresAt.getTime() > Date.now()
+}
+
+/** Paystack's generic "the customer did not finish" text, not a decline. */
+function looksNotCompleted(result: ProviderVerification): boolean {
+  const message = `${result.failureMessage ?? ''} ${result.gatewayResponse ?? ''}`.toLowerCase()
+  return message.includes('transaction was not completed') || message.includes('not completed')
+}
+
+/**
+ * Paystack uses `abandoned` (and sometimes `failed` with "The transaction was
+ * not completed") for a checkout or authorization the customer has not
+ * finished yet, not for a decline. Treating it as terminal is what closed the
+ * card window and failed the card tender a few seconds after it opened. The
+ * row stays pending until its own expiry, a webhook, or the cashier's explicit
+ * abandon decides it.
+ */
+function keepIncompletePending(
+  row: PaymentRow,
+  result: ProviderVerification,
+): ProviderVerification {
+  const incomplete =
+    result.status === 'abandoned' || (result.status === 'failed' && looksNotCompleted(result))
+  if (!incomplete || !withinWindow(row)) return result
+
+  logger.warn(
+    {
+      paymentId: row.id,
+      failureCode: result.failureCode ?? null,
+      failureMessage: result.failureMessage?.slice(0, 200) ?? null,
+    },
+    'provider reported an unfinished charge before the window closed; keeping pending',
+  )
+  return { ...result, status: 'pending' }
+}
+
 /**
  * Reads the provider's current state for a `PENDING` payment.
  *
@@ -470,11 +507,7 @@ function verifyOrCheckPayment(row: PaymentRow): Promise<ProviderVerification> {
       // "Reference check successful" while the customer still has time to
       // submit the OTP. A failure inside the window is "not completed yet",
       // not a decline: keep the row pending so the code can still settle it.
-      if (
-        result.status === 'FAILED' &&
-        row.expiresAt !== null &&
-        row.expiresAt.getTime() > Date.now()
-      ) {
+      if (result.status === 'FAILED' && withinWindow(row)) {
         logger.warn(
           {
             paymentId: row.id,
@@ -486,10 +519,11 @@ function verifyOrCheckPayment(row: PaymentRow): Promise<ProviderVerification> {
         return { ...verificationFromCharge(result, row.amountMinor), status: 'pending' }
       }
 
-      return verificationFromCharge(result, row.amountMinor)
+      return keepIncompletePending(row, verificationFromCharge(result, row.amountMinor))
     })
   }
-  return provider.verify(row.providerReference)
+
+  return provider.verify(row.providerReference).then((result) => keepIncompletePending(row, result))
 }
 
 function projectionFromCharge(result: ProviderChargeResult): PaymentPatch {

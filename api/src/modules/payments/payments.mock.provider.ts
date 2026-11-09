@@ -50,6 +50,8 @@ const chargesAwaitingOtp = new Set<string>()
 let otpForNextCharge = false
 /** Test-only: makes a pending OTP charge look failed on the check endpoint. */
 let failPendingChecks = false
+/** Test-only: makes a pending charge look abandoned on the verify endpoint. */
+let abandonPendingVerifications = false
 
 /** The one OTP the mock accepts for a transfer; any other code fails. */
 export const MOCK_TRANSFER_OTP = '123456'
@@ -327,6 +329,19 @@ export class MockPaymentProvider implements PaymentProvider {
         gatewayResponse: 'Unknown mock reference',
       }
     }
+    if (abandonPendingVerifications && record.status === 'PENDING') {
+      return {
+        reference,
+        status: 'abandoned',
+        amountMinor: record.amountMinor,
+        currency: 'GHS',
+        channel: record.channel,
+        paidAt: null,
+        gatewayResponse: 'The transaction was not completed',
+        failureCode: 'abandoned',
+        failureMessage: 'The transaction was not completed',
+      }
+    }
     return verification(record)
   }
 
@@ -536,6 +551,11 @@ export function forceMockCheckFailure(): void {
   failPendingChecks = true
 }
 
+/** Test hook: verify reports a still-open charge as abandoned. */
+export function forceMockVerifyAbandoned(): void {
+  abandonPendingVerifications = true
+}
+
 /** Harness hook: the till polls `verify`, which reports what this sets. */
 export function settleMockPayment(reference: string, outcome: MockSettlementOutcome): boolean {
   const record = charges.get(reference)
@@ -568,6 +588,7 @@ export function resetMockProvider(): void {
   chargesAwaitingOtp.clear()
   otpForNextCharge = false
   failPendingChecks = false
+  abandonPendingVerifications = false
   awaitingOtp.clear()
   otpForNextTransfer = false
   balanceMinor = DEFAULT_MOCK_BALANCE_MINOR

@@ -97,6 +97,7 @@ export function ElectronicTenderPanel({
   const activeRef = useRef<ElectronicTender | null>(null)
   const abandoned = useRef<Set<string>>(new Set())
   const openedCheckout = useRef<Set<string>>(new Set())
+  const closedCheckouts = useRef<Set<string>>(new Set())
   const paid = useRef<Set<string>>(new Set())
   const resumed = useRef(false)
 
@@ -178,7 +179,13 @@ export function ElectronicTenderPanel({
     if (outcome.abandon && outcome.tender?.paymentId) {
       void abandonOnce(outcome.tender.paymentId)
     }
-    if (outcome.tender && outcome.tender.status !== 'PENDING') closeCheckout()
+    if (outcome.tender && outcome.tender.status !== 'PENDING') {
+      // The payment is terminal, so the checkout no longer belongs on screen.
+      // Remember it: an open call still in flight must not report "could not
+      // open" after we deliberately closed it.
+      if (outcome.tender.paymentId) closedCheckouts.current.add(outcome.tender.paymentId)
+      closeCheckout()
+    }
   }
 
   async function abandonOnce(paymentId: string): Promise<void> {
@@ -198,14 +205,29 @@ export function ElectronicTenderPanel({
     }
   }
 
-  async function openCheckout(url: string): Promise<void> {
+  function checkoutStillWanted(paymentId: string): boolean {
+    return (
+      activeRef.current?.paymentId === paymentId &&
+      activeRef.current?.method === 'CARD' &&
+      activeRef.current?.status === 'PENDING' &&
+      !closedCheckouts.current.has(paymentId)
+    )
+  }
+
+  async function openCheckout(url: string, paymentId: string): Promise<void> {
     try {
       const checkout = getDesktopBridge().payments?.checkout
       if (!checkout) {
-        setMessage('The secure card window is unavailable on this terminal.')
+        if (checkoutStillWanted(paymentId)) {
+          setMessage('The secure card window is unavailable on this terminal.')
+        }
         return
       }
       const response = await checkout.open(url)
+      // The poll may have settled or failed the payment while the window was
+      // loading; in that case we closed it on purpose and must not blame the
+      // bridge for a window we no longer want.
+      if (!checkoutStillWanted(paymentId)) return
       if (!response.ok) {
         setMessage('The secure card window is unavailable on this terminal.')
         return
@@ -218,7 +240,9 @@ export function ElectronicTenderPanel({
         )
       }
     } catch {
-      setMessage('The secure card window is unavailable on this terminal.')
+      if (checkoutStillWanted(paymentId)) {
+        setMessage('The secure card window is unavailable on this terminal.')
+      }
     }
   }
 
@@ -227,7 +251,7 @@ export function ElectronicTenderPanel({
     if (!paymentId) return
     try {
       const payment = await paymentsClient.get(paymentId)
-      if (payment.authorizationUrl) await openCheckout(payment.authorizationUrl)
+      if (payment.authorizationUrl) await openCheckout(payment.authorizationUrl, paymentId)
       else setMessage('The server has no card link for this payment yet.')
     } catch (error) {
       setMessage(describe(error))
@@ -318,13 +342,13 @@ export function ElectronicTenderPanel({
     const paymentId = active.paymentId
     openedCheckout.current.add(paymentId)
     if (active.authorizationUrl) {
-      void openCheckout(active.authorizationUrl)
+      void openCheckout(active.authorizationUrl, paymentId)
       return
     }
     void paymentsClient
       .get(paymentId)
       .then((payment) => {
-        if (payment.authorizationUrl) void openCheckout(payment.authorizationUrl)
+        if (payment.authorizationUrl) void openCheckout(payment.authorizationUrl, paymentId)
       })
       .catch(() => {})
   }, [active?.paymentId, active?.method, active?.status])

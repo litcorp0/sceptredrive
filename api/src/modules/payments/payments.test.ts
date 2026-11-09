@@ -20,6 +20,7 @@ import { signDeviceJwt } from '../sync/sync.jwt.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import {
   forceMockCheckFailure,
+  forceMockVerifyAbandoned,
   getMockCallCounts,
   MOCK_PAYMENT_OTP,
   requestMockPaymentOtp,
@@ -555,6 +556,46 @@ describe.skipIf(!available)('payment intents and provider state', () => {
     expect(created.authorizationUrl).toContain(created.providerReference)
     expect(expiresIn(created.expiresAt)).toBeGreaterThan(CARD_EXPIRY_MS - 10_000)
     expect(expiresIn(created.expiresAt)).toBeLessThanOrEqual(CARD_EXPIRY_MS)
+  })
+
+  it('keeps a card checkout pending when verify reports it abandoned before expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const startedAt = new Date()
+    vi.setSystemTime(startedAt)
+
+    forceMockVerifyAbandoned()
+    const created = await readPayment(
+      await postPayment(createBody({ method: 'CARD', mobileMoney: undefined })),
+    )
+    expect(created.authorizationUrl).not.toBeNull()
+
+    // The till's first poll must not close the checkout: `abandoned` means the
+    // customer has not finished, not that the card was declined.
+    const waiting = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(waiting.status).toBe('PENDING')
+    expect(waiting.failedCode).toBeNull()
+
+    vi.setSystemTime(new Date(startedAt.getTime() + REFRESH_THROTTLE_MS + 1_000))
+    expect(settleMockPayment(created.providerReference, 'PAID')).toBe(true)
+    const paid = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(paid.status).toBe('PAID')
+  })
+
+  it('lets an abandoned card checkout become terminal once its window closes', async () => {
+    forceMockVerifyAbandoned()
+    const created = await readPayment(
+      await postPayment(createBody({ method: 'CARD', mobileMoney: undefined })),
+    )
+
+    // Move the row's own expiry into the past; the device token stays valid.
+    await db
+      .update(payment)
+      .set({ expiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(payment.id, created.id))
+
+    const expired = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(expired.status).toBe('FAILED')
+    expect(expired.failedCode).toBe('abandoned')
   })
 
   it('creates a bank transfer with the three account fields and a 15-minute expiry', async () => {

@@ -6,6 +6,27 @@
 **Milestone:** v1
 **Updated:** 2026-11-07
 
+> **2026-11-09 (live card checkout + bank-transfer name):** Two live card
+> tenders opened the checkout and closed it about four seconds later with
+> "Transaction was not completed". The rows show `failed_code=abandoned` and
+> `last_verified_at` about four seconds after create: Paystack's verify reports
+> a still-open checkout as `abandoned`, and the API was treating that as a
+> terminal failure. The till then closed the window, and the close raced the
+> window's `loadURL`, producing "The secure card window could not be opened".
+> `abandoned` (and `failed` with "The transaction was not completed") now stays
+> `PENDING` until the payment's own expiry, a webhook, or an explicit cashier
+> cancel; a real decline and a settled card still move immediately. The POS also
+> ignores an open failure after it has deliberately closed the window. Bank
+> transfers showing **PAYSTACK CHECKOUT** are not a code bug: Paystack's
+> Settings → Preferences → Virtual Accounts → **Name on Virtual Bank Account**
+> must be set to **Trading Name** (support changes the trading name itself).
+> MoMo stays at **180 seconds**: that is the mobile-money network hard limit, so
+> a five-minute local window would only wait on a charge the network has already
+> killed. Live evidence: a GHS 3.00 MoMo charge succeeded at 10:28 with a
+> `charge.success` webhook, so the OTP fix is working. Gates: `check-types` 7/7,
+> `lint` clean, API **919**, desktop **657**, shared **370**, web **33**,
+> `bun run build` green.
+
 > **2026-11-07 (live MoMo OTP):** A live Ghana MoMo charge showed Paystack's
 > "please enter the one-time password sent to your phone" and then ended as
 > "Transaction was not completed". Paystack's Charge API answers `send_otp` for
