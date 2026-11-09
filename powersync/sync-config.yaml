@@ -23,6 +23,11 @@ streams:
     auto_subscribe: true
     query: SELECT * FROM barcode
 
+  # Small global reference table: the POS shows the brand on every product card.
+  pos_brands:
+    auto_subscribe: true
+    query: SELECT * FROM brand
+
   # Branch-scoped: `branch_id` comes from the signed device JWT.
   pos_prices:
     auto_subscribe: true

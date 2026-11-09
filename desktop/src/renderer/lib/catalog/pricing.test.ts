@@ -18,6 +18,7 @@ function row(overrides: Partial<CatalogProductRow> = {}): CatalogProductRow {
     name: 'Brake Pad Set',
     base_price_minor: 10_000,
     tax_category: 'STANDARD',
+    brand_name: 'Bosch',
     barcode: '4006381333931',
     ...overrides,
   }

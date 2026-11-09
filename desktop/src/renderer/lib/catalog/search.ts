@@ -21,6 +21,7 @@ export interface CatalogRow {
   name: string
   base_price_minor: number
   tax_category: string
+  brand_name?: string | null
   barcode?: string | null
 }
 
@@ -41,7 +42,8 @@ export interface ProductQuery {
   parameters: string[] | Array<string | number>
 }
 
-const PRODUCT_COLUMNS = 'p.id, p.sku, p.name, p.base_price_minor, p.tax_category'
+const PRODUCT_COLUMNS =
+  'p.id, p.sku, p.name, p.base_price_minor, p.tax_category, b.name AS brand_name'
 
 /**
  * One query covers search and browse: an empty term lists the catalogue, a
@@ -52,14 +54,15 @@ export function buildProductSearchQuery(rawQuery: string, limit = SEARCH_LIMIT):
 
   return {
     sql: `SELECT ${PRODUCT_COLUMNS},
-                 (SELECT b.code FROM barcode b WHERE b.product_id = p.id ORDER BY b.code LIMIT 1) AS barcode
+                 (SELECT bc.code FROM barcode bc WHERE bc.product_id = p.id ORDER BY bc.code LIMIT 1) AS barcode
             FROM product p
+            LEFT JOIN brand b ON b.id = p.brand_id
            WHERE p.is_active = ?
              AND (? = ''
                   OR p.name LIKE ? ESCAPE '\\'
                   OR p.sku LIKE ? ESCAPE '\\'
                   OR p.sku = ? COLLATE NOCASE
-                  OR EXISTS (SELECT 1 FROM barcode b WHERE b.product_id = p.id AND b.code = ?))
+                  OR EXISTS (SELECT 1 FROM barcode bc WHERE bc.product_id = p.id AND bc.code = ?))
         ORDER BY CASE WHEN p.sku = ? COLLATE NOCASE THEN 0 ELSE 1 END,
                  p.name COLLATE NOCASE
            LIMIT ?`,
@@ -71,10 +74,11 @@ export function buildProductSearchQuery(rawQuery: string, limit = SEARCH_LIMIT):
 export function buildExactLookupQuery(code: string): ProductQuery {
   return {
     sql: `SELECT ${PRODUCT_COLUMNS},
-                 (SELECT b.code FROM barcode b WHERE b.product_id = p.id ORDER BY b.code LIMIT 1) AS barcode
+                 (SELECT bc.code FROM barcode bc WHERE bc.product_id = p.id ORDER BY bc.code LIMIT 1) AS barcode
             FROM product p
+            LEFT JOIN brand b ON b.id = p.brand_id
            WHERE p.is_active = ?
-             AND (EXISTS (SELECT 1 FROM barcode b WHERE b.product_id = p.id AND b.code = ?)
+             AND (EXISTS (SELECT 1 FROM barcode bc WHERE bc.product_id = p.id AND bc.code = ?)
                   OR p.sku = ? COLLATE NOCASE)
            ORDER BY CASE WHEN p.sku = ? COLLATE NOCASE THEN 0 ELSE 1 END
            LIMIT 1`,
@@ -88,6 +92,8 @@ export type CatalogProductRow = {
   name: string
   base_price_minor: number
   tax_category: string
+  /** The brand's name; null when the product has no brand or it has not synced yet. */
+  brand_name: string | null
   barcode: string | null
 }
 

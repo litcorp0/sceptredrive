@@ -51,6 +51,7 @@ check(
 const expectedStreams = [
   'pos_products',
   'pos_barcodes',
+  'pos_brands',
   'pos_prices',
   'pos_stock',
   'pos_customers',
@@ -137,6 +138,7 @@ check(/CREATE PUBLICATION powersync/.test(publicationSql), 'publication is named
 for (const table of [
   'product',
   'barcode',
+  'brand',
   'product_price',
   'stock_level',
   'customer',

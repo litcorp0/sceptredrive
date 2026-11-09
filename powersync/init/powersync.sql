@@ -53,6 +53,7 @@ BEGIN
       CREATE PUBLICATION powersync FOR TABLE
         product,
         barcode,
+        brand,
         product_price,
         stock_level,
         customer,
@@ -60,6 +61,19 @@ BEGIN
         loyalty_account,
         loyalty_lot
     $publication$;
+  END IF;
+END
+$$;
+
+-- Existing development databases predate the brand stream: add it once.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'powersync' AND tablename = 'brand'
+  ) THEN
+    ALTER PUBLICATION powersync ADD TABLE brand;
   END IF;
 END
 $$;

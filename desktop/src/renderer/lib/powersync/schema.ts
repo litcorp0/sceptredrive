@@ -49,6 +49,13 @@ export const barcode = new Table(
   { indexes: { barcode_code: ['code'], barcode_product: ['product_id'] } },
 )
 
+/** Global reference data: the brand name shown on a product card. */
+export const brand = new Table({
+  name: column.text,
+  is_active: flag,
+  updated_at: isoText,
+})
+
 export const productPrice = new Table(
   {
     product_id: column.text,
@@ -764,6 +771,7 @@ export const syncConflictLocal = new Table(
 export const PosSchema = new Schema({
   product,
   barcode,
+  brand,
   product_price: productPrice,
   stock_level: stockLevel,
   customer,
@@ -805,6 +813,7 @@ export type PosDatabase = (typeof PosSchema)['types']
 export const SYNCED_TABLES = [
   'product',
   'barcode',
+  'brand',
   'product_price',
   'stock_level',
   'customer',

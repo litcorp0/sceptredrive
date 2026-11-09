@@ -6,6 +6,18 @@
 **Milestone:** v1
 **Updated:** 2026-11-07
 
+> **2026-11-09 (product cards show the brand):** The catalogue cards on the
+> till now show the product's brand above its name, not only the name, price
+> and stock. `brand` is a new PowerSync stream (`pos_brands`, `SELECT * FROM
+> brand`), added to the local `PosSchema` and `SYNCED_TABLES`, and the catalogue
+> query joins it with `LEFT JOIN brand b ON b.id = p.brand_id` (null when the
+> product has no brand or the row has not synced yet). `powersync/init/
+> powersync.sql` adds the table to the publication for fresh and existing dev
+> databases. Production needs the same `ALTER PUBLICATION powersync ADD TABLE
+> brand` and a `sync-config.yaml` deploy; dev runs `bun run sync:init` and
+> restarts the service. No app migration. Gates: desktop **658**, sync config
+> **44 checks**, `check-types` 7/7, `lint` clean, `bun run build` green.
+
 > **2026-11-09 (live card checkout + bank-transfer name):** Two live card
 > tenders opened the checkout and closed it about four seconds later with
 > "Transaction was not completed". The rows show `failed_code=abandoned` and

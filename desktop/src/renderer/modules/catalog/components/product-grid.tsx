@@ -158,9 +158,20 @@ function ProductCard({
       className="grid h-[var(--product-card-height)] w-full grid-rows-[minmax(0,1fr)_auto] gap-1 overflow-hidden rounded-lg border border-border bg-card p-2 text-left transition-colors hover:border-line-strong hover:bg-muted/40 disabled:opacity-50 data-[blocked=true]:opacity-50 data-[blocked=true]:grayscale"
     >
       <div className="flex min-h-0 flex-wrap items-start justify-between gap-x-2 gap-y-0.5">
+        {row.brand_name ? (
+          <span
+            data-testid="product-brand"
+            className="basis-full truncate text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+            title={row.brand_name}
+          >
+            {row.brand_name}
+          </span>
+        ) : null}
         <span
           data-testid="product-name"
-          className="line-clamp-3 min-w-0 grow basis-full text-sm leading-tight font-medium xl:basis-auto"
+          className={`${
+            row.brand_name ? 'line-clamp-2' : 'line-clamp-3'
+          } min-w-0 grow basis-full text-sm leading-tight font-medium xl:basis-auto`}
         >
           {row.name}
         </span>

@@ -111,10 +111,11 @@ describe('the tables Plan 08 added', () => {
     })
   })
 
-  it('keeps the synced table list at exactly eight', () => {
+  it('keeps the synced table list at exactly nine', () => {
     // Every new table is the terminal's own; syncing one would put its writes in
     // PowerSync's CRUD queue instead of the sale transaction.
-    expect(SYNCED_TABLES).toHaveLength(8)
+    expect(SYNCED_TABLES).toHaveLength(9)
+    expect(SYNCED_TABLES).toContain('brand')
     for (const table of [
       'cart_tender',
       'held_cart',

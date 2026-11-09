@@ -44,7 +44,7 @@ prefixed variables are allowed, with `::number` / `::boolean` casts).
 
 ## What syncs
 
-`sync-config.yaml` streams the catalogue, barcodes, branch prices, branch stock,
+`sync-config.yaml` streams the catalogue, barcodes, brands, branch prices, branch stock,
 customers, branch credit profiles, loyalty accounts and live loyalty lots. The
 `branch_id` filter comes from the **signed JWT claim** (`auth.parameter('branch_id')`), so
 a terminal cannot widen its own scope.
@@ -80,7 +80,7 @@ invalidates both the terminals' stored JWTs and the generated service config.
 curl -s http://localhost:8080/probes/liveness          # 200 when alive
 curl -s http://localhost:8080/probes/startup           # 200 once startup finished
 docker compose logs --since 60s powersync | grep -iE "error|replicating"
-bun run sync:config-check                              # our config contract (42 checks)
+bun run sync:config-check                              # our config contract (44 checks)
 ```
 
 `POST /sync/stream` is the client endpoint: a malformed token returns `401 PSYNC_S2101`.

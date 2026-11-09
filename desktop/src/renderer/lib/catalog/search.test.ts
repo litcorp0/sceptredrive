@@ -16,6 +16,7 @@ function row(overrides: Partial<CatalogProductRow> = {}): CatalogProductRow {
     name: 'Brake Pad Set',
     base_price_minor: 10_000,
     tax_category: 'STANDARD',
+    brand_name: 'Bosch',
     barcode: '4006381333931',
     ...overrides,
   }
@@ -55,6 +56,12 @@ describe('buildProductSearchQuery', () => {
     expect(query.parameters[0]).toBe(1)
   })
 
+  it('selects the brand name for the product card', () => {
+    const query = buildProductSearchQuery('pad')
+    expect(query.sql).toContain('b.name AS brand_name')
+    expect(query.sql).toContain('LEFT JOIN brand b ON b.id = p.brand_id')
+  })
+
   it('defaults to the search cap', () => {
     expect(buildProductSearchQuery('x').parameters.at(-1)).toBe(SEARCH_LIMIT)
   })
@@ -67,7 +74,8 @@ describe('buildProductSearchQuery', () => {
 describe('buildExactLookupQuery', () => {
   it('matches a barcode or a SKU, barcode first', () => {
     const query = buildExactLookupQuery('4006381333931')
-    expect(query.sql).toContain('FROM barcode b')
+    expect(query.sql).toContain('FROM barcode bc')
+    expect(query.sql).toContain('LEFT JOIN brand b ON b.id = p.brand_id')
     expect(query.sql).toContain('LIMIT 1')
     expect(query.parameters).toEqual([1, '4006381333931', '4006381333931', '4006381333931'])
     expect(query.sql).not.toContain('4006381333931')
