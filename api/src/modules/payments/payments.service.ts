@@ -3,6 +3,7 @@ import { type DbExecutor, db } from '@sceptre/db'
 import { normalizeGhanaPhone } from '@sceptre/shared'
 import { env } from '../../config/env.ts'
 import { AppError, NotFoundError, ValidationError } from '../../http/errors.ts'
+import { logger } from '../../logger.ts'
 import {
   applyTransferEvent,
   getTransferView,
@@ -464,9 +465,29 @@ function verificationFromCharge(
 function verifyOrCheckPayment(row: PaymentRow): Promise<ProviderVerification> {
   const provider = getPaymentProvider()
   if (row.requiresOtp) {
-    return provider
-      .checkCharge(row.providerReference)
-      .then((result) => verificationFromCharge(result, row.amountMinor))
+    return provider.checkCharge(row.providerReference).then((result) => {
+      // Paystack's check call can answer `failed` with the envelope message
+      // "Reference check successful" while the customer still has time to
+      // submit the OTP. A failure inside the window is "not completed yet",
+      // not a decline: keep the row pending so the code can still settle it.
+      if (
+        result.status === 'FAILED' &&
+        row.expiresAt !== null &&
+        row.expiresAt.getTime() > Date.now()
+      ) {
+        logger.warn(
+          {
+            paymentId: row.id,
+            failureCode: result.failureCode,
+            failureMessage: result.failureMessage?.slice(0, 200) ?? null,
+          },
+          'otp charge reported failed before its window closed; keeping pending',
+        )
+        return { ...verificationFromCharge(result, row.amountMinor), status: 'pending' }
+      }
+
+      return verificationFromCharge(result, row.amountMinor)
+    })
   }
   return provider.verify(row.providerReference)
 }

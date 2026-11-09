@@ -48,6 +48,8 @@ const charges = new Map<string, MockChargeRecord>()
 const refunds = new Map<string, MockRefundRecord>()
 const chargesAwaitingOtp = new Set<string>()
 let otpForNextCharge = false
+/** Test-only: makes a pending OTP charge look failed on the check endpoint. */
+let failPendingChecks = false
 
 /** The one OTP the mock accepts for a transfer; any other code fails. */
 export const MOCK_TRANSFER_OTP = '123456'
@@ -292,10 +294,21 @@ export class MockPaymentProvider implements PaymentProvider {
     const record = charges.get(reference)
     if (!record) return baseResult(reference, 'PENDING', {})
 
-    if (record.requiresOtp) return baseResult(reference, 'OTP_REQUIRED', record)
     if (record.status === 'PAID') return baseResult(reference, 'SUCCESS', record)
     if (record.status === 'FAILED' || record.status === 'EXPIRED') {
       return baseResult(reference, 'FAILED', record)
+    }
+    if (record.requiresOtp) {
+      // The live provider can answer `failed` with "Reference check
+      // successful" while the OTP is still pending. A test turns this on.
+      if (failPendingChecks) {
+        return {
+          ...baseResult(reference, 'FAILED', record),
+          failureCode: 'failed',
+          failureMessage: 'Reference check successful',
+        }
+      }
+      return baseResult(reference, 'OTP_REQUIRED', record)
     }
     return baseResult(reference, record.method === 'MOMO' ? 'PAY_OFFLINE' : 'PENDING', record)
   }
@@ -518,6 +531,11 @@ export function requestMockPaymentOtp(reference?: string): void {
   else otpForNextCharge = true
 }
 
+/** Test hook: the check endpoint reports an OTP-pending charge as failed. */
+export function forceMockCheckFailure(): void {
+  failPendingChecks = true
+}
+
 /** Harness hook: the till polls `verify`, which reports what this sets. */
 export function settleMockPayment(reference: string, outcome: MockSettlementOutcome): boolean {
   const record = charges.get(reference)
@@ -549,6 +567,7 @@ export function resetMockProvider(): void {
   transfers.clear()
   chargesAwaitingOtp.clear()
   otpForNextCharge = false
+  failPendingChecks = false
   awaitingOtp.clear()
   otpForNextTransfer = false
   balanceMinor = DEFAULT_MOCK_BALANCE_MINOR

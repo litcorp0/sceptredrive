@@ -100,6 +100,24 @@ describe('Paystack mobile-money charge responses', () => {
     expect(init.method).toBe('GET')
   })
 
+  it('does not use a successful envelope message as the failure reason', async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({
+        status: true,
+        message: 'Reference check successful',
+        data: { reference: INPUT.reference, status: 'failed' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const result = await provider().checkCharge(INPUT.reference)
+
+    expect(result.status).toBe('FAILED')
+    expect(result.failureCode).toBe('failed')
+    expect(result.failureMessage).not.toBe('Reference check successful')
+    expect(result.failureMessage).toContain('did not complete')
+  })
+
   it('treats an unreadable check as pending, not a failed payment', async () => {
     const fetchImpl = vi.fn(async () => json({ status: false, message: 'Charge not found' }, 404))
     vi.stubGlobal('fetch', fetchImpl)

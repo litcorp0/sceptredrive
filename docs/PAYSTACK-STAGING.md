@@ -255,8 +255,11 @@ must show a one-time-code field and post the code to `/charge/submit_otp`. The a
 the fact that a code is required, never the code itself. While that row is pending it is polled
 with `GET /charge/:reference` (check pending charge), **not** `transaction/verify`: Paystack's
 verify call can report the still-waiting charge as "Transaction was not completed", which would
-close the window before the cashier can submit the code. If the field does not appear and the
-charge ends as "Transaction was not completed", the POS/API build predates the OTP fix.
+close the window before the cashier can submit the code. The check endpoint can itself answer
+`failed` with the envelope message "Reference check successful" while the OTP is still pending;
+the API treats a failed check inside the 180-second window as "not completed yet" and keeps the
+row `PENDING`. If the field does not appear and the charge ends as "Transaction was not
+completed", the POS/API build predates the OTP fix.
 
 ### What test mode does not simulate
 
@@ -342,6 +345,7 @@ charge ends as "Transaction was not completed", the POS/API build predates the O
 | `pay_offline` forever | customer did not approve within 180s | expected; start a new charge |
 | "Please enter the one-time password" then "Transaction was not completed" | the number answered `send_otp` and no code was submitted before the 180s timeout | the till must show the OTP field and post it to `/api/pos/payments/:id/otp`; update the POS/API if it does not |
 | OTP field appears, then "Transaction was not completed" a second later | the poll used `transaction/verify`, which reports an OTP-pending charge as not completed | an OTP-pending row must be polled with `GET /charge/:reference` (check pending charge); update the API |
+| OTP field appears, then "Reference check successful" and the field disappears | the check endpoint answered `failed` with that envelope message while the OTP was still pending | the API must keep a failed check pending until the 180-second window closes; update the API |
 | OTP field shows but every code is rejected | wrong code, expired charge, or the phone is not the one that received the code | read the provider's message; if it says expired, start a new charge |
 | Transfer `blocked` | the approval URL/server did not answer in time | not used by this app unless you configure URL approval; prefer OTP |
 

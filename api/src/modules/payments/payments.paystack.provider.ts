@@ -553,7 +553,11 @@ export class PaystackPaymentProvider implements PaymentProvider {
       expiresAt: text(data.account_expires_at),
       transactionId: data.id === undefined || data.id === null ? null : String(data.id),
       failureCode: failed ? (providerStatus ?? 'failed') : null,
-      failureMessage: failed ? (text(data.gateway_response) ?? response.message) : null,
+      // The envelope message for a check ("Reference check successful") is not
+      // a failure reason. Only the provider's own gateway response is.
+      failureMessage: failed
+        ? (text(data.gateway_response) ?? 'The provider did not complete the charge')
+        : null,
     }
   }
 

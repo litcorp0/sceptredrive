@@ -22,11 +22,19 @@
 > till's first poll used `transaction/verify`, which reports an OTP-pending
 > charge as not completed. OTP-pending rows are now polled with
 > `GET /charge/:reference` (check pending charge), which keeps `send_otp` live;
-> a check that cannot be read stays `PENDING`, never failed. Tests: API provider
-> mapping + OTP lifecycle + check-charge, desktop client + state machine. Gates:
-> `check-types` 7/7, `lint` clean, API **914**, desktop **657**, shared **370**,
-> web **33**, `bun run build` green. Live verification still needs a real
-> Telecel/Vodafone charge; the MTN test number does not exercise `send_otp`.
+> a check that cannot be read stays `PENDING`, never failed. A second live
+> follow-up (2026-11-07, four attempts on `TEM-MNZ-T01`) showed the check call
+> itself answering `failed` with the envelope message "Reference check
+> successful" about four seconds after create. The API now treats a failed
+> check inside the 180-second OTP window as "not completed yet", keeps the row
+> `PENDING`, and never uses the envelope's success message as a failure reason.
+> The live rows confirmed the diagnosis: all four were `FAILED`, none had
+> `paid_at`, and no `payment_event` was delivered. Tests: API provider mapping
+> + OTP lifecycle + check-charge + premature-failure guard, desktop client +
+> state machine. Gates: `check-types` 7/7, `lint` clean, API **917**, desktop
+> **657**, shared **370**, web **33**, `bun run build` green. Live verification
+> still needs a real Telecel/Vodafone charge that submits the code; the MTN test
+> number does not exercise `send_otp`.
 
 > **2026-10-28 (post-Phase-14):** Two-factor authentication was removed at the
 > operator's request. Sign-in is email + password; migration `0018` drops the

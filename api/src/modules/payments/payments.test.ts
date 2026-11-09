@@ -19,6 +19,7 @@ import { shift, syncConflict } from '../pos/pos.schema.ts'
 import { signDeviceJwt } from '../sync/sync.jwt.ts'
 import type { DeviceAuthContext } from '../sync/sync.types.ts'
 import {
+  forceMockCheckFailure,
   getMockCallCounts,
   MOCK_PAYMENT_OTP,
   requestMockPaymentOtp,
@@ -355,6 +356,46 @@ describe.skipIf(!available)('payment intents and provider state', () => {
 
     const paid = await readPayment(await submitOtpRequest(created.id, MOCK_PAYMENT_OTP))
     expect(paid.status).toBe('PAID')
+  })
+
+  it('ignores a premature failed check while the OTP window is still open', async () => {
+    requestMockPaymentOtp()
+    forceMockCheckFailure()
+    const created = await readPayment(await postPayment(createBody()))
+    expect(created.requiresOtp).toBe(true)
+
+    // Paystack's check call can answer `failed` with "Reference check
+    // successful" before the code is submitted. That is not a decline while
+    // the 180-second window is open, so the row must stay PENDING.
+    const refreshed = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(refreshed.status).toBe('PENDING')
+    expect(refreshed.requiresOtp).toBe(true)
+    expect(refreshed.failedCode).toBeNull()
+
+    const rows = await db.select().from(payment).where(eq(payment.id, created.id))
+    expect(rows[0]?.status).toBe('PENDING')
+    expect(rows[0]?.requiresOtp).toBe(true)
+
+    // The code can still settle the charge.
+    const paid = await readPayment(await submitOtpRequest(created.id, MOCK_PAYMENT_OTP))
+    expect(paid.status).toBe('PAID')
+  })
+
+  it('lets the same failed check become terminal once the OTP window has closed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const startedAt = new Date()
+    vi.setSystemTime(startedAt)
+
+    requestMockPaymentOtp()
+    forceMockCheckFailure()
+    const created = await readPayment(await postPayment(createBody()))
+    expect(created.requiresOtp).toBe(true)
+
+    vi.setSystemTime(new Date(startedAt.getTime() + MOMO_EXPIRY_MS + 1_000))
+
+    const refreshed = await readPayment(await getPaymentRequest(created.id, deviceA.token, true))
+    expect(refreshed.status).toBe('FAILED')
+    expect(refreshed.requiresOtp).toBe(false)
   })
 
   it('refuses an OTP for a payment that never asked for one', async () => {
